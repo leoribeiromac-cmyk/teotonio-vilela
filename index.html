@@ -3,390 +3,419 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sistema Teotônio Vilela — Painel ao Vivo</title>
+<title>Sistema Teotônio Vilela — Controle Integrado</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --pri: #0a3d62;
-  --pri-light: #1e5f8e;
-  --acc: #2ecc71;
-  --warn: #e67e22;
-  --err: #e74c3c;
-  --gray: #95a5a6;
-  --bg: #f4f6f8;
-  --card: #ffffff;
-  --text: #1a2332;
-  --muted: #5a6b7c;
-  --border: #ecf0f3;
-}
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  padding: 16px;
-  line-height: 1.4;
-}
-
-.header {
-  background: linear-gradient(135deg, var(--pri) 0%, var(--pri-light) 100%);
-  color: white;
-  padding: 18px 24px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-.header h1 { font-size: 20px; font-weight: 600; }
-.header .subtitle { font-size: 12px; opacity: 0.85; margin-top: 2px; }
-.header .status-pill {
-  background: rgba(255,255,255,0.15);
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.status-dot {
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  background: var(--acc);
-  animation: pulse 2s infinite;
-}
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-.status-dot.error { background: var(--err); animation: none; }
-.status-dot.loading { background: var(--warn); }
-
-.tabs {
-  display: flex;
-  gap: 4px;
-  background: var(--card);
-  padding: 4px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  flex-wrap: wrap;
-}
-.tab {
-  flex: 1;
-  min-width: 140px;
-  background: transparent;
-  border: none;
-  padding: 10px 14px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  color: var(--muted);
-  transition: all 0.15s;
-}
-.tab:hover { background: var(--bg); }
-.tab.active { background: var(--pri); color: white; }
-
-.view { display: none; }
-.view.active { display: block; }
-
-.controls {
-  background: var(--card);
-  padding: 14px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  align-items: center;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-}
-.control-group { display: flex; flex-direction: column; gap: 4px; }
-.control-group label {
-  font-size: 11px;
-  text-transform: uppercase;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.5px;
-}
-.btn-group { display: flex; gap: 4px; }
-.btn-group button {
-  background: #f0f3f5;
-  border: 1px solid #d4dbe0;
-  padding: 7px 12px;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  border-radius: 4px;
-  color: var(--text);
-}
-.btn-group button:hover { background: #e3e9ed; }
-.btn-group button.active {
-  background: var(--pri);
-  color: white;
-  border-color: var(--pri);
-}
-select, input[type="text"], input[type="date"], input[type="number"] {
-  padding: 7px 10px;
-  border: 1px solid #d4dbe0;
-  border-radius: 4px;
-  font-size: 13px;
-  background: white;
-  font-family: inherit;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f8f7f5;
+  --surface:#ffffff;
+  --surface-2:#fafaf8;
+  --border:#e8e6e2;
+  --border-strong:#d4d1cb;
+  --text:#1a1815;
+  --text-2:#3a3530;
+  --muted:#7a7670;
+  --muted-2:#a09b94;
+  
+  --pri:oklch(0.45 0.14 240);     /* azul profundo - primário */
+  --pri-l:oklch(0.96 0.02 240);
+  --pri-d:oklch(0.38 0.14 240);
+  
+  --acc:oklch(0.62 0.18 38);       /* terracota - acento */
+  --acc-l:oklch(0.96 0.04 38);
+  --acc-d:oklch(0.48 0.18 38);
+  
+  --grn:oklch(0.62 0.16 150);
+  --grn-l:oklch(0.95 0.04 150);
+  --blu:oklch(0.58 0.18 250);
+  --blu-l:oklch(0.95 0.04 250);
+  --ylw:oklch(0.75 0.16 85);
+  --ylw-l:oklch(0.97 0.04 85);
+  --ylw-d:oklch(0.55 0.16 85);
+  --red:oklch(0.58 0.2 20);
+  --red-l:oklch(0.96 0.04 20);
+  
+  --r:10px;
+  --r-sm:6px;
+  --r-lg:14px;
+  --sh:0 1px 3px rgba(0,0,0,.06),0 1px 8px rgba(0,0,0,.04);
+  --sh-md:0 4px 12px rgba(0,0,0,.08);
+  --sh-lg:0 12px 32px rgba(0,0,0,.12);
 }
 
-.kpis {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+html,body{
+  height:100%;
+  font-family:'DM Sans',system-ui,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  font-size:14px;
+  font-feature-settings:'ss01','ss02','cv11';
+  -webkit-font-smoothing:antialiased;
 }
-.kpi {
-  background: var(--card);
-  padding: 14px 16px;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  border-left: 3px solid var(--pri);
-}
-.kpi.green { border-left-color: var(--acc); }
-.kpi.orange { border-left-color: var(--warn); }
-.kpi.red { border-left-color: var(--err); }
-.kpi .value { font-size: 26px; font-weight: 700; color: var(--pri); line-height: 1.1; }
-.kpi.green .value { color: #1e8449; }
-.kpi.orange .value { color: #b9540a; }
-.kpi.red .value { color: #a93226; }
-.kpi .label { font-size: 10px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px; margin-top: 4px; font-weight: 600; }
-.kpi .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.mono{font-family:'JetBrains Mono',monospace}
 
-.card {
-  background: var(--card);
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-  margin-bottom: 16px;
-  overflow: hidden;
-}
-.card-header {
-  padding: 14px 16px;
-  background: #f8fafb;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.card-header h3 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--pri);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.card-body { padding: 14px 16px; }
+#root{height:100%;display:flex;flex-direction:column}
 
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-th {
-  background: var(--text);
-  color: white;
-  padding: 10px 12px;
-  text-align: left;
-  font-size: 11px;
-  text-transform: uppercase;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  position: sticky;
-  top: 0;
-}
-td {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
-  vertical-align: middle;
-}
-tr:hover td { background: #f8fafb; }
-tr.summary td { background: #eef3f7; font-weight: 600; color: var(--pri); }
-.indent-2 { padding-left: 24px; }
-.indent-3 { padding-left: 36px; }
-.indent-4 { padding-left: 48px; }
+/* ===================== LAYOUT ===================== */
+.app{display:flex;height:100vh;min-height:0;overflow:hidden}
 
-.pct-bar-wrap { display: flex; align-items: center; gap: 6px; min-width: 100px; }
-.pct-bar {
-  flex: 1;
-  height: 7px;
-  background: var(--border);
-  border-radius: 4px;
-  overflow: hidden;
-  min-width: 40px;
+.sidebar{
+  width:236px;flex-shrink:0;
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  padding:18px 0;
+  z-index:10;
+  transition:transform .3s cubic-bezier(.2,0,0,1);
 }
-.pct-fill { height: 100%; background: var(--acc); transition: width 0.3s; }
-.pct-fill.zero { background: var(--gray); }
-.pct-fill.parcial { background: var(--warn); }
-.pct-fill.completo { background: var(--acc); }
-.pct-fill.atrasado { background: var(--err); }
-.pct-text { font-size: 11px; font-weight: 600; min-width: 38px; text-align: right; }
+.sidebar-logo{padding:0 22px 22px}
+.badge-obra{
+  display:inline-block;
+  background:linear-gradient(135deg,var(--acc) 0%,var(--acc-d) 100%);
+  color:#fff;font-size:9px;font-weight:700;letter-spacing:.1em;
+  padding:3px 8px;border-radius:4px;margin-bottom:8px;
+}
+.sidebar-logo h1{font-size:14px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
+.sidebar-logo p{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
 
-.gantt-cell {
-  position: relative;
-  height: 22px;
-  background: linear-gradient(to right, var(--border) 50%, #f8fafb 50%);
-  background-size: 6.66% 100%;
-  border-radius: 3px;
-  overflow: hidden;
-  min-width: 200px;
+.nav-group{padding:14px 0 6px}
+.nav-label{
+  font-size:10px;font-weight:600;letter-spacing:.1em;
+  color:var(--muted-2);padding:0 22px 6px;text-transform:uppercase;
 }
-.gantt-bar {
-  position: absolute;
-  height: 14px;
-  top: 4px;
-  background: var(--pri-light);
-  border-radius: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  color: white;
-  font-weight: 600;
+.nav-item{
+  display:flex;align-items:center;gap:11px;
+  padding:9px 13px;margin:1px 10px;
+  border-radius:7px;cursor:pointer;
+  color:var(--muted);font-size:13px;font-weight:500;
+  transition:all .12s;white-space:nowrap;user-select:none;
+  position:relative;
 }
-.gantt-bar.iniciando { background: var(--acc); }
-.gantt-bar.terminando { background: var(--warn); }
-.gantt-bar.completo { background: var(--gray); }
-.gantt-bar.zero { background: #34495e; }
-.gantt-bar.atrasado { background: var(--err); }
+.nav-item:hover{background:var(--bg);color:var(--text)}
+.nav-item.active{background:var(--pri-l);color:var(--pri);font-weight:600}
+.nav-item.active::before{
+  content:'';position:absolute;left:-10px;top:50%;transform:translateY(-50%);
+  width:3px;height:18px;background:var(--pri);border-radius:0 2px 2px 0;
+}
+.nav-icon{font-size:15px;width:18px;text-align:center;flex-shrink:0}
+.nav-counter{
+  background:var(--border);color:var(--text-2);
+  font-size:10px;font-weight:600;
+  padding:1px 7px;border-radius:10px;margin-left:auto;
+}
+.nav-item.active .nav-counter{background:var(--pri);color:#fff}
+.nav-divider{border:none;border-top:1px solid var(--border);margin:14px 22px}
 
-.empty-state {
-  padding: 60px 20px;
-  text-align: center;
-  color: var(--muted);
+.sync-block{padding:0 22px;margin-top:auto}
+.sync-row{display:flex;align-items:center;gap:8px;padding:10px 0}
+.sync-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:.3s}
+.sync-dot.ok{background:var(--grn);box-shadow:0 0 0 3px oklch(0.62 0.16 150 / .15)}
+.sync-dot.loading{background:var(--ylw);animation:pulse 1.2s infinite}
+.sync-dot.error{background:var(--red)}
+.sync-dot.offline{background:var(--muted-2)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.sync-text{font-size:11px;color:var(--muted);line-height:1.35}
+.sync-text strong{color:var(--text);font-weight:600}
+.btn-refresh{
+  width:100%;padding:8px 10px;
+  background:transparent;border:1px solid var(--border);color:var(--muted);
+  border-radius:7px;font-size:11px;font-weight:600;letter-spacing:.04em;
+  cursor:pointer;transition:.15s;font-family:inherit;
 }
-.empty-state .icon { font-size: 42px; margin-bottom: 10px; }
+.btn-refresh:hover{border-color:var(--pri);color:var(--pri);background:var(--pri-l)}
 
-.loading {
-  padding: 80px 20px;
-  text-align: center;
-  color: var(--muted);
-}
-.spinner {
-  display: inline-block;
-  width: 28px;
-  height: 28px;
-  border: 3px solid var(--border);
-  border-top-color: var(--pri);
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 12px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
+.mobile-menu-btn{display:none}
+.sidebar-overlay{display:none}
 
-.error-box {
-  background: #fde8e6;
-  border: 1px solid var(--err);
-  border-left: 4px solid var(--err);
-  padding: 14px 16px;
-  border-radius: 6px;
-  margin-bottom: 14px;
-  color: #6b2620;
-  font-size: 13px;
-}
+/* ===================== MAIN ===================== */
+.main{flex:1;overflow-y:auto;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
 
-.tag {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+.topbar{
+  padding:16px 28px;background:var(--surface);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;gap:14px;position:sticky;top:0;z-index:5;
 }
-.tag.drenagem { background: #d6eaf8; color: #1a5276; }
-.tag.demolicao { background: #fadbd8; color: #922b21; }
-.tag.via { background: #fdebd0; color: #935116; }
-.tag.pav-flexivel { background: #d5dbdb; color: #424949; }
-.tag.pav-rigido { background: #d6dbdf; color: #2c3e50; }
-.tag.vala-tecnica { background: #fcf3cf; color: #7d6608; }
-.tag.sinalizacao { background: #d5f5e3; color: #196f3d; }
-.tag.passeio { background: #ebdef0; color: #6c3483; }
+.topbar-title{font-size:17px;font-weight:600;letter-spacing:-.01em;line-height:1.2}
+.topbar-sub{font-size:12px;color:var(--muted);margin-top:2px}
 
-#rdoForm {
-  background: var(--card);
-  padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+.btn{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:8px 14px;border-radius:7px;
+  font-size:13px;font-weight:500;cursor:pointer;
+  border:none;transition:all .15s;font-family:inherit;
+  white-space:nowrap;
 }
-#rdoForm h3 { color: var(--pri); margin-bottom: 12px; font-size: 14px; }
-#rdoForm .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
-#rdoForm label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
-#rdoForm input, #rdoForm select { width: 100%; margin-top: 3px; }
-#rdoForm button.primary {
-  background: var(--pri); color: white; border: none; padding: 10px 18px;
-  border-radius: 4px; font-weight: 600; cursor: pointer; margin-top: 12px; font-size: 13px;
+.btn-primary{background:var(--pri);color:#fff}
+.btn-primary:hover{background:var(--pri-d);transform:translateY(-1px)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-outline{background:transparent;color:var(--text);border:1px solid var(--border)}
+.btn-outline:hover{background:var(--bg);border-color:var(--border-strong)}
+.btn-ghost{background:transparent;color:var(--muted);border:none;padding:8px 10px}
+.btn-ghost:hover{background:var(--bg);color:var(--text)}
+.btn-acc{background:var(--acc);color:#fff}
+.btn-acc:hover{background:var(--acc-d);transform:translateY(-1px)}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-lg{padding:11px 20px;font-size:14px}
+
+.page{flex:1;padding:24px 28px;display:flex;flex-direction:column;gap:18px;max-width:1600px;width:100%;margin:0 auto}
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.card-header{
+  padding:16px 22px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
 }
-#rdoForm .copy-output {
-  margin-top: 14px;
-  background: #f8fafb;
-  border: 1px solid var(--border);
-  padding: 12px;
-  border-radius: 6px;
-  font-family: 'SF Mono', Monaco, monospace;
-  font-size: 12px;
-  white-space: pre-wrap;
-  word-break: break-all;
+.card-title{font-size:13px;font-weight:600;letter-spacing:.01em;text-transform:uppercase}
+.card-title-sub{font-size:11px;color:var(--muted);font-weight:400;margin-top:2px;text-transform:none;letter-spacing:0}
+.card-body{padding:18px 22px}
+.card-body.compact{padding:12px 18px}
+.card-body.flush{padding:0}
+
+/* ===================== KPI ===================== */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
+.kpi-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:16px 18px;display:flex;flex-direction:column;gap:6px;
+  transition:.15s;
+}
+.kpi-card:hover{border-color:var(--border-strong);box-shadow:var(--sh)}
+.kpi-label{font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.kpi-value{font-size:28px;font-weight:700;letter-spacing:-.025em;line-height:1.05;font-feature-settings:'tnum'}
+.kpi-sub{font-size:11px;color:var(--muted)}
+.kpi-trend{font-size:11px;font-weight:600;display:inline-flex;align-items:center;gap:3px}
+.kpi-trend.up{color:var(--grn)}
+.kpi-trend.warn{color:var(--ylw-d)}
+.kpi-trend.down{color:var(--red)}
+.kpi-bar-wrap{height:4px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden}
+.kpi-bar{height:100%;border-radius:2px;transition:width .6s ease}
+
+/* Special hero KPI */
+.kpi-hero{
+  grid-column:span 2;
+  background:linear-gradient(135deg,oklch(0.18 0.04 240) 0%,oklch(0.28 0.06 240) 100%);
+  color:#fff;border:none;
+}
+.kpi-hero .kpi-label{color:rgba(255,255,255,.7)}
+.kpi-hero .kpi-value{font-size:38px}
+.kpi-hero .kpi-sub{color:rgba(255,255,255,.65)}
+@media(max-width:600px){.kpi-hero{grid-column:span 1}}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media(max-width:900px){
+  .grid-2{grid-template-columns:1fr}
+  .grid-3{grid-template-columns:1fr}
 }
 
-@media (max-width: 768px) {
-  .kpi .value { font-size: 20px; }
-  .header h1 { font-size: 16px; }
-  th, td { padding: 6px 8px; font-size: 11px; }
+/* ===================== TABLE ===================== */
+table.t{width:100%;border-collapse:collapse;font-size:13px}
+table.t th{
+  font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--muted);padding:10px 14px;text-align:left;
+  border-bottom:1px solid var(--border);background:var(--surface-2);
+  position:sticky;top:0;
+}
+table.t td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px}
+table.t tr:last-child td{border-bottom:none}
+table.t tr:hover td{background:var(--bg)}
+table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:8px 14px}
+.t-num{font-variant-numeric:tabular-nums;text-align:right;font-family:'JetBrains Mono',monospace;font-size:12px}
+.t-mono{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
+
+/* ===================== PILLS / TAGS ===================== */
+.pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600;letter-spacing:.01em}
+.pill-grn{background:var(--grn-l);color:var(--grn)}
+.pill-ylw{background:var(--ylw-l);color:var(--ylw-d)}
+.pill-red{background:var(--red-l);color:var(--red)}
+.pill-blu{background:var(--blu-l);color:var(--blu)}
+.pill-acc{background:var(--acc-l);color:var(--acc-d)}
+.pill-pri{background:var(--pri-l);color:var(--pri)}
+
+/* Frente tags */
+.f-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+.f-Drenagem{background:#dceefb;color:#1a5276}
+.f-Demoli, .f-demolicao{background:#fadbd8;color:#922b21}
+.f-Via{background:#fdebd0;color:#935116}
+.f-Pav{background:#d6dbdf;color:#2c3e50}
+.f-Vala{background:#fcf3cf;color:#7d6608}
+.f-Sinaliza{background:#d5f5e3;color:#196f3d}
+
+.prog-bar-wrap{width:100%;min-width:60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle}
+.prog-bar{height:100%;border-radius:3px;transition:width .6s ease}
+.prog-bar.zero{background:var(--muted-2)}
+.prog-bar.parcial{background:var(--ylw)}
+.prog-bar.completo{background:var(--grn)}
+.prog-bar.atrasado{background:var(--red)}
+
+/* ===================== HEATMAP ===================== */
+.heatmap-wrap{overflow-x:auto;padding-bottom:8px}
+.heatmap{display:grid;gap:2px;font-size:9px;font-family:'JetBrains Mono',monospace}
+.hm-cell{
+  min-height:22px;border-radius:3px;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:600;cursor:default;transition:.15s;
+}
+.hm-cell:hover{transform:scale(1.15);z-index:2;box-shadow:var(--sh-md)}
+.hm-row-label{
+  font-size:10px;font-weight:600;color:var(--muted);
+  padding:0 8px 0 4px;display:flex;align-items:center;justify-content:flex-end;
+  white-space:nowrap;
+}
+.hm-col-label{
+  font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;
+  text-align:center;padding:2px 0;
+  writing-mode:vertical-rl;transform:rotate(180deg);
+}
+
+/* ===================== FORM ===================== */
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:700px){.form-grid{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label{font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+.field input,.field select,.field textarea{
+  padding:9px 12px;border:1px solid var(--border);border-radius:7px;
+  font-size:14px;background:var(--surface);font-family:inherit;color:var(--text);
+  transition:.15s;width:100%;
+}
+.field input:focus,.field select:focus,.field textarea:focus{
+  outline:none;border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-l);
+}
+.field input.invalid,.field select.invalid{border-color:var(--red)}
+.field-error{font-size:11px;color:var(--red);font-weight:500}
+.field-hint{font-size:11px;color:var(--muted);margin-top:-2px}
+
+.btn-toggle-group{display:flex;gap:0;border:1px solid var(--border);border-radius:7px;overflow:hidden;width:fit-content}
+.btn-toggle{
+  padding:7px 14px;background:transparent;border:none;font-size:13px;
+  font-family:inherit;color:var(--muted);cursor:pointer;font-weight:500;
+  border-right:1px solid var(--border);transition:.15s;
+}
+.btn-toggle:last-child{border-right:none}
+.btn-toggle.active{background:var(--pri);color:#fff;font-weight:600}
+.btn-toggle:hover:not(.active){background:var(--bg);color:var(--text)}
+
+.servico-row{
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--r);padding:14px;margin-bottom:10px;
+  position:relative;
+}
+.servico-row .row-num{
+  position:absolute;top:-8px;left:14px;
+  background:var(--pri);color:#fff;font-size:10px;font-weight:700;letter-spacing:.05em;
+  padding:2px 8px;border-radius:10px;
+}
+.servico-row .btn-remove{
+  position:absolute;top:10px;right:10px;
+  background:transparent;border:none;color:var(--muted);cursor:pointer;
+  font-size:18px;padding:2px 8px;border-radius:4px;
+}
+.servico-row .btn-remove:hover{background:var(--red-l);color:var(--red)}
+.btn-add-servico{
+  width:100%;padding:11px;
+  background:transparent;border:1.5px dashed var(--border-strong);
+  border-radius:var(--r);font-size:13px;font-weight:500;color:var(--muted);
+  cursor:pointer;font-family:inherit;transition:.15s;
+}
+.btn-add-servico:hover{border-color:var(--pri);color:var(--pri);background:var(--pri-l)}
+
+/* ===================== TOAST ===================== */
+.toast-wrap{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast{
+  background:var(--surface);border:1px solid var(--border);
+  padding:12px 18px;border-radius:var(--r);box-shadow:var(--sh-lg);
+  font-size:13px;display:flex;align-items:center;gap:10px;
+  pointer-events:auto;animation:slideIn .25s cubic-bezier(.2,0,0,1);
+  max-width:420px;
+}
+.toast.success{border-left:4px solid var(--grn)}
+.toast.error{border-left:4px solid var(--red)}
+.toast.info{border-left:4px solid var(--blu)}
+@keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* ===================== EMPTY / LOADING ===================== */
+.empty{padding:60px 20px;text-align:center;color:var(--muted)}
+.empty-icon{font-size:42px;margin-bottom:12px;opacity:.5}
+.empty-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
+.empty-sub{font-size:12px;color:var(--muted);max-width:380px;margin:0 auto}
+
+.loading{padding:80px 20px;text-align:center}
+.spinner{
+  display:inline-block;width:32px;height:32px;
+  border:3px solid var(--border);border-top-color:var(--pri);
+  border-radius:50%;animation:spin .8s linear infinite;margin-bottom:14px;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===================== MOBILE ===================== */
+@media(max-width:768px){
+  .mobile-menu-btn{
+    display:flex;align-items:center;justify-content:center;
+    background:transparent;border:none;color:var(--text);
+    font-size:22px;cursor:pointer;padding:6px 10px;
+    margin-right:-4px;
+  }
+  .sidebar{
+    position:fixed;left:0;top:0;height:100%;
+    transform:translateX(-100%);box-shadow:var(--sh-lg);
+  }
+  .sidebar.open{transform:translateX(0)}
+  .sidebar-overlay{
+    display:block;position:fixed;inset:0;
+    background:rgba(0,0,0,.4);z-index:9;
+    opacity:0;pointer-events:none;transition:.25s;
+  }
+  .sidebar-overlay.open{opacity:1;pointer-events:auto}
+  .page{padding:14px}
+  .topbar{padding:12px 16px}
+  .topbar-title{font-size:15px}
+  .card-body{padding:14px 16px}
+  .kpi-card{padding:14px}
+  .kpi-value{font-size:22px}
+  .kpi-hero .kpi-value{font-size:30px}
 }
 </style>
 </head>
 <body>
-
-<div class="header">
-  <div>
-    <h1>🏗️ Sistema Teotônio Vilela — Painel ao Vivo</h1>
-    <div class="subtitle">Av. Senador Teotônio Vilela · Consórcio Arvek+Gestor · Lê dados da Google Sheets em tempo real</div>
-  </div>
-  <div class="status-pill">
-    <div class="status-dot loading" id="statusDot"></div>
-    <span id="statusText">Carregando dados…</span>
-  </div>
-</div>
-
-<div class="tabs">
-  <button class="tab active" data-view="executivo">📊 Executivo</button>
-  <button class="tab" data-view="cronograma">📅 Cronograma</button>
-  <button class="tab" data-view="avancofisico">📈 Avanço por Pacote</button>
-  <button class="tab" data-view="rdo">📝 Lançar RDO</button>
-  <button class="tab" data-view="medicao">🧮 Apoio Medição</button>
-</div>
-
-<div id="content"></div>
+<div id="root"></div>
+<div class="toast-wrap" id="toastWrap"></div>
 
 <script>
-// =============================================================
-// CONFIGURAÇÃO — URLs dos CSVs publicados na Google Sheets
-// =============================================================
-const CSV_URLS = {
-  cronograma:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=565093066&single=true&output=csv',
-  pacotes:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=386002450&single=true&output=csv',
-  coeficientes:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1962881430&single=true&output=csv',
-  rdoavanco:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1906961773&single=true&output=csv',
+// ====================================================================
+// CONFIGURAÇÃO
+// ====================================================================
+const CONFIG = {
+  // CSVs publicados (leitura)
+  csv: {
+    cronograma:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=565093066&single=true&output=csv',
+    pacotes:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=386002450&single=true&output=csv',
+    coeficientes:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1962881430&single=true&output=csv',
+    rdoavanco:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1906961773&single=true&output=csv',
+  },
+  // Apps Script (escrita) - JSONP
+  appsScript: 'https://script.google.com/macros/s/AKfycbwy7vPSA4KFUxxHpZqEsSlwdkTT9L44LbLV9TdhjNks4JNGHZpgF2PTPBXxezYNuS68/exec',
+  
+  // Estacas reais (corrigidas pelo Leonardo)
+  estacasCB: { ini: 99, fim: 141, label: 'Centro→Bairro' },
+  estacasBC: { ini: 201, fim: 244, label: 'Bairro→Centro' },
+  
+  // Refresh automático (5 min)
+  refreshMs: 5 * 60 * 1000,
+  
+  // localStorage keys
+  ls: {
+    rdoDraft: 'teotonio_rdo_draft_v1',
+    apontador: 'teotonio_apontador_v1',
+  }
 };
 
-const STATUS_DATA = '2026-04-27';
-
-// =============================================================
-// UTILIDADES
-// =============================================================
+// ====================================================================
+// UTILITIES
+// ====================================================================
 function parseCSV(text) {
-  // Parser CSV robusto para campos com vírgulas dentro de aspas
   const lines = [];
   let current = [], field = '', inQuotes = false;
   for (let i = 0; i < text.length; i++) {
@@ -401,7 +430,7 @@ function parseCSV(text) {
       else if (c === '\n' || c === '\r') {
         if (c === '\r' && text[i+1] === '\n') i++;
         current.push(field); field = '';
-        if (current.length > 0 && current.some(x => x.length > 0)) lines.push(current);
+        if (current.some(x => x.length > 0)) lines.push(current);
         current = [];
       } else field += c;
     }
@@ -420,33 +449,45 @@ function parseCSV(text) {
 }
 
 async function fetchCSV(url) {
-  const res = await fetch(url + '&t=' + Date.now()); // Cache buster
+  const res = await fetch(url + '&t=' + Date.now());
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  const text = await res.text();
-  return parseCSV(text);
+  return parseCSV(await res.text());
 }
 
-function fmtData(iso) {
-  if (!iso) return '';
-  // Aceita "2026-04-27" ou "2026-04-27 09:00" ou "27/04/2026"
-  let d;
-  if (iso.includes('/')) {
-    const p = iso.split('/');
-    d = new Date(`${p[2].slice(0,4)}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`);
-  } else {
-    d = new Date(iso);
-  }
-  if (isNaN(d)) return iso;
-  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getFullYear()).slice(2);
-}
-
-function parseISODate(s) {
-  if (!s) return null;
-  if (s.includes('/')) {
-    const p = s.split('/');
-    return new Date(`${p[2].slice(0,4)}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`);
-  }
-  return new Date(s);
+// JSONP request para Apps Script (evita CORS)
+function jsonp(url, params) {
+  return new Promise((resolve, reject) => {
+    const cb = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('Timeout (15s)'));
+    }, 15000);
+    
+    function cleanup() {
+      delete window[cb];
+      const s = document.getElementById(cb);
+      if (s) s.remove();
+      clearTimeout(timeout);
+    }
+    
+    window[cb] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+    
+    const qs = Object.entries({...params, callback: cb})
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&');
+    
+    const script = document.createElement('script');
+    script.id = cb;
+    script.src = url + '?' + qs;
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('Falha de rede ou Apps Script offline'));
+    };
+    document.body.appendChild(script);
+  });
 }
 
 function num(s) {
@@ -456,317 +497,493 @@ function num(s) {
   return isNaN(v) ? parseFloat(s) || 0 : v;
 }
 
-function frenteToTagClass(frente) {
-  return (frente || '').toLowerCase()
-    .replace(/\./g, '').replace(/\s+/g, '-')
-    .replace(/[áàã]/g, 'a').replace(/é/g, 'e').replace(/í/g, 'i').replace(/[óô]/g, 'o').replace(/ç/g, 'c');
+function fmtData(iso) {
+  if (!iso) return '';
+  let d;
+  if (iso instanceof Date) d = iso;
+  else if (String(iso).includes('/')) {
+    const p = String(iso).split('/');
+    d = new Date(`${p[2].slice(0,4)}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`);
+  } else d = new Date(iso);
+  if (isNaN(d)) return String(iso);
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getFullYear()).slice(2);
 }
 
-// =============================================================
-// ESTADO
-// =============================================================
+function parseISODate(s) {
+  if (!s) return null;
+  if (String(s).includes('/')) {
+    const p = String(s).split('/');
+    return new Date(`${p[2].slice(0,4)}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`);
+  }
+  return new Date(s);
+}
+
+function fmtNum(n, decimals = 2) {
+  if (n === null || n === undefined || isNaN(n)) return '0';
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+function fmtPct(n) {
+  return (n * 100).toFixed(1).replace('.', ',') + '%';
+}
+
+function frenteSlug(f) {
+  const s = (f || '').toString().trim();
+  if (s.startsWith('Drenagem')) return 'Drenagem';
+  if (s.startsWith('Demoli')) return 'Demoli';
+  if (s.startsWith('Pav')) return 'Pav';
+  if (s.startsWith('Vala')) return 'Vala';
+  if (s.startsWith('Sinaliza')) return 'Sinaliza';
+  if (s.startsWith('Via')) return 'Via';
+  return 'default';
+}
+
+// ====================================================================
+// TOAST SYSTEM
+// ====================================================================
+function toast(msg, type = 'info', durationMs = 3500) {
+  const wrap = document.getElementById('toastWrap');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'i';
+  t.innerHTML = `<span style="font-weight:700">${icon}</span><span>${msg}</span>`;
+  wrap.appendChild(t);
+  setTimeout(() => {
+    t.style.animation = 'slideIn .2s reverse';
+    setTimeout(() => t.remove(), 200);
+  }, durationMs);
+}
+
+// ====================================================================
+// ESTADO GLOBAL (sem React, manipulação direta de DOM)
+// ====================================================================
 const STATE = {
-  cronograma: [],
-  pacotes: [],
-  coeficientes: [],
-  rdoavanco: [],
-  loaded: false,
-  currentView: 'executivo',
-  currentMes: '2026-04',
+  cronograma: [], pacotes: [], coeficientes: [], rdoavanco: [],
+  loaded: false, lastSync: null,
+  currentPage: 'executivo',
+  draft: null,  // rascunho do RDO
 };
 
-// =============================================================
+// ====================================================================
 // CARREGAMENTO INICIAL
-// =============================================================
+// ====================================================================
 async function carregarTudo() {
-  const dot = document.getElementById('statusDot');
-  const txt = document.getElementById('statusText');
-  
+  setSyncStatus('loading', 'Carregando dados…');
   try {
-    dot.className = 'status-dot loading';
-    txt.textContent = 'Carregando dados…';
-    
-    const [crono, pacs, coefs, rdos] = await Promise.all([
-      fetchCSV(CSV_URLS.cronograma),
-      fetchCSV(CSV_URLS.pacotes),
-      fetchCSV(CSV_URLS.coeficientes),
-      fetchCSV(CSV_URLS.rdoavanco),
+    const [c, p, k, r] = await Promise.all([
+      fetchCSV(CONFIG.csv.cronograma),
+      fetchCSV(CONFIG.csv.pacotes),
+      fetchCSV(CONFIG.csv.coeficientes),
+      fetchCSV(CONFIG.csv.rdoavanco),
     ]);
-    
-    STATE.cronograma = crono;
-    STATE.pacotes = pacs;
-    STATE.coeficientes = coefs;
-    STATE.rdoavanco = rdos;
+    STATE.cronograma = c;
+    STATE.pacotes = p;
+    STATE.coeficientes = k;
+    STATE.rdoavanco = r;
     STATE.loaded = true;
-    
-    dot.className = 'status-dot';
-    const ago = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-    txt.textContent = `Atualizado ${ago} · ${crono.length} tarefas, ${pacs.length} pacotes, ${rdos.length} RDOs`;
-    
+    STATE.lastSync = new Date();
+    setSyncStatus('ok', `Sincronizado · ${c.length} tarefas, ${p.length} pacotes, ${r.length} RDOs`);
     render();
-  } catch (e) {
-    dot.className = 'status-dot error';
-    txt.textContent = 'Erro ao carregar';
-    document.getElementById('content').innerHTML = `
-      <div class="error-box">
-        <strong>❌ Não consegui carregar os dados da Google Sheets.</strong><br>
-        Erro: ${e.message}<br><br>
-        Verifique:<br>
-        • Os CSVs estão publicados na web?<br>
-        • Os 4 links no topo do código deste HTML estão corretos?<br>
-        • A planilha Google está acessível?<br><br>
-        <button onclick="carregarTudo()" style="background:#0a3d62;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;">🔄 Tentar de novo</button>
-      </div>
-    `;
+  } catch(e) {
+    STATE.loaded = false;
+    setSyncStatus('error', 'Erro: ' + e.message);
+    renderError(e);
   }
 }
 
-// =============================================================
-// CÁLCULO DE AVANÇO POR PACOTE (lógica central)
-// =============================================================
+function setSyncStatus(state, text) {
+  const dot = document.getElementById('syncDot');
+  const txt = document.getElementById('syncText');
+  if (!dot || !txt) return;
+  dot.className = 'sync-dot ' + state;
+  txt.innerHTML = text;
+}
+
+// ====================================================================
+// CÁLCULOS DERIVADOS
+// ====================================================================
 function calcularAvancoPorPacote() {
-  // Para cada pacote, soma quantidades dos RDOs que apontam pra ele
-  const avanco = {};
+  const m = {};
   STATE.pacotes.forEach(p => {
-    const id = p['ID'] || p['id'];
+    const id = p['ID'];
     if (!id) return;
-    const qtdEstim = num(p['Qtd Estimada'] || p['qtd_estimada'] || p['Qtd_Estimada']);
-    avanco[id] = {
+    m[id] = {
       pacote: p,
-      qtdEstimada: qtdEstim,
+      qtdEstimada: num(p['Qtd Estimada']),
       qtdExecutada: 0,
       lancamentos: 0,
       ultimaData: null,
+      porEstaca: {},  // { 'E105': qtd, 'E106': qtd, ... }
     };
   });
-  
   STATE.rdoavanco.forEach(r => {
-    const pid = r['Pacote_ID'] || r['Pacote_id'] || r['pacote_id'];
-    if (!pid || !avanco[pid]) return;
-    const q = num(r['Quantidade'] || r['quantidade']);
-    avanco[pid].qtdExecutada += q;
-    avanco[pid].lancamentos++;
-    const d = parseISODate(r['Data'] || r['data']);
-    if (d && (!avanco[pid].ultimaData || d > avanco[pid].ultimaData)) {
-      avanco[pid].ultimaData = d;
+    const pid = r['Pacote_ID'] || r['Pacote_id'];
+    if (!pid || !m[pid]) return;
+    const q = num(r['Quantidade']);
+    m[pid].qtdExecutada += q;
+    m[pid].lancamentos++;
+    const d = parseISODate(r['Data']);
+    if (d && (!m[pid].ultimaData || d > m[pid].ultimaData)) m[pid].ultimaData = d;
+    
+    // Mapeamento estaca → quantidade
+    const est = (r['Local_Estaca'] || '').toUpperCase().match(/E?\d{2,3}/g);
+    if (est) {
+      const qPorEstaca = q / est.length;
+      est.forEach(e => {
+        const ek = e.replace(/^E/, 'E') === 'E' ? 'E' + e.replace(/^E/, '').padStart(3, '0') : (e.startsWith('E') ? e : 'E' + e);
+        m[pid].porEstaca[ek] = (m[pid].porEstaca[ek] || 0) + qPorEstaca;
+      });
     }
   });
-  
-  // Calcular % e produtividade
-  Object.values(avanco).forEach(a => {
+  Object.values(m).forEach(a => {
     a.pct = a.qtdEstimada > 0 ? Math.min(a.qtdExecutada / a.qtdEstimada, 1.0) : 0;
     a.pctRaw = a.qtdEstimada > 0 ? a.qtdExecutada / a.qtdEstimada : 0;
   });
-  
-  return avanco;
+  return m;
 }
 
-// =============================================================
-// VIEWS
-// =============================================================
-function render() {
-  if (!STATE.loaded) return;
-  const c = document.getElementById('content');
-  if (STATE.currentView === 'executivo') c.innerHTML = renderExecutivo();
-  else if (STATE.currentView === 'cronograma') c.innerHTML = renderCronograma();
-  else if (STATE.currentView === 'avancofisico') c.innerHTML = renderAvancoFisico();
-  else if (STATE.currentView === 'rdo') c.innerHTML = renderRDOForm();
-  else if (STATE.currentView === 'medicao') c.innerHTML = renderApoioMedicao();
-  
-  // Reanexar handlers do mês caso a aba use
-  const mesGroup = document.getElementById('mesGroup');
-  if (mesGroup) {
-    mesGroup.querySelectorAll('button').forEach(btn => {
-      btn.onclick = () => {
-        STATE.currentMes = btn.dataset.mes;
-        render();
-      };
+function calcularConsumoItens(avanco) {
+  const out = {};
+  Object.values(avanco).forEach(a => {
+    if (a.qtdExecutada <= 0) return;
+    const pid = a.pacote['ID'];
+    const coefs = STATE.coeficientes.filter(c => (c['Pacote ID'] || c['Pacote_ID']) === pid);
+    coefs.forEach(c => {
+      const item = c['Item Contratual'];
+      if (!item) return;
+      const desc = c['Descrição Item'] || '';
+      const coef = num(c['Coef']);
+      const consumo = a.qtdExecutada * coef;
+      if (!out[item]) {
+        out[item] = {
+          item, descricao: desc,
+          unidadeItem: c['Unid Item'] || '',
+          consumido: 0, pacotes: []
+        };
+      }
+      out[item].consumido += consumo;
+      out[item].pacotes.push(`${a.pacote['Pacote']} × ${coef}`);
     });
-  }
+  });
+  return out;
 }
 
-function renderExecutivo() {
-  const avanco = calcularAvancoPorPacote();
-  const pacotes = Object.values(avanco).filter(a => a.pacote && a.pacote['Status'] !== 'Histórico');
-  
-  // KPIs
-  const totalPacotes = pacotes.length;
-  const pacotesIniciados = pacotes.filter(a => a.qtdExecutada > 0).length;
-  const pacotesConcluidos = pacotes.filter(a => a.pct >= 0.999).length;
-  const totalRDOs = STATE.rdoavanco.length;
-  
-  // % físico médio (ponderado pela quantidade estimada × valor não temos, então só média simples)
-  const pctMedio = pacotes.length > 0 ? 
-    pacotes.reduce((s, a) => s + a.pct, 0) / pacotes.length : 0;
-  
-  // Avanço por frente
-  const porFrente = {};
-  pacotes.forEach(a => {
-    const f = a.pacote['Frente'] || 'Outros';
-    if (!porFrente[f]) porFrente[f] = { pacotes: [], pctSum: 0 };
-    porFrente[f].pacotes.push(a);
-    porFrente[f].pctSum += a.pct;
-  });
-  Object.keys(porFrente).forEach(f => {
-    porFrente[f].pctMedio = porFrente[f].pctSum / porFrente[f].pacotes.length;
-  });
-  
-  return `
-    <div class="kpis">
-      <div class="kpi">
-        <div class="value">${totalPacotes}</div>
-        <div class="label">Pacotes ativos</div>
-      </div>
-      <div class="kpi green">
-        <div class="value">${pacotesIniciados}</div>
-        <div class="label">Iniciados</div>
-        <div class="sub">${(pacotesIniciados/totalPacotes*100).toFixed(0)}% do total</div>
-      </div>
-      <div class="kpi">
-        <div class="value">${pacotesConcluidos}</div>
-        <div class="label">Concluídos</div>
-      </div>
-      <div class="kpi orange">
-        <div class="value">${(pctMedio*100).toFixed(1)}%</div>
-        <div class="label">Avanço médio físico</div>
-      </div>
-      <div class="kpi">
-        <div class="value">${totalRDOs}</div>
-        <div class="label">Total RDOs lançados</div>
-      </div>
-    </div>
-    
-    <div class="card">
-      <div class="card-header">
-        <h3>📊 Avanço por Frente de Obra</h3>
-      </div>
-      <div class="card-body">
-        ${Object.entries(porFrente).sort((a,b) => b[1].pctMedio - a[1].pctMedio).map(([f, d]) => `
-          <div style="margin-bottom: 14px;">
-            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-              <strong style="font-size: 13px;">${f}</strong>
-              <span style="font-size: 12px; color: var(--muted);">
-                ${d.pacotes.length} pacote${d.pacotes.length>1?'s':''} · ${(d.pctMedio*100).toFixed(1)}%
-              </span>
-            </div>
-            <div class="pct-bar">
-              <div class="pct-fill ${d.pctMedio >= 0.999 ? 'completo' : d.pctMedio > 0 ? 'parcial' : 'zero'}" 
-                   style="width: ${d.pctMedio*100}%"></div>
+function listarEstacas() {
+  const out = [];
+  for (let i = CONFIG.estacasCB.ini; i <= CONFIG.estacasCB.fim; i++) {
+    out.push({ id: 'E' + i, num: i, sentido: 'CB' });
+  }
+  for (let i = CONFIG.estacasBC.ini; i <= CONFIG.estacasBC.fim; i++) {
+    out.push({ id: 'E' + i, num: i, sentido: 'BC' });
+  }
+  return out;
+}
+
+// ====================================================================
+// LAYOUT PRINCIPAL (sidebar + main)
+// ====================================================================
+function renderShell() {
+  const root = document.getElementById('root');
+  root.innerHTML = `
+    <div class="app">
+      <div class="sidebar-overlay" id="sidebarOverlay"></div>
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-logo">
+          <div class="badge-obra">CONSÓRCIO ARVEK + GESTOR</div>
+          <h1>Av. Senador<br>Teotônio Vilela</h1>
+          <p>Sistema integrado<br>de planejamento</p>
+        </div>
+        
+        <div class="nav-group">
+          <div class="nav-label">Análise</div>
+          <div class="nav-item" data-page="executivo">
+            <span class="nav-icon">◆</span>
+            <span>Executivo</span>
+          </div>
+          <div class="nav-item" data-page="avancofisico">
+            <span class="nav-icon">◰</span>
+            <span>Avanço Físico</span>
+          </div>
+          <div class="nav-item" data-page="cronograma">
+            <span class="nav-icon">◷</span>
+            <span>Cronograma</span>
+          </div>
+          <div class="nav-item" data-page="medicao">
+            <span class="nav-icon">⌗</span>
+            <span>Apoio Medição</span>
+          </div>
+        </div>
+        
+        <hr class="nav-divider">
+        
+        <div class="nav-group">
+          <div class="nav-label">Operação</div>
+          <div class="nav-item" data-page="rdo">
+            <span class="nav-icon">⊕</span>
+            <span>Lançar RDO</span>
+            <span class="nav-counter" id="rdoCount">0</span>
+          </div>
+          <div class="nav-item" data-page="historico">
+            <span class="nav-icon">≡</span>
+            <span>Histórico RDOs</span>
+          </div>
+        </div>
+        
+        <div class="sync-block">
+          <hr class="nav-divider" style="margin:10px 0">
+          <div class="sync-row">
+            <div class="sync-dot loading" id="syncDot"></div>
+            <div class="sync-text" id="syncText">Carregando…</div>
+          </div>
+          <button class="btn-refresh" onclick="carregarTudo()">↻ ATUALIZAR</button>
+        </div>
+      </aside>
+      
+      <main class="main">
+        <div class="topbar">
+          <div style="display:flex;align-items:center;gap:6px">
+            <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+            <div>
+              <div class="topbar-title" id="pageTitle">Painel Executivo</div>
+              <div class="topbar-sub" id="pageSubtitle">Visão consolidada da obra</div>
             </div>
           </div>
-        `).join('')}
-      </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>
+            <button class="btn btn-primary btn-sm" onclick="navigate('rdo')">+ Novo RDO</button>
+          </div>
+        </div>
+        <div class="page" id="page"></div>
+      </main>
     </div>
-    
+  `;
+  
+  // Bind navegação
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.onclick = () => navigate(el.dataset.page);
+  });
+  document.getElementById('sidebarOverlay').onclick = () => toggleSidebar(false);
+}
+
+function toggleSidebar(open) {
+  const sb = document.getElementById('sidebar');
+  const ov = document.getElementById('sidebarOverlay');
+  if (!sb) return;
+  if (open === undefined) open = !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  ov.classList.toggle('open', open);
+}
+
+function navigate(page) {
+  STATE.currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+  toggleSidebar(false);
+  render();
+}
+
+function render() {
+  if (!STATE.loaded) return;
+  const titles = {
+    executivo: ['Painel Executivo', 'Visão consolidada da obra · KPIs e curva S'],
+    avancofisico: ['Avanço Físico', 'Pacotes, mapa de estacas e produtividade'],
+    cronograma: ['Cronograma', 'Tarefas do Project · 11 fases'],
+    medicao: ['Apoio à Medição', 'Consumo derivado por item contratual'],
+    rdo: ['Lançar RDO', 'Registro do dia · grava direto na Sheets'],
+    historico: ['Histórico de RDOs', 'Lançamentos anteriores'],
+  };
+  const [t, s] = titles[STATE.currentPage] || ['', ''];
+  document.getElementById('pageTitle').textContent = t;
+  document.getElementById('pageSubtitle').textContent = s;
+  document.getElementById('rdoCount').textContent = STATE.rdoavanco.length;
+  
+  const page = document.getElementById('page');
+  if (STATE.currentPage === 'executivo') page.innerHTML = renderExecutivo();
+  else if (STATE.currentPage === 'avancofisico') page.innerHTML = renderAvancoFisico();
+  else if (STATE.currentPage === 'cronograma') page.innerHTML = renderCronograma();
+  else if (STATE.currentPage === 'medicao') page.innerHTML = renderMedicao();
+  else if (STATE.currentPage === 'rdo') { page.innerHTML = renderRDO(); attachRDOForm(); }
+  else if (STATE.currentPage === 'historico') page.innerHTML = renderHistorico();
+  
+  // Após render, montar gráficos se aplicável
+  setTimeout(montarGraficos, 50);
+}
+
+function renderError(e) {
+  const page = document.getElementById('page');
+  if (!page) return;
+  page.innerHTML = `
     <div class="card">
-      <div class="card-header">
-        <h3>🔥 Pacotes mais ativos (últimos lançamentos)</h3>
-      </div>
-      <div class="card-body" style="padding: 0;">
-        <table>
-          <thead><tr>
-            <th>Pacote</th><th>Frente</th><th>Executado</th><th>%</th><th>Última atividade</th>
-          </tr></thead>
-          <tbody>
-            ${pacotes
-              .filter(a => a.qtdExecutada > 0)
-              .sort((a, b) => (b.ultimaData || 0) - (a.ultimaData || 0))
-              .slice(0, 8)
-              .map(a => `
-                <tr>
-                  <td><strong>${a.pacote['Pacote'] || ''}</strong></td>
-                  <td><span class="tag ${frenteToTagClass(a.pacote['Frente'])}">${a.pacote['Frente']||''}</span></td>
-                  <td>${a.qtdExecutada.toFixed(2)} / ${a.qtdEstimada.toFixed(0)} ${a.pacote['Unidade Física']||''}</td>
-                  <td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill ${a.pct >= 0.999 ? 'completo' : 'parcial'}" style="width:${a.pct*100}%"></div></div><span class="pct-text">${(a.pct*100).toFixed(0)}%</span></div></td>
-                  <td>${a.ultimaData ? fmtData(a.ultimaData.toISOString().split('T')[0]) : '—'}</td>
-                </tr>
-              `).join('') || '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);">Nenhum RDO lançado ainda. Comece lançando o primeiro na aba "📝 Lançar RDO".</td></tr>'}
-          </tbody>
-        </table>
+      <div class="card-body">
+        <div class="empty">
+          <div class="empty-icon">⚠</div>
+          <div class="empty-title">Não consegui carregar os dados</div>
+          <div class="empty-sub">${e.message}<br><br>Verifique se os CSVs estão publicados na Sheets e tente novamente.</div>
+          <br>
+          <button class="btn btn-primary" onclick="carregarTudo()">↻ Tentar de novo</button>
+        </div>
       </div>
     </div>
   `;
 }
 
-function renderCronograma() {
-  // Igual ao dashboard v1, com filtro de mês
-  const tarefas = STATE.cronograma.map(t => ({
-    nome: t['Nome'],
-    edt: t['EDT'],
-    nivel: parseInt(t['Nivel']) || 0,
-    ini: parseISODate(t['Inicio']),
-    fim: parseISODate(t['Termino']),
-    pct: num(t['Pct_Concluido_Plan']),
-    resumo: (t['Eh_Resumo'] || '').toLowerCase().startsWith('s'),
-    pacote: t['Pacote_ID'] || ''
-  })).filter(t => t.ini && t.fim);
+// ====================================================================
+// VIEW: EXECUTIVO
+// ====================================================================
+function renderExecutivo() {
+  const av = calcularAvancoPorPacote();
+  const pacotes = Object.values(av).filter(a => a.pacote && a.pacote['Status'] !== 'Histórico');
   
-  const mesAno = STATE.currentMes.split('-').map(Number);
-  const mesIni = new Date(mesAno[0], mesAno[1]-1, 1);
-  const mesFim = new Date(mesAno[0], mesAno[1], 0, 23, 59);
-  const dias = mesFim.getDate();
+  const totalPac = pacotes.length;
+  const iniciados = pacotes.filter(a => a.qtdExecutada > 0).length;
+  const concluidos = pacotes.filter(a => a.pct >= 0.999).length;
+  const totalRDOs = STATE.rdoavanco.length;
   
-  const ativas = tarefas.filter(t => t.ini <= mesFim && t.fim >= mesIni && !t.resumo)
-    .sort((a, b) => {
-      const ea = a.edt.split('.').map(Number);
-      const eb = b.edt.split('.').map(Number);
-      for (let i = 0; i < Math.max(ea.length, eb.length); i++) {
-        const da = ea[i]||0, db = eb[i]||0;
-        if (da !== db) return da - db;
-      }
-      return 0;
-    });
+  // % físico ponderado pela qtd estimada (peso real, não média simples)
+  const totalEstim = pacotes.reduce((s,a) => s + a.qtdEstimada, 0);
+  const pctPond = totalEstim > 0 ?
+    pacotes.reduce((s,a) => s + a.pct * a.qtdEstimada, 0) / totalEstim : 0;
+  
+  // Avanço por frente (ponderado também)
+  const porFrente = {};
+  pacotes.forEach(a => {
+    const f = a.pacote['Frente'] || 'Outros';
+    if (!porFrente[f]) porFrente[f] = { items: [], totalEstim: 0, totalExec: 0 };
+    porFrente[f].items.push(a);
+    porFrente[f].totalEstim += a.qtdEstimada;
+    porFrente[f].totalExec += a.qtdExecutada;
+  });
+  Object.values(porFrente).forEach(f => {
+    f.pctPond = f.totalEstim > 0 ? f.totalExec / f.totalEstim : 0;
+  });
+  
+  // Top pacotes ativos
+  const ativosOrdenados = pacotes
+    .filter(a => a.qtdExecutada > 0)
+    .sort((a,b) => (b.ultimaData || 0) - (a.ultimaData || 0))
+    .slice(0, 8);
+  
+  // Curva S (acumulado por dia)
+  const rdosOrdenados = [...STATE.rdoavanco]
+    .map(r => ({ data: parseISODate(r['Data']), pid: r['Pacote_ID'], qtd: num(r['Quantidade']) }))
+    .filter(r => r.data && r.pid)
+    .sort((a,b) => a.data - b.data);
   
   return `
-    <div class="controls">
-      <div class="control-group">
-        <label>Mês de referência</label>
-        <div class="btn-group" id="mesGroup">
-          <button data-mes="2026-04" class="${STATE.currentMes==='2026-04'?'active':''}">Abril/26</button>
-          <button data-mes="2026-05" class="${STATE.currentMes==='2026-05'?'active':''}">Maio/26</button>
-          <button data-mes="2026-06" class="${STATE.currentMes==='2026-06'?'active':''}">Junho/26</button>
-          <button data-mes="2026-07" class="${STATE.currentMes==='2026-07'?'active':''}">Julho/26</button>
+    <div class="kpi-grid">
+      <div class="kpi-card kpi-hero">
+        <div class="kpi-label">Avanço físico geral</div>
+        <div class="kpi-value">${fmtPct(pctPond)}</div>
+        <div class="kpi-sub">Calculado dos ${totalRDOs} RDOs lançados · ponderado por quantidade</div>
+        <div class="kpi-bar-wrap" style="background:rgba(255,255,255,.15);margin-top:10px">
+          <div class="kpi-bar" style="background:#fff;width:${pctPond*100}%"></div>
+        </div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pacotes</div>
+        <div class="kpi-value">${iniciados}<span style="color:var(--muted);font-size:18px">/${totalPac}</span></div>
+        <div class="kpi-sub">${concluidos} concluídos</div>
+        <div class="kpi-bar-wrap"><div class="kpi-bar" style="background:var(--pri);width:${iniciados/totalPac*100}%"></div></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">RDOs Lançados</div>
+        <div class="kpi-value">${totalRDOs}</div>
+        <div class="kpi-sub">${rdosOrdenados.length > 0 ? `Último: ${fmtData(rdosOrdenados[rdosOrdenados.length-1].data)}` : 'nenhum lançamento'}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Frentes ativas</div>
+        <div class="kpi-value">${Object.keys(porFrente).length}</div>
+        <div class="kpi-sub">${Object.entries(porFrente).filter(([,f]) => f.pctPond > 0).length} com avanço</div>
+      </div>
+    </div>
+    
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Curva S — avanço acumulado</div>
+            <div class="card-title-sub">% acumulado por dia (RDOs reais)</div>
+          </div>
+        </div>
+        <div class="card-body">
+          ${rdosOrdenados.length > 0 ?
+            '<canvas id="curvaS" height="200"></canvas>' :
+            '<div class="empty"><div class="empty-icon">◷</div><div class="empty-title">Sem dados ainda</div><div class="empty-sub">Lance o primeiro RDO pra ver a curva S aparecer aqui</div></div>'}
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Avanço por frente</div>
+            <div class="card-title-sub">Ponderado por quantidade estimada</div>
+          </div>
+        </div>
+        <div class="card-body">
+          ${Object.entries(porFrente)
+            .sort((a,b) => b[1].pctPond - a[1].pctPond)
+            .map(([f, d]) => `
+              <div style="margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;margin-bottom:5px;align-items:center">
+                  <div>
+                    <span class="f-tag f-${frenteSlug(f)}">${f}</span>
+                    <span style="color:var(--muted);font-size:11px;margin-left:6px">${d.items.length} pacote${d.items.length>1?'s':''}</span>
+                  </div>
+                  <span class="t-num" style="font-weight:600;color:var(--text)">${fmtPct(d.pctPond)}</span>
+                </div>
+                <div class="prog-bar-wrap">
+                  <div class="prog-bar ${d.pctPond >= 0.999 ? 'completo' : d.pctPond > 0 ? 'parcial' : 'zero'}" style="width:${d.pctPond*100}%"></div>
+                </div>
+              </div>
+            `).join('')}
         </div>
       </div>
     </div>
     
     <div class="card">
       <div class="card-header">
-        <h3>📅 ${ativas.length} serviços ativos no mês selecionado</h3>
+        <div>
+          <div class="card-title">Pacotes mais ativos</div>
+          <div class="card-title-sub">Últimos lançamentos no canteiro</div>
+        </div>
       </div>
-      <div class="card-body" style="padding: 0; overflow-x: auto;">
-        <table>
-          <thead><tr>
-            <th>EDT</th><th>Serviço</th><th>Início</th><th>Término</th>
-            <th>%</th><th>Linha do tempo do mês</th>
-          </tr></thead>
-          <tbody>
-            ${ativas.map(t => {
-              const ini = t.ini < mesIni ? mesIni : t.ini;
-              const fim = t.fim > mesFim ? mesFim : t.fim;
-              const left = ((ini.getDate()-1)/dias)*100;
-              const width = ((fim.getDate()-ini.getDate()+1)/dias)*100;
-              return `
+      <div class="card-body flush">
+        ${ativosOrdenados.length === 0 ?
+          '<div class="empty"><div class="empty-icon">⊕</div><div class="empty-title">Nenhum RDO ainda</div><div class="empty-sub">Comece lançando o primeiro serviço pra ver o sistema funcionar.</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro RDO</button></div>' :
+          `<table class="t">
+            <thead>
+              <tr><th>Pacote</th><th>Frente</th><th>Executado</th><th>Avanço</th><th>Última atividade</th></tr>
+            </thead>
+            <tbody>
+              ${ativosOrdenados.map(a => `
                 <tr>
-                  <td style="font-family:monospace;font-size:11px;color:var(--muted)">${t.edt}</td>
-                  <td class="indent-${Math.min(t.nivel,4)}">${t.nome}</td>
-                  <td style="font-size:12px">${fmtData(t.ini.toISOString())}</td>
-                  <td style="font-size:12px">${fmtData(t.fim.toISOString())}</td>
-                  <td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill ${t.pct >= 0.999 ? 'completo' : t.pct > 0 ? 'parcial' : 'zero'}" style="width:${t.pct*100}%"></div></div><span class="pct-text">${(t.pct*100).toFixed(0)}%</span></div></td>
-                  <td><div class="gantt-cell"><div class="gantt-bar ${t.pct >= 0.999 ? 'completo' : t.pct > 0 ? 'iniciando' : 'zero'}" style="left:${left}%;width:${width}%">${width > 12 ? ini.getDate()+'-'+fim.getDate() : ''}</div></div></td>
+                  <td><strong>${a.pacote['Pacote']}</strong></td>
+                  <td><span class="f-tag f-${frenteSlug(a.pacote['Frente'])}">${a.pacote['Frente']||''}</span></td>
+                  <td class="t-num">${fmtNum(a.qtdExecutada)} <span style="color:var(--muted);font-size:11px">/ ${fmtNum(a.qtdEstimada,0)} ${a.pacote['Unidade Física']||''}</span></td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <div class="prog-bar-wrap" style="width:80px"><div class="prog-bar ${a.pct >= 0.999 ? 'completo' : 'parcial'}" style="width:${a.pct*100}%"></div></div>
+                      <span class="t-num">${fmtPct(a.pct)}</span>
+                    </div>
+                  </td>
+                  <td>${a.ultimaData ? fmtData(a.ultimaData) : '—'}</td>
                 </tr>
-              `;
-            }).join('') || '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted);">Nenhuma tarefa no período.</td></tr>'}
-          </tbody>
-        </table>
+              `).join('')}
+            </tbody>
+          </table>`
+        }
       </div>
     </div>
   `;
 }
 
+// ====================================================================
+// VIEW: AVANÇO FÍSICO (heatmap + tabela)
+// ====================================================================
 function renderAvancoFisico() {
-  const avanco = calcularAvancoPorPacote();
-  const pacotes = Object.values(avanco).filter(a => a.pacote);
+  const av = calcularAvancoPorPacote();
+  const pacotes = Object.values(av).filter(a => a.pacote);
   
   // Agrupar por frente
   const porFrente = {};
@@ -779,27 +996,52 @@ function renderAvancoFisico() {
   return `
     <div class="card">
       <div class="card-header">
-        <h3>📈 Avanço Físico por Pacote</h3>
-        <span style="font-size:12px;color:var(--muted)">Calculado a partir dos RDOs lançados</span>
+        <div>
+          <div class="card-title">Mapa de avanço por estaca</div>
+          <div class="card-title-sub">Cada célula = quantidade lançada na estaca · células mais escuras = mais executado</div>
+        </div>
       </div>
-      <div class="card-body" style="padding: 0;">
-        <table>
-          <thead><tr>
-            <th>Pacote</th><th>Unid</th><th>Executado</th><th>Estimado</th>
-            <th>% Físico</th><th>Lançamentos</th><th>Última atividade</th>
-          </tr></thead>
+      <div class="card-body">
+        ${renderHeatmap(av)}
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Avanço detalhado por pacote</div>
+          <div class="card-title-sub">${pacotes.length} pacotes · agrupados por frente</div>
+        </div>
+      </div>
+      <div class="card-body flush">
+        <table class="t">
+          <thead>
+            <tr>
+              <th>Pacote</th><th>Unid</th>
+              <th class="t-num" style="text-align:right">Executado</th>
+              <th class="t-num" style="text-align:right">Estimado</th>
+              <th>Avanço</th>
+              <th class="t-num" style="text-align:right">Lançam.</th>
+              <th>Última</th>
+            </tr>
+          </thead>
           <tbody>
             ${Object.entries(porFrente).map(([f, lista]) => `
-              <tr class="summary"><td colspan="7">${f.toUpperCase()} — ${lista.length} pacote${lista.length>1?'s':''}</td></tr>
+              <tr class="summary"><td colspan="7">${f} — ${lista.length} pacote${lista.length>1?'s':''}</td></tr>
               ${lista.map(a => `
                 <tr>
                   <td><strong>${a.pacote['Pacote']||''}</strong></td>
-                  <td>${a.pacote['Unidade Física']||''}</td>
-                  <td>${a.qtdExecutada.toFixed(2)}</td>
-                  <td>${a.qtdEstimada.toFixed(2)}</td>
-                  <td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill ${a.pct >= 0.999 ? 'completo' : a.pct > 0 ? 'parcial' : 'zero'}" style="width:${a.pct*100}%"></div></div><span class="pct-text">${(a.pct*100).toFixed(0)}%</span></div></td>
-                  <td>${a.lancamentos}</td>
-                  <td>${a.ultimaData ? fmtData(a.ultimaData.toISOString().split('T')[0]) : '—'}</td>
+                  <td><span class="t-mono">${a.pacote['Unidade Física']||''}</span></td>
+                  <td class="t-num">${fmtNum(a.qtdExecutada)}</td>
+                  <td class="t-num" style="color:var(--muted)">${fmtNum(a.qtdEstimada, 0)}</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:8px;min-width:140px">
+                      <div class="prog-bar-wrap" style="width:80px"><div class="prog-bar ${a.pct >= 0.999 ? 'completo' : a.pct > 0 ? 'parcial' : 'zero'}" style="width:${a.pct*100}%"></div></div>
+                      <span class="t-num" style="min-width:42px">${fmtPct(a.pct)}</span>
+                    </div>
+                  </td>
+                  <td class="t-num">${a.lancamentos}</td>
+                  <td style="font-size:11px;color:var(--muted)">${a.ultimaData ? fmtData(a.ultimaData) : '—'}</td>
                 </tr>
               `).join('')}
             `).join('')}
@@ -810,127 +1052,165 @@ function renderAvancoFisico() {
   `;
 }
 
-function renderRDOForm() {
-  const pacotes = STATE.pacotes
-    .filter(p => p['Status'] !== 'Histórico')
-    .sort((a,b) => (a['Frente']||'').localeCompare(b['Frente']||''));
+function renderHeatmap(av) {
+  const estacas = listarEstacas();
+  // pegar pacotes que têm pelo menos 1 lançamento ou todos os ativos
+  const pacotesAtivos = Object.values(av).filter(a => a.pacote && a.pacote['Status'] !== 'Histórico')
+    .filter(a => a.qtdExecutada > 0 || true) // mostra todos pra dar mapa contextual
+    .slice(0, 15); // limitar pra não poluir
   
-  const hoje = new Date().toISOString().split('T')[0];
+  if (pacotesAtivos.length === 0) {
+    return '<div class="empty"><div class="empty-icon">▦</div><div class="empty-title">Mapa vazio</div><div class="empty-sub">Lance RDOs com estaca preenchida pra ver o mapa se construir</div></div>';
+  }
+  
+  // Estaca máxima por pacote pra normalizar cor
+  const maxPorPac = {};
+  pacotesAtivos.forEach(a => {
+    maxPorPac[a.pacote['ID']] = Math.max(0, ...Object.values(a.porEstaca));
+  });
+  
+  // Quebrar em 2 grupos: CB (99-141) e BC (201-244)
+  const cb = estacas.filter(e => e.sentido === 'CB');
+  const bc = estacas.filter(e => e.sentido === 'BC');
+  
+  function blocoHeatmap(lista, label) {
+    if (lista.length === 0) return '';
+    const colTemplate = `200px repeat(${lista.length}, minmax(28px, 1fr))`;
+    return `
+      <div style="margin-bottom:18px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${label}</div>
+        <div class="heatmap" style="grid-template-columns:${colTemplate}">
+          <div class="hm-row-label" style="visibility:hidden">.</div>
+          ${lista.map(e => `<div class="hm-col-label">${e.id}</div>`).join('')}
+          ${pacotesAtivos.map(a => {
+            const max = maxPorPac[a.pacote['ID']] || 1;
+            return `
+              <div class="hm-row-label">${a.pacote['Pacote']}</div>
+              ${lista.map(e => {
+                const v = a.porEstaca[e.id] || 0;
+                const intensity = max > 0 ? Math.min(v / max, 1) : 0;
+                const bg = v > 0 ?
+                  `background:oklch(${0.95 - intensity * 0.45} 0.18 38)` :
+                  `background:var(--bg)`;
+                const color = intensity > 0.5 ? '#fff' : 'var(--muted)';
+                const title = `${e.id} · ${a.pacote['Pacote']}: ${fmtNum(v, 1)} ${a.pacote['Unidade Física']||''}`;
+                return `<div class="hm-cell" style="${bg};color:${color}" title="${title}">${v > 0 ? fmtNum(v, 0) : ''}</div>`;
+              }).join('')}
+            `;
+          }).join('')}
+        </div>
+      </div>
+    `;
+  }
   
   return `
-    <div id="rdoForm">
-      <h3>📝 Novo lançamento de RDO</h3>
-      <p style="font-size: 12px; color: var(--muted); margin-bottom: 14px;">
-        Preencha os dados abaixo. Esse formulário gera o texto formatado pra você COLAR direto na aba <strong>RDO_Avanco</strong> da sua Google Sheets.
-        <br>(Esse é um modo provisório até a Sessão 4 — quando o app de RDO vai gravar direto na Sheets via API.)
-      </p>
-      
-      <div class="row">
-        <div>
-          <label>Data</label>
-          <input type="date" id="f_data" value="${hoje}">
-        </div>
-        <div>
-          <label>Pacote</label>
-          <select id="f_pacote">
-            <option value="">— escolher —</option>
-            ${pacotes.map(p => `<option value="${p['ID']}|${p['Pacote']}|${p['Unidade Física']||''}">${p['Frente']||''} → ${p['Pacote']||''} (${p['Unidade Física']||''})</option>`).join('')}
-          </select>
-        </div>
-        <div>
-          <label>Quantidade</label>
-          <input type="number" id="f_qtd" step="0.01" placeholder="50">
-        </div>
-        <div>
-          <label>Local / Estaca</label>
-          <input type="text" id="f_local" placeholder="E12+05 a E12+50">
-        </div>
-        <div>
-          <label>Equipe / Subcontratado</label>
-          <input type="text" id="f_equipe" placeholder="Sena Obras">
-        </div>
-        <div>
-          <label>Efetivo total</label>
-          <input type="number" id="f_efetivo" placeholder="8">
-        </div>
-        <div>
-          <label>Clima</label>
-          <select id="f_clima">
-            <option>Bom</option><option>Garoa</option><option>Chuva</option><option>Parado por chuva</option>
-          </select>
-        </div>
-        <div>
-          <label>Apontador</label>
-          <input type="text" id="f_apontador" placeholder="João">
-        </div>
-      </div>
-      
-      <div style="margin-top: 10px;">
-        <label style="font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600;">Observação</label>
-        <input type="text" id="f_obs" placeholder="Continuar amanhã trecho 12+50 a 13+00" style="width: 100%; margin-top: 3px;">
-      </div>
-      
-      <button class="primary" onclick="gerarLinhaRDO()">📋 Gerar linha pra colar</button>
-      
-      <div id="rdoOutput" style="display:none;" class="copy-output"></div>
+    <div class="heatmap-wrap">
+      ${blocoHeatmap(cb, `Sentido Centro→Bairro · E${CONFIG.estacasCB.ini}–E${CONFIG.estacasCB.fim}`)}
+      ${blocoHeatmap(bc, `Sentido Bairro→Centro · E${CONFIG.estacasBC.ini}–E${CONFIG.estacasBC.fim}`)}
     </div>
   `;
 }
 
-function renderApoioMedicao() {
-  const avanco = calcularAvancoPorPacote();
+// ====================================================================
+// VIEW: CRONOGRAMA (visão por mês + visão por fase)
+// ====================================================================
+let CRONO_VIEW = 'mes';
+let CRONO_MES = '2026-04';
+
+function renderCronograma() {
+  const tarefas = STATE.cronograma.map(t => ({
+    nome: t['Nome'] || t['nome'],
+    edt: t['EDT'] || t['edt'],
+    nivel: parseInt(t['Nivel'] || t['nivel']) || 0,
+    ini: parseISODate(t['Inicio'] || t['Início']),
+    fim: parseISODate(t['Termino'] || t['Término']),
+    pct: num(t['Pct_Concluido_Plan']),
+    resumo: (t['Eh_Resumo'] || '').toLowerCase().startsWith('s'),
+  })).filter(t => t.ini && t.fim);
   
-  // Para cada pacote com execução, expandir nos itens contratuais via coeficientes
-  const consumoPorItem = {};
-  
-  Object.values(avanco).forEach(a => {
-    if (a.qtdExecutada <= 0) return;
-    const pid = a.pacote['ID'];
-    const coefsDoPacote = STATE.coeficientes.filter(c => c['Pacote ID'] === pid);
-    coefsDoPacote.forEach(c => {
-      const item = c['Item Contratual'];
-      const desc = c['Descrição Item'];
-      const coef = num(c['Coef']);
-      const consumo = a.qtdExecutada * coef;
-      if (!consumoPorItem[item]) {
-        consumoPorItem[item] = { 
-          item, descricao: desc, unidadeItem: c['Unid Item'] || '', 
-          consumido: 0, pacotes: [] 
-        };
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div class="btn-toggle-group">
+        <button class="btn-toggle ${CRONO_VIEW==='mes'?'active':''}" onclick="setCronoView('mes')">Por mês</button>
+        <button class="btn-toggle ${CRONO_VIEW==='fases'?'active':''}" onclick="setCronoView('fases')">Por fase</button>
+      </div>
+    </div>
+    ${CRONO_VIEW === 'mes' ? renderCronoMes(tarefas) : renderCronoFases(tarefas)}
+  `;
+}
+
+function setCronoView(v) {
+  CRONO_VIEW = v;
+  render();
+}
+
+function setCronoMes(m) {
+  CRONO_MES = m;
+  render();
+}
+
+function renderCronoMes(tarefas) {
+  const [y, m] = CRONO_MES.split('-').map(Number);
+  const ini = new Date(y, m-1, 1);
+  const fim = new Date(y, m, 0, 23, 59);
+  const dias = fim.getDate();
+  const ativas = tarefas.filter(t => t.ini <= fim && t.fim >= ini && !t.resumo)
+    .sort((a, b) => {
+      const ea = a.edt.split('.').map(Number), eb = b.edt.split('.').map(Number);
+      for (let i = 0; i < Math.max(ea.length, eb.length); i++) {
+        const da = ea[i]||0, db = eb[i]||0;
+        if (da !== db) return da - db;
       }
-      consumoPorItem[item].consumido += consumo;
-      consumoPorItem[item].pacotes.push(`${a.pacote['Pacote']} × ${coef}`);
+      return 0;
     });
-  });
   
-  const lista = Object.values(consumoPorItem).filter(x => x.consumido > 0)
-    .sort((a, b) => b.consumido - a.consumido);
+  const mesesDisp = ['2026-04','2026-05','2026-06','2026-07','2026-08','2026-09'];
+  const mesNomes = {'2026-04':'Abril/26','2026-05':'Maio/26','2026-06':'Junho/26','2026-07':'Julho/26','2026-08':'Agosto/26','2026-09':'Setembro/26'};
   
   return `
     <div class="card">
       <div class="card-header">
-        <h3>🧮 Apoio à Medição — Consumo por Item Contratual</h3>
-        <span style="font-size:12px;color:var(--muted)">Gerado a partir dos RDOs × matriz de coeficientes</span>
+        <div>
+          <div class="card-title">Tarefas ativas no mês</div>
+          <div class="card-title-sub">${ativas.length} serviços previstos</div>
+        </div>
+        <div class="btn-toggle-group">
+          ${mesesDisp.map(mz => `<button class="btn-toggle ${CRONO_MES===mz?'active':''}" onclick="setCronoMes('${mz}')">${mesNomes[mz]}</button>`).join('')}
+        </div>
       </div>
-      <div class="card-body">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
-          Esta tabela mostra <strong>quanto de cada item contratual</strong> foi consumido com base nos RDOs lançados. 
-          Use como apoio na hora de montar a memória de cálculo da medição mensal.
-        </p>
-        <table>
+      <div class="card-body flush" style="overflow-x:auto">
+        <table class="t" style="min-width:900px">
           <thead><tr>
-            <th>Item</th><th>Descrição</th><th>Unid</th><th>Consumido</th><th>De quais pacotes</th>
+            <th>EDT</th><th>Serviço</th><th>Início</th><th>Término</th>
+            <th style="width:130px">% Plan.</th><th style="min-width:280px">Linha do tempo do mês</th>
           </tr></thead>
           <tbody>
-            ${lista.map(x => `
-              <tr>
-                <td style="font-family:monospace;font-size:11px">${x.item}</td>
-                <td>${x.descricao}</td>
-                <td>${x.unidadeItem}</td>
-                <td><strong>${x.consumido.toFixed(2)}</strong></td>
-                <td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td>
-              </tr>
-            `).join('') || '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);">Nenhum RDO lançado. Comece lançando RDOs na aba "📝 Lançar RDO".</td></tr>'}
+            ${ativas.map(t => {
+              const tIni = t.ini < ini ? ini : t.ini;
+              const tFim = t.fim > fim ? fim : t.fim;
+              const left = ((tIni.getDate()-1)/dias)*100;
+              const width = ((tFim.getDate()-tIni.getDate()+1)/dias)*100;
+              return `
+                <tr>
+                  <td class="t-mono">${t.edt}</td>
+                  <td style="padding-left:${14 + Math.min(t.nivel,4)*12}px">${t.nome}</td>
+                  <td style="font-size:12px">${fmtData(t.ini)}</td>
+                  <td style="font-size:12px">${fmtData(t.fim)}</td>
+                  <td>
+                    <div style="display:flex;align-items:center;gap:6px">
+                      <div class="prog-bar-wrap" style="width:60px"><div class="prog-bar ${t.pct >= 0.999 ? 'completo' : t.pct > 0 ? 'parcial' : 'zero'}" style="width:${t.pct*100}%"></div></div>
+                      <span class="t-num" style="font-size:11px;min-width:36px">${fmtPct(t.pct)}</span>
+                    </div>
+                  </td>
+                  <td>
+                    <div style="position:relative;height:22px;background:var(--bg);border-radius:4px;overflow:hidden">
+                      <div style="position:absolute;left:${left}%;width:${width}%;top:3px;height:16px;background:var(--pri);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:600">${width > 12 ? tIni.getDate()+'-'+tFim.getDate() : ''}</div>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+            ${ativas.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">Nenhuma tarefa nesse mês.</td></tr>' : ''}
           </tbody>
         </table>
       </div>
@@ -938,58 +1218,647 @@ function renderApoioMedicao() {
   `;
 }
 
-function gerarLinhaRDO() {
-  const data = document.getElementById('f_data').value;
-  const pacote = document.getElementById('f_pacote').value;
-  const qtd = document.getElementById('f_qtd').value;
-  const local = document.getElementById('f_local').value;
-  const equipe = document.getElementById('f_equipe').value;
-  const efetivo = document.getElementById('f_efetivo').value;
-  const clima = document.getElementById('f_clima').value;
-  const apontador = document.getElementById('f_apontador').value;
-  const obs = document.getElementById('f_obs').value;
+function renderCronoFases(tarefas) {
+  // Agrupar por nível 1 (FASE 0, FASE 1, ...) baseado no EDT
+  const fases = {};
+  tarefas.forEach(t => {
+    const edtParts = t.edt.split('.');
+    const root = edtParts[0];  // pega o "1.X.Y" → "1"
+    if (!fases[root]) {
+      fases[root] = { tarefas: [], nome: '', resumoTopo: null };
+    }
+    if (t.nivel === 2 && edtParts.length === 1) {
+      // É a tarefa de nível superior (resumo da fase)
+      fases[root].nome = t.nome;
+      fases[root].resumoTopo = t;
+    } else {
+      fases[root].tarefas.push(t);
+    }
+  });
   
-  if (!pacote || !qtd || !data) {
-    alert('Preencha pelo menos: Data, Pacote e Quantidade.');
-    return;
-  }
+  // Procurar nomes pelos resumos
+  tarefas.forEach(t => {
+    if (t.resumo && t.nivel <= 2) {
+      const root = t.edt.split('.')[0];
+      if (fases[root] && !fases[root].nome) fases[root].nome = t.nome;
+    }
+  });
   
-  const [pid, pnome, punid] = pacote.split('|');
-  const id = 'R' + String(STATE.rdoavanco.length + 1).padStart(4, '0');
+  return `
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Cronograma por fase</div>
+          <div class="card-title-sub">Estrutura hierárquica do Project · % planejado</div>
+        </div>
+      </div>
+      <div class="card-body">
+        ${Object.entries(fases)
+          .sort((a,b) => parseInt(a[0]) - parseInt(b[0]))
+          .map(([rid, f]) => {
+            const sub = f.tarefas.filter(t => !t.resumo).slice(0, 80);
+            const pctMedio = sub.length > 0 ? sub.reduce((s,t)=>s+t.pct, 0)/sub.length : 0;
+            const inis = sub.map(t=>t.ini).filter(Boolean);
+            const fims = sub.map(t=>t.fim).filter(Boolean);
+            const dataIni = inis.length ? new Date(Math.min(...inis)) : null;
+            const dataFim = fims.length ? new Date(Math.max(...fims)) : null;
+            return `
+              <div style="margin-bottom:18px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
+                <div style="padding:14px 18px;background:var(--surface-2);display:flex;justify-content:space-between;align-items:center;cursor:pointer;flex-wrap:wrap;gap:10px" onclick="document.getElementById('fase-${rid}').classList.toggle('hidden')">
+                  <div>
+                    <div style="font-size:14px;font-weight:600">FASE ${rid}: ${f.nome || '(sem título)'}</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:2px">
+                      ${dataIni ? fmtData(dataIni) : '—'} → ${dataFim ? fmtData(dataFim) : '—'}
+                      · ${sub.length} sub-tarefa${sub.length>1?'s':''}
+                    </div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <div class="prog-bar-wrap" style="width:120px"><div class="prog-bar ${pctMedio >= 0.999 ? 'completo' : pctMedio > 0 ? 'parcial' : 'zero'}" style="width:${pctMedio*100}%"></div></div>
+                    <span class="t-num" style="font-weight:600;min-width:48px">${fmtPct(pctMedio)}</span>
+                    <span style="color:var(--muted);font-size:14px">▾</span>
+                  </div>
+                </div>
+                <div id="fase-${rid}" class="hidden" style="padding:14px 18px">
+                  <table class="t">
+                    <tbody>
+                      ${sub.slice(0, 30).map(t => `
+                        <tr>
+                          <td class="t-mono" style="width:80px">${t.edt}</td>
+                          <td>${t.nome}</td>
+                          <td style="font-size:12px;color:var(--muted)">${fmtData(t.ini)} → ${fmtData(t.fim)}</td>
+                          <td style="width:140px">
+                            <div style="display:flex;align-items:center;gap:6px">
+                              <div class="prog-bar-wrap" style="width:60px"><div class="prog-bar ${t.pct >= 0.999 ? 'completo' : t.pct > 0 ? 'parcial' : 'zero'}" style="width:${t.pct*100}%"></div></div>
+                              <span class="t-num" style="font-size:11px">${fmtPct(t.pct)}</span>
+                            </div>
+                          </td>
+                        </tr>
+                      `).join('')}
+                      ${sub.length > 30 ? `<tr><td colspan="4" style="text-align:center;color:var(--muted);font-size:11px">+ ${sub.length - 30} tarefas adicionais</td></tr>` : ''}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `;
+          }).join('')}
+      </div>
+    </div>
+    <style>.hidden{display:none}</style>
+  `;
+}
+
+// ====================================================================
+// VIEW: APOIO À MEDIÇÃO
+// ====================================================================
+function renderMedicao() {
+  const av = calcularAvancoPorPacote();
+  const consumo = calcularConsumoItens(av);
+  const lista = Object.values(consumo).filter(x => x.consumido > 0)
+    .sort((a,b) => b.consumido - a.consumido);
   
-  // Linha tab-separated pra colar direto na Sheets
-  const linha = [id, data, pid, pnome, qtd, punid, local, equipe.split('/')[0]||'', equipe, efetivo, '', clima, '', '', obs, apontador].join('\t');
-  
-  const out = document.getElementById('rdoOutput');
-  out.style.display = 'block';
-  out.innerHTML = `
-    <div style="margin-bottom: 8px; color: var(--pri); font-weight: 600;">✅ Linha gerada — copie e cole na primeira linha vazia da aba <strong>RDO_Avanco</strong> da sua Sheets:</div>
-    <textarea id="copyText" style="width:100%; height:60px; font-family: monospace; font-size: 11px; padding: 8px; border-radius: 4px; border: 1px solid var(--border);" readonly>${linha}</textarea>
-    <button onclick="navigator.clipboard.writeText(document.getElementById('copyText').value);this.textContent='✅ Copiado!'" style="margin-top: 8px; padding: 6px 14px; background: var(--pri); color: white; border: none; border-radius: 4px; cursor: pointer;">📋 Copiar</button>
-    <div style="font-size: 11px; color: var(--muted); margin-top: 10px;">
-      💡 Dica: clique numa célula vazia da coluna A (depois da última linha de RDO) na sua Sheets, e cole. Os valores vão pras colunas certas automaticamente.
+  return `
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Consumo derivado por item contratual</div>
+          <div class="card-title-sub">Calculado a partir dos RDOs × matriz de coeficientes (33 pacotes × 104 coefs)</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted)">${lista.length} itens com consumo</div>
+      </div>
+      <div class="card-body flush">
+        ${lista.length === 0 ?
+          '<div class="empty"><div class="empty-icon">⌗</div><div class="empty-title">Nada consumido ainda</div><div class="empty-sub">Quando você lançar RDOs com pacote e quantidade, esta tabela vai mostrar QUANTO de cada item contratual foi consumido — pronto pra montar a memória de cálculo da medição mensal.</div></div>' :
+          `<table class="t">
+            <thead>
+              <tr>
+                <th>Código</th><th>Descrição</th><th>Unid.</th>
+                <th class="t-num" style="text-align:right">Consumido</th>
+                <th>Pacotes que contribuíram</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${lista.map(x => `
+                <tr>
+                  <td class="t-mono"><strong>${x.item}</strong></td>
+                  <td>${x.descricao}</td>
+                  <td><span class="t-mono">${x.unidadeItem}</span></td>
+                  <td class="t-num" style="font-weight:600">${fmtNum(x.consumido)}</td>
+                  <td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>`
+        }
+      </div>
     </div>
   `;
 }
 
-// =============================================================
-// NAVEGAÇÃO
-// =============================================================
-document.querySelectorAll('.tab').forEach(t => {
-  t.onclick = () => {
-    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-    t.classList.add('active');
-    STATE.currentView = t.dataset.view;
-    render();
+// ====================================================================
+// VIEW: HISTÓRICO DE RDOs
+// ====================================================================
+function renderHistorico() {
+  const rdos = [...STATE.rdoavanco].reverse(); // mais recentes primeiro
+  return `
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Histórico de RDOs</div>
+          <div class="card-title-sub">${rdos.length} lançamento${rdos.length!==1?'s':''} no total</div>
+        </div>
+      </div>
+      <div class="card-body flush">
+        ${rdos.length === 0 ?
+          '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum RDO ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro RDO</button></div>' :
+          `<table class="t">
+            <thead><tr>
+              <th>ID</th><th>Data</th><th>Pacote</th>
+              <th class="t-num" style="text-align:right">Qtd</th>
+              <th>Estaca</th><th>Equipe</th><th>Apontador</th><th>Obs.</th>
+            </tr></thead>
+            <tbody>
+              ${rdos.slice(0, 100).map(r => `
+                <tr>
+                  <td class="t-mono">${r['ID']||''}</td>
+                  <td style="font-size:12px">${fmtData(r['Data'])}</td>
+                  <td><strong>${r['Pacote_Nome']||''}</strong></td>
+                  <td class="t-num">${fmtNum(num(r['Quantidade']))} ${r['Unidade']||''}</td>
+                  <td class="t-mono" style="font-size:11px">${r['Local_Estaca']||''}</td>
+                  <td style="font-size:12px">${r['Equipe']||r['Subcontratado']||''}</td>
+                  <td style="font-size:12px">${r['Apontador']||''}</td>
+                  <td style="font-size:11px;color:var(--muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['Observacao']||''}</td>
+                </tr>
+              `).join('')}
+              ${rdos.length > 100 ? `<tr><td colspan="8" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${rdos.length} total</td></tr>` : ''}
+            </tbody>
+          </table>`
+        }
+      </div>
+    </div>
+  `;
+}
+
+// ====================================================================
+// VIEW: LANÇAR RDO (mobile-first, grava direto via Apps Script)
+// ====================================================================
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(CONFIG.ls.rdoDraft);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+
+function saveDraft(draft) {
+  try { localStorage.setItem(CONFIG.ls.rdoDraft, JSON.stringify(draft)); } catch(e) {}
+}
+
+function clearDraft() {
+  try { localStorage.removeItem(CONFIG.ls.rdoDraft); } catch(e) {}
+}
+
+function defaultDraft() {
+  const apontador = localStorage.getItem(CONFIG.ls.apontador) || '';
+  return {
+    data: new Date().toISOString().split('T')[0],
+    sentido: 'CB',
+    estacaIni: '',
+    estacaFim: '',
+    apontador,
+    clima: 'Bom',
+    efetivo: '',
+    observacaoGeral: '',
+    servicos: [
+      { frente: '', pacoteId: '', quantidade: '', equipe: '', observacao: '' }
+    ]
   };
+}
+
+function renderRDO() {
+  if (!STATE.draft) STATE.draft = loadDraft() || defaultDraft();
+  const d = STATE.draft;
+  
+  const estacasCB = []; for (let i = CONFIG.estacasCB.ini; i <= CONFIG.estacasCB.fim; i++) estacasCB.push('E' + i);
+  const estacasBC = []; for (let i = CONFIG.estacasBC.ini; i <= CONFIG.estacasBC.fim; i++) estacasBC.push('E' + i);
+  const estacasUsar = d.sentido === 'CB' ? estacasCB : estacasBC;
+  
+  const frentes = [...new Set(STATE.pacotes
+    .filter(p => p['Status'] !== 'Histórico' && p['Frente'])
+    .map(p => p['Frente']))].sort();
+  
+  const temRascunho = !!loadDraft();
+  
+  return `
+    ${temRascunho ? `
+      <div style="background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div style="font-size:13px;color:var(--ylw-d)">📝 Rascunho restaurado da última sessão.</div>
+        <button class="btn btn-sm btn-outline" onclick="resetDraft()">Limpar e começar novo</button>
+      </div>
+    ` : ''}
+    
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Diário de obra · cabeçalho</div>
+          <div class="card-title-sub">Dados gerais do dia · preencha 1× por dia</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label>Data</label>
+            <input type="date" data-draft="data" value="${d.data}">
+          </div>
+          <div class="field">
+            <label>Apontador</label>
+            <input type="text" data-draft="apontador" value="${d.apontador}" placeholder="Seu nome">
+          </div>
+          <div class="field">
+            <label>Sentido da via</label>
+            <div class="btn-toggle-group">
+              <button type="button" class="btn-toggle ${d.sentido==='CB'?'active':''}" onclick="setSentido('CB')">Centro→Bairro</button>
+              <button type="button" class="btn-toggle ${d.sentido==='BC'?'active':''}" onclick="setSentido('BC')">Bairro→Centro</button>
+            </div>
+            <div class="field-hint">${d.sentido === 'CB' ? `E${CONFIG.estacasCB.ini}–E${CONFIG.estacasCB.fim}` : `E${CONFIG.estacasBC.ini}–E${CONFIG.estacasBC.fim}`}</div>
+          </div>
+          <div class="field">
+            <label>Clima</label>
+            <select data-draft="clima">
+              <option ${d.clima==='Bom'?'selected':''}>Bom</option>
+              <option ${d.clima==='Garoa'?'selected':''}>Garoa</option>
+              <option ${d.clima==='Chuva'?'selected':''}>Chuva</option>
+              <option ${d.clima==='Parado por chuva'?'selected':''}>Parado por chuva</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Estaca início</label>
+            <select data-draft="estacaIni">
+              <option value="">— início —</option>
+              ${estacasUsar.map(e => `<option ${d.estacaIni===e?'selected':''}>${e}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Estaca fim</label>
+            <select data-draft="estacaFim">
+              <option value="">— fim —</option>
+              ${estacasUsar.map(e => `<option ${d.estacaFim===e?'selected':''}>${e}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Efetivo total no canteiro</label>
+            <input type="number" data-draft="efetivo" value="${d.efetivo}" placeholder="ex: 12" min="0">
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>Observação geral do dia</label>
+            <input type="text" data-draft="observacaoGeral" value="${d.observacaoGeral}" placeholder="ex: Chuva à tarde interrompeu pavimentação">
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Serviços executados hoje</div>
+          <div class="card-title-sub">Adicione 1 linha por pacote/serviço executado · cada linha vira 1 RDO na Sheets</div>
+        </div>
+        <span style="font-size:11px;color:var(--muted)">${d.servicos.length} serviço${d.servicos.length>1?'s':''}</span>
+      </div>
+      <div class="card-body">
+        <div id="servicosList">
+          ${d.servicos.map((s, i) => renderServicoRow(s, i, frentes)).join('')}
+        </div>
+        <button class="btn-add-servico" onclick="adicionarServico()">+ Adicionar outro serviço</button>
+      </div>
+    </div>
+    
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px">
+      <div style="font-size:12px;color:var(--muted);max-width:520px">
+        ⓘ Ao salvar, cada serviço acima vira <strong>1 linha na aba RDO_Avanco</strong> da Google Sheets.<br>
+        O dashboard e a curva S atualizam em até 5 min (republicação automática).
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-outline" onclick="resetDraft()">Limpar tudo</button>
+        <button class="btn btn-primary btn-lg" id="btnSalvarRDO" onclick="salvarRDO()">💾 Salvar RDO completo</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderServicoRow(s, idx, frentes) {
+  // Pacotes filtrados pela frente selecionada
+  const pacotesDaFrente = s.frente ? 
+    STATE.pacotes.filter(p => p['Frente'] === s.frente && p['Status'] !== 'Histórico') :
+    [];
+  const pacoteSelecionado = STATE.pacotes.find(p => p['ID'] === s.pacoteId);
+  const unidade = pacoteSelecionado ? (pacoteSelecionado['Unidade Física'] || '') : '';
+  
+  return `
+    <div class="servico-row" data-idx="${idx}">
+      <span class="row-num">SERVIÇO ${idx + 1}</span>
+      ${idx > 0 ? `<button class="btn-remove" onclick="removerServico(${idx})" title="Remover">×</button>` : ''}
+      <div class="form-grid" style="margin-top:6px">
+        <div class="field">
+          <label>Frente</label>
+          <select data-svc="${idx}" data-field="frente">
+            <option value="">— escolher —</option>
+            ${frentes.map(f => `<option ${s.frente===f?'selected':''}>${f}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Pacote / Serviço</label>
+          <select data-svc="${idx}" data-field="pacoteId" ${!s.frente ? 'disabled' : ''}>
+            <option value="">${s.frente ? '— escolher pacote —' : '↑ escolha frente primeiro'}</option>
+            ${pacotesDaFrente.map(p => `<option value="${p['ID']}" ${s.pacoteId===p['ID']?'selected':''}>${p['Pacote']} (${p['Unidade Física']||''})</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Quantidade ${unidade ? `(${unidade})` : ''}</label>
+          <input type="number" data-svc="${idx}" data-field="quantidade" value="${s.quantidade}" placeholder="0" step="0.01" min="0">
+        </div>
+        <div class="field">
+          <label>Equipe / Subcontratado</label>
+          <input type="text" data-svc="${idx}" data-field="equipe" value="${s.equipe}" placeholder="ex: Sena Obras">
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Observação do serviço (opcional)</label>
+          <input type="text" data-svc="${idx}" data-field="observacao" value="${s.observacao}" placeholder="ex: Continuar amanhã">
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function attachRDOForm() {
+  // Bind inputs do cabeçalho
+  document.querySelectorAll('[data-draft]').forEach(el => {
+    el.oninput = el.onchange = () => {
+      STATE.draft[el.dataset.draft] = el.value;
+      if (el.dataset.draft === 'apontador') {
+        try { localStorage.setItem(CONFIG.ls.apontador, el.value); } catch(e) {}
+      }
+      saveDraft(STATE.draft);
+    };
+  });
+  
+  // Bind inputs dos serviços (delegação)
+  document.getElementById('servicosList').addEventListener('input', svcInputHandler);
+  document.getElementById('servicosList').addEventListener('change', svcInputHandler);
+}
+
+function svcInputHandler(ev) {
+  const el = ev.target;
+  if (!el.dataset.svc) return;
+  const idx = parseInt(el.dataset.svc);
+  const field = el.dataset.field;
+  STATE.draft.servicos[idx][field] = el.value;
+  
+  // Se mudou frente, limpa pacote e re-renderiza só essa linha
+  if (field === 'frente') {
+    STATE.draft.servicos[idx].pacoteId = '';
+    rerenderServicoRow(idx);
+  }
+  // Se mudou pacote, atualiza unidade exibida (re-render simples)
+  if (field === 'pacoteId') {
+    rerenderServicoRow(idx);
+  }
+  saveDraft(STATE.draft);
+}
+
+function rerenderServicoRow(idx) {
+  const frentes = [...new Set(STATE.pacotes
+    .filter(p => p['Status'] !== 'Histórico' && p['Frente'])
+    .map(p => p['Frente']))].sort();
+  const html = renderServicoRow(STATE.draft.servicos[idx], idx, frentes);
+  const old = document.querySelector(`.servico-row[data-idx="${idx}"]`);
+  if (old) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    old.replaceWith(tmp.firstElementChild);
+  }
+}
+
+function setSentido(s) {
+  STATE.draft.sentido = s;
+  // limpar estacas se mudou sentido
+  STATE.draft.estacaIni = '';
+  STATE.draft.estacaFim = '';
+  saveDraft(STATE.draft);
+  render();
+}
+
+function adicionarServico() {
+  STATE.draft.servicos.push({
+    frente: '', pacoteId: '', quantidade: '', equipe: '', observacao: ''
+  });
+  saveDraft(STATE.draft);
+  render();
+}
+
+function removerServico(idx) {
+  STATE.draft.servicos.splice(idx, 1);
+  if (STATE.draft.servicos.length === 0) {
+    STATE.draft.servicos.push({ frente: '', pacoteId: '', quantidade: '', equipe: '', observacao: '' });
+  }
+  saveDraft(STATE.draft);
+  render();
+}
+
+function resetDraft() {
+  if (!confirm('Limpar todos os dados desse RDO? Não tem como desfazer.')) return;
+  clearDraft();
+  STATE.draft = defaultDraft();
+  render();
+}
+
+function validarRDO(d) {
+  const erros = [];
+  if (!d.data) erros.push('Data é obrigatória');
+  if (!d.apontador.trim()) erros.push('Apontador é obrigatório');
+  
+  const servicosValidos = d.servicos.filter(s => s.pacoteId && num(s.quantidade) > 0);
+  if (servicosValidos.length === 0) {
+    erros.push('Adicione pelo menos 1 serviço com pacote e quantidade > 0');
+  }
+  return erros;
+}
+
+async function salvarRDO() {
+  const d = STATE.draft;
+  const erros = validarRDO(d);
+  if (erros.length > 0) {
+    toast(erros.join(' · '), 'error', 5000);
+    return;
+  }
+  
+  const btn = document.getElementById('btnSalvarRDO');
+  const btnTxtOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Salvando…';
+  
+  // Construir local_estaca a partir de início/fim
+  let localEstaca = '';
+  if (d.estacaIni && d.estacaFim) localEstaca = `${d.estacaIni} a ${d.estacaFim}`;
+  else if (d.estacaIni) localEstaca = d.estacaIni;
+  
+  // Montar batch
+  const batch = d.servicos
+    .filter(s => s.pacoteId && num(s.quantidade) > 0)
+    .map(s => {
+      const p = STATE.pacotes.find(pp => pp['ID'] === s.pacoteId);
+      const obsCompleta = [d.observacaoGeral, s.observacao].filter(x => x && x.trim()).join(' · ');
+      return {
+        data: d.data,
+        pacote_id: s.pacoteId,
+        pacote_nome: p ? p['Pacote'] : '',
+        quantidade: num(s.quantidade),
+        unidade: p ? (p['Unidade Física']||'') : '',
+        local_estaca: localEstaca,
+        equipe: s.equipe,
+        subcontratado: s.equipe,
+        efetivo_total: num(d.efetivo),
+        equipamentos: '',
+        clima: d.clima,
+        paralisado_motivo: d.clima === 'Parado por chuva' ? 'Chuva' : '',
+        foto_link: '',
+        observacao: obsCompleta,
+        apontador: d.apontador
+      };
+    });
+  
+  try {
+    const result = await jsonp(CONFIG.appsScript, {
+      action: 'addBatchRDO',
+      batch: JSON.stringify(batch)
+    });
+    
+    if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+    
+    toast(`✓ ${batch.length} serviço${batch.length>1?'s':''} salvo${batch.length>1?'s':''} na Sheets`, 'success', 4000);
+    
+    // Limpar rascunho de serviços, mas manter cabeçalho do dia
+    clearDraft();
+    STATE.draft = {
+      ...defaultDraft(),
+      apontador: d.apontador,
+      sentido: d.sentido,
+    };
+    
+    // Forçar refresh dos dados (vai aparecer em ~5min depois da republicação)
+    setTimeout(() => carregarTudo(), 800);
+    
+    // Voltar pra tela executiva
+    setTimeout(() => navigate('historico'), 600);
+    
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = btnTxtOriginal;
+    toast('Falha ao salvar: ' + e.message, 'error', 6000);
+  }
+}
+
+// ====================================================================
+// GRÁFICOS (Chart.js)
+// ====================================================================
+let chartCurvaS = null;
+
+function montarGraficos() {
+  // Curva S
+  const cv = document.getElementById('curvaS');
+  if (cv) {
+    if (chartCurvaS) { try { chartCurvaS.destroy(); } catch(e){} chartCurvaS = null; }
+    
+    const av = calcularAvancoPorPacote();
+    const totalEstim = Object.values(av).filter(a => a.pacote['Status'] !== 'Histórico')
+      .reduce((s,a) => s + a.qtdEstimada, 0);
+    
+    // Acumular por dia
+    const rdosPorDia = {};
+    STATE.rdoavanco.forEach(r => {
+      const d = parseISODate(r['Data']);
+      if (!d) return;
+      const dStr = d.toISOString().split('T')[0];
+      const pid = r['Pacote_ID'];
+      const pacote = STATE.pacotes.find(p => p['ID'] === pid);
+      if (!pacote) return;
+      const qtdEstimP = num(pacote['Qtd Estimada']);
+      if (qtdEstimP <= 0) return;
+      const contrib = num(r['Quantidade']) / qtdEstimP * qtdEstimP / totalEstim;
+      // Equivalente a: cada % de avanço de um pacote contribui proporcionalmente ao seu peso
+      const contribPct = totalEstim > 0 ? num(r['Quantidade']) / totalEstim : 0;
+      rdosPorDia[dStr] = (rdosPorDia[dStr] || 0) + contribPct;
+    });
+    
+    const dias = Object.keys(rdosPorDia).sort();
+    let acc = 0;
+    const pontos = dias.map(d => {
+      acc += rdosPorDia[d];
+      return { x: d, y: acc * 100 };
+    });
+    
+    if (pontos.length > 0) {
+      chartCurvaS = new Chart(cv, {
+        type: 'line',
+        data: {
+          datasets: [{
+            label: 'Avanço acumulado real (%)',
+            data: pontos,
+            borderColor: 'oklch(0.45 0.14 240)',
+            backgroundColor: 'oklch(0.45 0.14 240 / 0.1)',
+            tension: 0.2,
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: 'oklch(0.45 0.14 240)',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              type: 'time',
+              time: { unit: 'day', displayFormats: { day: 'dd/MM' } },
+              grid: { display: false },
+              ticks: { font: { size: 10 } }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { font: { size: 10 }, callback: v => v.toFixed(1) + '%' },
+              grid: { color: '#eee' }
+            }
+          }
+        }
+      });
+    }
+  }
+}
+
+// ====================================================================
+// BOOT
+// ====================================================================
+document.addEventListener('DOMContentLoaded', () => {
+  renderShell();
+  navigate('executivo');
+  carregarTudo();
+  
+  // Auto-refresh a cada 5min
+  setInterval(carregarTudo, CONFIG.refreshMs);
 });
 
-// Auto-refresh a cada 5 minutos
-setInterval(carregarTudo, 5 * 60 * 1000);
+// Expor pro escopo global pra usar em onclick="..."
+window.carregarTudo = carregarTudo;
+window.navigate = navigate;
+window.toggleSidebar = toggleSidebar;
+window.setCronoView = setCronoView;
+window.setCronoMes = setCronoMes;
+window.setSentido = setSentido;
+window.adicionarServico = adicionarServico;
+window.removerServico = removerServico;
+window.resetDraft = resetDraft;
+window.salvarRDO = salvarRDO;
 
-// Boot
-carregarTudo();
 </script>
-
 </body>
 </html>
