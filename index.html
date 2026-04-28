@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sistema Teotônio Vilela — Painel ao Vivo</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --pri: #0a3d62;
+  --pri-light: #1e5f8e;
+  --acc: #2ecc71;
+  --warn: #e67e22;
+  --err: #e74c3c;
+  --gray: #95a5a6;
+  --bg: #f4f6f8;
+  --card: #ffffff;
+  --text: #1a2332;
+  --muted: #5a6b7c;
+  --border: #ecf0f3;
+}
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  padding: 16px;
+  line-height: 1.4;
+}
+
+.header {
+  background: linear-gradient(135deg, var(--pri) 0%, var(--pri-light) 100%);
+  color: white;
+  padding: 18px 24px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.header h1 { font-size: 20px; font-weight: 600; }
+.header .subtitle { font-size: 12px; opacity: 0.85; margin-top: 2px; }
+.header .status-pill {
+  background: rgba(255,255,255,0.15);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--acc);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.status-dot.error { background: var(--err); animation: none; }
+.status-dot.loading { background: var(--warn); }
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--card);
+  padding: 4px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  flex-wrap: wrap;
+}
+.tab {
+  flex: 1;
+  min-width: 140px;
+  background: transparent;
+  border: none;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--muted);
+  transition: all 0.15s;
+}
+.tab:hover { background: var(--bg); }
+.tab.active { background: var(--pri); color: white; }
+
+.view { display: none; }
+.view.active { display: block; }
+
+.controls {
+  background: var(--card);
+  padding: 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.control-group { display: flex; flex-direction: column; gap: 4px; }
+.control-group label {
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.5px;
+}
+.btn-group { display: flex; gap: 4px; }
+.btn-group button {
+  background: #f0f3f5;
+  border: 1px solid #d4dbe0;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 4px;
+  color: var(--text);
+}
+.btn-group button:hover { background: #e3e9ed; }
+.btn-group button.active {
+  background: var(--pri);
+  color: white;
+  border-color: var(--pri);
+}
+select, input[type="text"], input[type="date"], input[type="number"] {
+  padding: 7px 10px;
+  border: 1px solid #d4dbe0;
+  border-radius: 4px;
+  font-size: 13px;
+  background: white;
+  font-family: inherit;
+}
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.kpi {
+  background: var(--card);
+  padding: 14px 16px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  border-left: 3px solid var(--pri);
+}
+.kpi.green { border-left-color: var(--acc); }
+.kpi.orange { border-left-color: var(--warn); }
+.kpi.red { border-left-color: var(--err); }
+.kpi .value { font-size: 26px; font-weight: 700; color: var(--pri); line-height: 1.1; }
+.kpi.green .value { color: #1e8449; }
+.kpi.orange .value { color: #b9540a; }
+.kpi.red .value { color: #a93226; }
+.kpi .label { font-size: 10px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.5px; margin-top: 4px; font-weight: 600; }
+.kpi .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.card {
+  background: var(--card);
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.card-header {
+  padding: 14px 16px;
+  background: #f8fafb;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.card-header h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--pri);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.card-body { padding: 14px 16px; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+th {
+  background: var(--text);
+  color: white;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  position: sticky;
+  top: 0;
+}
+td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+tr:hover td { background: #f8fafb; }
+tr.summary td { background: #eef3f7; font-weight: 600; color: var(--pri); }
+.indent-2 { padding-left: 24px; }
+.indent-3 { padding-left: 36px; }
+.indent-4 { padding-left: 48px; }
+
+.pct-bar-wrap { display: flex; align-items: center; gap: 6px; min-width: 100px; }
+.pct-bar {
+  flex: 1;
+  height: 7px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 40px;
+}
+.pct-fill { height: 100%; background: var(--acc); transition: width 0.3s; }
+.pct-fill.zero { background: var(--gray); }
+.pct-fill.parcial { background: var(--warn); }
+.pct-fill.completo { background: var(--acc); }
+.pct-fill.atrasado { background: var(--err); }
+.pct-text { font-size: 11px; font-weight: 600; min-width: 38px; text-align: right; }
+
+.gantt-cell {
+  position: relative;
+  height: 22px;
+  background: linear-gradient(to right, var(--border) 50%, #f8fafb 50%);
+  background-size: 6.66% 100%;
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 200px;
+}
+.gantt-bar {
+  position: absolute;
+  height: 14px;
+  top: 4px;
+  background: var(--pri-light);
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: white;
+  font-weight: 600;
+}
+.gantt-bar.iniciando { background: var(--acc); }
+.gantt-bar.terminando { background: var(--warn); }
+.gantt-bar.completo { background: var(--gray); }
+.gantt-bar.zero { background: #34495e; }
+.gantt-bar.atrasado { background: var(--err); }
+
+.empty-state {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+.empty-state .icon { font-size: 42px; margin-bottom: 10px; }
+
+.loading {
+  padding: 80px 20px;
+  text-align: center;
+  color: var(--muted);
+}
+.spinner {
+  display: inline-block;
+  width: 28px;
+  height: 28px;
+  border: 3px solid var(--border);
+  border-top-color: var(--pri);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.error-box {
+  background: #fde8e6;
+  border: 1px solid var(--err);
+  border-left: 4px solid var(--err);
+  padding: 14px 16px;
+  border-radius: 6px;
+  margin-bottom: 14px;
+  color: #6b2620;
+  font-size: 13px;
+}
+
+.tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.tag.drenagem { background: #d6eaf8; color: #1a5276; }
+.tag.demolicao { background: #fadbd8; color: #922b21; }
+.tag.via { background: #fdebd0; color: #935116; }
+.tag.pav-flexivel { background: #d5dbdb; color: #424949; }
+.tag.pav-rigido { background: #d6dbdf; color: #2c3e50; }
+.tag.vala-tecnica { background: #fcf3cf; color: #7d6608; }
+.tag.sinalizacao { background: #d5f5e3; color: #196f3d; }
+.tag.passeio { background: #ebdef0; color: #6c3483; }
+
+#rdoForm {
+  background: var(--card);
+  padding: 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+#rdoForm h3 { color: var(--pri); margin-bottom: 12px; font-size: 14px; }
+#rdoForm .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+#rdoForm label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+#rdoForm input, #rdoForm select { width: 100%; margin-top: 3px; }
+#rdoForm button.primary {
+  background: var(--pri); color: white; border: none; padding: 10px 18px;
+  border-radius: 4px; font-weight: 600; cursor: pointer; margin-top: 12px; font-size: 13px;
+}
+#rdoForm .copy-output {
+  margin-top: 14px;
+  background: #f8fafb;
+  border: 1px solid var(--border);
+  padding: 12px;
+  border-radius: 6px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+@media (max-width: 768px) {
+  .kpi .value { font-size: 20px; }
+  .header h1 { font-size: 16px; }
+  th, td { padding: 6px 8px; font-size: 11px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🏗️ Sistema Teotônio Vilela — Painel ao Vivo</h1>
+    <div class="subtitle">Av. Senador Teotônio Vilela · Consórcio Arvek+Gestor · Lê dados da Google Sheets em tempo real</div>
+  </div>
+  <div class="status-pill">
+    <div class="status-dot loading" id="statusDot"></div>
+    <span id="statusText">Carregando dados…</span>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" data-view="executivo">📊 Executivo</button>
+  <button class="tab" data-view="cronograma">📅 Cronograma</button>
+  <button class="tab" data-view="avancofisico">📈 Avanço por Pacote</button>
+  <button class="tab" data-view="rdo">📝 Lançar RDO</button>
+  <button class="tab" data-view="medicao">🧮 Apoio Medição</button>
+</div>
+
+<div id="content"></div>
+
+<script>
+// =============================================================
+// CONFIGURAÇÃO — URLs dos CSVs publicados na Google Sheets
+// =============================================================
+const CSV_URLS = {
+  cronograma:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=565093066&single=true&output=csv',
+  pacotes:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=386002450&single=true&output=csv',
+  coeficientes:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1962881430&single=true&output=csv',
+  rdoavanco:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1906961773&single=true&output=csv',
+};
+
+const STATUS_DATA = '2026-04-27';
+
+// =============================================================
+// UTILIDADES
+// =============================================================
+function parseCSV(text) {
+  // Parser CSV robusto para campos com vírgulas dentro de aspas
+  const lines = [];
+  let current = [], field = '', inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"' && text[i+1] === '"') { field += '"'; i++; }
+      else if (c === '"') inQuotes = false;
+      else field += c;
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { current.push(field); field = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i+1] === '\n') i++;
+        current.push(field); field = '';
+        if (current.length > 0 && current.some(x => x.length > 0)) lines.push(current);
+        current = [];
+      } else field += c;
+    }
+  }
+  if (field.length > 0 || current.length > 0) {
+    current.push(field);
+    if (current.some(x => x.length > 0)) lines.push(current);
+  }
+  if (lines.length === 0) return [];
+  const headers = lines[0].map(h => h.trim());
+  return lines.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => obj[h] = (row[i] || '').trim());
+    return obj;
+  });
+}
+
+async function fetchCSV(url) {
+  const res = await fetch(url + '&t=' + Date.now()); // Cache buster
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const text = await res.text();
+  return parseCSV(text);
+}
+
+function fmtData(iso) {
+  if (!iso) return '';
+  // Aceita "2026-04-27" ou "2026-04-27 09:00" ou "27/04/2026"
+  let d;
+  if (iso.includes('/')) {
+    const p = iso.split('/');
+    d = new Date(`${p[2].slice(0,4)}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`);
+  } else {
+    d = new Date(iso);
+  }
+  if (isNaN(d)) return iso;
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getFullYear()).slice(2);
+}
+
+function parseISODate(s) {
+  if (!s) return null;
+  if (s.includes('/')) {
+    const p = s.split('/');
+    return new Date(`${p[2].slice(0,4)}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`);
+  }
+  return new Date(s);
+}
+
+function num(s) {
+  if (s === null || s === undefined || s === '') return 0;
+  const cleaned = String(s).replace(/\./g, '').replace(',', '.');
+  const v = parseFloat(cleaned);
+  return isNaN(v) ? parseFloat(s) || 0 : v;
+}
+
+function frenteToTagClass(frente) {
+  return (frente || '').toLowerCase()
+    .replace(/\./g, '').replace(/\s+/g, '-')
+    .replace(/[áàã]/g, 'a').replace(/é/g, 'e').replace(/í/g, 'i').replace(/[óô]/g, 'o').replace(/ç/g, 'c');
+}
+
+// =============================================================
+// ESTADO
+// =============================================================
+const STATE = {
+  cronograma: [],
+  pacotes: [],
+  coeficientes: [],
+  rdoavanco: [],
+  loaded: false,
+  currentView: 'executivo',
+  currentMes: '2026-04',
+};
+
+// =============================================================
+// CARREGAMENTO INICIAL
+// =============================================================
+async function carregarTudo() {
+  const dot = document.getElementById('statusDot');
+  const txt = document.getElementById('statusText');
+  
+  try {
+    dot.className = 'status-dot loading';
+    txt.textContent = 'Carregando dados…';
+    
+    const [crono, pacs, coefs, rdos] = await Promise.all([
+      fetchCSV(CSV_URLS.cronograma),
+      fetchCSV(CSV_URLS.pacotes),
+      fetchCSV(CSV_URLS.coeficientes),
+      fetchCSV(CSV_URLS.rdoavanco),
+    ]);
+    
+    STATE.cronograma = crono;
+    STATE.pacotes = pacs;
+    STATE.coeficientes = coefs;
+    STATE.rdoavanco = rdos;
+    STATE.loaded = true;
+    
+    dot.className = 'status-dot';
+    const ago = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    txt.textContent = `Atualizado ${ago} · ${crono.length} tarefas, ${pacs.length} pacotes, ${rdos.length} RDOs`;
+    
+    render();
+  } catch (e) {
+    dot.className = 'status-dot error';
+    txt.textContent = 'Erro ao carregar';
+    document.getElementById('content').innerHTML = `
+      <div class="error-box">
+        <strong>❌ Não consegui carregar os dados da Google Sheets.</strong><br>
+        Erro: ${e.message}<br><br>
+        Verifique:<br>
+        • Os CSVs estão publicados na web?<br>
+        • Os 4 links no topo do código deste HTML estão corretos?<br>
+        • A planilha Google está acessível?<br><br>
+        <button onclick="carregarTudo()" style="background:#0a3d62;color:white;border:none;padding:8px 16px;border-radius:4px;cursor:pointer;">🔄 Tentar de novo</button>
+      </div>
+    `;
+  }
+}
+
+// =============================================================
+// CÁLCULO DE AVANÇO POR PACOTE (lógica central)
+// =============================================================
+function calcularAvancoPorPacote() {
+  // Para cada pacote, soma quantidades dos RDOs que apontam pra ele
+  const avanco = {};
+  STATE.pacotes.forEach(p => {
+    const id = p['ID'] || p['id'];
+    if (!id) return;
+    const qtdEstim = num(p['Qtd Estimada'] || p['qtd_estimada'] || p['Qtd_Estimada']);
+    avanco[id] = {
+      pacote: p,
+      qtdEstimada: qtdEstim,
+      qtdExecutada: 0,
+      lancamentos: 0,
+      ultimaData: null,
+    };
+  });
+  
+  STATE.rdoavanco.forEach(r => {
+    const pid = r['Pacote_ID'] || r['Pacote_id'] || r['pacote_id'];
+    if (!pid || !avanco[pid]) return;
+    const q = num(r['Quantidade'] || r['quantidade']);
+    avanco[pid].qtdExecutada += q;
+    avanco[pid].lancamentos++;
+    const d = parseISODate(r['Data'] || r['data']);
+    if (d && (!avanco[pid].ultimaData || d > avanco[pid].ultimaData)) {
+      avanco[pid].ultimaData = d;
+    }
+  });
+  
+  // Calcular % e produtividade
+  Object.values(avanco).forEach(a => {
+    a.pct = a.qtdEstimada > 0 ? Math.min(a.qtdExecutada / a.qtdEstimada, 1.0) : 0;
+    a.pctRaw = a.qtdEstimada > 0 ? a.qtdExecutada / a.qtdEstimada : 0;
+  });
+  
+  return avanco;
+}
+
+// =============================================================
+// VIEWS
+// =============================================================
+function render() {
+  if (!STATE.loaded) return;
+  const c = document.getElementById('content');
+  if (STATE.currentView === 'executivo') c.innerHTML = renderExecutivo();
+  else if (STATE.currentView === 'cronograma') c.innerHTML = renderCronograma();
+  else if (STATE.currentView === 'avancofisico') c.innerHTML = renderAvancoFisico();
+  else if (STATE.currentView === 'rdo') c.innerHTML = renderRDOForm();
+  else if (STATE.currentView === 'medicao') c.innerHTML = renderApoioMedicao();
+  
+  // Reanexar handlers do mês caso a aba use
+  const mesGroup = document.getElementById('mesGroup');
+  if (mesGroup) {
+    mesGroup.querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => {
+        STATE.currentMes = btn.dataset.mes;
+        render();
+      };
+    });
+  }
+}
+
+function renderExecutivo() {
+  const avanco = calcularAvancoPorPacote();
+  const pacotes = Object.values(avanco).filter(a => a.pacote && a.pacote['Status'] !== 'Histórico');
+  
+  // KPIs
+  const totalPacotes = pacotes.length;
+  const pacotesIniciados = pacotes.filter(a => a.qtdExecutada > 0).length;
+  const pacotesConcluidos = pacotes.filter(a => a.pct >= 0.999).length;
+  const totalRDOs = STATE.rdoavanco.length;
+  
+  // % físico médio (ponderado pela quantidade estimada × valor não temos, então só média simples)
+  const pctMedio = pacotes.length > 0 ? 
+    pacotes.reduce((s, a) => s + a.pct, 0) / pacotes.length : 0;
+  
+  // Avanço por frente
+  const porFrente = {};
+  pacotes.forEach(a => {
+    const f = a.pacote['Frente'] || 'Outros';
+    if (!porFrente[f]) porFrente[f] = { pacotes: [], pctSum: 0 };
+    porFrente[f].pacotes.push(a);
+    porFrente[f].pctSum += a.pct;
+  });
+  Object.keys(porFrente).forEach(f => {
+    porFrente[f].pctMedio = porFrente[f].pctSum / porFrente[f].pacotes.length;
+  });
+  
+  return `
+    <div class="kpis">
+      <div class="kpi">
+        <div class="value">${totalPacotes}</div>
+        <div class="label">Pacotes ativos</div>
+      </div>
+      <div class="kpi green">
+        <div class="value">${pacotesIniciados}</div>
+        <div class="label">Iniciados</div>
+        <div class="sub">${(pacotesIniciados/totalPacotes*100).toFixed(0)}% do total</div>
+      </div>
+      <div class="kpi">
+        <div class="value">${pacotesConcluidos}</div>
+        <div class="label">Concluídos</div>
+      </div>
+      <div class="kpi orange">
+        <div class="value">${(pctMedio*100).toFixed(1)}%</div>
+        <div class="label">Avanço médio físico</div>
+      </div>
+      <div class="kpi">
+        <div class="value">${totalRDOs}</div>
+        <div class="label">Total RDOs lançados</div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <h3>📊 Avanço por Frente de Obra</h3>
+      </div>
+      <div class="card-body">
+        ${Object.entries(porFrente).sort((a,b) => b[1].pctMedio - a[1].pctMedio).map(([f, d]) => `
+          <div style="margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+              <strong style="font-size: 13px;">${f}</strong>
+              <span style="font-size: 12px; color: var(--muted);">
+                ${d.pacotes.length} pacote${d.pacotes.length>1?'s':''} · ${(d.pctMedio*100).toFixed(1)}%
+              </span>
+            </div>
+            <div class="pct-bar">
+              <div class="pct-fill ${d.pctMedio >= 0.999 ? 'completo' : d.pctMedio > 0 ? 'parcial' : 'zero'}" 
+                   style="width: ${d.pctMedio*100}%"></div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <h3>🔥 Pacotes mais ativos (últimos lançamentos)</h3>
+      </div>
+      <div class="card-body" style="padding: 0;">
+        <table>
+          <thead><tr>
+            <th>Pacote</th><th>Frente</th><th>Executado</th><th>%</th><th>Última atividade</th>
+          </tr></thead>
+          <tbody>
+            ${pacotes
+              .filter(a => a.qtdExecutada > 0)
+              .sort((a, b) => (b.ultimaData || 0) - (a.ultimaData || 0))
+              .slice(0, 8)
+              .map(a => `
+                <tr>
+                  <td><strong>${a.pacote['Pacote'] || ''}</strong></td>
+                  <td><span class="tag ${frenteToTagClass(a.pacote['Frente'])}">${a.pacote['Frente']||''}</span></td>
+                  <td>${a.qtdExecutada.toFixed(2)} / ${a.qtdEstimada.toFixed(0)} ${a.pacote['Unidade Física']||''}</td>
+                  <td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill ${a.pct >= 0.999 ? 'completo' : 'parcial'}" style="width:${a.pct*100}%"></div></div><span class="pct-text">${(a.pct*100).toFixed(0)}%</span></div></td>
+                  <td>${a.ultimaData ? fmtData(a.ultimaData.toISOString().split('T')[0]) : '—'}</td>
+                </tr>
+              `).join('') || '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);">Nenhum RDO lançado ainda. Comece lançando o primeiro na aba "📝 Lançar RDO".</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderCronograma() {
+  // Igual ao dashboard v1, com filtro de mês
+  const tarefas = STATE.cronograma.map(t => ({
+    nome: t['Nome'],
+    edt: t['EDT'],
+    nivel: parseInt(t['Nivel']) || 0,
+    ini: parseISODate(t['Inicio']),
+    fim: parseISODate(t['Termino']),
+    pct: num(t['Pct_Concluido_Plan']),
+    resumo: (t['Eh_Resumo'] || '').toLowerCase().startsWith('s'),
+    pacote: t['Pacote_ID'] || ''
+  })).filter(t => t.ini && t.fim);
+  
+  const mesAno = STATE.currentMes.split('-').map(Number);
+  const mesIni = new Date(mesAno[0], mesAno[1]-1, 1);
+  const mesFim = new Date(mesAno[0], mesAno[1], 0, 23, 59);
+  const dias = mesFim.getDate();
+  
+  const ativas = tarefas.filter(t => t.ini <= mesFim && t.fim >= mesIni && !t.resumo)
+    .sort((a, b) => {
+      const ea = a.edt.split('.').map(Number);
+      const eb = b.edt.split('.').map(Number);
+      for (let i = 0; i < Math.max(ea.length, eb.length); i++) {
+        const da = ea[i]||0, db = eb[i]||0;
+        if (da !== db) return da - db;
+      }
+      return 0;
+    });
+  
+  return `
+    <div class="controls">
+      <div class="control-group">
+        <label>Mês de referência</label>
+        <div class="btn-group" id="mesGroup">
+          <button data-mes="2026-04" class="${STATE.currentMes==='2026-04'?'active':''}">Abril/26</button>
+          <button data-mes="2026-05" class="${STATE.currentMes==='2026-05'?'active':''}">Maio/26</button>
+          <button data-mes="2026-06" class="${STATE.currentMes==='2026-06'?'active':''}">Junho/26</button>
+          <button data-mes="2026-07" class="${STATE.currentMes==='2026-07'?'active':''}">Julho/26</button>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <h3>📅 ${ativas.length} serviços ativos no mês selecionado</h3>
+      </div>
+      <div class="card-body" style="padding: 0; overflow-x: auto;">
+        <table>
+          <thead><tr>
+            <th>EDT</th><th>Serviço</th><th>Início</th><th>Término</th>
+            <th>%</th><th>Linha do tempo do mês</th>
+          </tr></thead>
+          <tbody>
+            ${ativas.map(t => {
+              const ini = t.ini < mesIni ? mesIni : t.ini;
+              const fim = t.fim > mesFim ? mesFim : t.fim;
+              const left = ((ini.getDate()-1)/dias)*100;
+              const width = ((fim.getDate()-ini.getDate()+1)/dias)*100;
+              return `
+                <tr>
+                  <td style="font-family:monospace;font-size:11px;color:var(--muted)">${t.edt}</td>
+                  <td class="indent-${Math.min(t.nivel,4)}">${t.nome}</td>
+                  <td style="font-size:12px">${fmtData(t.ini.toISOString())}</td>
+                  <td style="font-size:12px">${fmtData(t.fim.toISOString())}</td>
+                  <td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill ${t.pct >= 0.999 ? 'completo' : t.pct > 0 ? 'parcial' : 'zero'}" style="width:${t.pct*100}%"></div></div><span class="pct-text">${(t.pct*100).toFixed(0)}%</span></div></td>
+                  <td><div class="gantt-cell"><div class="gantt-bar ${t.pct >= 0.999 ? 'completo' : t.pct > 0 ? 'iniciando' : 'zero'}" style="left:${left}%;width:${width}%">${width > 12 ? ini.getDate()+'-'+fim.getDate() : ''}</div></div></td>
+                </tr>
+              `;
+            }).join('') || '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--muted);">Nenhuma tarefa no período.</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderAvancoFisico() {
+  const avanco = calcularAvancoPorPacote();
+  const pacotes = Object.values(avanco).filter(a => a.pacote);
+  
+  // Agrupar por frente
+  const porFrente = {};
+  pacotes.forEach(a => {
+    const f = a.pacote['Frente'] || 'Outros';
+    if (!porFrente[f]) porFrente[f] = [];
+    porFrente[f].push(a);
+  });
+  
+  return `
+    <div class="card">
+      <div class="card-header">
+        <h3>📈 Avanço Físico por Pacote</h3>
+        <span style="font-size:12px;color:var(--muted)">Calculado a partir dos RDOs lançados</span>
+      </div>
+      <div class="card-body" style="padding: 0;">
+        <table>
+          <thead><tr>
+            <th>Pacote</th><th>Unid</th><th>Executado</th><th>Estimado</th>
+            <th>% Físico</th><th>Lançamentos</th><th>Última atividade</th>
+          </tr></thead>
+          <tbody>
+            ${Object.entries(porFrente).map(([f, lista]) => `
+              <tr class="summary"><td colspan="7">${f.toUpperCase()} — ${lista.length} pacote${lista.length>1?'s':''}</td></tr>
+              ${lista.map(a => `
+                <tr>
+                  <td><strong>${a.pacote['Pacote']||''}</strong></td>
+                  <td>${a.pacote['Unidade Física']||''}</td>
+                  <td>${a.qtdExecutada.toFixed(2)}</td>
+                  <td>${a.qtdEstimada.toFixed(2)}</td>
+                  <td><div class="pct-bar-wrap"><div class="pct-bar"><div class="pct-fill ${a.pct >= 0.999 ? 'completo' : a.pct > 0 ? 'parcial' : 'zero'}" style="width:${a.pct*100}%"></div></div><span class="pct-text">${(a.pct*100).toFixed(0)}%</span></div></td>
+                  <td>${a.lancamentos}</td>
+                  <td>${a.ultimaData ? fmtData(a.ultimaData.toISOString().split('T')[0]) : '—'}</td>
+                </tr>
+              `).join('')}
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function renderRDOForm() {
+  const pacotes = STATE.pacotes
+    .filter(p => p['Status'] !== 'Histórico')
+    .sort((a,b) => (a['Frente']||'').localeCompare(b['Frente']||''));
+  
+  const hoje = new Date().toISOString().split('T')[0];
+  
+  return `
+    <div id="rdoForm">
+      <h3>📝 Novo lançamento de RDO</h3>
+      <p style="font-size: 12px; color: var(--muted); margin-bottom: 14px;">
+        Preencha os dados abaixo. Esse formulário gera o texto formatado pra você COLAR direto na aba <strong>RDO_Avanco</strong> da sua Google Sheets.
+        <br>(Esse é um modo provisório até a Sessão 4 — quando o app de RDO vai gravar direto na Sheets via API.)
+      </p>
+      
+      <div class="row">
+        <div>
+          <label>Data</label>
+          <input type="date" id="f_data" value="${hoje}">
+        </div>
+        <div>
+          <label>Pacote</label>
+          <select id="f_pacote">
+            <option value="">— escolher —</option>
+            ${pacotes.map(p => `<option value="${p['ID']}|${p['Pacote']}|${p['Unidade Física']||''}">${p['Frente']||''} → ${p['Pacote']||''} (${p['Unidade Física']||''})</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label>Quantidade</label>
+          <input type="number" id="f_qtd" step="0.01" placeholder="50">
+        </div>
+        <div>
+          <label>Local / Estaca</label>
+          <input type="text" id="f_local" placeholder="E12+05 a E12+50">
+        </div>
+        <div>
+          <label>Equipe / Subcontratado</label>
+          <input type="text" id="f_equipe" placeholder="Sena Obras">
+        </div>
+        <div>
+          <label>Efetivo total</label>
+          <input type="number" id="f_efetivo" placeholder="8">
+        </div>
+        <div>
+          <label>Clima</label>
+          <select id="f_clima">
+            <option>Bom</option><option>Garoa</option><option>Chuva</option><option>Parado por chuva</option>
+          </select>
+        </div>
+        <div>
+          <label>Apontador</label>
+          <input type="text" id="f_apontador" placeholder="João">
+        </div>
+      </div>
+      
+      <div style="margin-top: 10px;">
+        <label style="font-size: 11px; color: var(--muted); text-transform: uppercase; font-weight: 600;">Observação</label>
+        <input type="text" id="f_obs" placeholder="Continuar amanhã trecho 12+50 a 13+00" style="width: 100%; margin-top: 3px;">
+      </div>
+      
+      <button class="primary" onclick="gerarLinhaRDO()">📋 Gerar linha pra colar</button>
+      
+      <div id="rdoOutput" style="display:none;" class="copy-output"></div>
+    </div>
+  `;
+}
+
+function renderApoioMedicao() {
+  const avanco = calcularAvancoPorPacote();
+  
+  // Para cada pacote com execução, expandir nos itens contratuais via coeficientes
+  const consumoPorItem = {};
+  
+  Object.values(avanco).forEach(a => {
+    if (a.qtdExecutada <= 0) return;
+    const pid = a.pacote['ID'];
+    const coefsDoPacote = STATE.coeficientes.filter(c => c['Pacote ID'] === pid);
+    coefsDoPacote.forEach(c => {
+      const item = c['Item Contratual'];
+      const desc = c['Descrição Item'];
+      const coef = num(c['Coef']);
+      const consumo = a.qtdExecutada * coef;
+      if (!consumoPorItem[item]) {
+        consumoPorItem[item] = { 
+          item, descricao: desc, unidadeItem: c['Unid Item'] || '', 
+          consumido: 0, pacotes: [] 
+        };
+      }
+      consumoPorItem[item].consumido += consumo;
+      consumoPorItem[item].pacotes.push(`${a.pacote['Pacote']} × ${coef}`);
+    });
+  });
+  
+  const lista = Object.values(consumoPorItem).filter(x => x.consumido > 0)
+    .sort((a, b) => b.consumido - a.consumido);
+  
+  return `
+    <div class="card">
+      <div class="card-header">
+        <h3>🧮 Apoio à Medição — Consumo por Item Contratual</h3>
+        <span style="font-size:12px;color:var(--muted)">Gerado a partir dos RDOs × matriz de coeficientes</span>
+      </div>
+      <div class="card-body">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:14px;">
+          Esta tabela mostra <strong>quanto de cada item contratual</strong> foi consumido com base nos RDOs lançados. 
+          Use como apoio na hora de montar a memória de cálculo da medição mensal.
+        </p>
+        <table>
+          <thead><tr>
+            <th>Item</th><th>Descrição</th><th>Unid</th><th>Consumido</th><th>De quais pacotes</th>
+          </tr></thead>
+          <tbody>
+            ${lista.map(x => `
+              <tr>
+                <td style="font-family:monospace;font-size:11px">${x.item}</td>
+                <td>${x.descricao}</td>
+                <td>${x.unidadeItem}</td>
+                <td><strong>${x.consumido.toFixed(2)}</strong></td>
+                <td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td>
+              </tr>
+            `).join('') || '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--muted);">Nenhum RDO lançado. Comece lançando RDOs na aba "📝 Lançar RDO".</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function gerarLinhaRDO() {
+  const data = document.getElementById('f_data').value;
+  const pacote = document.getElementById('f_pacote').value;
+  const qtd = document.getElementById('f_qtd').value;
+  const local = document.getElementById('f_local').value;
+  const equipe = document.getElementById('f_equipe').value;
+  const efetivo = document.getElementById('f_efetivo').value;
+  const clima = document.getElementById('f_clima').value;
+  const apontador = document.getElementById('f_apontador').value;
+  const obs = document.getElementById('f_obs').value;
+  
+  if (!pacote || !qtd || !data) {
+    alert('Preencha pelo menos: Data, Pacote e Quantidade.');
+    return;
+  }
+  
+  const [pid, pnome, punid] = pacote.split('|');
+  const id = 'R' + String(STATE.rdoavanco.length + 1).padStart(4, '0');
+  
+  // Linha tab-separated pra colar direto na Sheets
+  const linha = [id, data, pid, pnome, qtd, punid, local, equipe.split('/')[0]||'', equipe, efetivo, '', clima, '', '', obs, apontador].join('\t');
+  
+  const out = document.getElementById('rdoOutput');
+  out.style.display = 'block';
+  out.innerHTML = `
+    <div style="margin-bottom: 8px; color: var(--pri); font-weight: 600;">✅ Linha gerada — copie e cole na primeira linha vazia da aba <strong>RDO_Avanco</strong> da sua Sheets:</div>
+    <textarea id="copyText" style="width:100%; height:60px; font-family: monospace; font-size: 11px; padding: 8px; border-radius: 4px; border: 1px solid var(--border);" readonly>${linha}</textarea>
+    <button onclick="navigator.clipboard.writeText(document.getElementById('copyText').value);this.textContent='✅ Copiado!'" style="margin-top: 8px; padding: 6px 14px; background: var(--pri); color: white; border: none; border-radius: 4px; cursor: pointer;">📋 Copiar</button>
+    <div style="font-size: 11px; color: var(--muted); margin-top: 10px;">
+      💡 Dica: clique numa célula vazia da coluna A (depois da última linha de RDO) na sua Sheets, e cole. Os valores vão pras colunas certas automaticamente.
+    </div>
+  `;
+}
+
+// =============================================================
+// NAVEGAÇÃO
+// =============================================================
+document.querySelectorAll('.tab').forEach(t => {
+  t.onclick = () => {
+    document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+    t.classList.add('active');
+    STATE.currentView = t.dataset.view;
+    render();
+  };
+});
+
+// Auto-refresh a cada 5 minutos
+setInterval(carregarTudo, 5 * 60 * 1000);
+
+// Boot
+carregarTudo();
+</script>
+
+</body>
+</html>
