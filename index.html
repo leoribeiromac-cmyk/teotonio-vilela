@@ -8,6 +8,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -394,6 +396,7 @@ const CONFIG = {
     pacotes:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=386002450&single=true&output=csv',
     coeficientes:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1962881430&single=true&output=csv',
     rdoavanco:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1906961773&single=true&output=csv',
+    rdodiario:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1032075331&single=true&output=csv',
   },
   // Apps Script (escrita) - JSONP
   appsScript: 'https://script.google.com/macros/s/AKfycbwy7vPSA4KFUxxHpZqEsSlwdkTT9L44LbLV9TdhjNks4JNGHZpgF2PTPBXxezYNuS68/exec',
@@ -558,7 +561,7 @@ function toast(msg, type = 'info', durationMs = 3500) {
 // ESTADO GLOBAL (sem React, manipulação direta de DOM)
 // ====================================================================
 const STATE = {
-  cronograma: [], pacotes: [], coeficientes: [], rdoavanco: [],
+  cronograma: [], pacotes: [], coeficientes: [], rdoavanco: [], rdodiario: [],
   loaded: false, lastSync: null,
   currentPage: 'executivo',
   draft: null,  // rascunho do RDO
@@ -570,19 +573,21 @@ const STATE = {
 async function carregarTudo() {
   setSyncStatus('loading', 'Carregando dados…');
   try {
-    const [c, p, k, r] = await Promise.all([
+    const [c, p, k, r, d] = await Promise.all([
       fetchCSV(CONFIG.csv.cronograma),
       fetchCSV(CONFIG.csv.pacotes),
       fetchCSV(CONFIG.csv.coeficientes),
       fetchCSV(CONFIG.csv.rdoavanco),
+      fetchCSV(CONFIG.csv.rdodiario).catch(() => []),
     ]);
     STATE.cronograma = c;
     STATE.pacotes = p;
     STATE.coeficientes = k;
     STATE.rdoavanco = r;
+    STATE.rdodiario = d || [];
     STATE.loaded = true;
     STATE.lastSync = new Date();
-    setSyncStatus('ok', `Sincronizado · ${c.length} tarefas, ${p.length} pacotes, ${r.length} RDOs`);
+    setSyncStatus('ok', `Sincronizado · ${p.length} pacotes, ${r.length} serviços, ${(d||[]).length} RDOs diários`);
     render();
   } catch(e) {
     STATE.loaded = false;
@@ -720,12 +725,17 @@ function renderShell() {
           <div class="nav-label">Operação</div>
           <div class="nav-item" data-page="rdo">
             <span class="nav-icon">⊕</span>
-            <span>Lançar RDO</span>
+            <span>Lançar Serviço</span>
             <span class="nav-counter" id="rdoCount">0</span>
+          </div>
+          <div class="nav-item" data-page="rdodiario">
+            <span class="nav-icon">📋</span>
+            <span>RDO Diário</span>
+            <span class="nav-counter" id="diarioCount">0</span>
           </div>
           <div class="nav-item" data-page="historico">
             <span class="nav-icon">≡</span>
-            <span>Histórico RDOs</span>
+            <span>Histórico</span>
           </div>
         </div>
         
@@ -750,7 +760,7 @@ function renderShell() {
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>
-            <button class="btn btn-primary btn-sm" onclick="navigate('rdo')">+ Novo RDO</button>
+            <button class="btn btn-primary btn-sm" onclick="navigate('rdo')">+ Novo Serviço</button>
           </div>
         </div>
         <div class="page" id="page"></div>
@@ -790,13 +800,15 @@ function render() {
     avancofisico: ['Avanço Físico', 'Pacotes, mapa de estacas e produtividade'],
     cronograma: ['Cronograma', 'Tarefas do Project · 11 fases'],
     medicao: ['Apoio à Medição', 'Consumo derivado por item contratual'],
-    rdo: ['Lançar RDO', 'Registro do dia · grava direto na Sheets'],
-    historico: ['Histórico de RDOs', 'Lançamentos anteriores'],
+    rdo: ['Lançar Serviço', 'Registra serviços executados · grava em RDO_Avanco'],
+    rdodiario: ['RDO Diário', 'Cabeçalho do dia · efetivo, equipamentos, clima · gera PDF'],
+    historico: ['Histórico', 'Serviços e RDOs diários lançados'],
   };
   const [t, s] = titles[STATE.currentPage] || ['', ''];
   document.getElementById('pageTitle').textContent = t;
   document.getElementById('pageSubtitle').textContent = s;
   document.getElementById('rdoCount').textContent = STATE.rdoavanco.length;
+  document.getElementById('diarioCount').textContent = (STATE.rdodiario||[]).length;
   
   const page = document.getElementById('page');
   if (STATE.currentPage === 'executivo') page.innerHTML = renderExecutivo();
@@ -804,6 +816,7 @@ function render() {
   else if (STATE.currentPage === 'cronograma') page.innerHTML = renderCronograma();
   else if (STATE.currentPage === 'medicao') page.innerHTML = renderMedicao();
   else if (STATE.currentPage === 'rdo') { page.innerHTML = renderRDO(); attachRDOForm(); }
+  else if (STATE.currentPage === 'rdodiario') { page.innerHTML = renderRDODiario(); attachRDODiarioForm(); }
   else if (STATE.currentPage === 'historico') page.innerHTML = renderHistorico();
   
   // Após render, montar gráficos se aplicável
@@ -1355,41 +1368,113 @@ function renderMedicao() {
 }
 
 // ====================================================================
-// VIEW: HISTÓRICO DE RDOs
+// VIEW: HISTÓRICO (com tabs Serviços | RDOs Diários)
 // ====================================================================
+let HISTORICO_TAB = 'servicos';
+
+function setHistoricoTab(t) {
+  HISTORICO_TAB = t;
+  render();
+}
+
 function renderHistorico() {
-  const rdos = [...STATE.rdoavanco].reverse(); // mais recentes primeiro
+  return `
+    <div class="btn-toggle-group" style="margin-bottom:0">
+      <button class="btn-toggle ${HISTORICO_TAB==='servicos'?'active':''}" onclick="setHistoricoTab('servicos')">
+        Serviços (${STATE.rdoavanco.length})
+      </button>
+      <button class="btn-toggle ${HISTORICO_TAB==='diarios'?'active':''}" onclick="setHistoricoTab('diarios')">
+        RDOs Diários (${(STATE.rdodiario||[]).length})
+      </button>
+    </div>
+    ${HISTORICO_TAB === 'servicos' ? renderHistoricoServicos() : renderHistoricoDiarios()}
+  `;
+}
+
+function renderHistoricoServicos() {
+  const rdos = [...STATE.rdoavanco].reverse();
   return `
     <div class="card">
       <div class="card-header">
         <div>
-          <div class="card-title">Histórico de RDOs</div>
-          <div class="card-title-sub">${rdos.length} lançamento${rdos.length!==1?'s':''} no total</div>
+          <div class="card-title">Serviços lançados</div>
+          <div class="card-title-sub">Cada linha = 1 pacote executado · alimenta avanço físico e medição</div>
         </div>
       </div>
       <div class="card-body flush">
         ${rdos.length === 0 ?
-          '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum RDO ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro RDO</button></div>' :
+          '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum serviço ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro serviço</button></div>' :
           `<table class="t">
             <thead><tr>
-              <th>ID</th><th>Data</th><th>Pacote</th>
+              <th>ID</th><th>Data</th><th>Turno</th><th>Pacote</th>
               <th class="t-num" style="text-align:right">Qtd</th>
-              <th>Estaca</th><th>Equipe</th><th>Apontador</th><th>Obs.</th>
+              <th>Estaca</th><th>Equipe</th><th>Apontador</th>
             </tr></thead>
             <tbody>
               ${rdos.slice(0, 100).map(r => `
                 <tr>
                   <td class="t-mono">${r['ID']||''}</td>
                   <td style="font-size:12px">${fmtData(r['Data'])}</td>
+                  <td><span class="pill ${r['Turno']==='Noturno'?'pill-blu':'pill-ylw'}">${r['Turno']||'Diurno'}</span></td>
                   <td><strong>${r['Pacote_Nome']||''}</strong></td>
                   <td class="t-num">${fmtNum(num(r['Quantidade']))} ${r['Unidade']||''}</td>
                   <td class="t-mono" style="font-size:11px">${r['Local_Estaca']||''}</td>
                   <td style="font-size:12px">${r['Equipe']||r['Subcontratado']||''}</td>
                   <td style="font-size:12px">${r['Apontador']||''}</td>
-                  <td style="font-size:11px;color:var(--muted);max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r['Observacao']||''}</td>
                 </tr>
               `).join('')}
-              ${rdos.length > 100 ? `<tr><td colspan="8" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${rdos.length} total</td></tr>` : ''}
+              ${rdos.length > 100 ? `<tr><td colspan="8" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${rdos.length}</td></tr>` : ''}
+            </tbody>
+          </table>`
+        }
+      </div>
+    </div>
+  `;
+}
+
+function renderHistoricoDiarios() {
+  const diarios = [...(STATE.rdodiario||[])].reverse();
+  return `
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">RDOs Diários</div>
+          <div class="card-title-sub">Cabeçalhos do dia · efetivo, equipamentos, clima · clique pra gerar PDF</div>
+        </div>
+      </div>
+      <div class="card-body flush">
+        ${diarios.length === 0 ?
+          '<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum RDO Diário ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdodiario\')">+ Criar primeiro RDO Diário</button></div>' :
+          `<table class="t">
+            <thead><tr>
+              <th>ID</th><th>Data</th><th>Encarregado</th><th>Apontador</th>
+              <th>Clima</th>
+              <th class="t-num" style="text-align:right">Efetivo Total</th>
+              <th>Noturno?</th>
+              <th></th>
+            </tr></thead>
+            <tbody>
+              ${diarios.map(r => {
+                const cats = ['Servente','Pedreiro','Armador','Carpinteiro','OpMaquina','Sinaleiro','Encarregado'];
+                let total = 0;
+                cats.forEach(c => {
+                  total += parseInt(r[c+'_Diurno']) || 0;
+                  total += parseInt(r[c+'_Noturno']) || 0;
+                });
+                const climaResumo = [r['Clima_Manha'], r['Clima_Tarde'], r['Clima_Noite']].filter(Boolean).join(' · ');
+                return `
+                  <tr>
+                    <td class="t-mono">${r['ID']||''}</td>
+                    <td>${fmtData(r['Data'])}</td>
+                    <td style="font-size:12px">${r['Encarregado']||''}</td>
+                    <td style="font-size:12px">${r['Apontador']||''}</td>
+                    <td style="font-size:11px;color:var(--muted)">${climaResumo}</td>
+                    <td class="t-num">${total}</td>
+                    <td>${r['Tem_Turno_Noturno']==='Sim'?'<span class="pill pill-blu">Sim</span>':'<span class="pill pill-ylw">Não</span>'}</td>
+                    <td><button class="btn btn-sm btn-primary" onclick='gerarPDFDiario(${JSON.stringify(r['Data']).replace(/'/g,"&#39;")})'>📄 PDF</button></td>
+                  </tr>
+                `;
+              }).join('')}
             </tbody>
           </table>`
         }
@@ -1421,12 +1506,11 @@ function defaultDraft() {
   const apontador = localStorage.getItem(CONFIG.ls.apontador) || '';
   return {
     data: new Date().toISOString().split('T')[0],
+    turno: 'Diurno',
     sentido: 'CB',
     estacaIni: '',
     estacaFim: '',
     apontador,
-    clima: 'Bom',
-    efetivo: '',
     observacaoGeral: '',
     servicos: [
       { frente: '', pacoteId: '', quantidade: '', equipe: '', observacao: '' }
@@ -1459,8 +1543,8 @@ function renderRDO() {
     <div class="card">
       <div class="card-header">
         <div>
-          <div class="card-title">Diário de obra · cabeçalho</div>
-          <div class="card-title-sub">Dados gerais do dia · preencha 1× por dia</div>
+          <div class="card-title">Identificação</div>
+          <div class="card-title-sub">Data, turno e localização dos serviços</div>
         </div>
       </div>
       <div class="card-body">
@@ -1468,6 +1552,13 @@ function renderRDO() {
           <div class="field">
             <label>Data</label>
             <input type="date" data-draft="data" value="${d.data}">
+          </div>
+          <div class="field">
+            <label>Turno</label>
+            <div class="btn-toggle-group">
+              <button type="button" class="btn-toggle ${d.turno==='Diurno'?'active':''}" onclick="setTurno('Diurno')">☀ Diurno</button>
+              <button type="button" class="btn-toggle ${d.turno==='Noturno'?'active':''}" onclick="setTurno('Noturno')">🌙 Noturno</button>
+            </div>
           </div>
           <div class="field">
             <label>Apontador</label>
@@ -1480,15 +1571,6 @@ function renderRDO() {
               <button type="button" class="btn-toggle ${d.sentido==='BC'?'active':''}" onclick="setSentido('BC')">Bairro→Centro</button>
             </div>
             <div class="field-hint">${d.sentido === 'CB' ? `E${CONFIG.estacasCB.ini}–E${CONFIG.estacasCB.fim}` : `E${CONFIG.estacasBC.ini}–E${CONFIG.estacasBC.fim}`}</div>
-          </div>
-          <div class="field">
-            <label>Clima</label>
-            <select data-draft="clima">
-              <option ${d.clima==='Bom'?'selected':''}>Bom</option>
-              <option ${d.clima==='Garoa'?'selected':''}>Garoa</option>
-              <option ${d.clima==='Chuva'?'selected':''}>Chuva</option>
-              <option ${d.clima==='Parado por chuva'?'selected':''}>Parado por chuva</option>
-            </select>
           </div>
           <div class="field">
             <label>Estaca início</label>
@@ -1504,14 +1586,13 @@ function renderRDO() {
               ${estacasUsar.map(e => `<option ${d.estacaFim===e?'selected':''}>${e}</option>`).join('')}
             </select>
           </div>
-          <div class="field">
-            <label>Efetivo total no canteiro</label>
-            <input type="number" data-draft="efetivo" value="${d.efetivo}" placeholder="ex: 12" min="0">
-          </div>
           <div class="field" style="grid-column:1/-1">
-            <label>Observação geral do dia</label>
-            <input type="text" data-draft="observacaoGeral" value="${d.observacaoGeral}" placeholder="ex: Chuva à tarde interrompeu pavimentação">
+            <label>Observação geral (opcional)</label>
+            <input type="text" data-draft="observacaoGeral" value="${d.observacaoGeral}" placeholder="ex: Continuar amanhã">
           </div>
+        </div>
+        <div style="margin-top:12px;padding:10px 14px;background:var(--blu-l);border-radius:var(--r);font-size:12px;color:var(--blu)">
+          ℹ Efetivo, equipamentos e clima vão na aba <strong>RDO Diário</strong> (1× por dia, separadamente).
         </div>
       </div>
     </div>
@@ -1519,8 +1600,8 @@ function renderRDO() {
     <div class="card">
       <div class="card-header">
         <div>
-          <div class="card-title">Serviços executados hoje</div>
-          <div class="card-title-sub">Adicione 1 linha por pacote/serviço executado · cada linha vira 1 RDO na Sheets</div>
+          <div class="card-title">Serviços executados</div>
+          <div class="card-title-sub">Adicione 1 linha por pacote · cada linha vira 1 lançamento em RDO_Avanco</div>
         </div>
         <span style="font-size:11px;color:var(--muted)">${d.servicos.length} serviço${d.servicos.length>1?'s':''}</span>
       </div>
@@ -1534,12 +1615,11 @@ function renderRDO() {
     
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px">
       <div style="font-size:12px;color:var(--muted);max-width:520px">
-        ⓘ Ao salvar, cada serviço acima vira <strong>1 linha na aba RDO_Avanco</strong> da Google Sheets.<br>
-        O dashboard e a curva S atualizam em até 5 min (republicação automática).
+        ⓘ Cada serviço vira 1 linha em <strong>RDO_Avanco</strong>. O dashboard atualiza em até 5 min.
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-outline" onclick="resetDraft()">Limpar tudo</button>
-        <button class="btn btn-primary btn-lg" id="btnSalvarRDO" onclick="salvarRDO()">💾 Salvar RDO completo</button>
+        <button class="btn btn-outline" onclick="resetDraft()">Limpar</button>
+        <button class="btn btn-primary btn-lg" id="btnSalvarRDO" onclick="salvarRDO()">💾 Salvar Serviços</button>
       </div>
     </div>
   `;
@@ -1640,9 +1720,14 @@ function rerenderServicoRow(idx) {
 
 function setSentido(s) {
   STATE.draft.sentido = s;
-  // limpar estacas se mudou sentido
   STATE.draft.estacaIni = '';
   STATE.draft.estacaFim = '';
+  saveDraft(STATE.draft);
+  render();
+}
+
+function setTurno(t) {
+  STATE.draft.turno = t;
   saveDraft(STATE.draft);
   render();
 }
@@ -1709,6 +1794,7 @@ async function salvarRDO() {
       const obsCompleta = [d.observacaoGeral, s.observacao].filter(x => x && x.trim()).join(' · ');
       return {
         data: d.data,
+        turno: d.turno || 'Diurno',
         pacote_id: s.pacoteId,
         pacote_nome: p ? p['Pacote'] : '',
         quantidade: num(s.quantidade),
@@ -1716,10 +1802,10 @@ async function salvarRDO() {
         local_estaca: localEstaca,
         equipe: s.equipe,
         subcontratado: s.equipe,
-        efetivo_total: num(d.efetivo),
+        efetivo_total: 0,
         equipamentos: '',
-        clima: d.clima,
-        paralisado_motivo: d.clima === 'Parado por chuva' ? 'Chuva' : '',
+        clima: '',
+        paralisado_motivo: '',
         foto_link: '',
         observacao: obsCompleta,
         apontador: d.apontador
@@ -1734,20 +1820,21 @@ async function salvarRDO() {
     
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
     
-    toast(`✓ ${batch.length} serviço${batch.length>1?'s':''} salvo${batch.length>1?'s':''} na Sheets`, 'success', 4000);
+    toast(`✓ ${batch.length} serviço${batch.length>1?'s':''} salvo${batch.length>1?'s':''} (${d.turno})`, 'success', 4000);
     
-    // Limpar rascunho de serviços, mas manter cabeçalho do dia
     clearDraft();
     STATE.draft = {
       ...defaultDraft(),
       apontador: d.apontador,
       sentido: d.sentido,
+      turno: d.turno,
     };
     
     // Forçar refresh dos dados (vai aparecer em ~5min depois da republicação)
     setTimeout(() => carregarTudo(), 800);
     
     // Voltar pra tela executiva
+    HISTORICO_TAB = 'servicos';
     setTimeout(() => navigate('historico'), 600);
     
   } catch(e) {
@@ -1756,6 +1843,691 @@ async function salvarRDO() {
     toast('Falha ao salvar: ' + e.message, 'error', 6000);
   }
 }
+
+
+// ====================================================================
+// VIEW: RDO DIÁRIO (cabeçalho do dia, gera PDF)
+// ====================================================================
+const CATEGORIAS_MO = [
+  { key: 'servente', label: 'Servente' },
+  { key: 'pedreiro', label: 'Pedreiro' },
+  { key: 'armador', label: 'Armador' },
+  { key: 'carpinteiro', label: 'Carpinteiro' },
+  { key: 'opmaquina', label: 'Op. Máquina' },
+  { key: 'sinaleiro', label: 'Sinaleiro' },
+  { key: 'encarregado', label: 'Encarregado' },
+];
+
+const CATEGORIAS_EQUIP = [
+  { key: 'retroescav', label: 'Retroescavadeira' },
+  { key: 'caminhao', label: 'Caminhão Basculante' },
+  { key: 'rolo', label: 'Rolo Compactador' },
+  { key: 'compactador_placa', label: 'Compactador Placa' },
+  { key: 'vibroacabadora', label: 'Vibroacabadora' },
+  { key: 'espargidor', label: 'Espargidor' },
+  { key: 'pa_carregadeira', label: 'Pá Carregadeira' },
+  { key: 'escavadeira', label: 'Escavadeira Hidráulica' },
+];
+
+const CLIMAS = ['Bom', 'Encoberto', 'Garoa', 'Chuva', 'Chuva forte'];
+
+let DIARIO_STATE = null;
+
+function defaultDiarioDraft() {
+  const apontador = localStorage.getItem(CONFIG.ls.apontador) || '';
+  const obj = {
+    data: new Date().toISOString().split('T')[0],
+    encarregado: '',
+    apontador,
+    clima_manha: 'Bom',
+    clima_tarde: 'Bom',
+    clima_noite: 'Bom',
+    tem_turno_noturno: false,
+    visitas: '',
+    ocorrencias: '',
+    observacoes_gerais: '',
+  };
+  CATEGORIAS_MO.forEach(c => {
+    obj[c.key + '_diurno'] = '';
+    obj[c.key + '_noturno'] = '';
+  });
+  CATEGORIAS_EQUIP.forEach(c => {
+    obj[c.key] = '';
+  });
+  return obj;
+}
+
+function loadDiarioDraft() {
+  try {
+    const raw = localStorage.getItem('teotonio_rdo_diario_draft_v1');
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+function saveDiarioDraft(d) {
+  try { localStorage.setItem('teotonio_rdo_diario_draft_v1', JSON.stringify(d)); } catch(e) {}
+}
+function clearDiarioDraft() {
+  try { localStorage.removeItem('teotonio_rdo_diario_draft_v1'); } catch(e) {}
+}
+
+function renderRDODiario() {
+  if (!DIARIO_STATE) DIARIO_STATE = loadDiarioDraft() || defaultDiarioDraft();
+  const d = DIARIO_STATE;
+  
+  // Verifica se já existe RDO Diário pra essa data — pré-popula pra editar
+  const existente = (STATE.rdodiario || []).find(r => {
+    const rd = String(r['Data']);
+    return rd === d.data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === d.data);
+  });
+  
+  return `
+    ${existente ? `
+      <div style="background:var(--blu-l);border:1px solid var(--blu);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div style="font-size:13px;color:var(--blu)">📋 Já existe RDO Diário pra <strong>${fmtData(d.data)}</strong> (ID: ${existente['ID']}). Salvar vai <strong>atualizar</strong> o existente.</div>
+        <button class="btn btn-sm btn-outline" onclick="carregarRDODiarioExistente('${d.data}')">Carregar dados existentes</button>
+      </div>
+    ` : ''}
+    
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Identificação do dia</div>
+          <div class="card-title-sub">1 RDO por data · pode incluir turno noturno</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label>Data</label>
+            <input type="date" data-diario="data" value="${d.data}">
+          </div>
+          <div class="field">
+            <label>Encarregado</label>
+            <input type="text" data-diario="encarregado" value="${d.encarregado||''}" placeholder="Nome do encarregado">
+          </div>
+          <div class="field">
+            <label>Apontador</label>
+            <input type="text" data-diario="apontador" value="${d.apontador||''}" placeholder="Seu nome">
+          </div>
+          <div class="field">
+            <label>Tem turno noturno?</label>
+            <div class="btn-toggle-group">
+              <button type="button" class="btn-toggle ${!d.tem_turno_noturno?'active':''}" onclick="setTurnoNoturno(false)">Não</button>
+              <button type="button" class="btn-toggle ${d.tem_turno_noturno?'active':''}" onclick="setTurnoNoturno(true)">Sim</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Clima</div>
+          <div class="card-title-sub">3 períodos do dia</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label>Manhã</label>
+            <select data-diario="clima_manha">
+              ${CLIMAS.map(c => `<option ${d.clima_manha===c?'selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Tarde</label>
+            <select data-diario="clima_tarde">
+              ${CLIMAS.map(c => `<option ${d.clima_tarde===c?'selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field">
+            <label>Noite</label>
+            <select data-diario="clima_noite">
+              ${CLIMAS.map(c => `<option ${d.clima_noite===c?'selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Efetivo${d.tem_turno_noturno ? ' · Diurno' : ''}</div>
+          <div class="card-title-sub">Quantidade por categoria</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+          ${CATEGORIAS_MO.map(c => `
+            <div class="field">
+              <label>${c.label}</label>
+              <input type="number" data-diario="${c.key}_diurno" value="${d[c.key+'_diurno']||''}" placeholder="0" min="0">
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+    
+    ${d.tem_turno_noturno ? `
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Efetivo · Noturno</div>
+            <div class="card-title-sub">Quantidade por categoria no turno noturno</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
+            ${CATEGORIAS_MO.map(c => `
+              <div class="field">
+                <label>${c.label}</label>
+                <input type="number" data-diario="${c.key}_noturno" value="${d[c.key+'_noturno']||''}" placeholder="0" min="0">
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    ` : ''}
+    
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Equipamentos</div>
+          <div class="card-title-sub">Quantidade no canteiro</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+          ${CATEGORIAS_EQUIP.map(c => `
+            <div class="field">
+              <label>${c.label}</label>
+              <input type="number" data-diario="${c.key}" value="${d[c.key]||''}" placeholder="0" min="0">
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Observações</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-grid" style="grid-template-columns:1fr">
+          <div class="field">
+            <label>Visitas</label>
+            <input type="text" data-diario="visitas" value="${d.visitas||''}" placeholder="ex: Fiscal SIURB de manhã, projetista à tarde">
+          </div>
+          <div class="field">
+            <label>Ocorrências</label>
+            <input type="text" data-diario="ocorrencias" value="${d.ocorrencias||''}" placeholder="ex: Pequena interrupção por chuva às 15h">
+          </div>
+          <div class="field">
+            <label>Observações gerais</label>
+            <textarea data-diario="observacoes_gerais" rows="3" placeholder="ex: Continuar amanhã trecho E125 a E130">${d.observacoes_gerais||''}</textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px">
+      <div style="font-size:12px;color:var(--muted);max-width:520px">
+        ⓘ Salva o cabeçalho na aba <strong>RDO_Diario</strong>. O PDF é gerado puxando os serviços de <strong>RDO_Avanco</strong> dessa data, sem mostrar quantidades.
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-outline" onclick="resetDiarioDraft()">Limpar</button>
+        <button class="btn btn-acc" onclick="gerarPDFDiario(DIARIO_STATE.data)">📄 Gerar PDF</button>
+        <button class="btn btn-primary btn-lg" id="btnSalvarDiario" onclick="salvarRDODiario()">💾 Salvar RDO Diário</button>
+      </div>
+    </div>
+  `;
+}
+
+function attachRDODiarioForm() {
+  document.querySelectorAll('[data-diario]').forEach(el => {
+    el.oninput = el.onchange = () => {
+      DIARIO_STATE[el.dataset.diario] = el.value;
+      if (el.dataset.diario === 'apontador') {
+        try { localStorage.setItem(CONFIG.ls.apontador, el.value); } catch(e) {}
+      }
+      saveDiarioDraft(DIARIO_STATE);
+    };
+  });
+}
+
+function setTurnoNoturno(v) {
+  DIARIO_STATE.tem_turno_noturno = v;
+  saveDiarioDraft(DIARIO_STATE);
+  render();
+}
+
+function resetDiarioDraft() {
+  if (!confirm('Limpar todos os dados deste RDO Diário?')) return;
+  clearDiarioDraft();
+  DIARIO_STATE = defaultDiarioDraft();
+  render();
+}
+
+function carregarRDODiarioExistente(data) {
+  const r = (STATE.rdodiario||[]).find(x => {
+    const rd = String(x['Data']);
+    return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
+  });
+  if (!r) { toast('RDO existente não encontrado', 'error'); return; }
+  
+  DIARIO_STATE = {
+    data: data,
+    encarregado: r['Encarregado']||'',
+    apontador: r['Apontador']||'',
+    clima_manha: r['Clima_Manha']||'Bom',
+    clima_tarde: r['Clima_Tarde']||'Bom',
+    clima_noite: r['Clima_Noite']||'Bom',
+    tem_turno_noturno: r['Tem_Turno_Noturno'] === 'Sim',
+    visitas: r['Visitas']||'',
+    ocorrencias: r['Ocorrencias']||'',
+    observacoes_gerais: r['Observacoes_Gerais']||'',
+  };
+  // Mapear MO
+  CATEGORIAS_MO.forEach(c => {
+    const sheetKey = c.key.charAt(0).toUpperCase() + c.key.slice(1);
+    // Heurística pra encontrar a coluna
+    const colDiurno = Object.keys(r).find(k => k.toLowerCase().includes(c.key.toLowerCase()) && k.toLowerCase().includes('diurno'));
+    const colNoturno = Object.keys(r).find(k => k.toLowerCase().includes(c.key.toLowerCase()) && k.toLowerCase().includes('noturno'));
+    DIARIO_STATE[c.key + '_diurno'] = colDiurno ? (r[colDiurno]||'') : '';
+    DIARIO_STATE[c.key + '_noturno'] = colNoturno ? (r[colNoturno]||'') : '';
+  });
+  // Mapear equipamentos
+  CATEGORIAS_EQUIP.forEach(c => {
+    const col = Object.keys(r).find(k => k.toLowerCase().replace(/_/g,'') === c.key.toLowerCase().replace(/_/g,''));
+    DIARIO_STATE[c.key] = col ? (r[col]||'') : '';
+  });
+  
+  saveDiarioDraft(DIARIO_STATE);
+  toast('Dados existentes carregados', 'info');
+  render();
+}
+
+async function salvarRDODiario() {
+  const d = DIARIO_STATE;
+  if (!d.data) { toast('Data obrigatória', 'error'); return; }
+  if (!d.apontador.trim()) { toast('Apontador obrigatório', 'error'); return; }
+  
+  const btn = document.getElementById('btnSalvarDiario');
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Salvando…';
+  
+  // Verifica se já existe pra usar update
+  const existe = (STATE.rdodiario || []).some(r => {
+    const rd = String(r['Data']);
+    return rd === d.data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === d.data);
+  });
+  
+  const params = {
+    action: existe ? 'updateRDODiario' : 'addRDODiario',
+    data: d.data,
+    encarregado: d.encarregado || '',
+    apontador: d.apontador || '',
+    clima_manha: d.clima_manha || '',
+    clima_tarde: d.clima_tarde || '',
+    clima_noite: d.clima_noite || '',
+    visitas: d.visitas || '',
+    ocorrencias: d.ocorrencias || '',
+    observacoes_gerais: d.observacoes_gerais || '',
+    tem_turno_noturno: d.tem_turno_noturno ? 'true' : 'false',
+  };
+  CATEGORIAS_MO.forEach(c => {
+    params[c.key + '_diurno'] = d[c.key + '_diurno'] || '0';
+    params[c.key + '_noturno'] = d[c.key + '_noturno'] || '0';
+  });
+  CATEGORIAS_EQUIP.forEach(c => {
+    params[c.key] = d[c.key] || '0';
+  });
+  
+  try {
+    const result = await jsonp(CONFIG.appsScript, params);
+    if (!result.ok) throw new Error(result.error || 'Erro');
+    toast(`✓ RDO Diário ${result.updated ? 'atualizado' : 'salvo'}`, 'success', 4000);
+    setTimeout(() => carregarTudo(), 800);
+    btn.disabled = false;
+    btn.innerHTML = original;
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = original;
+    toast('Falha: ' + e.message, 'error', 6000);
+  }
+}
+
+// ====================================================================
+// PDF DO RDO DIÁRIO (jsPDF)
+// ====================================================================
+function gerarPDFDiario(data) {
+  // Buscar dados do RDO Diário (preferir Sheets, senão usar DIARIO_STATE)
+  const fromSheet = (STATE.rdodiario || []).find(r => {
+    const rd = String(r['Data']);
+    return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
+  });
+  
+  const d = fromSheet ? sheetRowToDiario(fromSheet) : (DIARIO_STATE && DIARIO_STATE.data === data ? DIARIO_STATE : null);
+  if (!d) { toast('Não encontrei o RDO Diário pra gerar PDF', 'error'); return; }
+  
+  // Filtrar serviços executados nesse dia
+  const servicosDiurnos = STATE.rdoavanco.filter(r => {
+    const rd = parseISODate(r['Data']);
+    if (!rd) return false;
+    return rd.toISOString().split('T')[0] === data && (r['Turno']||'Diurno') === 'Diurno';
+  });
+  const servicosNoturnos = STATE.rdoavanco.filter(r => {
+    const rd = parseISODate(r['Data']);
+    if (!rd) return false;
+    return rd.toISOString().split('T')[0] === data && r['Turno'] === 'Noturno';
+  });
+  
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 12;
+  let y = margin;
+  
+  // === CABEÇALHO ===
+  doc.setFillColor(10, 61, 98);
+  doc.rect(0, 0, pageW, 22, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RELATÓRIO DIÁRIO DE OBRA - RDO', margin, 9);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Av. Senador Teotônio Vilela · Consórcio Arvek + Gestor', margin, 14);
+  doc.text(`Data: ${fmtData(d.data)}`, margin, 19);
+  
+  // ID e número
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  const idText = (fromSheet && fromSheet['ID']) || 'D????';
+  doc.text(idText, pageW - margin - 20, 9);
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+  doc.text(d.tem_turno_noturno ? 'Diurno + Noturno' : 'Diurno', pageW - margin - 20, 14);
+  
+  doc.setTextColor(0, 0, 0);
+  y = 27;
+  
+  // === IDENTIFICAÇÃO ===
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'bold');
+  doc.setFillColor(240, 240, 240);
+  doc.rect(margin, y, pageW - 2*margin, 5, 'F');
+  doc.text('IDENTIFICAÇÃO', margin + 2, y + 3.5);
+  y += 7;
+  
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.text(`Encarregado:`, margin, y);
+  doc.setFont('helvetica', 'bold');
+  doc.text(d.encarregado || '—', margin + 22, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Apontador:`, margin + 95, y);
+  doc.setFont('helvetica', 'bold');
+  doc.text(d.apontador || '—', margin + 115, y);
+  y += 6;
+  
+  // === CLIMA ===
+  doc.setFont('helvetica', 'bold');
+  doc.setFillColor(240, 240, 240);
+  doc.rect(margin, y, pageW - 2*margin, 5, 'F');
+  doc.text('CLIMA', margin + 2, y + 3.5);
+  y += 7;
+  
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  const colW = (pageW - 2*margin) / 3;
+  doc.text(`Manhã: `, margin, y);
+  doc.setFont('helvetica', 'bold');
+  doc.text(d.clima_manha || '—', margin + 14, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Tarde: `, margin + colW, y);
+  doc.setFont('helvetica', 'bold');
+  doc.text(d.clima_tarde || '—', margin + colW + 12, y);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Noite: `, margin + 2*colW, y);
+  doc.setFont('helvetica', 'bold');
+  doc.text(d.clima_noite || '—', margin + 2*colW + 12, y);
+  y += 6;
+  
+  // === EFETIVO ===
+  doc.setFont('helvetica', 'bold');
+  doc.setFillColor(240, 240, 240);
+  doc.rect(margin, y, pageW - 2*margin, 5, 'F');
+  doc.text('EFETIVO', margin + 2, y + 3.5);
+  y += 6;
+  
+  // Tabela efetivo
+  const efetivoHead = d.tem_turno_noturno ? 
+    [['Categoria', 'Diurno', 'Noturno', 'Total']] :
+    [['Categoria', 'Quantidade']];
+  
+  const efetivoBody = CATEGORIAS_MO.map(c => {
+    const diu = parseInt(d[c.key + '_diurno']) || 0;
+    const not = parseInt(d[c.key + '_noturno']) || 0;
+    return d.tem_turno_noturno ?
+      [c.label, String(diu || ''), String(not || ''), String(diu + not || '')] :
+      [c.label, String(diu || '—')];
+  });
+  
+  // Linha de total
+  const totalDiu = CATEGORIAS_MO.reduce((s, c) => s + (parseInt(d[c.key + '_diurno']) || 0), 0);
+  const totalNot = CATEGORIAS_MO.reduce((s, c) => s + (parseInt(d[c.key + '_noturno']) || 0), 0);
+  if (d.tem_turno_noturno) {
+    efetivoBody.push(['TOTAL', String(totalDiu), String(totalNot), String(totalDiu + totalNot)]);
+  } else {
+    efetivoBody.push(['TOTAL', String(totalDiu)]);
+  }
+  
+  doc.autoTable({
+    startY: y,
+    head: efetivoHead,
+    body: efetivoBody,
+    margin: { left: margin, right: margin },
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 1.5 },
+    headStyles: { fillColor: [10, 61, 98], textColor: 255, fontStyle: 'bold' },
+    didParseCell: function(data) {
+      if (data.row.index === efetivoBody.length - 1) {
+        data.cell.styles.fillColor = [240, 240, 240];
+        data.cell.styles.fontStyle = 'bold';
+      }
+    }
+  });
+  y = doc.lastAutoTable.finalY + 4;
+  
+  // === EQUIPAMENTOS ===
+  doc.setFont('helvetica', 'bold');
+  doc.setFillColor(240, 240, 240);
+  doc.rect(margin, y, pageW - 2*margin, 5, 'F');
+  doc.text('EQUIPAMENTOS', margin + 2, y + 3.5);
+  y += 6;
+  
+  const equipBody = CATEGORIAS_EQUIP
+    .map(c => [c.label, String(parseInt(d[c.key]) || '—')])
+    .filter(row => row[1] !== '—');
+  
+  if (equipBody.length === 0) {
+    equipBody.push(['Nenhum equipamento registrado', '']);
+  }
+  
+  doc.autoTable({
+    startY: y,
+    head: [['Equipamento', 'Quantidade']],
+    body: equipBody,
+    margin: { left: margin, right: margin },
+    theme: 'grid',
+    styles: { fontSize: 8, cellPadding: 1.5 },
+    headStyles: { fillColor: [10, 61, 98], textColor: 255, fontStyle: 'bold' },
+    columnStyles: { 1: { halign: 'center', cellWidth: 30 } }
+  });
+  y = doc.lastAutoTable.finalY + 4;
+  
+  // === SERVIÇOS DIURNOS ===
+  if (servicosDiurnos.length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFillColor(240, 240, 240);
+    doc.rect(margin, y, pageW - 2*margin, 5, 'F');
+    doc.text(`SERVIÇOS EXECUTADOS · DIURNO (${servicosDiurnos.length})`, margin + 2, y + 3.5);
+    y += 6;
+    
+    doc.autoTable({
+      startY: y,
+      head: [['Frente / Pacote', 'Local / Estaca', 'Equipe']],
+      body: servicosDiurnos.map(s => {
+        const p = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
+        const frente = p ? (p['Frente']||'') : '';
+        return [
+          `${frente ? frente + ' · ' : ''}${s['Pacote_Nome']||''}`,
+          s['Local_Estaca']||'',
+          s['Equipe']||s['Subcontratado']||'',
+        ];
+      }),
+      margin: { left: margin, right: margin },
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 1.5 },
+      headStyles: { fillColor: [10, 61, 98], textColor: 255, fontStyle: 'bold' },
+    });
+    y = doc.lastAutoTable.finalY + 4;
+  }
+  
+  // === SERVIÇOS NOTURNOS ===
+  if (servicosNoturnos.length > 0) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFillColor(240, 240, 240);
+    doc.rect(margin, y, pageW - 2*margin, 5, 'F');
+    doc.text(`SERVIÇOS EXECUTADOS · NOTURNO (${servicosNoturnos.length})`, margin + 2, y + 3.5);
+    y += 6;
+    
+    doc.autoTable({
+      startY: y,
+      head: [['Frente / Pacote', 'Local / Estaca', 'Equipe']],
+      body: servicosNoturnos.map(s => {
+        const p = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
+        const frente = p ? (p['Frente']||'') : '';
+        return [
+          `${frente ? frente + ' · ' : ''}${s['Pacote_Nome']||''}`,
+          s['Local_Estaca']||'',
+          s['Equipe']||s['Subcontratado']||'',
+        ];
+      }),
+      margin: { left: margin, right: margin },
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 1.5 },
+      headStyles: { fillColor: [40, 50, 90], textColor: 255, fontStyle: 'bold' },
+    });
+    y = doc.lastAutoTable.finalY + 4;
+  }
+  
+  if (servicosDiurnos.length === 0 && servicosNoturnos.length === 0) {
+    doc.setFont('helvetica', 'italic');
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    doc.text('Nenhum serviço lançado para esta data.', margin, y + 4);
+    doc.setTextColor(0, 0, 0);
+    y += 10;
+  }
+  
+  // === OBSERVAÇÕES (se couber na página) ===
+  if (y < pageH - 50 && (d.visitas || d.ocorrencias || d.observacoes_gerais)) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setFillColor(240, 240, 240);
+    doc.rect(margin, y, pageW - 2*margin, 5, 'F');
+    doc.text('OBSERVAÇÕES', margin + 2, y + 3.5);
+    y += 7;
+    
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    if (d.visitas) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Visitas: ', margin, y);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(d.visitas, pageW - 2*margin - 18);
+      doc.text(lines, margin + 14, y);
+      y += lines.length * 4 + 1;
+    }
+    if (d.ocorrencias) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Ocorrências: ', margin, y);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(d.ocorrencias, pageW - 2*margin - 22);
+      doc.text(lines, margin + 18, y);
+      y += lines.length * 4 + 1;
+    }
+    if (d.observacoes_gerais) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Gerais: ', margin, y);
+      doc.setFont('helvetica', 'normal');
+      const lines = doc.splitTextToSize(d.observacoes_gerais, pageW - 2*margin - 14);
+      doc.text(lines, margin + 11, y);
+      y += lines.length * 4 + 1;
+    }
+  }
+  
+  // === RODAPÉ COM ASSINATURAS ===
+  const yAssinaturas = pageH - 30;
+  doc.setDrawColor(150, 150, 150);
+  doc.line(margin, yAssinaturas, margin + 70, yAssinaturas);
+  doc.line(pageW - margin - 70, yAssinaturas, pageW - margin, yAssinaturas);
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Encarregado: ${d.encarregado || ''}`, margin, yAssinaturas + 4);
+  doc.text(`Apontador: ${d.apontador || ''}`, pageW - margin - 70, yAssinaturas + 4);
+  
+  doc.setFontSize(7);
+  doc.setTextColor(150, 150, 150);
+  doc.text(`Gerado em ${new Date().toLocaleString('pt-BR')} · Sistema Teotônio Vilela`, pageW/2, pageH - 6, { align: 'center' });
+  
+  // Salvar
+  const filename = `RDO_${d.data.replace(/-/g,'')}_TeotonioVilela.pdf`;
+  doc.save(filename);
+  toast('PDF gerado: ' + filename, 'success');
+}
+
+function sheetRowToDiario(r) {
+  const d = {
+    data: parseISODate(r['Data']) ? parseISODate(r['Data']).toISOString().split('T')[0] : String(r['Data']),
+    encarregado: r['Encarregado']||'',
+    apontador: r['Apontador']||'',
+    clima_manha: r['Clima_Manha']||'',
+    clima_tarde: r['Clima_Tarde']||'',
+    clima_noite: r['Clima_Noite']||'',
+    tem_turno_noturno: r['Tem_Turno_Noturno'] === 'Sim',
+    visitas: r['Visitas']||'',
+    ocorrencias: r['Ocorrencias']||'',
+    observacoes_gerais: r['Observacoes_Gerais']||'',
+  };
+  CATEGORIAS_MO.forEach(c => {
+    const colDiu = Object.keys(r).find(k => k.toLowerCase().includes(c.key.toLowerCase()) && k.toLowerCase().includes('diurno'));
+    const colNot = Object.keys(r).find(k => k.toLowerCase().includes(c.key.toLowerCase()) && k.toLowerCase().includes('noturno'));
+    d[c.key + '_diurno'] = colDiu ? (r[colDiu]||'') : '';
+    d[c.key + '_noturno'] = colNot ? (r[colNot]||'') : '';
+  });
+  CATEGORIAS_EQUIP.forEach(c => {
+    const col = Object.keys(r).find(k => k.toLowerCase().replace(/_/g,'') === c.key.toLowerCase().replace(/_/g,''));
+    d[c.key] = col ? (r[col]||'') : '';
+  });
+  return d;
+}
+
+function navegacaoRDODiario() {} // placeholder pra compat
+
+// Export funções
+window.setTurnoNoturno = setTurnoNoturno;
+window.resetDiarioDraft = resetDiarioDraft;
+window.carregarRDODiarioExistente = carregarRDODiarioExistente;
 
 // ====================================================================
 // GRÁFICOS (Chart.js)
@@ -1854,6 +2626,11 @@ window.toggleSidebar = toggleSidebar;
 window.setCronoView = setCronoView;
 window.setCronoMes = setCronoMes;
 window.setSentido = setSentido;
+window.setTurno = setTurno;
+window.navegacaoRDODiario = navegacaoRDODiario;
+window.gerarPDFDiario = gerarPDFDiario;
+window.setHistoricoTab = setHistoricoTab;
+window.salvarRDODiario = salvarRDODiario;
 window.adicionarServico = adicionarServico;
 window.removerServico = removerServico;
 window.resetDraft = resetDraft;
