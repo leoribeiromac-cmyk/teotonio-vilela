@@ -432,6 +432,28 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   .kpi-value{font-size:22px}
   .kpi-hero .kpi-value{font-size:30px}
 }
+
+/* Botões para remover items custom */
+.btn-remove-custom{
+  position:absolute;top:0;right:-2px;
+  width:20px;height:20px;border-radius:50%;
+  background:transparent;border:none;color:var(--red);
+  cursor:pointer;font-size:18px;font-weight:700;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+  transition:.15s;
+}
+.btn-remove-custom:hover{background:var(--red);color:#fff;}
+
+.btn-remove-custom-row{
+  position:absolute;top:50%;right:6px;transform:translateY(-50%);
+  width:18px;height:18px;border-radius:50%;
+  background:transparent;border:none;color:var(--red);
+  cursor:pointer;font-size:16px;font-weight:700;line-height:1;
+  display:flex;align-items:center;justify-content:center;
+  transition:.15s;
+}
+.btn-remove-custom-row:hover{background:var(--red);color:#fff;}
+
 </style>
 </head>
 <body>
@@ -449,7 +471,7 @@ const CONFIG = {
     pacotes:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=386002450&single=true&output=csv',
     coeficientes:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1962881430&single=true&output=csv',
     rdoavanco:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1906961773&single=true&output=csv',
-    rdodiario:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1032075331&single=true&output=csv',
+    rdodiario:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1234324544&single=true&output=csv',
   },
   // Apps Script (escrita) - JSONP
   appsScript: 'https://script.google.com/macros/s/AKfycbwfslMjc5bmKbZ3y6OpUZyi8MD2KGriocjAVBUci5FOMiI7ho0KgTXvtAioDGWkpk5I/exec',
@@ -1907,40 +1929,109 @@ async function salvarRDO() {
 }
 
 
+
 // ====================================================================
-// VIEW: RDO DIÁRIO (cabeçalho do dia, gera PDF)
+// CATEGORIAS DE EFETIVO (v3 - Direto/Indireto)
 // ====================================================================
-const CATEGORIAS_MO = [
-  { key: 'servente', label: 'Servente' },
-  { key: 'pedreiro', label: 'Pedreiro' },
-  { key: 'armador', label: 'Armador' },
-  { key: 'carpinteiro', label: 'Carpinteiro' },
-  { key: 'opmaquina', label: 'Op. Máquina' },
-  { key: 'sinaleiro', label: 'Sinaleiro' },
+const CATEGORIAS_INDIRETO = [
+  { key: 'coordenador', label: 'Coordenador' },
+  { key: 'eng_planejamento', label: 'Eng. Civil Planejamento' },
+  { key: 'eng_producao', label: 'Eng. Civil Produção' },
+  { key: 'assist_eng', label: 'Assistente de Engenharia' },
+  { key: 'tec_seguranca', label: 'Téc. Segurança' },
+  { key: 'assist_adm', label: 'Assist. ADM' },
+  { key: 'almoxarifado', label: 'Almoxarifado' },
+  { key: 'apontador', label: 'Apontador' },
+  { key: 'enc_geral', label: 'Encarregado Geral' },
   { key: 'encarregado', label: 'Encarregado' },
+  { key: 'feitor', label: 'Feitor' },
+  { key: 'topografo', label: 'Topógrafo' },
+  { key: 'aux_topografia', label: 'Aux. Topografia' },
+  { key: 'assist_social', label: 'Assistente Social' },
+  { key: 'aux_limpeza', label: 'Aux. de Limpeza' },
+  { key: 'laboratorista', label: 'Laboratorista' },
+  { key: 'lider_transito', label: 'Líder de Trânsito' },
 ];
 
-const CATEGORIAS_EQUIP = [
-  { key: 'retroescav', label: 'Retroescavadeira' },
-  { key: 'caminhao', label: 'Caminhão Basculante' },
-  { key: 'rolo', label: 'Rolo Compactador' },
-  { key: 'compactador_placa', label: 'Compactador Placa' },
+const CATEGORIAS_DIRETO = [
+  { key: 'ajudante', label: 'Ajudante' },
+  { key: 'carpinteiro', label: 'Carpinteiro' },
+  { key: 'armador', label: 'Armador' },
+  { key: 'pedreiro', label: 'Pedreiro' },
+  { key: 'pedreiro_guieiro', label: 'Pedreiro (guieiro)' },
+  { key: 'meio_oficial', label: 'Meio Oficial' },
+  { key: 'motorista_cb', label: 'Motorista CB' },
+  { key: 'op_transito', label: 'Op. de Trânsito/Sinaleiro' },
+  { key: 'motorista_casinha', label: 'Motorista casinha' },
+  { key: 'op_rolo', label: 'Op. Rolo' },
+  { key: 'motorista_pipa', label: 'Motorista caminhão pipa' },
+  { key: 'op_escavadeira', label: 'Op. Escavadeira' },
+  { key: 'op_retro', label: 'Op. Retro Escavadeira' },
+  { key: 'op_fresadora', label: 'Op. Fresadora' },
+  { key: 'op_mini_escavadeira', label: 'Op. Mini-escavadeira' },
+  { key: 'motorista_munck', label: 'Motorista Munck' },
+  { key: 'op_bobcat', label: 'Op. Bobcat' },
+];
+
+const CATEGORIAS_EQUIP_PADRAO = [
+  { key: 'kombi_van', label: 'Kombi/Van' },
+  { key: 'veiculo_leve', label: 'Veículo leve' },
+  { key: 'veiculo_utilitario', label: 'Veículo utilitário (sinalização)' },
+  { key: 'caminhao_toco', label: 'Caminhão Carroceria Toco (Casinha)' },
+  { key: 'caminhao_basculante', label: 'Caminhão Basculante' },
+  { key: 'caminhao_basculante_usina', label: 'Caminhão Basculante Usina' },
+  { key: 'caminhao_tanque', label: 'Caminhão Tanque' },
+  { key: 'caminhao_espargidor', label: 'Caminhão Espargidor' },
+  { key: 'carreta_prancha', label: 'Carreta Prancha' },
   { key: 'vibroacabadora', label: 'Vibroacabadora' },
-  { key: 'espargidor', label: 'Espargidor' },
-  { key: 'pa_carregadeira', label: 'Pá Carregadeira' },
-  { key: 'escavadeira', label: 'Escavadeira Hidráulica' },
+  { key: 'rolo_pc', label: 'Rolo de PC' },
+  { key: 'rolo_chapa', label: 'Rolo Chapa' },
+  { key: 'escavadeira_hidraulica', label: 'Escavadeira Hidráulica' },
+  { key: 'retro_escavadeira', label: 'Retro Escavadeira' },
+  { key: 'serra_circular', label: 'Serra Circular' },
+  { key: 'serra_clipper', label: 'Serra Clipper' },
+  { key: 'sapo_compactador', label: 'Sapo Compactador' },
+  { key: 'gerador', label: 'Gerador' },
+  { key: 'martelete', label: 'Martelete' },
+  { key: 'vibrador', label: 'Vibrador' },
+  { key: 'bobcat', label: 'Bobcat' },
+  { key: 'fresa', label: 'Fresa' },
+  { key: 'mini_escavadeira', label: 'Mini Escavadeira' },
+  { key: 'rolo_pneu', label: 'Rolo Pneu' },
 ];
 
 const CLIMAS = ['Bom', 'Encoberto', 'Garoa', 'Chuva', 'Chuva forte'];
+// Shim de compatibilidade: PDF Oficial antigo usa essas variáveis
+const CATEGORIAS_MO = [...CATEGORIAS_INDIRETO, ...CATEGORIAS_DIRETO];
+const CATEGORIAS_EQUIP = CATEGORIAS_EQUIP_PADRAO;
 
-let DIARIO_STATE = null;
 
-function defaultDiarioDraft() {
+// Estado do RDO Diário (separado de DIARIO_STATE pra evitar colisão)
+let DIARIO_V3 = null;
+
+function loadDiarioV3() {
+  try {
+    const raw = localStorage.getItem('teotonio_rdo_diario_v3');
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+
+function saveDiarioV3(d) {
+  try { localStorage.setItem('teotonio_rdo_diario_v3', JSON.stringify(d)); } catch(e) {}
+}
+
+function clearDiarioV3() {
+  try { localStorage.removeItem('teotonio_rdo_diario_v3'); } catch(e) {}
+}
+
+function defaultDiarioV3() {
   const apontador = localStorage.getItem(CONFIG.ls.apontador) || '';
-  const obj = {
+  return {
     data: new Date().toISOString().split('T')[0],
+    apontador_diurno: apontador,
+    apontador_noturno: '',
     encarregado: '',
-    apontador,
     clima_manha: 'Bom',
     clima_tarde: 'Bom',
     clima_noite: 'Bom',
@@ -1948,36 +2039,21 @@ function defaultDiarioDraft() {
     visitas: '',
     ocorrencias: '',
     observacoes_gerais: '',
+    // Efetivo: { 'carpinteiro_diurno': 4, 'pedreiro_diurno': 2, ... }
+    efetivo: {},
+    // Equipamentos: { 'caminhao_basculante': 3, ... }
+    equipamentos: {},
+    // Custom: { 'indireto_diurno': [{label, qtd}], 'direto_diurno': [...], 'equip': [...] }
+    customIndireto: [],  // [{ label, diurno, noturno }]
+    customDireto: [],
+    customEquip: [],
   };
-  CATEGORIAS_MO.forEach(c => {
-    obj[c.key + '_diurno'] = '';
-    obj[c.key + '_noturno'] = '';
-  });
-  CATEGORIAS_EQUIP.forEach(c => {
-    obj[c.key] = '';
-  });
-  return obj;
 }
 
-function loadDiarioDraft() {
-  try {
-    const raw = localStorage.getItem('teotonio_rdo_diario_draft_v1');
-    if (raw) return JSON.parse(raw);
-  } catch(e) {}
-  return null;
-}
-function saveDiarioDraft(d) {
-  try { localStorage.setItem('teotonio_rdo_diario_draft_v1', JSON.stringify(d)); } catch(e) {}
-}
-function clearDiarioDraft() {
-  try { localStorage.removeItem('teotonio_rdo_diario_draft_v1'); } catch(e) {}
-}
-
-function renderRDODiario() {
-  if (!DIARIO_STATE) DIARIO_STATE = loadDiarioDraft() || defaultDiarioDraft();
-  const d = DIARIO_STATE;
+function renderRDODiarioV3() {
+  if (!DIARIO_V3) DIARIO_V3 = loadDiarioV3() || defaultDiarioV3();
+  const d = DIARIO_V3;
   
-  // Verifica se já existe RDO Diário pra essa data — pré-popula pra editar
   const existente = (STATE.rdodiario || []).find(r => {
     const rd = String(r['Data']);
     return rd === d.data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === d.data);
@@ -1987,43 +2063,49 @@ function renderRDODiario() {
     ${existente ? `
       <div style="background:var(--blu-l);border:1px solid var(--blu);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
         <div style="font-size:13px;color:var(--blu)">📋 Já existe RDO Diário pra <strong>${fmtData(d.data)}</strong> (ID: ${existente['ID']}). Salvar vai <strong>atualizar</strong> o existente.</div>
-        <button class="btn btn-sm btn-outline" onclick="carregarRDODiarioExistente('${d.data}')">Carregar dados existentes</button>
+        <button class="btn btn-sm btn-outline" onclick="carregarRDOV3Existente('${d.data}')">Carregar dados existentes</button>
       </div>
     ` : ''}
     
-    <div class="card">
+    <div class="card stagger-item" style="animation-delay:.05s">
       <div class="card-header">
         <div>
           <div class="card-title">Identificação do dia</div>
-          <div class="card-title-sub">1 RDO por data · pode incluir turno noturno</div>
+          <div class="card-title-sub">1 RDO por data · pode ter apontador diurno e noturno separados</div>
         </div>
       </div>
       <div class="card-body">
         <div class="form-grid">
           <div class="field">
             <label>Data</label>
-            <input type="date" data-diario="data" value="${d.data}">
+            <input type="date" data-diario3="data" value="${d.data}">
           </div>
           <div class="field">
             <label>Encarregado</label>
-            <input type="text" data-diario="encarregado" value="${d.encarregado||''}" placeholder="Nome do encarregado">
+            <input type="text" data-diario3="encarregado" value="${d.encarregado||''}" placeholder="Nome do encarregado">
           </div>
           <div class="field">
-            <label>Apontador</label>
-            <input type="text" data-diario="apontador" value="${d.apontador||''}" placeholder="Seu nome">
+            <label>Apontador Diurno</label>
+            <input type="text" data-diario3="apontador_diurno" value="${d.apontador_diurno||''}" placeholder="Nome do apontador do dia">
           </div>
           <div class="field">
             <label>Tem turno noturno?</label>
             <div class="btn-toggle-group">
-              <button type="button" class="btn-toggle ${!d.tem_turno_noturno?'active':''}" onclick="setTurnoNoturno(false)">Não</button>
-              <button type="button" class="btn-toggle ${d.tem_turno_noturno?'active':''}" onclick="setTurnoNoturno(true)">Sim</button>
+              <button type="button" class="btn-toggle ${!d.tem_turno_noturno?'active':''}" onclick="setTurnoNoturnoV3(false)">Não</button>
+              <button type="button" class="btn-toggle ${d.tem_turno_noturno?'active':''}" onclick="setTurnoNoturnoV3(true)">Sim</button>
             </div>
           </div>
+          ${d.tem_turno_noturno ? `
+            <div class="field" style="grid-column:1/-1">
+              <label>Apontador Noturno</label>
+              <input type="text" data-diario3="apontador_noturno" value="${d.apontador_noturno||''}" placeholder="Nome do apontador da noite">
+            </div>
+          ` : ''}
         </div>
       </div>
     </div>
     
-    <div class="card">
+    <div class="card stagger-item" style="animation-delay:.1s">
       <div class="card-header">
         <div>
           <div class="card-title">Clima</div>
@@ -2034,19 +2116,19 @@ function renderRDODiario() {
         <div class="form-grid">
           <div class="field">
             <label>Manhã</label>
-            <select data-diario="clima_manha">
+            <select data-diario3="clima_manha">
               ${CLIMAS.map(c => `<option ${d.clima_manha===c?'selected':''}>${c}</option>`).join('')}
             </select>
           </div>
           <div class="field">
             <label>Tarde</label>
-            <select data-diario="clima_tarde">
+            <select data-diario3="clima_tarde">
               ${CLIMAS.map(c => `<option ${d.clima_tarde===c?'selected':''}>${c}</option>`).join('')}
             </select>
           </div>
           <div class="field">
             <label>Noite</label>
-            <select data-diario="clima_noite">
+            <select data-diario3="clima_noite">
               ${CLIMAS.map(c => `<option ${d.clima_noite===c?'selected':''}>${c}</option>`).join('')}
             </select>
           </div>
@@ -2054,66 +2136,44 @@ function renderRDODiario() {
       </div>
     </div>
     
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Efetivo${d.tem_turno_noturno ? ' · Diurno' : ''}</div>
-          <div class="card-title-sub">Quantidade por categoria</div>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
-          ${CATEGORIAS_MO.map(c => `
-            <div class="field">
-              <label>${c.label}</label>
-              <input type="number" data-diario="${c.key}_diurno" value="${d[c.key+'_diurno']||''}" placeholder="0" min="0">
-            </div>
-          `).join('')}
-        </div>
-      </div>
-    </div>
+    ${renderEfetivoBlock('INDIRETO', CATEGORIAS_INDIRETO, d.tem_turno_noturno, d, 'indireto')}
+    ${renderEfetivoBlock('DIRETO', CATEGORIAS_DIRETO, d.tem_turno_noturno, d, 'direto')}
     
-    ${d.tem_turno_noturno ? `
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Efetivo · Noturno</div>
-            <div class="card-title-sub">Quantidade por categoria no turno noturno</div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr))">
-            ${CATEGORIAS_MO.map(c => `
-              <div class="field">
-                <label>${c.label}</label>
-                <input type="number" data-diario="${c.key}_noturno" value="${d[c.key+'_noturno']||''}" placeholder="0" min="0">
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      </div>
-    ` : ''}
-    
-    <div class="card">
+    <div class="card stagger-item" style="animation-delay:.3s">
       <div class="card-header">
         <div>
           <div class="card-title">Equipamentos</div>
-          <div class="card-title-sub">Quantidade no canteiro</div>
+          <div class="card-title-sub">Pesados e leves no canteiro</div>
         </div>
+        <button class="btn btn-sm btn-outline" onclick="adicionarEquipCustomV3()">+ Equipamento personalizado</button>
       </div>
       <div class="card-body">
-        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
-          ${CATEGORIAS_EQUIP.map(c => `
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr))">
+          ${CATEGORIAS_EQUIP_PADRAO.map(c => `
             <div class="field">
               <label>${c.label}</label>
-              <input type="number" data-diario="${c.key}" value="${d[c.key]||''}" placeholder="0" min="0">
+              <input type="number" data-equip3="${c.key}" value="${d.equipamentos[c.key]||''}" placeholder="0" min="0">
             </div>
           `).join('')}
         </div>
+        ${d.customEquip.length > 0 ? `
+          <div style="margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)">
+            <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Equipamentos personalizados</div>
+            <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+              ${d.customEquip.map((eq, i) => `
+                <div class="field" style="position:relative">
+                  <label>${eq.label}</label>
+                  <input type="number" data-equipcustom3="${i}" value="${eq.qtd||''}" placeholder="0" min="0">
+                  <button class="btn-remove-custom" onclick="removerEquipCustomV3(${i})" title="Remover">×</button>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
       </div>
     </div>
     
-    <div class="card">
+    <div class="card stagger-item" style="animation-delay:.35s">
       <div class="card-header">
         <div>
           <div class="card-title">Observações</div>
@@ -2123,15 +2183,15 @@ function renderRDODiario() {
         <div class="form-grid" style="grid-template-columns:1fr">
           <div class="field">
             <label>Visitas</label>
-            <input type="text" data-diario="visitas" value="${d.visitas||''}" placeholder="ex: Fiscal SIURB de manhã, projetista à tarde">
+            <input type="text" data-diario3="visitas" value="${d.visitas||''}" placeholder="ex: Fiscal SIURB de manhã">
           </div>
           <div class="field">
             <label>Ocorrências</label>
-            <input type="text" data-diario="ocorrencias" value="${d.ocorrencias||''}" placeholder="ex: Pequena interrupção por chuva às 15h">
+            <input type="text" data-diario3="ocorrencias" value="${d.ocorrencias||''}" placeholder="ex: Pequena interrupção por chuva às 15h">
           </div>
           <div class="field">
             <label>Observações gerais</label>
-            <textarea data-diario="observacoes_gerais" rows="3" placeholder="ex: Continuar amanhã trecho E125 a E130">${d.observacoes_gerais||''}</textarea>
+            <textarea data-diario3="observacoes_gerais" rows="3" placeholder="Continuar amanhã trecho E125 a E130">${d.observacoes_gerais||''}</textarea>
           </div>
         </div>
       </div>
@@ -2139,102 +2199,225 @@ function renderRDODiario() {
     
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px">
       <div style="font-size:12px;color:var(--muted);max-width:520px">
-        ⓘ Salva o cabeçalho na aba <strong>RDO_Diario</strong>. O PDF é gerado puxando os serviços de <strong>RDO_Avanco</strong> dessa data, sem mostrar quantidades.
+        ⓘ Salva o cabeçalho na aba <strong>RDO_Diario</strong>. Os 2 PDFs (Oficial e Interno) puxam serviços de <strong>RDO_Avanco</strong> da mesma data.
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-outline" onclick="resetDiarioDraft()">Limpar</button>
-        <button class="btn btn-acc" onclick="gerarPDFDiario(DIARIO_STATE.data)">📄 Gerar PDF</button>
-        <button class="btn btn-primary btn-lg" id="btnSalvarDiario" onclick="salvarRDODiario()">💾 Salvar RDO Diário</button>
+        <button class="btn btn-outline" onclick="resetDiarioV3()">Limpar</button>
+        <button class="btn btn-acc" onclick="gerarPDFInterno(DIARIO_V3.data)">📊 PDF Interno</button>
+        <button class="btn btn-outline" onclick="gerarPDFDiario(DIARIO_V3.data)">📄 PDF Oficial</button>
+        <button class="btn btn-primary btn-lg" id="btnSalvarDiarioV3" onclick="salvarRDODiarioV3()">💾 Salvar RDO Diário</button>
       </div>
     </div>
   `;
 }
 
-function attachRDODiarioForm() {
-  document.querySelectorAll('[data-diario]').forEach(el => {
+function renderEfetivoBlock(titulo, categorias, temNoturno, d, prefix) {
+  const customList = prefix === 'indireto' ? d.customIndireto : d.customDireto;
+  const corBorda = prefix === 'indireto' ? '#7d6608' : '#1a5276';
+  
+  return `
+    <div class="card stagger-item" style="animation-delay:.${prefix==='indireto'?'15':'25'}s">
+      <div class="card-header" style="border-left:3px solid ${corBorda}">
+        <div>
+          <div class="card-title">EFETIVO ${titulo}</div>
+          <div class="card-title-sub">${categorias.length} funções padrão · ${temNoturno ? 'Diurno + Noturno' : 'só Diurno'}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="adicionarFuncaoCustomV3('${prefix}')">+ Função personalizada</button>
+      </div>
+      <div class="card-body">
+        <div style="overflow-x:auto">
+          <table class="t" style="font-size:12px">
+            <thead>
+              <tr>
+                <th style="text-align:left">Função</th>
+                <th class="t-num" style="text-align:right;width:90px">Diurno</th>
+                ${temNoturno ? '<th class="t-num" style="text-align:right;width:90px">Noturno</th>' : ''}
+                <th class="t-num" style="text-align:right;width:80px">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${categorias.map(c => {
+                const diu = parseInt(d.efetivo[c.key + '_diurno']) || 0;
+                const not = parseInt(d.efetivo[c.key + '_noturno']) || 0;
+                return `
+                  <tr>
+                    <td>${c.label}</td>
+                    <td><input type="number" data-efet3="${c.key}_diurno" value="${d.efetivo[c.key+'_diurno']||''}" placeholder="0" min="0" style="width:70px;text-align:right"></td>
+                    ${temNoturno ? `<td><input type="number" data-efet3="${c.key}_noturno" value="${d.efetivo[c.key+'_noturno']||''}" placeholder="0" min="0" style="width:70px;text-align:right"></td>` : ''}
+                    <td class="t-num"><strong>${diu+not || ''}</strong></td>
+                  </tr>
+                `;
+              }).join('')}
+              ${customList.length > 0 ? `
+                <tr><td colspan="${temNoturno?4:3}" style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding-top:14px">Funções personalizadas</td></tr>
+                ${customList.map((f, i) => `
+                  <tr>
+                    <td style="position:relative">
+                      <input type="text" data-customfun3="${prefix}|${i}|label" value="${f.label||''}" placeholder="Nome da função" style="width:90%;font-size:12px">
+                      <button class="btn-remove-custom-row" onclick="removerFuncaoCustomV3('${prefix}', ${i})" title="Remover">×</button>
+                    </td>
+                    <td><input type="number" data-customfun3="${prefix}|${i}|diurno" value="${f.diurno||''}" placeholder="0" min="0" style="width:70px;text-align:right"></td>
+                    ${temNoturno ? `<td><input type="number" data-customfun3="${prefix}|${i}|noturno" value="${f.noturno||''}" placeholder="0" min="0" style="width:70px;text-align:right"></td>` : ''}
+                    <td class="t-num"><strong>${(parseInt(f.diurno)||0)+(parseInt(f.noturno)||0) || ''}</strong></td>
+                  </tr>
+                `).join('')}
+              ` : ''}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function attachRDODiarioV3Form() {
+  document.querySelectorAll('[data-diario3]').forEach(el => {
     el.oninput = el.onchange = () => {
-      DIARIO_STATE[el.dataset.diario] = el.value;
-      if (el.dataset.diario === 'apontador') {
+      DIARIO_V3[el.dataset.diario3] = el.value;
+      if (el.dataset.diario3 === 'apontador_diurno' || el.dataset.diario3 === 'apontador_noturno') {
         try { localStorage.setItem(CONFIG.ls.apontador, el.value); } catch(e) {}
       }
-      saveDiarioDraft(DIARIO_STATE);
+      saveDiarioV3(DIARIO_V3);
+    };
+  });
+  document.querySelectorAll('[data-efet3]').forEach(el => {
+    el.oninput = el.onchange = () => {
+      DIARIO_V3.efetivo[el.dataset.efet3] = el.value;
+      saveDiarioV3(DIARIO_V3);
+    };
+  });
+  document.querySelectorAll('[data-equip3]').forEach(el => {
+    el.oninput = el.onchange = () => {
+      DIARIO_V3.equipamentos[el.dataset.equip3] = el.value;
+      saveDiarioV3(DIARIO_V3);
+    };
+  });
+  document.querySelectorAll('[data-equipcustom3]').forEach(el => {
+    el.oninput = el.onchange = () => {
+      const idx = parseInt(el.dataset.equipcustom3);
+      DIARIO_V3.customEquip[idx].qtd = el.value;
+      saveDiarioV3(DIARIO_V3);
+    };
+  });
+  document.querySelectorAll('[data-customfun3]').forEach(el => {
+    el.oninput = el.onchange = () => {
+      const [prefix, idx, field] = el.dataset.customfun3.split('|');
+      const list = prefix === 'indireto' ? DIARIO_V3.customIndireto : DIARIO_V3.customDireto;
+      list[parseInt(idx)][field] = el.value;
+      saveDiarioV3(DIARIO_V3);
     };
   });
 }
 
-function setTurnoNoturno(v) {
-  DIARIO_STATE.tem_turno_noturno = v;
-  saveDiarioDraft(DIARIO_STATE);
+function setTurnoNoturnoV3(v) {
+  DIARIO_V3.tem_turno_noturno = v;
+  saveDiarioV3(DIARIO_V3);
   render();
 }
 
-function resetDiarioDraft() {
+function resetDiarioV3() {
   if (!confirm('Limpar todos os dados deste RDO Diário?')) return;
-  clearDiarioDraft();
-  DIARIO_STATE = defaultDiarioDraft();
+  clearDiarioV3();
+  DIARIO_V3 = defaultDiarioV3();
   render();
 }
 
-function carregarRDODiarioExistente(data) {
+function adicionarFuncaoCustomV3(prefix) {
+  const list = prefix === 'indireto' ? DIARIO_V3.customIndireto : DIARIO_V3.customDireto;
+  list.push({ label: '', diurno: '', noturno: '' });
+  saveDiarioV3(DIARIO_V3);
+  render();
+}
+
+function removerFuncaoCustomV3(prefix, idx) {
+  const list = prefix === 'indireto' ? DIARIO_V3.customIndireto : DIARIO_V3.customDireto;
+  list.splice(idx, 1);
+  saveDiarioV3(DIARIO_V3);
+  render();
+}
+
+function adicionarEquipCustomV3() {
+  const label = prompt('Nome do equipamento personalizado:');
+  if (!label || !label.trim()) return;
+  DIARIO_V3.customEquip.push({ label: label.trim(), qtd: '' });
+  saveDiarioV3(DIARIO_V3);
+  render();
+}
+
+function removerEquipCustomV3(idx) {
+  DIARIO_V3.customEquip.splice(idx, 1);
+  saveDiarioV3(DIARIO_V3);
+  render();
+}
+
+function carregarRDOV3Existente(data) {
   const r = (STATE.rdodiario||[]).find(x => {
     const rd = String(x['Data']);
     return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
   });
   if (!r) { toast('RDO existente não encontrado', 'error'); return; }
   
-  DIARIO_STATE = {
-    data: data,
-    encarregado: r['Encarregado']||'',
-    apontador: r['Apontador']||'',
-    clima_manha: r['Clima_Manha']||'Bom',
-    clima_tarde: r['Clima_Tarde']||'Bom',
-    clima_noite: r['Clima_Noite']||'Bom',
-    tem_turno_noturno: r['Tem_Turno_Noturno'] === 'Sim',
-    visitas: r['Visitas']||'',
-    ocorrencias: r['Ocorrencias']||'',
-    observacoes_gerais: r['Observacoes_Gerais']||'',
-  };
-  // Mapear MO
-  CATEGORIAS_MO.forEach(c => {
-    const sheetKey = c.key.charAt(0).toUpperCase() + c.key.slice(1);
-    // Heurística pra encontrar a coluna
-    const colDiurno = Object.keys(r).find(k => k.toLowerCase().includes(c.key.toLowerCase()) && k.toLowerCase().includes('diurno'));
-    const colNoturno = Object.keys(r).find(k => k.toLowerCase().includes(c.key.toLowerCase()) && k.toLowerCase().includes('noturno'));
-    DIARIO_STATE[c.key + '_diurno'] = colDiurno ? (r[colDiurno]||'') : '';
-    DIARIO_STATE[c.key + '_noturno'] = colNoturno ? (r[colNoturno]||'') : '';
-  });
-  // Mapear equipamentos
-  CATEGORIAS_EQUIP.forEach(c => {
-    const col = Object.keys(r).find(k => k.toLowerCase().replace(/_/g,'') === c.key.toLowerCase().replace(/_/g,''));
-    DIARIO_STATE[c.key] = col ? (r[col]||'') : '';
-  });
+  let efet = {}, equip = {};
+  try { efet = JSON.parse(r['Efetivo_JSON'] || '{}'); } catch(e) {}
+  try { equip = JSON.parse(r['Equipamentos_JSON'] || '{}'); } catch(e) {}
   
-  saveDiarioDraft(DIARIO_STATE);
+  DIARIO_V3 = {
+    data,
+    apontador_diurno: r['Apontador_Diurno'] || '',
+    apontador_noturno: r['Apontador_Noturno'] || '',
+    encarregado: r['Encarregado'] || '',
+    clima_manha: r['Clima_Manha'] || 'Bom',
+    clima_tarde: r['Clima_Tarde'] || 'Bom',
+    clima_noite: r['Clima_Noite'] || 'Bom',
+    tem_turno_noturno: r['Tem_Turno_Noturno'] === 'Sim',
+    visitas: r['Visitas'] || '',
+    ocorrencias: r['Ocorrencias'] || '',
+    observacoes_gerais: r['Observacoes_Gerais'] || '',
+    efetivo: efet.padrao || {},
+    equipamentos: equip.padrao || {},
+    customIndireto: efet.customIndireto || [],
+    customDireto: efet.customDireto || [],
+    customEquip: equip.custom || [],
+  };
+  saveDiarioV3(DIARIO_V3);
   toast('Dados existentes carregados', 'info');
   render();
 }
 
-async function salvarRDODiario() {
-  const d = DIARIO_STATE;
+async function salvarRDODiarioV3() {
+  const d = DIARIO_V3;
   if (!d.data) { toast('Data obrigatória', 'error'); return; }
-  if (!d.apontador.trim()) { toast('Apontador obrigatório', 'error'); return; }
+  if (!d.apontador_diurno.trim() && !d.apontador_noturno.trim()) {
+    toast('Pelo menos um apontador é obrigatório', 'error'); return;
+  }
   
-  const btn = document.getElementById('btnSalvarDiario');
+  const btn = document.getElementById('btnSalvarDiarioV3');
   const original = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '⏳ Salvando…';
   
-  // Verifica se já existe pra usar update
   const existe = (STATE.rdodiario || []).some(r => {
     const rd = String(r['Data']);
     return rd === d.data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === d.data);
   });
   
+  // Construir JSON do efetivo
+  const efetivoJSON = {
+    padrao: d.efetivo,
+    customIndireto: d.customIndireto.filter(f => f.label && f.label.trim()),
+    customDireto: d.customDireto.filter(f => f.label && f.label.trim()),
+  };
+  const equipJSON = {
+    padrao: d.equipamentos,
+    custom: d.customEquip.filter(e => e.label && e.label.trim()),
+  };
+  
   const params = {
     action: existe ? 'updateRDODiario' : 'addRDODiario',
     data: d.data,
+    apontador_diurno: d.apontador_diurno || '',
+    apontador_noturno: d.apontador_noturno || '',
     encarregado: d.encarregado || '',
-    apontador: d.apontador || '',
     clima_manha: d.clima_manha || '',
     clima_tarde: d.clima_tarde || '',
     clima_noite: d.clima_noite || '',
@@ -2242,14 +2425,9 @@ async function salvarRDODiario() {
     ocorrencias: d.ocorrencias || '',
     observacoes_gerais: d.observacoes_gerais || '',
     tem_turno_noturno: d.tem_turno_noturno ? 'true' : 'false',
+    efetivo_json: JSON.stringify(efetivoJSON),
+    equipamentos_json: JSON.stringify(equipJSON),
   };
-  CATEGORIAS_MO.forEach(c => {
-    params[c.key + '_diurno'] = d[c.key + '_diurno'] || '0';
-    params[c.key + '_noturno'] = d[c.key + '_noturno'] || '0';
-  });
-  CATEGORIAS_EQUIP.forEach(c => {
-    params[c.key] = d[c.key] || '0';
-  });
   
   try {
     const result = await jsonp(CONFIG.appsScript, params);
@@ -2265,6 +2443,34 @@ async function salvarRDODiario() {
   }
 }
 
+// Helper: converter linha da Sheets em estrutura do DIARIO_V3
+function sheetRowToDiarioV3(r) {
+  let efet = {}, equip = {};
+  try { efet = JSON.parse(r['Efetivo_JSON'] || '{}'); } catch(e) {}
+  try { equip = JSON.parse(r['Equipamentos_JSON'] || '{}'); } catch(e) {}
+  
+  return {
+    data: parseISODate(r['Data']) ? parseISODate(r['Data']).toISOString().split('T')[0] : String(r['Data']),
+    apontador_diurno: r['Apontador_Diurno'] || '',
+    apontador_noturno: r['Apontador_Noturno'] || '',
+    encarregado: r['Encarregado'] || '',
+    clima_manha: r['Clima_Manha'] || '',
+    clima_tarde: r['Clima_Tarde'] || '',
+    clima_noite: r['Clima_Noite'] || '',
+    tem_turno_noturno: r['Tem_Turno_Noturno'] === 'Sim',
+    visitas: r['Visitas'] || '',
+    ocorrencias: r['Ocorrencias'] || '',
+    observacoes_gerais: r['Observacoes_Gerais'] || '',
+    efetivo: efet.padrao || {},
+    equipamentos: equip.padrao || {},
+    customIndireto: efet.customIndireto || [],
+    customDireto: efet.customDireto || [],
+    customEquip: equip.custom || [],
+  };
+}
+
+// CSS extra pros botões de remover
+
 // ====================================================================
 // LOGOS RDO OFICIAL (embutidos em base64)
 // ====================================================================
@@ -2276,13 +2482,13 @@ const RDO_LOGO_L3 = 'iVBORw0KGgoAAAANSUhEUgAAAPUAAADJCAYAAAD7CXSzAAAAAXNSR0IArs4
 // PDF DO RDO DIÁRIO — LAYOUT OFICIAL (jsPDF)
 // ====================================================================
 function gerarPDFDiario(data) {
-  // Buscar dados do RDO Diário (preferir Sheets, senão usar DIARIO_STATE)
+  // Buscar dados do RDO Diário (preferir Sheets, senão usar DIARIO_V3)
   const fromSheet = (STATE.rdodiario || []).find(r => {
     const rd = String(r['Data']);
     return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
   });
   
-  const d = fromSheet ? sheetRowToDiario(fromSheet) : (DIARIO_STATE && DIARIO_STATE.data === data ? DIARIO_STATE : null);
+  const d = fromSheet ? sheetRowToDiarioV3(fromSheet) : (DIARIO_V3 && DIARIO_V3.data === data ? DIARIO_V3 : null);
   if (!d) { toast('Não encontrei o RDO Diário pra gerar PDF', 'error'); return; }
   
   // Filtrar serviços executados nesse dia
@@ -2631,6 +2837,369 @@ function gerarPDFDiario(data) {
   toast('PDF gerado: ' + fname, 'success');
 }
 
+
+// ====================================================================
+// PDF INTERNO — Visual, pra mandar no grupo (sem logos formais)
+// ====================================================================
+function gerarPDFInterno(data) {
+  const fromSheet = (STATE.rdodiario || []).find(r => {
+    const rd = String(r['Data']);
+    return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
+  });
+  
+  const d = fromSheet ? sheetRowToDiarioV3(fromSheet) : (DIARIO_V3 && DIARIO_V3.data === data ? DIARIO_V3 : null);
+  if (!d) { toast('Não encontrei o RDO Diário', 'error'); return; }
+  
+  const servicosDiurnos = STATE.rdoavanco.filter(r => {
+    const rd = parseISODate(r['Data']);
+    if (!rd) return false;
+    return rd.toISOString().split('T')[0] === data && (r['Turno']||'Diurno') === 'Diurno';
+  });
+  const servicosNoturnos = STATE.rdoavanco.filter(r => {
+    const rd = parseISODate(r['Data']);
+    if (!rd) return false;
+    return rd.toISOString().split('T')[0] === data && r['Turno'] === 'Noturno';
+  });
+  
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const PW = 210, PH = 297, ML = 12, TW = 186;
+  
+  // Paleta visual do interno (terra/terracota - mais vibrante)
+  const TERRACOTA = [201, 114, 64];
+  const TERRA_DARK = [122, 65, 36];
+  const NAVY = [26, 22, 18];
+  const VERDE = [70, 142, 87];
+  const AMARELO = [212, 168, 16];
+  const AZUL = [50, 100, 150];
+  const CINZA = [120, 117, 112];
+  const CINZA_BG = [245, 243, 239];
+  
+  function sf(sz, st, col) {
+    doc.setFontSize(sz);
+    doc.setFont('helvetica', st || 'normal');
+    doc.setTextColor(...(col || [0, 0, 0]));
+  }
+  function rect(x, y, w, h, fl, sk) {
+    if (fl) { doc.setFillColor(...fl); doc.rect(x, y, w, h, sk ? 'FD' : 'F'); }
+    if (sk && !fl) { doc.setDrawColor(...sk); doc.rect(x, y, w, h, 'S'); }
+  }
+  function tx(t, x, y, opt) { doc.text(String(t || ''), x, y, opt || {}); }
+  
+  const dataObj = new Date(data + 'T12:00:00');
+  const diaSem = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][dataObj.getDay()];
+  const dataFmt = dataObj.toLocaleDateString('pt-BR');
+  
+  let y = 0;
+  
+  // ═══════════════════════════════════════════════════
+  // CABEÇALHO IMPACTANTE (estilo "produto")
+  // ═══════════════════════════════════════════════════
+  rect(0, 0, PW, 32, NAVY);
+  rect(0, 32, PW, 4, TERRACOTA);
+  
+  sf(20, 'bold', [255, 255, 255]);
+  tx('RELATÓRIO DIÁRIO', ML, 13);
+  sf(10, 'normal', [255, 255, 255]);
+  doc.setTextColor(255, 200, 150);
+  tx('Av. Senador Teotônio Vilela · Consórcio Arvek + Gestor', ML, 19);
+  
+  sf(8, 'normal', [180, 175, 168]);
+  tx(diaSem.toUpperCase() + ' · ' + dataFmt, ML, 27);
+  
+  // Badge dia/noite à direita
+  const tipoTxt = d.tem_turno_noturno ? 'DIURNO + NOTURNO' : 'DIURNO';
+  rect(PW - ML - 50, 8, 50, 18, TERRACOTA);
+  sf(7, 'bold', [255, 255, 255]);
+  tx('TURNO', PW - ML - 25, 13, { align: 'center' });
+  sf(11, 'bold', [255, 255, 255]);
+  tx(tipoTxt, PW - ML - 25, 21, { align: 'center' });
+  
+  y = 42;
+  
+  // ═══════════════════════════════════════════════════
+  // RESUMO DO DIA (metrics tipo dashboard)
+  // ═══════════════════════════════════════════════════
+  const totalServicos = servicosDiurnos.length + servicosNoturnos.length;
+  
+  // Calcular efetivo total
+  let totalEfetivo = 0;
+  Object.values(d.efetivo || {}).forEach(v => totalEfetivo += parseInt(v) || 0);
+  d.customIndireto.forEach(f => {
+    totalEfetivo += (parseInt(f.diurno) || 0) + (parseInt(f.noturno) || 0);
+  });
+  d.customDireto.forEach(f => {
+    totalEfetivo += (parseInt(f.diurno) || 0) + (parseInt(f.noturno) || 0);
+  });
+  
+  // Calcular equipamentos total
+  let totalEquip = 0;
+  Object.values(d.equipamentos || {}).forEach(v => totalEquip += parseInt(v) || 0);
+  d.customEquip.forEach(e => totalEquip += parseInt(e.qtd) || 0);
+  
+  // Estacas trabalhadas
+  const estacasTrabalhadas = new Set();
+  [...servicosDiurnos, ...servicosNoturnos].forEach(s => {
+    const m = (s['Local_Estaca'] || '').match(/E?\d+(\.\d+)?/g);
+    if (m) m.forEach(e => estacasTrabalhadas.add(e));
+  });
+  
+  // Layout 4 KPIs lado a lado
+  const kw = (TW - 12) / 4;
+  const kpis = [
+    { label: 'SERVIÇOS', valor: totalServicos, sub: 'executados', cor: TERRACOTA },
+    { label: 'EFETIVO', valor: totalEfetivo, sub: 'pessoas', cor: AZUL },
+    { label: 'EQUIPAMENTOS', valor: totalEquip, sub: 'no canteiro', cor: VERDE },
+    { label: 'ESTACAS', valor: estacasTrabalhadas.size, sub: 'trabalhadas', cor: AMARELO },
+  ];
+  kpis.forEach((k, i) => {
+    const x = ML + i * (kw + 4);
+    rect(x, y, kw, 22, [255, 255, 255], CINZA);
+    rect(x, y, kw, 2, k.cor); // barra colorida no topo
+    sf(7, 'bold', CINZA);
+    tx(k.label, x + 3, y + 7);
+    sf(18, 'bold', NAVY);
+    tx(String(k.valor), x + 3, y + 16);
+    sf(7, 'normal', CINZA);
+    tx(k.sub, x + 3, y + 20);
+  });
+  y += 28;
+  
+  // ═══════════════════════════════════════════════════
+  // CLIMA visual
+  // ═══════════════════════════════════════════════════
+  rect(ML, y, TW, 14, CINZA_BG);
+  sf(8, 'bold', NAVY);
+  tx('CONDIÇÕES CLIMÁTICAS', ML + 4, y + 5);
+  sf(9, 'normal', [40, 40, 40]);
+  const climas = [
+    { label: 'Manhã', val: d.clima_manha || '—' },
+    { label: 'Tarde', val: d.clima_tarde || '—' },
+    { label: 'Noite', val: d.clima_noite || '—' },
+  ];
+  climas.forEach((c, i) => {
+    const x = ML + 6 + i * (TW / 3);
+    sf(7, 'normal', CINZA);
+    tx(c.label.toUpperCase(), x, y + 11);
+    sf(10, 'bold', NAVY);
+    tx(c.val, x + 16, y + 11);
+  });
+  y += 18;
+  
+  // ═══════════════════════════════════════════════════
+  // SERVIÇOS POR TURNO
+  // ═══════════════════════════════════════════════════
+  function renderServicosTurno(turnoNome, servicos, corTurno) {
+    if (servicos.length === 0) return;
+    
+    rect(ML, y, TW, 8, corTurno);
+    sf(10, 'bold', [255, 255, 255]);
+    tx(turnoNome.toUpperCase() + '  ·  ' + servicos.length + ' serviço' + (servicos.length>1?'s':''), ML + 4, y + 5.5);
+    y += 8;
+    
+    // Header tabela
+    sf(6.5, 'bold', CINZA);
+    rect(ML, y, TW, 6, CINZA_BG);
+    tx('FRENTE / PACOTE', ML + 3, y + 4);
+    tx('LOCAL / ESTACA', ML + 75, y + 4);
+    tx('QTD', ML + 130, y + 4, { align: 'right' });
+    tx('UN', ML + 138, y + 4);
+    tx('EQUIPE', ML + 152, y + 4);
+    y += 6;
+    
+    servicos.forEach((s, i) => {
+      const bg = i % 2 === 0 ? null : [252, 250, 246];
+      if (bg) rect(ML, y, TW, 5, bg);
+      
+      const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
+      const frente = pacote ? (pacote['Frente'] || '') : '';
+      
+      sf(7, 'bold', NAVY);
+      tx((frente ? frente + ' · ' : '') + (s['Pacote_Nome'] || ''), ML + 3, y + 3.5);
+      sf(7, 'normal', [50, 50, 50]);
+      tx(s['Local_Estaca'] || '', ML + 75, y + 3.5);
+      sf(7, 'bold', TERRA_DARK);
+      tx(fmtNum(num(s['Quantidade'])), ML + 130, y + 3.5, { align: 'right' });
+      sf(7, 'normal', CINZA);
+      tx(s['Unidade'] || '', ML + 138, y + 3.5);
+      tx(s['Equipe'] || s['Subcontratado'] || '', ML + 152, y + 3.5);
+      y += 5;
+    });
+    y += 3;
+  }
+  
+  if (servicosDiurnos.length > 0) renderServicosTurno('SERVIÇOS DIURNOS', servicosDiurnos, AMARELO);
+  if (servicosNoturnos.length > 0) renderServicosTurno('SERVIÇOS NOTURNOS', servicosNoturnos, AZUL);
+  
+  if (totalServicos === 0) {
+    rect(ML, y, TW, 14, [253, 246, 230]);
+    sf(9, 'italic', [140, 90, 30]);
+    tx('Nenhum serviço lançado pra esta data.', ML + 4, y + 9);
+    y += 18;
+  }
+  
+  // ═══════════════════════════════════════════════════
+  // EFETIVO DETALHADO (categorias com pessoas)
+  // ═══════════════════════════════════════════════════
+  if (y < PH - 60) {
+    rect(ML, y, TW, 8, NAVY);
+    sf(10, 'bold', [255, 255, 255]);
+    tx('EFETIVO  ·  ' + totalEfetivo + ' pessoa' + (totalEfetivo>1?'s':'') + ' no canteiro', ML + 4, y + 5.5);
+    y += 8;
+    
+    // Direto + Indireto em duas colunas
+    const colW = (TW - 4) / 2;
+    let yIni = y;
+    
+    function renderEfetivoCol(titulo, categorias, customList, tipo, x) {
+      let cy = yIni;
+      sf(7, 'bold', tipo === 'DIRETO' ? AZUL : AMARELO);
+      tx(titulo, x + 3, cy + 4);
+      cy += 6;
+      
+      let total = 0;
+      const linhas = [];
+      categorias.forEach(c => {
+        const diu = parseInt(d.efetivo[c.key + '_diurno']) || 0;
+        const not = parseInt(d.efetivo[c.key + '_noturno']) || 0;
+        if (diu + not > 0) {
+          linhas.push({ label: c.label, diu, not });
+          total += diu + not;
+        }
+      });
+      customList.forEach(f => {
+        const diu = parseInt(f.diurno) || 0;
+        const not = parseInt(f.noturno) || 0;
+        if (f.label && (diu + not) > 0) {
+          linhas.push({ label: f.label + ' ✱', diu, not });
+          total += diu + not;
+        }
+      });
+      
+      if (linhas.length === 0) {
+        sf(7, 'italic', CINZA);
+        tx('—', x + 3, cy + 3);
+        cy += 5;
+      } else {
+        linhas.forEach((l, i) => {
+          if (i % 2 === 0) rect(x, cy, colW, 4.2, [248, 246, 242]);
+          sf(7, 'normal', [40, 40, 40]);
+          tx(l.label, x + 3, cy + 3);
+          sf(7, 'bold', NAVY);
+          if (d.tem_turno_noturno) {
+            tx(String(l.diu), x + colW - 24, cy + 3, { align: 'right' });
+            tx(String(l.not), x + colW - 12, cy + 3, { align: 'right' });
+            tx(String(l.diu + l.not), x + colW - 3, cy + 3, { align: 'right' });
+          } else {
+            tx(String(l.diu + l.not), x + colW - 3, cy + 3, { align: 'right' });
+          }
+          cy += 4.2;
+        });
+      }
+      cy += 1;
+      // Subtotal
+      rect(x, cy, colW, 4, [240, 235, 226]);
+      sf(7, 'bold', TERRA_DARK);
+      tx('TOTAL ' + titulo, x + 3, cy + 3);
+      tx(String(total), x + colW - 3, cy + 3, { align: 'right' });
+      cy += 5;
+      return cy;
+    }
+    
+    const yFimDir = renderEfetivoCol('DIRETO', CATEGORIAS_DIRETO, d.customDireto, 'DIRETO', ML);
+    const yFimInd = renderEfetivoCol('INDIRETO', CATEGORIAS_INDIRETO, d.customIndireto, 'INDIRETO', ML + colW + 4);
+    y = Math.max(yFimDir, yFimInd) + 3;
+  }
+  
+  // ═══════════════════════════════════════════════════
+  // EQUIPAMENTOS (compacto)
+  // ═══════════════════════════════════════════════════
+  if (totalEquip > 0 && y < PH - 50) {
+    rect(ML, y, TW, 8, NAVY);
+    sf(10, 'bold', [255, 255, 255]);
+    tx('EQUIPAMENTOS  ·  ' + totalEquip + ' no canteiro', ML + 4, y + 5.5);
+    y += 8;
+    
+    // Grid 4 colunas
+    const equipsAtivos = [];
+    CATEGORIAS_EQUIP_PADRAO.forEach(eq => {
+      const v = parseInt(d.equipamentos[eq.key]) || 0;
+      if (v > 0) equipsAtivos.push({ label: eq.label, qtd: v });
+    });
+    d.customEquip.forEach(eq => {
+      const v = parseInt(eq.qtd) || 0;
+      if (eq.label && v > 0) equipsAtivos.push({ label: eq.label + ' ✱', qtd: v });
+    });
+    
+    const colsEq = 3;
+    const eqW = TW / colsEq;
+    equipsAtivos.forEach((eq, i) => {
+      const col = i % colsEq;
+      const row = Math.floor(i / colsEq);
+      const ex = ML + col * eqW;
+      const ey = y + row * 5;
+      if (row % 2 === 0) rect(ex, ey, eqW, 5, [248, 246, 242]);
+      sf(7, 'normal', [40, 40, 40]);
+      tx(eq.label, ex + 3, ey + 3.5);
+      sf(8, 'bold', TERRACOTA);
+      tx(String(eq.qtd), ex + eqW - 4, ey + 3.5, { align: 'right' });
+    });
+    y += Math.ceil(equipsAtivos.length / colsEq) * 5 + 4;
+  }
+  
+  // ═══════════════════════════════════════════════════
+  // OBSERVAÇÕES
+  // ═══════════════════════════════════════════════════
+  const temObs = d.visitas || d.ocorrencias || d.observacoes_gerais;
+  if (temObs && y < PH - 35) {
+    rect(ML, y, TW, 6, [240, 235, 226]);
+    sf(8, 'bold', TERRA_DARK);
+    tx('OBSERVAÇÕES', ML + 3, y + 4);
+    y += 6;
+    
+    sf(8, 'normal', [40, 40, 40]);
+    if (d.visitas) {
+      sf(7, 'bold', NAVY); tx('Visitas:', ML + 3, y + 3);
+      sf(7, 'normal', [40, 40, 40]);
+      const ll = doc.splitTextToSize(d.visitas, TW - 24);
+      doc.text(ll.slice(0, 2), ML + 18, y + 3);
+      y += ll.length * 3.5 + 1;
+    }
+    if (d.ocorrencias) {
+      sf(7, 'bold', NAVY); tx('Ocorr.:', ML + 3, y + 3);
+      sf(7, 'normal', [40, 40, 40]);
+      const ll = doc.splitTextToSize(d.ocorrencias, TW - 22);
+      doc.text(ll.slice(0, 2), ML + 16, y + 3);
+      y += ll.length * 3.5 + 1;
+    }
+    if (d.observacoes_gerais) {
+      sf(7, 'bold', NAVY); tx('Geral:', ML + 3, y + 3);
+      sf(7, 'normal', [40, 40, 40]);
+      const ll = doc.splitTextToSize(d.observacoes_gerais, TW - 18);
+      doc.text(ll.slice(0, 3), ML + 14, y + 3);
+      y += ll.length * 3.5 + 1;
+    }
+  }
+  
+  // ═══════════════════════════════════════════════════
+  // RODAPÉ
+  // ═══════════════════════════════════════════════════
+  rect(0, PH - 14, PW, 14, NAVY);
+  sf(8, 'bold', [255, 255, 255]);
+  tx('CONSÓRCIO ARVEK + GESTOR', ML, PH - 8);
+  sf(7, 'normal', [180, 175, 168]);
+  tx('Apontador Diurno: ' + (d.apontador_diurno || '—') + (d.apontador_noturno ? '  ·  Noturno: ' + d.apontador_noturno : ''), ML, PH - 4);
+  
+  sf(7, 'normal', [180, 175, 168]);
+  tx('Gerado em ' + new Date().toLocaleString('pt-BR'), PW - ML, PH - 4, { align: 'right' });
+  
+  // Salvar
+  const fname = 'RDO_INTERNO_' + data.replace(/-/g, '_') + '.pdf';
+  doc.save(fname);
+  toast('PDF Interno gerado: ' + fname, 'success');
+}
+
+
 function sheetRowToDiario(r) {
   const d = {
     data: parseISODate(r['Data']) ? parseISODate(r['Data']).toISOString().split('T')[0] : String(r['Data']),
@@ -2766,6 +3335,16 @@ window.navegacaoRDODiario = navegacaoRDODiario;
 window.gerarPDFDiario = gerarPDFDiario;
 window.setHistoricoTab = setHistoricoTab;
 window.salvarRDODiario = salvarRDODiario;
+window.setTurnoNoturnoV3 = setTurnoNoturnoV3;
+window.resetDiarioV3 = resetDiarioV3;
+window.adicionarFuncaoCustomV3 = adicionarFuncaoCustomV3;
+window.removerFuncaoCustomV3 = removerFuncaoCustomV3;
+window.adicionarEquipCustomV3 = adicionarEquipCustomV3;
+window.removerEquipCustomV3 = removerEquipCustomV3;
+window.carregarRDOV3Existente = carregarRDOV3Existente;
+window.salvarRDODiarioV3 = salvarRDODiarioV3;
+window.gerarPDFInterno = gerarPDFInterno;
+
 window.adicionarServico = adicionarServico;
 window.removerServico = removerServico;
 window.resetDraft = resetDraft;
