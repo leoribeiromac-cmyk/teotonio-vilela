@@ -2350,7 +2350,7 @@ function renderFormularioTurno() {
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-outline" onclick="resetTurnoV4()">Limpar turno</button>
-        <button class="btn btn-acc" onclick="gerarPDFInternoTurnoV4()">📊 PDF Interno do turno</button>
+        <button class="btn btn-acc" onclick="TurnoV4()">📊 PDF Interno do turno</button>
         <button class="btn btn-primary btn-lg" id="btnSalvarDiarioV4" onclick="salvarDiarioV4()">💾 Salvar turno</button>
       </div>
     </div>
@@ -3075,6 +3075,9 @@ function gerarPDFDiarioV4(data) {
 // PDF INTERNO — Visual, pra mandar no grupo (sem logos formais)
 // ====================================================================
 function gerarPDFInterno(data, turnoFocus) {
+  // Tornando a função à prova de falhas: se o botão não enviou o turno, ela mesma descobre qual tela está aberta
+  const focus = turnoFocus || (typeof DIARIO_TURNO_ATIVO !== 'undefined' ? DIARIO_TURNO_ATIVO : null);
+
   const fromSheet = (STATE.rdodiario || []).find(r => {
     const rd = String(r['Data']);
     return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
@@ -3136,7 +3139,7 @@ function gerarPDFInterno(data, turnoFocus) {
   if (!d) { toast('Não encontrei o RDO Diário pra gerar PDF', 'error'); return; }
 
   // --- LÓGICA DE ISOLAMENTO DO TURNO ---
-  if (turnoFocus === 'diurno') {
+  if (focus === 'diurno') {
     d.tem_turno_noturno = false;
     d.apontador_noturno = '';
     d.efetivo_noturno = {};
@@ -3149,7 +3152,7 @@ function gerarPDFInterno(data, turnoFocus) {
       d.ocorrencias = DIARIO_V4.diurno.ocorrencias || '';
       d.observacoes_gerais = DIARIO_V4.diurno.observacoes || '';
     }
-  } else if (turnoFocus === 'noturno') {
+  } else if (focus === 'noturno') {
     d.tem_turno_noturno = false;
     d.apontador_diurno = '';
     d.efetivo_diurno = {};
@@ -3164,19 +3167,23 @@ function gerarPDFInterno(data, turnoFocus) {
     }
   }
 
+  // Filtro robusto que ignora letras maiúsculas/minúsculas e espaços em branco
   let servicosDiurnos = STATE.rdoavanco.filter(r => {
     const rd = parseISODate(r['Data']);
     if (!rd) return false;
-    return fmtData(rd) === fmtData(data) && (r['Turno']||'Diurno') === 'Diurno';
+    const t = String(r['Turno'] || 'Diurno').trim().toLowerCase();
+    return fmtData(rd) === fmtData(data) && t !== 'noturno';
   });
+  
   let servicosNoturnos = STATE.rdoavanco.filter(r => {
     const rd = parseISODate(r['Data']);
     if (!rd) return false;
-    return fmtData(rd) === fmtData(data) && r['Turno'] === 'Noturno';
+    const t = String(r['Turno'] || '').trim().toLowerCase();
+    return fmtData(rd) === fmtData(data) && t === 'noturno';
   });
 
-  if (turnoFocus === 'diurno') servicosNoturnos = [];
-  if (turnoFocus === 'noturno') servicosDiurnos = [];
+  if (focus === 'diurno') servicosNoturnos = [];
+  if (focus === 'noturno') servicosDiurnos = [];
   // ------------------------------------
 
   const { jsPDF } = window.jspdf;
@@ -3223,7 +3230,7 @@ function gerarPDFInterno(data, turnoFocus) {
   tx(diaSem.toUpperCase() + ' · ' + dataFmt, ML, 27);
 
   let tipoTxt = d.tem_turno_noturno ? 'DIURNO + NOTURNO' : 'DIURNO';
-  if (turnoFocus) tipoTxt = turnoFocus.toUpperCase();
+  if (focus) tipoTxt = focus.toUpperCase();
   
   rect(PW - ML - 50, 8, 50, 18, TERRACOTA);
   sf(7, 'bold', [255, 255, 255]);
@@ -3499,10 +3506,10 @@ function gerarPDFInterno(data, turnoFocus) {
     }
   }
 
-  // RODAPÉ COM NOME ESPECÍFICO DO APONTADOR DO TURNO
+  // RODAPÉ COM NOME ESPECÍFICO DO APONTADOR
   let rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—') + (d.apontador_noturno ? '  ·  Noturno: ' + d.apontador_noturno : '');
-  if (turnoFocus === 'diurno') rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—');
-  if (turnoFocus === 'noturno') rodapeTxt = 'Apontador Noturno: ' + (d.apontador_noturno || '—');
+  if (focus === 'diurno') rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—');
+  if (focus === 'noturno') rodapeTxt = 'Apontador Noturno: ' + (d.apontador_noturno || '—');
 
   rect(0, PH - 14, PW, 14, NAVY);
   sf(8, 'bold', [255, 255, 255]);
@@ -3515,7 +3522,7 @@ function gerarPDFInterno(data, turnoFocus) {
 
   // Nomeia o arquivo de acordo com o turno para não sobrepor se salvarem ambos
   let fname = 'RDO_INTERNO_' + data.replace(/-/g, '_');
-  if (turnoFocus) fname += '_' + turnoFocus.toUpperCase();
+  if (focus) fname += '_' + focus.toUpperCase();
   fname += '.pdf';
   doc.save(fname);
   toast('PDF Interno gerado: ' + fname, 'success');
