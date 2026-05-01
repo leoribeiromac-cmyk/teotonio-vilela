@@ -1286,6 +1286,9 @@ function calcularDataInicioReversa(dataFimStr, diasDuracao) {
 function renderCronograma() {
   loadPlanDados();
   
+  // Puxa o avanço real já calculado no seu sistema pelos RDOs
+  const av = calcularAvancoPorPacote();
+  
   // Pegar todos os pacotes ativos
   const pacotesAtivos = STATE.pacotes.filter(p => p['Status'] !== 'Histórico' && p['ID']);
   
@@ -1305,7 +1308,7 @@ function renderCronograma() {
       <div class="card-header">
         <div>
           <div class="card-title">Motor de Planejamento Reverso</div>
-          <div class="card-title-sub">Defina o término alvo e a produtividade. O sistema calcula quando você precisa iniciar (descontando domingos).</div>
+          <div class="card-title-sub">Defina o término alvo e a produtividade. O sistema calcula quando você precisa iniciar o SALDO RESTANTE (descontando domingos).</div>
         </div>
       </div>
       <div class="card-body flush" style="overflow-x:auto">
@@ -1313,10 +1316,10 @@ function renderCronograma() {
           <thead>
             <tr>
               <th style="width: 25%">Pacote / Serviço</th>
-              <th class="t-num" style="text-align: right; width: 10%">Qtd Total</th>
+              <th class="t-num" style="text-align: right; width: 10%">Saldo a Executar</th>
               <th style="width: 15%">Término Alvo</th>
               <th style="width: 15%">Produtividade/dia</th>
-              <th class="t-num" style="text-align: center; width: 10%">Duração</th>
+              <th class="t-num" style="text-align: center; width: 10%">Duração (Saldo)</th>
               <th style="width: 25%">Data Início Necessária</th>
             </tr>
           </thead>
@@ -1326,56 +1329,73 @@ function renderCronograma() {
               ${pacotes.map(p => {
                 const pid = p['ID'];
                 const plan = PLAN_DADOS[pid] || { prod: '', dataFim: '' };
+                
+                // Busca os dados de avanço real
+                const avancoPacote = av[pid];
                 const qtdTotal = num(p['Qtd Estimada']);
+                const qtdExecutada = avancoPacote ? avancoPacote.qtdExecutada : 0;
+                
+                // Calcula o saldo (garante que não fique negativo)
+                const saldo = Math.max(0, qtdTotal - qtdExecutada); 
+                
                 const unid = p['Unidade Física'] || '';
                 
                 let duracaoDias = 0;
                 let dataInicioStr = '<span style="color:var(--muted)">Aguardando dados...</span>';
                 let alertClass = '';
 
-                if (plan.prod > 0 && plan.dataFim) {
-                  duracaoDias = qtdTotal / plan.prod;
+                // Se o saldo for zero, já terminou
+                if (saldo === 0) {
+                     dataInicioStr = '<span style="color:var(--grn); font-weight:bold;">100% Concluído</span>';
+                } else if (plan.prod > 0 && plan.dataFim) {
+                  // O cálculo de dias é feito em cima do que FALTA FAZER
+                  duracaoDias = saldo / plan.prod;
                   const dataInicio = calcularDataInicioReversa(plan.dataFim, duracaoDias);
                   
                   if (dataInicio) {
                     const strFormatada = fmtData(dataInicio);
-                    // Se a data de início já passou do dia de hoje, está atrasado para começar
+                    // Compara com o dia de hoje pra ver se a tarefa já devia ter começado
                     if (dataInicio < hoje) {
                       alertClass = 'color: var(--red); font-weight: bold;';
-                      dataInicioStr = `⚠️ ${strFormatada} (Atrasado!)`;
+                      dataInicioStr = \`⚠️ \${strFormatada} (Atrasado!)\`;
                     } else {
-                      alertClass = 'color: var(--grn); font-weight: bold;';
-                      dataInicioStr = `✅ ${strFormatada} (No prazo)`;
+                      alertClass = 'color: var(--blu); font-weight: bold;';
+                      dataInicioStr = \`📅 \${strFormatada}\`;
                     }
                   }
                 }
 
-                return `
+                return \`
                   <tr>
-                    <td><strong>${p['Pacote']}</strong></td>
-                    <td class="t-num">${fmtNum(qtdTotal)} ${unid}</td>
                     <td>
-                      <input type="date" style="padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" 
-                             value="${plan.dataFim}" 
-                             onchange="atualizarPlan('${pid}', 'dataFim', this.value)">
+                        <strong>\${p['Pacote']}</strong>
+                        <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">Total: \${fmtNum(qtdTotal)} | Executado: \${fmtNum(qtdExecutada)}</div>
+                    </td>
+                    <td class="t-num" style="color: \${saldo > 0 ? 'var(--text)' : 'var(--grn)'}; font-weight: 600; text-align: right;">
+                        \${fmtNum(saldo)} \${unid}
                     </td>
                     <td>
-                      <div style="display:flex; align-items:center; gap: 4px;">
+                      \${saldo > 0 ? \`<input type="date" style="padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" 
+                             value="\${plan.dataFim}" 
+                             onchange="atualizarPlan('\${pid}', 'dataFim', this.value)">\` : '—'}
+                    </td>
+                    <td>
+                      \${saldo > 0 ? \`<div style="display:flex; align-items:center; gap: 4px;">
                         <input type="number" style="width: 70px; padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" 
-                               placeholder="Ex: 40" value="${plan.prod}" 
-                               onkeyup="if(event.key==='Enter') atualizarPlan('${pid}', 'prod', this.value)"
-                               onblur="atualizarPlan('${pid}', 'prod', this.value)">
-                        <span style="font-size: 11px; color: var(--muted);">${unid}/dia</span>
-                      </div>
+                               placeholder="Ex: 40" value="\${plan.prod}" 
+                               onkeyup="if(event.key==='Enter') atualizarPlan('\${pid}', 'prod', this.value)"
+                               onblur="atualizarPlan('\${pid}', 'prod', this.value)">
+                        <span style="font-size: 11px; color: var(--muted);">\${unid}/dia</span>
+                      </div>\` : '—'}
                     </td>
                     <td class="t-num" style="text-align: center;">
-                      ${duracaoDias > 0 ? Math.ceil(duracaoDias) + ' dias' : '—'}
+                      \${duracaoDias > 0 ? Math.ceil(duracaoDias) + ' dias' : '—'}
                     </td>
-                    <td style="font-size: 13px; ${alertClass}">
-                      ${dataInicioStr}
+                    <td style="font-size: 13px; \${alertClass}">
+                      \${dataInicioStr}
                     </td>
                   </tr>
-                `;
+                \`;
               }).join('')}
             `).join('')}
           </tbody>
