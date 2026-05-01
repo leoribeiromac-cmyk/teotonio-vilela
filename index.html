@@ -593,25 +593,28 @@ function num(s) {
   return isNaN(v) ? parseFloat(s) || 0 : v;
 }
 
-function fmtData(iso) {
-  if (!iso) return '';
-  let d;
-  if (iso instanceof Date) d = iso;
-  else if (String(iso).includes('/')) {
-    const p = String(iso).split('/');
-    d = new Date(`${p[2].slice(0,4)}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`);
-  } else d = new Date(iso);
-  if (isNaN(d)) return String(iso);
-  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getFullYear()).slice(2);
-}
-
 function parseISODate(s) {
   if (!s) return null;
-  if (String(s).includes('/')) {
-    const p = String(s).split('/');
-    return new Date(`${p[2].slice(0,4)}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}`);
+  if (s instanceof Date) return s;
+  const str = String(s);
+  // Se vier com barras (ex: 25/12/2026)
+  if (str.includes('/')) {
+    const p = str.split('/');
+    return new Date(parseInt(p[2].slice(0,4)), parseInt(p[1])-1, parseInt(p[0]));
   }
-  return new Date(s);
+  // Corrige o bug do fuso horário forçando a extração local
+  if (str.includes('-') && str.length >= 10) {
+     const parts = str.slice(0,10).split('-');
+     return new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+  }
+  return new Date(str);
+}
+
+function fmtData(iso) {
+  if (!iso) return '';
+  const d = parseISODate(iso);
+  if (!d || isNaN(d)) return String(iso);
+  return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getFullYear()).slice(2);
 }
 
 function fmtNum(n, decimals = 2) {
@@ -3076,26 +3079,77 @@ function gerarPDFInterno(data) {
     const rd = String(r['Data']);
     return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
   });
-  
-  const d = fromSheet ? sheetRowToDiarioV3(fromSheet) : (DIARIO_V3 && DIARIO_V3.data === data ? DIARIO_V3 : null);
-  if (!d) { toast('Não encontrei o RDO Diário', 'error'); return; }
-  
+
+  let d;
+  if (fromSheet) {
+    let efetJson = {}, equipJson = {};
+    try { efetJson = JSON.parse(fromSheet['Efetivo_JSON'] || '{}'); } catch(e) {}
+    try { equipJson = JSON.parse(fromSheet['Equipamentos_JSON'] || '{}'); } catch(e) {}
+    d = {
+      data: data,
+      tem_turno_noturno: (fromSheet['Apontador_Diurno'] && fromSheet['Apontador_Noturno']) ? true : false,
+      apontador_diurno: fromSheet['Apontador_Diurno'] || '',
+      apontador_noturno: fromSheet['Apontador_Noturno'] || '',
+      clima_manha: fromSheet['Clima_Manha'] || '',
+      clima_tarde: fromSheet['Clima_Tarde'] || '',
+      clima_noite: fromSheet['Clima_Noite'] || '',
+      visitas: fromSheet['Visitas'] || '',
+      ocorrencias: fromSheet['Ocorrencias'] || '',
+      observacoes_gerais: fromSheet['Observacoes_Gerais'] || '',
+      efetivo_diurno: efetJson.padrao_diurno || {},
+      efetivo_noturno: efetJson.padrao_noturno || {},
+      equipamentos_diurno: equipJson.padrao_diurno || {},
+      equipamentos_noturno: equipJson.padrao_noturno || {},
+      customIndireto_diurno: efetJson.customIndireto_diurno || [],
+      customIndireto_noturno: efetJson.customIndireto_noturno || [],
+      customDireto_diurno: efetJson.customDireto_diurno || [],
+      customDireto_noturno: efetJson.customDireto_noturno || [],
+      customEquip_diurno: equipJson.custom_diurno || [],
+      customEquip_noturno: equipJson.custom_noturno || []
+    };
+  } else if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
+    const v4 = DIARIO_V4;
+    d = {
+      data: data,
+      tem_turno_noturno: (v4.diurno.preenchido && v4.noturno.preenchido) ? true : false,
+      apontador_diurno: v4.diurno.apontador || '',
+      apontador_noturno: v4.noturno.apontador || '',
+      clima_manha: v4.clima_manha, clima_tarde: v4.clima_tarde, clima_noite: v4.clima_noite,
+      visitas: [v4.diurno.visitas, v4.noturno.visitas].filter(x=>x).join(' / ') || '',
+      ocorrencias: [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / ') || '',
+      observacoes_gerais: [v4.diurno.observacoes, v4.noturno.observacoes].filter(x=>x).join(' / ') || '',
+      efetivo_diurno: v4.diurno.efetivo || {},
+      efetivo_noturno: v4.noturno.efetivo || {},
+      equipamentos_diurno: v4.diurno.equipamentos || {},
+      equipamentos_noturno: v4.noturno.equipamentos || {},
+      customIndireto_diurno: v4.diurno.customIndireto || [],
+      customIndireto_noturno: v4.noturno.customIndireto || [],
+      customDireto_diurno: v4.diurno.customDireto || [],
+      customDireto_noturno: v4.noturno.customDireto || [],
+      customEquip_diurno: v4.diurno.customEquip || [],
+      customEquip_noturno: v4.noturno.customEquip || []
+    };
+  } else {
+    d = null;
+  }
+
+  if (!d) { toast('Não encontrei o RDO Diário pra gerar PDF', 'error'); return; }
+
   const servicosDiurnos = STATE.rdoavanco.filter(r => {
     const rd = parseISODate(r['Data']);
     if (!rd) return false;
-    return rd.toISOString().split('T')[0] === data && (r['Turno']||'Diurno') === 'Diurno';
+    return fmtData(rd) === fmtData(data) && (r['Turno']||'Diurno') === 'Diurno';
   });
   const servicosNoturnos = STATE.rdoavanco.filter(r => {
     const rd = parseISODate(r['Data']);
     if (!rd) return false;
-    return rd.toISOString().split('T')[0] === data && r['Turno'] === 'Noturno';
+    return fmtData(rd) === fmtData(data) && r['Turno'] === 'Noturno';
   });
-  
+
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PW = 210, PH = 297, ML = 12, TW = 186;
-  
-  // Paleta visual do interno (terra/terracota - mais vibrante)
+
   const TERRACOTA = [201, 114, 64];
   const TERRA_DARK = [122, 65, 36];
   const NAVY = [26, 22, 18];
@@ -3104,7 +3158,7 @@ function gerarPDFInterno(data) {
   const AZUL = [50, 100, 150];
   const CINZA = [120, 117, 112];
   const CINZA_BG = [245, 243, 239];
-  
+
   function sf(sz, st, col) {
     doc.setFontSize(sz);
     doc.setFont('helvetica', st || 'normal');
@@ -3115,66 +3169,58 @@ function gerarPDFInterno(data) {
     if (sk && !fl) { doc.setDrawColor(...sk); doc.rect(x, y, w, h, 'S'); }
   }
   function tx(t, x, y, opt) { doc.text(String(t || ''), x, y, opt || {}); }
-  
-  const dataObj = new Date(data + 'T12:00:00');
+
+  const dataObj = parseISODate(data);
   const diaSem = ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][dataObj.getDay()];
-  const dataFmt = dataObj.toLocaleDateString('pt-BR');
-  
+  const dataFmt = fmtData(data);
+
   let y = 0;
-  
-  // ═══════════════════════════════════════════════════
-  // CABEÇALHO IMPACTANTE (estilo "produto")
-  // ═══════════════════════════════════════════════════
+
+  // CABEÇALHO IMPACTANTE
   rect(0, 0, PW, 32, NAVY);
   rect(0, 32, PW, 4, TERRACOTA);
-  
+
   sf(20, 'bold', [255, 255, 255]);
   tx('RELATÓRIO DIÁRIO', ML, 13);
   sf(10, 'normal', [255, 255, 255]);
   doc.setTextColor(255, 200, 150);
   tx('Av. Senador Teotônio Vilela · Consórcio Arvek + Gestor', ML, 19);
-  
+
   sf(8, 'normal', [180, 175, 168]);
   tx(diaSem.toUpperCase() + ' · ' + dataFmt, ML, 27);
-  
-  // Badge dia/noite à direita
+
   const tipoTxt = d.tem_turno_noturno ? 'DIURNO + NOTURNO' : 'DIURNO';
   rect(PW - ML - 50, 8, 50, 18, TERRACOTA);
   sf(7, 'bold', [255, 255, 255]);
   tx('TURNO', PW - ML - 25, 13, { align: 'center' });
   sf(11, 'bold', [255, 255, 255]);
   tx(tipoTxt, PW - ML - 25, 21, { align: 'center' });
-  
+
   y = 42;
-  
-  // ═══════════════════════════════════════════════════
-  // RESUMO DO DIA (metrics tipo dashboard)
-  // ═══════════════════════════════════════════════════
+
+  // RESUMO DO DIA
   const totalServicos = servicosDiurnos.length + servicosNoturnos.length;
-  
-  // Calcular efetivo total
+
   let totalEfetivo = 0;
-  Object.values(d.efetivo || {}).forEach(v => totalEfetivo += parseInt(v) || 0);
-  d.customIndireto.forEach(f => {
-    totalEfetivo += (parseInt(f.diurno) || 0) + (parseInt(f.noturno) || 0);
-  });
-  d.customDireto.forEach(f => {
-    totalEfetivo += (parseInt(f.diurno) || 0) + (parseInt(f.noturno) || 0);
-  });
-  
-  // Calcular equipamentos total
+  Object.values(d.efetivo_diurno || {}).forEach(v => totalEfetivo += parseInt(v) || 0);
+  Object.values(d.efetivo_noturno || {}).forEach(v => totalEfetivo += parseInt(v) || 0);
+  (d.customIndireto_diurno || []).forEach(f => totalEfetivo += parseInt(f.qtd) || 0);
+  (d.customIndireto_noturno || []).forEach(f => totalEfetivo += parseInt(f.qtd) || 0);
+  (d.customDireto_diurno || []).forEach(f => totalEfetivo += parseInt(f.qtd) || 0);
+  (d.customDireto_noturno || []).forEach(f => totalEfetivo += parseInt(f.qtd) || 0);
+
   let totalEquip = 0;
-  Object.values(d.equipamentos || {}).forEach(v => totalEquip += parseInt(v) || 0);
-  d.customEquip.forEach(e => totalEquip += parseInt(e.qtd) || 0);
-  
-  // Estacas trabalhadas
+  Object.values(d.equipamentos_diurno || {}).forEach(v => totalEquip += parseInt(v) || 0);
+  Object.values(d.equipamentos_noturno || {}).forEach(v => totalEquip += parseInt(v) || 0);
+  (d.customEquip_diurno || []).forEach(e => totalEquip += parseInt(e.qtd) || 0);
+  (d.customEquip_noturno || []).forEach(e => totalEquip += parseInt(e.qtd) || 0);
+
   const estacasTrabalhadas = new Set();
   [...servicosDiurnos, ...servicosNoturnos].forEach(s => {
     const m = (s['Local_Estaca'] || '').match(/E?\d+(\.\d+)?/g);
     if (m) m.forEach(e => estacasTrabalhadas.add(e));
   });
-  
-  // Layout 4 KPIs lado a lado
+
   const kw = (TW - 12) / 4;
   const kpis = [
     { label: 'SERVIÇOS', valor: totalServicos, sub: 'executados', cor: TERRACOTA },
@@ -3185,7 +3231,7 @@ function gerarPDFInterno(data) {
   kpis.forEach((k, i) => {
     const x = ML + i * (kw + 4);
     rect(x, y, kw, 22, [255, 255, 255], CINZA);
-    rect(x, y, kw, 2, k.cor); // barra colorida no topo
+    rect(x, y, kw, 2, k.cor); 
     sf(7, 'bold', CINZA);
     tx(k.label, x + 3, y + 7);
     sf(18, 'bold', NAVY);
@@ -3194,10 +3240,8 @@ function gerarPDFInterno(data) {
     tx(k.sub, x + 3, y + 20);
   });
   y += 28;
-  
-  // ═══════════════════════════════════════════════════
+
   // CLIMA visual
-  // ═══════════════════════════════════════════════════
   rect(ML, y, TW, 14, CINZA_BG);
   sf(8, 'bold', NAVY);
   tx('CONDIÇÕES CLIMÁTICAS', ML + 4, y + 5);
@@ -3215,10 +3259,8 @@ function gerarPDFInterno(data) {
     tx(c.val, x + 16, y + 11);
   });
   y += 18;
-  
-  // ═══════════════════════════════════════════════════
+
   // SERVIÇOS POR TURNO
-  // ═══════════════════════════════════════════════════
   function renderServicosTurno(turnoNome, servicos, corTurno) {
     if (servicos.length === 0) return;
     
@@ -3227,7 +3269,6 @@ function gerarPDFInterno(data) {
     tx(turnoNome.toUpperCase() + '  ·  ' + servicos.length + ' serviço' + (servicos.length>1?'s':''), ML + 4, y + 5.5);
     y += 8;
     
-    // Header tabela
     sf(6.5, 'bold', CINZA);
     rect(ML, y, TW, 6, CINZA_BG);
     tx('FRENTE / PACOTE', ML + 3, y + 4);
@@ -3241,7 +3282,7 @@ function gerarPDFInterno(data) {
       const bg = i % 2 === 0 ? null : [252, 250, 246];
       if (bg) rect(ML, y, TW, 5, bg);
       
-      const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
+      const pacote = (STATE && STATE.pacotes) ? STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']) : null;
       const frente = pacote ? (pacote['Frente'] || '') : '';
       
       sf(7, 'bold', NAVY);
@@ -3249,7 +3290,7 @@ function gerarPDFInterno(data) {
       sf(7, 'normal', [50, 50, 50]);
       tx(s['Local_Estaca'] || '', ML + 75, y + 3.5);
       sf(7, 'bold', TERRA_DARK);
-      tx(fmtNum(num(s['Quantidade'])), ML + 130, y + 3.5, { align: 'right' });
+      tx(parseFloat(s['Quantidade']||0).toLocaleString('pt-BR'), ML + 130, y + 3.5, { align: 'right' });
       sf(7, 'normal', CINZA);
       tx(s['Unidade'] || '', ML + 138, y + 3.5);
       tx(s['Equipe'] || s['Subcontratado'] || '', ML + 152, y + 3.5);
@@ -3267,21 +3308,18 @@ function gerarPDFInterno(data) {
     tx('Nenhum serviço lançado pra esta data.', ML + 4, y + 9);
     y += 18;
   }
-  
-  // ═══════════════════════════════════════════════════
-  // EFETIVO DETALHADO (categorias com pessoas)
-  // ═══════════════════════════════════════════════════
+
+  // EFETIVO DETALHADO
   if (y < PH - 60) {
     rect(ML, y, TW, 8, NAVY);
     sf(10, 'bold', [255, 255, 255]);
     tx('EFETIVO  ·  ' + totalEfetivo + ' pessoa' + (totalEfetivo>1?'s':'') + ' no canteiro', ML + 4, y + 5.5);
     y += 8;
     
-    // Direto + Indireto em duas colunas
     const colW = (TW - 4) / 2;
     let yIni = y;
     
-    function renderEfetivoCol(titulo, categorias, customList, tipo, x) {
+    function renderEfetivoCol(titulo, categorias, customListDiu, customListNot, tipo, x) {
       let cy = yIni;
       sf(7, 'bold', tipo === 'DIRETO' ? AZUL : AMARELO);
       tx(titulo, x + 3, cy + 4);
@@ -3290,20 +3328,30 @@ function gerarPDFInterno(data) {
       let total = 0;
       const linhas = [];
       categorias.forEach(c => {
-        const diu = parseInt(d.efetivo[c.key + '_diurno']) || 0;
-        const not = parseInt(d.efetivo[c.key + '_noturno']) || 0;
+        const diu = parseInt(d.efetivo_diurno[c.key]) || 0;
+        const not = parseInt(d.efetivo_noturno[c.key]) || 0;
         if (diu + not > 0) {
           linhas.push({ label: c.label, diu, not });
           total += diu + not;
         }
       });
-      customList.forEach(f => {
-        const diu = parseInt(f.diurno) || 0;
-        const not = parseInt(f.noturno) || 0;
-        if (f.label && (diu + not) > 0) {
-          linhas.push({ label: f.label + ' ✱', diu, not });
-          total += diu + not;
+      
+      const mapCustom = {};
+      customListDiu.forEach(f => { if(f.label) mapCustom[f.label] = { diu: parseInt(f.qtd)||0, not: 0 }; });
+      customListNot.forEach(f => {
+        if(f.label) {
+          if(!mapCustom[f.label]) mapCustom[f.label] = { diu: 0, not: 0 };
+          mapCustom[f.label].not = parseInt(f.qtd)||0;
         }
+      });
+      
+      Object.keys(mapCustom).forEach(k => {
+         const diu = mapCustom[k].diu;
+         const not = mapCustom[k].not;
+         if (diu + not > 0) {
+            linhas.push({ label: k + ' ✱', diu, not });
+            total += diu + not;
+         }
       });
       
       if (linhas.length === 0) {
@@ -3327,7 +3375,6 @@ function gerarPDFInterno(data) {
         });
       }
       cy += 1;
-      // Subtotal
       rect(x, cy, colW, 4, [240, 235, 226]);
       sf(7, 'bold', TERRA_DARK);
       tx('TOTAL ' + titulo, x + 3, cy + 3);
@@ -3336,29 +3383,37 @@ function gerarPDFInterno(data) {
       return cy;
     }
     
-    const yFimDir = renderEfetivoCol('DIRETO', CATEGORIAS_DIRETO, d.customDireto, 'DIRETO', ML);
-    const yFimInd = renderEfetivoCol('INDIRETO', CATEGORIAS_INDIRETO, d.customIndireto, 'INDIRETO', ML + colW + 4);
+    const yFimDir = renderEfetivoCol('DIRETO', CATEGORIAS_DIRETO, d.customDireto_diurno, d.customDireto_noturno, 'DIRETO', ML);
+    const yFimInd = renderEfetivoCol('INDIRETO', CATEGORIAS_INDIRETO, d.customIndireto_diurno, d.customIndireto_noturno, 'INDIRETO', ML + colW + 4);
     y = Math.max(yFimDir, yFimInd) + 3;
   }
-  
-  // ═══════════════════════════════════════════════════
-  // EQUIPAMENTOS (compacto)
-  // ═══════════════════════════════════════════════════
+
+  // EQUIPAMENTOS
   if (totalEquip > 0 && y < PH - 50) {
     rect(ML, y, TW, 8, NAVY);
     sf(10, 'bold', [255, 255, 255]);
     tx('EQUIPAMENTOS  ·  ' + totalEquip + ' no canteiro', ML + 4, y + 5.5);
     y += 8;
     
-    // Grid 4 colunas
     const equipsAtivos = [];
     CATEGORIAS_EQUIP_PADRAO.forEach(eq => {
-      const v = parseInt(d.equipamentos[eq.key]) || 0;
-      if (v > 0) equipsAtivos.push({ label: eq.label, qtd: v });
+      const diu = parseInt(d.equipamentos_diurno[eq.key]) || 0;
+      const not = parseInt(d.equipamentos_noturno[eq.key]) || 0;
+      if (diu + not > 0) equipsAtivos.push({ label: eq.label, qtd: diu + not });
     });
-    d.customEquip.forEach(eq => {
-      const v = parseInt(eq.qtd) || 0;
-      if (eq.label && v > 0) equipsAtivos.push({ label: eq.label + ' ✱', qtd: v });
+    
+    const mapCustomEq = {};
+    d.customEquip_diurno.forEach(f => { if(f.label) mapCustomEq[f.label] = { diu: parseInt(f.qtd)||0, not: 0 }; });
+    d.customEquip_noturno.forEach(f => {
+        if(f.label) {
+            if(!mapCustomEq[f.label]) mapCustomEq[f.label] = { diu: 0, not: 0 };
+            mapCustomEq[f.label].not = parseInt(f.qtd)||0;
+        }
+    });
+    Object.keys(mapCustomEq).forEach(k => {
+         const diu = mapCustomEq[k].diu;
+         const not = mapCustomEq[k].not;
+         if (diu + not > 0) equipsAtivos.push({ label: k + ' ✱', qtd: diu + not });
     });
     
     const colsEq = 3;
@@ -3376,10 +3431,8 @@ function gerarPDFInterno(data) {
     });
     y += Math.ceil(equipsAtivos.length / colsEq) * 5 + 4;
   }
-  
-  // ═══════════════════════════════════════════════════
+
   // OBSERVAÇÕES
-  // ═══════════════════════════════════════════════════
   const temObs = d.visitas || d.ocorrencias || d.observacoes_gerais;
   if (temObs && y < PH - 35) {
     rect(ML, y, TW, 6, [240, 235, 226]);
@@ -3410,10 +3463,8 @@ function gerarPDFInterno(data) {
       y += ll.length * 3.5 + 1;
     }
   }
-  
-  // ═══════════════════════════════════════════════════
+
   // RODAPÉ
-  // ═══════════════════════════════════════════════════
   rect(0, PH - 14, PW, 14, NAVY);
   sf(8, 'bold', [255, 255, 255]);
   tx('CONSÓRCIO ARVEK + GESTOR', ML, PH - 8);
@@ -3422,8 +3473,7 @@ function gerarPDFInterno(data) {
   
   sf(7, 'normal', [180, 175, 168]);
   tx('Gerado em ' + new Date().toLocaleString('pt-BR'), PW - ML, PH - 4, { align: 'right' });
-  
-  // Salvar
+
   const fname = 'RDO_INTERNO_' + data.replace(/-/g, '_') + '.pdf';
   doc.save(fname);
   toast('PDF Interno gerado: ' + fname, 'success');
