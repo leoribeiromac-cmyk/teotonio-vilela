@@ -2081,10 +2081,6 @@ function renderRDODiarioV3() {
             <input type="date" data-diario3="data" value="${d.data}">
           </div>
           <div class="field">
-            <label>Encarregado</label>
-            <input type="text" data-diario3="encarregado" value="${d.encarregado||''}" placeholder="Nome do encarregado">
-          </div>
-          <div class="field">
             <label>Apontador Diurno</label>
             <input type="text" data-diario3="apontador_diurno" value="${d.apontador_diurno||''}" placeholder="Nome do apontador do dia">
           </div>
@@ -2482,7 +2478,7 @@ const RDO_LOGO_L3 = 'iVBORw0KGgoAAAANSUhEUgAAAPUAAADJCAYAAAD7CXSzAAAAAXNSR0IArs4
 // PDF DO RDO DIÁRIO — LAYOUT OFICIAL (jsPDF)
 // ====================================================================
 function gerarPDFDiario(data) {
-  // Buscar dados do RDO Diário (preferir Sheets, senão usar DIARIO_V3)
+  // Buscar dados do RDO Diário
   const fromSheet = (STATE.rdodiario || []).find(r => {
     const rd = String(r['Data']);
     return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
@@ -2491,7 +2487,7 @@ function gerarPDFDiario(data) {
   const d = fromSheet ? sheetRowToDiarioV3(fromSheet) : (DIARIO_V3 && DIARIO_V3.data === data ? DIARIO_V3 : null);
   if (!d) { toast('Não encontrei o RDO Diário pra gerar PDF', 'error'); return; }
   
-  // Filtrar serviços executados nesse dia
+  // Filtrar serviços do dia separados por turno
   const servicosDiurnos = STATE.rdoavanco.filter(r => {
     const rd = parseISODate(r['Data']);
     if (!rd) return false;
@@ -2505,11 +2501,9 @@ function gerarPDFDiario(data) {
   
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  
-  // Constantes de layout (replicando o antigo)
   const PW = 210, PH = 297, ML = 8, MT = 5, TW = 194;
   
-  // Paleta (igual ao antigo)
+  // Paleta
   const NAV = [30, 58, 95];
   const LB = [210, 225, 242];
   const LG = [249, 249, 249];
@@ -2519,7 +2513,6 @@ function gerarPDFDiario(data) {
   const DG = [80, 80, 80];
   const BD = [165, 165, 165];
   
-  // Primitivos
   function sf(sz, st, col) {
     doc.setFontSize(sz);
     doc.setFont('helvetica', st || 'normal');
@@ -2536,20 +2529,17 @@ function gerarPDFDiario(data) {
     doc.setLineWidth(lw || 0.15);
     doc.line(x1, y1, x2, y2);
   }
-  function tx(t, x, y, opt) {
-    doc.text(String(t || ''), x, y, opt || {});
-  }
+  function tx(t, x, y, opt) { doc.text(String(t || ''), x, y, opt || {}); }
   
-  // Datas formatadas
   const df = new Date(data + 'T12:00:00').toLocaleDateString('pt-BR');
   const dd = new Date(data + 'T12:00:00');
-  const diaSemanaIdx = [6, 0, 1, 2, 3, 4, 5][dd.getDay()]; // S T Q Q S S D (Seg=0 ... Dom=6)
+  const diaSemanaIdx = [6, 0, 1, 2, 3, 4, 5][dd.getDay()];
   
   let y = MT;
   
-  // ══════════════════════════════════════════
-  // 1. CABEÇALHO — 3 logos + título (22mm)
-  // ══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
+  // 1. CABEÇALHO COM 3 LOGOS (22mm)
+  // ═══════════════════════════════════════════════════
   rf(ML, y, TW, 22, W, NAV, 0.5);
   try { doc.addImage('data:image/png;base64,' + RDO_LOGO_L1, 'PNG', ML + 1, y + 1, 20, 20); } catch(e) {}
   try { doc.addImage('data:image/png;base64,' + RDO_LOGO_L2, 'PNG', ML + 22, y + 1, 24, 20); } catch(e) {}
@@ -2557,8 +2547,7 @@ function gerarPDFDiario(data) {
   
   const cxL = ML + 47, cxR = ML + TW - 29, cxW = cxR - cxL, cxMid = cxL + cxW / 2;
   sf(9.5, 'bold', NAV);
-  const tituloRDO = d.tem_turno_noturno ? 'RELATÓRIO DIÁRIO DE OBRA — DIURNO + NOTURNO' : 'RELATÓRIO DIÁRIO DE OBRA — DIURNO';
-  tx(tituloRDO, cxMid, y + 7.5, { align: 'center' });
+  tx('RELATÓRIO DIÁRIO DE OBRA', cxMid, y + 7.5, { align: 'center' });
   sf(6.5, 'normal', DG);
   tx('Consórcio Viário Teotônio Vilela  |  Duplicação Viária — Av. Sen. Teotônio Vilela, SP', cxMid, y + 13, { align: 'center' });
   sf(4.5, 'normal', DG);
@@ -2567,9 +2556,9 @@ function gerarPDFDiario(data) {
   doc.text(respLines.slice(0, 2), cxMid, y + 17.5, { align: 'center' });
   y += 22;
   
-  // ══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   // 2. OBJETO (10mm)
-  // ══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   rf(ML, y, TW, 10, LB, BD);
   sf(5, 'bold', NAV); tx('OBJETO', ML + 2, y + 3.5);
   sf(5, 'normal', [0, 0, 0]);
@@ -2578,21 +2567,18 @@ function gerarPDFDiario(data) {
   doc.text(objL.slice(0, 2), ML + 2, y + 6.5);
   y += 10;
   
-  // ══════════════════════════════════════════
-  // 3. LOCAL / DATA / Nº / PRAZO (12mm = 2×6)
-  // ══════════════════════════════════════════
-  // Calcular Nº do RDO baseado no ID
+  // ═══════════════════════════════════════════════════
+  // 3. LOCAL/DATA/Nº/PRAZO (12mm)
+  // ═══════════════════════════════════════════════════
   const nrRDO = (fromSheet && fromSheet['ID']) ? String(fromSheet['ID']).replace(/^D0*/, '') || '1' : '—';
   const H3 = 6;
   
-  // Linha 1 — cabeçalhos
   rf(ML, y, TW * 0.55, H3, LB, BD); sf(5, 'bold', NAV); tx('LOCAL', ML + 2, y + H3 * 0.72);
   rf(ML + TW * 0.55, y, TW * 0.22, H3, LB, BD); sf(5, 'bold', NAV); tx('DATA', ML + TW * 0.55 + TW * 0.11, y + H3 * 0.72, { align: 'center' });
   rf(ML + TW * 0.77, y, TW * 0.12, H3, LB, BD); sf(5, 'bold', NAV); tx('NÚMERO', ML + TW * 0.77 + TW * 0.06, y + H3 * 0.72, { align: 'center' });
   rf(ML + TW * 0.89, y, TW * 0.11, H3, LB, BD); sf(5, 'bold', NAV); tx('PRAZO(dias)', ML + TW * 0.89 + TW * 0.055, y + H3 * 0.72, { align: 'center' });
   y += H3;
   
-  // Linha 2 — valores
   rf(ML, y, TW * 0.55, H3, W, BD); sf(5.5, 'normal', [0, 0, 0]);
   tx('Av. Sen. Teotônio Vilela (Rua José Nicolau — Rua Satélite Ariel)', ML + 2, y + H3 * 0.72);
   rf(ML + TW * 0.55, y, TW * 0.22, H3, W, BD); sf(7, 'bold', NAV); tx(df, ML + TW * 0.55 + TW * 0.11, y + H3 * 0.72, { align: 'center' });
@@ -2600,20 +2586,18 @@ function gerarPDFDiario(data) {
   rf(ML + TW * 0.89, y, TW * 0.11, H3, W, BD); sf(6, 'bold', NAV); tx('669', ML + TW * 0.89 + TW * 0.055, y + H3 * 0.72, { align: 'center' });
   y += H3;
   
-  // ══════════════════════════════════════════
-  // 4. DIA / JORNADA / CLIMA (10mm = 2×5)
-  // ══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
+  // 4. DIA / JORNADA / CLIMA
+  // ═══════════════════════════════════════════════════
   const JH = 5;
   const dCW = TW * 0.038, jW = TW * 0.25, cW = TW - 7 * dCW - jW;
   const jcw = jW / 4, ccw = cW / 4;
   
-  // Cabeçalho
   rf(ML, y, 7 * dCW, JH, LB, BD); sf(5, 'bold', NAV); tx('DIA DA SEMANA', ML + 7 * dCW / 2, y + JH * 0.72, { align: 'center' });
   rf(ML + 7 * dCW, y, jW, JH, LB, BD); sf(5, 'bold', NAV); tx('JORNADA', ML + 7 * dCW + jW / 2, y + JH * 0.72, { align: 'center' });
   rf(ML + 7 * dCW + jW, y, cW, JH, LB, BD); sf(5, 'bold', NAV); tx('CONDIÇÕES CLIMÁTICAS', ML + 7 * dCW + jW + cW / 2, y + JH * 0.72, { align: 'center' });
   y += JH;
   
-  // Valores - Dia da semana
   ['S', 'T', 'Q', 'Q', 'S', 'S', 'D'].forEach((dl, i) => {
     const on = i === diaSemanaIdx;
     rf(ML + i * dCW, y, dCW, JH, on ? NAV : W, BD);
@@ -2621,13 +2605,11 @@ function gerarPDFDiario(data) {
     tx(dl, ML + (i + 0.5) * dCW, y + JH * 0.72, { align: 'center' });
   });
   
-  // Jornada (vazio - fica genérico)
   ['Início', '', 'Térm.', ''].forEach((lbl, i) => {
     rf(ML + 7 * dCW + i * jcw, y, jcw, JH, W, BD);
     sf(5, 'bold', NAV); tx(lbl, ML + 7 * dCW + (i + 0.5) * jcw, y + 2, { align: 'center' });
   });
   
-  // Clima — usa o clima_manha do RDO Diário como referência principal
   const climaPrincipal = (d.clima_manha || 'Bom').toLowerCase();
   let climaKey = 'bom';
   if (climaPrincipal.includes('chuv')) climaKey = 'chu';
@@ -2641,36 +2623,25 @@ function gerarPDFDiario(data) {
     tx(lbl, ML + 7 * dCW + jW + (i + 0.5) * ccw, y + 2, { align: 'center' });
     if (on) { sf(7, 'bold', NAV); tx('✓', ML + 7 * dCW + jW + (i + 0.5) * ccw, y + JH * 0.78, { align: 'center' }); }
   });
-  y += JH;
+  y += JH + 2;
   
-  // Chuva extra (se aplicável)
-  if (climaKey === 'chu') {
-    rf(ML, y, TW, 4, [255, 248, 220], [200, 150, 0]);
-    sf(5.5, 'bold', [140, 80, 0]); tx('Paralização/Chuva: ', ML + 2, y + 2.8);
-    sf(5.5, 'normal', [0, 0, 0]);
-    const chuTxt = `Manhã: ${d.clima_manha}  |  Tarde: ${d.clima_tarde}  |  Noite: ${d.clima_noite}`;
-    tx(chuTxt, ML + 30, y + 2.8);
-    y += 4;
-  }
-  
-  // ══════════════════════════════════════════
-  // 5. TABELA EFETIVO
-  // ══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
+  // 5. TABELA EFETIVO (sempre Diurno + Noturno como 2 colunas)
+  // ═══════════════════════════════════════════════════
   rf(ML, y, TW, 5, NAV); sf(6.5, 'bold', W); tx('EFETIVO — CONSÓRCIO VIÁRIO TEOTÔNIO VILELA', ML + 2, y + 3.3); y += 5;
   
-  // Colunas
-  const CD = 45, CN = 8.5, CT = 10, CO = TW - CD - 4 * CN - CT;
-  const EH = 3.1;
+  const CD = 60, CN = 12, CT = 12, CO = TW - CD - 4 * CN - CT;
+  const EH = 3.4;
   
-  // Cabeçalho 1
-  rf(ML, y, CD, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('DESCRIÇÃO', ML + 2, y + EH);
-  rf(ML + CD, y, CN * 2, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('DIURNO', ML + CD + CN, y + EH, { align: 'center' });
-  rf(ML + CD + CN * 2, y, CN * 2, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('NOTURNO', ML + CD + CN * 3, y + EH, { align: 'center' });
-  rf(ML + CD + CN * 4, y, CT, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('TOT.', ML + CD + CN * 4 + CT / 2, y + EH, { align: 'center' });
-  rf(ML + CD + CN * 4 + CT, y, CO, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('COMENTÁRIOS / ATIVIDADES', ML + CD + CN * 4 + CT + 2, y + EH);
+  // Cabeçalho 1: DESCRIÇÃO | DIURNO | NOTURNO | TOT | COMENTÁRIOS
+  rf(ML, y, CD, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('DESCRIÇÃO', ML + 2, y + EH);
+  rf(ML + CD, y, CN * 2, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('DIURNO', ML + CD + CN, y + EH, { align: 'center' });
+  rf(ML + CD + CN * 2, y, CN * 2, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('NOTURNO', ML + CD + CN * 3, y + EH, { align: 'center' });
+  rf(ML + CD + CN * 4, y, CT, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('TOT.', ML + CD + CN * 4 + CT / 2, y + EH, { align: 'center' });
+  rf(ML + CD + CN * 4 + CT, y, CO, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('OBSERVAÇÕES', ML + CD + CN * 4 + CT + 2, y + EH);
   y += EH * 1.5;
   
-  // Cabeçalho 2
+  // Cabeçalho 2: subtipos
   rf(ML, y, CD, EH, LB, BD);
   ['Direto', 'Indireto', 'Direto', 'Indireto'].forEach((l, i) => {
     rf(ML + CD + i * CN, y, CN, EH, LB, BD); sf(4.5, 'bold', NAV);
@@ -2680,63 +2651,82 @@ function gerarPDFDiario(data) {
   rf(ML + CD + 4 * CN + CT, y, CO, EH, LB, BD);
   y += EH;
   
-  // Mapeamento das nossas categorias para a tabela do RDO antigo
-  // No antigo, "Direto" = Cons.+Contr. e "Indireto" = Cons.+Contr.
-  // Vamos: Direto Cons. = Diurno; Direto Contr. = Noturno; Indireto = (zero por enquanto)
-  // Para nossas 7 categorias, mostrar separadas e indicar Diurno como "Cons." e Noturno como "Contr."
-  // Categorias: usa todas as 34 (17 indireto + 17 direto)
-  // Cada categoria tem um campo .tipo pra saber se vai na coluna Direto ou Indireto
-  const cats_diretas = (typeof CATEGORIAS_DIRETO !== 'undefined') ? CATEGORIAS_DIRETO.map(c => ({...c, tipo: 'direto'})) : [];
-  const cats_indiretas = (typeof CATEGORIAS_INDIRETO !== 'undefined') ? CATEGORIAS_INDIRETO.map(c => ({...c, tipo: 'indireto'})) : [];
-  // Filtra só as que têm valor (pra não poluir o PDF com 34 linhas vazias)
-  const todasCats = [...cats_indiretas, ...cats_diretas];
-  const categorias = todasCats.filter(c => {
+  // Compilar categorias com valor não-zero
+  const todasCats = [
+    ...(typeof CATEGORIAS_INDIRETO !== 'undefined' ? CATEGORIAS_INDIRETO.map(c => ({...c, tipo: 'indireto'})) : []),
+    ...(typeof CATEGORIAS_DIRETO !== 'undefined' ? CATEGORIAS_DIRETO.map(c => ({...c, tipo: 'direto'})) : []),
+  ];
+  
+  let categorias = todasCats.filter(c => {
     const diu = parseInt(d.efetivo && d.efetivo[c.key + '_diurno']) || 0;
     const not = parseInt(d.efetivo && d.efetivo[c.key + '_noturno']) || 0;
     return (diu + not) > 0;
   });
-  // Se nenhuma categoria tem valor, mostra pelo menos 7 placeholders pra preencher página
-  if (categorias.length === 0) {
-    [...cats_indiretas.slice(0,3), ...cats_diretas.slice(0,4)].forEach(c => categorias.push(c));
-  }
-  // Limita a 14 linhas pra não estourar página
-  categorias.length = Math.min(categorias.length, 14);
   
-  // Pegar serviços para preencher coluna de comentários
+  // Adicionar customs
+  (d.customIndireto || []).forEach(f => {
+    const diu = parseInt(f.diurno) || 0;
+    const not = parseInt(f.noturno) || 0;
+    if (f.label && (diu + not) > 0) {
+      categorias.push({ key: '__custom_ind_' + f.label, label: f.label + ' ✱', tipo: 'indireto', _customDiu: diu, _customNot: not });
+    }
+  });
+  (d.customDireto || []).forEach(f => {
+    const diu = parseInt(f.diurno) || 0;
+    const not = parseInt(f.noturno) || 0;
+    if (f.label && (diu + not) > 0) {
+      categorias.push({ key: '__custom_dir_' + f.label, label: f.label + ' ✱', tipo: 'direto', _customDiu: diu, _customNot: not });
+    }
+  });
+  
+  // Garantir mínimo de 12 linhas pra ocupar página
+  const MIN_LINHAS = 12;
+  if (categorias.length < MIN_LINHAS) {
+    const placeholders = todasCats.filter(c => !categorias.some(ec => ec.key === c.key)).slice(0, MIN_LINHAS - categorias.length);
+    categorias = [...categorias, ...placeholders];
+  }
+  // Limitar a 14 pra não estourar
+  categorias = categorias.slice(0, 14);
+  
+  // Pegar serviços pra coluna comentários
   const servicosTodos = [...servicosDiurnos, ...servicosNoturnos];
   let svcIdx = 0;
   
   let tcd = 0, tci = 0, ttd = 0, tti = 0;
   categorias.forEach((cat, i) => {
-    // Pega valores diurno/noturno - mesmo objeto pra todas categorias
-    const diu = parseInt(d.efetivo && d.efetivo[cat.key + '_diurno']) || 0;
-    const not = parseInt(d.efetivo && d.efetivo[cat.key + '_noturno']) || 0;
+    let diu, not;
+    if (cat._customDiu !== undefined) {
+      diu = cat._customDiu; not = cat._customNot;
+    } else {
+      diu = parseInt(d.efetivo && d.efetivo[cat.key + '_diurno']) || 0;
+      not = parseInt(d.efetivo && d.efetivo[cat.key + '_noturno']) || 0;
+    }
     
-    // Distribui nas 4 colunas baseado no tipo (direto/indireto)
-    const cd = cat.tipo === 'direto' ? diu : 0;     // Diurno-Direto
-    const ci = cat.tipo === 'indireto' ? diu : 0;   // Diurno-Indireto
-    const td = cat.tipo === 'direto' ? not : 0;     // Noturno-Direto
-    const ti = cat.tipo === 'indireto' ? not : 0;   // Noturno-Indireto
+    const cd = cat.tipo === 'direto' ? diu : 0;
+    const ci = cat.tipo === 'indireto' ? diu : 0;
+    const td = cat.tipo === 'direto' ? not : 0;
+    const ti = cat.tipo === 'indireto' ? not : 0;
     const tot = cd + ci + td + ti;
     tcd += cd; tci += ci; ttd += td; tti += ti;
     
     const bg = i % 2 === 0 ? W : LG;
-    rf(ML, y, CD, EH, bg, BD); sf(5, 'normal', [0, 0, 0]); tx(cat.label, ML + 1.5, y + EH * 0.72);
+    rf(ML, y, CD, EH, bg, BD); sf(5.5, 'normal', [0, 0, 0]); tx(cat.label, ML + 1.5, y + EH * 0.72);
     [cd, ci, td, ti].forEach((v, j) => {
       rf(ML + CD + j * CN, y, CN, EH, bg, BD);
-      if (v > 0) { sf(5.5, 'bold', NAV); tx(String(v), ML + CD + (j + 0.5) * CN, y + EH * 0.72, { align: 'center' }); }
+      if (v > 0) { sf(6, 'bold', NAV); tx(String(v), ML + CD + (j + 0.5) * CN, y + EH * 0.72, { align: 'center' }); }
     });
     rf(ML + CD + 4 * CN, y, CT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
-    if (tot > 0) { sf(6, 'bold', NAV); tx(String(tot), ML + CD + 4 * CN + CT / 2, y + EH * 0.72, { align: 'center' }); }
+    if (tot > 0) { sf(6.5, 'bold', NAV); tx(String(tot), ML + CD + 4 * CN + CT / 2, y + EH * 0.72, { align: 'center' }); }
     rf(ML + CD + 4 * CN + CT, y, CO, EH, bg, BD);
     
-    // Inserir nome do serviço executado (sem quantidade!)
+    // Coluna observações: nomes de serviços executados
     if (svcIdx < servicosTodos.length) {
       const s = servicosTodos[svcIdx];
       const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
       const frente = pacote ? (pacote['Frente'] || '') : '';
-      const linhaServ = `${frente ? frente + ' · ' : ''}${s['Pacote_Nome'] || ''} (${s['Local_Estaca'] || '-'})`;
-      sf(4.5, 'normal', [30, 30, 30]);
+      const turnoTag = (s['Turno'] === 'Noturno') ? '🌙' : '☀';
+      const linhaServ = `${turnoTag} ${frente ? frente + ' · ' : ''}${s['Pacote_Nome'] || ''} (${s['Local_Estaca'] || '-'})`;
+      sf(4.8, 'normal', [30, 30, 30]);
       const sl = doc.splitTextToSize(linhaServ, CO - 2);
       tx(sl[0], ML + CD + 4 * CN + CT + 1.2, y + EH * 0.72);
       svcIdx++;
@@ -2747,63 +2737,69 @@ function gerarPDFDiario(data) {
   // Total efetivo
   const gtV = tcd + tci + ttd + tti;
   const TEH = 4;
-  rf(ML, y, CD, TEH, NAV); sf(5.5, 'bold', W); tx('TOTAL EFETIVO', ML + 2, y + TEH * 0.68);
+  rf(ML, y, CD, TEH, NAV); sf(6, 'bold', W); tx('TOTAL EFETIVO', ML + 2, y + TEH * 0.68);
   [tcd, tci, ttd, tti].forEach((v, j) => {
-    rf(ML + CD + j * CN, y, CN, TEH, NAV); sf(6, 'bold', W);
+    rf(ML + CD + j * CN, y, CN, TEH, NAV); sf(6.5, 'bold', W);
     tx(String(v), ML + CD + (j + 0.5) * CN, y + TEH * 0.68, { align: 'center' });
   });
-  rf(ML + CD + 4 * CN, y, CT, TEH, RED); sf(7, 'bold', W);
+  rf(ML + CD + 4 * CN, y, CT, TEH, RED); sf(7.5, 'bold', W);
   tx(String(gtV), ML + CD + 4 * CN + CT / 2, y + TEH * 0.68, { align: 'center' });
   rf(ML + CD + 4 * CN + CT, y, CO, TEH, NAV);
-  y += TEH + 1;
+  y += TEH + 2;
   
-  // ══════════════════════════════════════════
-  // 6. EQUIPAMENTOS
-  // ══════════════════════════════════════════
-  rf(ML, y, TW, 5, NAV); sf(6.5, 'bold', W); tx('EQUIPAMENTOS PESADOS E LEVES', ML + 2, y + 3.3); y += 5;
+  // ═══════════════════════════════════════════════════
+  // 6. SERVIÇOS POR TURNO (NOVO - separado)
+  // ═══════════════════════════════════════════════════
+  if (y < PH - 90) {
+    function renderServicosBlock(titulo, lista, corBlock) {
+      rf(ML, y, TW, 4.5, corBlock); sf(6.5, 'bold', W); tx(titulo, ML + 2, y + 3); y += 4.5;
+      const SH = 3.2;
+      // Header
+      rf(ML, y, TW * 0.45, SH, LB, BD); sf(4.5, 'bold', NAV); tx('PACOTE', ML + 2, y + SH * 0.72);
+      rf(ML + TW * 0.45, y, TW * 0.18, SH, LB, BD); sf(4.5, 'bold', NAV); tx('LOCAL', ML + TW * 0.45 + 2, y + SH * 0.72);
+      rf(ML + TW * 0.63, y, TW * 0.10, SH, LB, BD); sf(4.5, 'bold', NAV); tx('QTD', ML + TW * 0.63 + TW * 0.05, y + SH * 0.72, { align: 'center' });
+      rf(ML + TW * 0.73, y, TW * 0.07, SH, LB, BD); sf(4.5, 'bold', NAV); tx('UN', ML + TW * 0.73 + TW * 0.035, y + SH * 0.72, { align: 'center' });
+      rf(ML + TW * 0.80, y, TW * 0.20, SH, LB, BD); sf(4.5, 'bold', NAV); tx('EQUIPE / SUBC.', ML + TW * 0.80 + 2, y + SH * 0.72);
+      y += SH;
+      
+      if (lista.length === 0) {
+        rf(ML, y, TW, SH, [253, 246, 230], BD);
+        sf(5, 'italic', [140, 90, 30]);
+        tx('— sem serviços neste turno —', ML + TW/2, y + SH * 0.72, { align: 'center' });
+        y += SH;
+      } else {
+        lista.forEach((s, i) => {
+          const bg = i % 2 === 0 ? W : LG;
+          const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
+          const frente = pacote ? (pacote['Frente'] || '') : '';
+          
+          rf(ML, y, TW * 0.45, SH, bg, BD); sf(5, 'normal', [0, 0, 0]);
+          tx((frente ? frente.substring(0,4) + '·' : '') + (s['Pacote_Nome'] || '').substring(0, 35), ML + 1.5, y + SH * 0.72);
+          rf(ML + TW * 0.45, y, TW * 0.18, SH, bg, BD); sf(5, 'normal', [40, 40, 40]);
+          tx(String(s['Local_Estaca'] || '').substring(0, 16), ML + TW * 0.45 + 1.5, y + SH * 0.72);
+          rf(ML + TW * 0.63, y, TW * 0.10, SH, bg, BD); sf(5, 'bold', NAV);
+          tx(fmtNum(num(s['Quantidade'])), ML + TW * 0.63 + TW * 0.045, y + SH * 0.72, { align: 'right' });
+          rf(ML + TW * 0.73, y, TW * 0.07, SH, bg, BD); sf(5, 'normal', DG);
+          tx(s['Unidade'] || '', ML + TW * 0.73 + TW * 0.035, y + SH * 0.72, { align: 'center' });
+          rf(ML + TW * 0.80, y, TW * 0.20, SH, bg, BD); sf(5, 'normal', [0, 0, 0]);
+          tx(String(s['Equipe'] || s['Subcontratado'] || '').substring(0, 22), ML + TW * 0.80 + 1.5, y + SH * 0.72);
+          y += SH;
+        });
+      }
+      y += 2;
+    }
+    
+    // SEMPRE 2 BLOCOS — DIURNO + NOTURNO
+    renderServicosBlock('SERVIÇOS DIURNOS', servicosDiurnos, [212, 168, 16]);
+    renderServicosBlock('SERVIÇOS NOTURNOS', servicosNoturnos, [50, 100, 150]);
+  }
   
-  rf(ML, y, CD, EH, LB, BD); sf(5, 'bold', NAV); tx('DESCRIÇÃO', ML + 2, y + EH * 0.72);
-  ['Cons.', 'Contr.', '', ''].forEach((l, i) => {
-    rf(ML + CD + i * CN, y, CN, EH, LB, BD); sf(4.5, 'bold', NAV);
-    tx(l, ML + CD + (i + 0.5) * CN, y + EH * 0.72, { align: 'center' });
-  });
-  rf(ML + CD + 4 * CN, y, CT, EH, LB, BD); sf(5, 'bold', NAV);
-  tx('TOT.', ML + CD + 4 * CN + CT / 2, y + EH * 0.72, { align: 'center' });
-  rf(ML + CD + 4 * CN + CT, y, CO, EH, LB, BD); sf(5, 'bold', NAV);
-  tx('OBSERVAÇÕES CVTV', ML + CD + 4 * CN + CT + 2, y + EH * 0.72);
-  y += EH;
+  // ═══════════════════════════════════════════════════
+  // 7. OBSERVAÇÕES (espaço flexível)
+  // ═══════════════════════════════════════════════════
+  const yMaxBeforeAssin = PH - 32; // reserva 32mm pro bloco assinaturas + rodapé
+  const obsHeight = Math.max(15, yMaxBeforeAssin - y - 2);
   
-  const equipamentos = [
-    { key: 'retroescav', label: 'Retroescavadeira' },
-    { key: 'caminhao', label: 'Caminhão Basculante' },
-    { key: 'rolo', label: 'Rolo Compactador' },
-    { key: 'compactador_placa', label: 'Compactador Placa' },
-    { key: 'vibroacabadora', label: 'Vibroacabadora' },
-    { key: 'espargidor', label: 'Espargidor' },
-    { key: 'pa_carregadeira', label: 'Pá Carregadeira' },
-    { key: 'escavadeira', label: 'Escavadeira Hidráulica' },
-  ];
-  
-  equipamentos.forEach((eq, i) => {
-    const ec = parseInt(d[eq.key]) || 0;
-    const et = 0; // contratada
-    const tot = ec + et;
-    const bg = i % 2 === 0 ? W : LG;
-    rf(ML, y, CD, EH, bg, BD); sf(5, 'normal', [0, 0, 0]); tx(eq.label, ML + 1.5, y + EH * 0.72);
-    [ec, et, 0, 0].forEach((v, j) => {
-      rf(ML + CD + j * CN, y, CN, EH, bg, BD);
-      if (v > 0) { sf(5.5, 'bold', NAV); tx(String(v), ML + CD + (j + 0.5) * CN, y + EH * 0.72, { align: 'center' }); }
-    });
-    rf(ML + CD + 4 * CN, y, CT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
-    if (tot > 0) { sf(6, 'bold', NAV); tx(String(tot), ML + CD + 4 * CN + CT / 2, y + EH * 0.72, { align: 'center' }); }
-    rf(ML + CD + 4 * CN + CT, y, CO, EH, bg, BD);
-    y += EH;
-  });
-  y += 1;
-  
-  // ══════════════════════════════════════════
-  // 7. OBSERVAÇÕES (lado a lado)
-  // ══════════════════════════════════════════
   rf(ML, y, TW, 4.5, NAV); sf(6.5, 'bold', W); tx('OBSERVAÇÕES GERAIS', ML + 2, y + 3); y += 4.5;
   
   const hw = (TW - 3) / 2;
@@ -2815,14 +2811,16 @@ function gerarPDFDiario(data) {
   const obsCli = d.visitas || '—';
   const cvL = doc.splitTextToSize(obsCVTV, hw - 3);
   const clL = doc.splitTextToSize(obsCli, hw - 3);
-  const obsH = Math.max(Math.min(cvL.length, 3), Math.min(clL.length, 3)) * 3.2 + 3;
-  rf(ML, y, hw, obsH, YB, [190, 170, 0]); sf(5.5, 'normal', [0, 0, 0]); doc.text(cvL.slice(0, 3), ML + 2, y + 3);
-  rf(ML + hw + 3, y, hw, obsH, [240, 255, 242], [0, 140, 70]); sf(5.5, 'normal', [0, 0, 0]); doc.text(clL.slice(0, 3), ML + hw + 5, y + 3);
-  y += obsH + 1;
+  const obsBlockH = Math.max(15, obsHeight - 7.5);
+  rf(ML, y, hw, obsBlockH, YB, [190, 170, 0]); sf(5.5, 'normal', [0, 0, 0]);
+  doc.text(cvL.slice(0, Math.floor(obsBlockH / 3.5)), ML + 2, y + 3);
+  rf(ML + hw + 3, y, hw, obsBlockH, [240, 255, 242], [0, 140, 70]); sf(5.5, 'normal', [0, 0, 0]);
+  doc.text(clL.slice(0, Math.floor(obsBlockH / 3.5)), ML + hw + 5, y + 3);
+  y += obsBlockH + 1;
   
-  // ══════════════════════════════════════════
-  // 8. ASSINATURAS (14mm)
-  // ══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
+  // 8. ASSINATURAS
+  // ═══════════════════════════════════════════════════
   rf(ML, y, TW, 4, NAV); sf(6, 'bold', W); tx('ASSINATURAS', ML + 2, y + 2.8); y += 4;
   const sw = (TW - 4) / 2;
   rf(ML, y, sw, 14, W, BD);
@@ -2835,16 +2833,15 @@ function gerarPDFDiario(data) {
   sf(5, 'normal', DG); tx(df, ML + sw + 4 + sw / 2, y + 13, { align: 'center' });
   y += 14;
   
-  // ══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   // 9. RODAPÉ
-  // ══════════════════════════════════════════
+  // ═══════════════════════════════════════════════════
   const fy = PH - 8;
   ln(ML, fy - 1, ML + TW, fy - 1, NAV, 0.4);
   sf(5, 'normal', DG);
   tx('Consórcio Viário Teotônio Vilela  |  RDO Nº ' + nrRDO + '  |  Data: ' + df, PW / 2, fy + 2, { align: 'center' });
   tx('Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária', PW / 2, fy + 5.5, { align: 'center' });
   
-  // Salvar
   const fname = 'RDO_' + data.replace(/-/g, '_') + '_N' + nrRDO + '.pdf';
   doc.save(fname);
   toast('PDF gerado: ' + fname, 'success');
