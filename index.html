@@ -1232,196 +1232,156 @@ function renderHeatmap(av) {
 // ====================================================================
 // VIEW: CRONOGRAMA (visão por mês + visão por fase)
 // ====================================================================
-let CRONO_VIEW = 'mes';
-let CRONO_MES = '2026-04';
+// ====================================================================
+// VIEW: CRONOGRAMA FÍSICO (Planejamento Reverso)
+// ====================================================================
+
+// Estado local para salvar as simulações de prazo e produtividade
+let PLAN_DADOS = null;
+
+function loadPlanDados() {
+  if (PLAN_DADOS) return PLAN_DADOS;
+  try {
+    const raw = localStorage.getItem('teotonio_plan_reverso_v1');
+    if (raw) PLAN_DADOS = JSON.parse(raw);
+    else PLAN_DADOS = {};
+  } catch(e) { PLAN_DADOS = {}; }
+  return PLAN_DADOS;
+}
+
+function salvarPlanDados() {
+  try { localStorage.setItem('teotonio_plan_reverso_v1', JSON.stringify(PLAN_DADOS)); } catch(e) {}
+}
+
+// Atualiza o valor digitado pelo engenheiro e recalcula
+window.atualizarPlan = function(pacoteId, campo, valor) {
+  if (!PLAN_DADOS) loadPlanDados();
+  if (!PLAN_DADOS[pacoteId]) PLAN_DADOS[pacoteId] = { prod: '', dataFim: '' };
+  PLAN_DADOS[pacoteId][campo] = valor;
+  salvarPlanDados();
+  render(); // Re-renderiza a tela para mostrar o cálculo atualizado
+};
+
+// Função que volta os dias no calendário (descontando domingos)
+function calcularDataInicioReversa(dataFimStr, diasDuracao) {
+  if (!dataFimStr || diasDuracao <= 0) return null;
+  const dataFim = parseISODate(dataFimStr);
+  if (!dataFim || isNaN(dataFim)) return null;
+
+  let d = new Date(dataFim.getTime());
+  // Se a duração é 1 dia, começa e termina no mesmo dia
+  let diasRestantes = Math.ceil(diasDuracao) - 1; 
+  if (diasRestantes < 0) diasRestantes = 0;
+
+  while (diasRestantes > 0) {
+    d.setDate(d.getDate() - 1);
+    // Pula Domingo (0)
+    if (d.getDay() !== 0) {
+      diasRestantes--;
+    }
+  }
+  return d;
+}
 
 function renderCronograma() {
-  const tarefas = STATE.cronograma.map(t => ({
-    nome: t['Nome'] || t['nome'],
-    edt: t['EDT'] || t['edt'],
-    nivel: parseInt(t['Nivel'] || t['nivel']) || 0,
-    ini: parseISODate(t['Inicio'] || t['Início']),
-    fim: parseISODate(t['Termino'] || t['Término']),
-    pct: num(t['Pct_Concluido_Plan']),
-    resumo: (t['Eh_Resumo'] || '').toLowerCase().startsWith('s'),
-  })).filter(t => t.ini && t.fim);
+  loadPlanDados();
   
-  return `
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-      <div class="btn-toggle-group">
-        <button class="btn-toggle ${CRONO_VIEW==='mes'?'active':''}" onclick="setCronoView('mes')">Por mês</button>
-        <button class="btn-toggle ${CRONO_VIEW==='fases'?'active':''}" onclick="setCronoView('fases')">Por fase</button>
-      </div>
-    </div>
-    ${CRONO_VIEW === 'mes' ? renderCronoMes(tarefas) : renderCronoFases(tarefas)}
-  `;
-}
-
-function setCronoView(v) {
-  CRONO_VIEW = v;
-  render();
-}
-
-function setCronoMes(m) {
-  CRONO_MES = m;
-  render();
-}
-
-function renderCronoMes(tarefas) {
-  const [y, m] = CRONO_MES.split('-').map(Number);
-  const ini = new Date(y, m-1, 1);
-  const fim = new Date(y, m, 0, 23, 59);
-  const dias = fim.getDate();
-  const ativas = tarefas.filter(t => t.ini <= fim && t.fim >= ini && !t.resumo)
-    .sort((a, b) => {
-      const ea = a.edt.split('.').map(Number), eb = b.edt.split('.').map(Number);
-      for (let i = 0; i < Math.max(ea.length, eb.length); i++) {
-        const da = ea[i]||0, db = eb[i]||0;
-        if (da !== db) return da - db;
-      }
-      return 0;
-    });
+  // Pegar todos os pacotes ativos
+  const pacotesAtivos = STATE.pacotes.filter(p => p['Status'] !== 'Histórico' && p['ID']);
   
-  const mesesDisp = ['2026-04','2026-05','2026-06','2026-07','2026-08','2026-09'];
-  const mesNomes = {'2026-04':'Abril/26','2026-05':'Maio/26','2026-06':'Junho/26','2026-07':'Julho/26','2026-08':'Agosto/26','2026-09':'Setembro/26'};
-  
+  // Agrupar por frente
+  const porFrente = {};
+  pacotesAtivos.forEach(p => {
+    const f = p['Frente'] || 'Outros';
+    if (!porFrente[f]) porFrente[f] = [];
+    porFrente[f].push(p);
+  });
+
+  const hoje = new Date();
+  hoje.setHours(0,0,0,0);
+
   return `
     <div class="card">
       <div class="card-header">
         <div>
-          <div class="card-title">Tarefas ativas no mês</div>
-          <div class="card-title-sub">${ativas.length} serviços previstos</div>
-        </div>
-        <div class="btn-toggle-group">
-          ${mesesDisp.map(mz => `<button class="btn-toggle ${CRONO_MES===mz?'active':''}" onclick="setCronoMes('${mz}')">${mesNomes[mz]}</button>`).join('')}
+          <div class="card-title">Motor de Planejamento Reverso</div>
+          <div class="card-title-sub">Defina o término alvo e a produtividade. O sistema calcula quando você precisa iniciar (descontando domingos).</div>
         </div>
       </div>
       <div class="card-body flush" style="overflow-x:auto">
-        <table class="t" style="min-width:900px">
-          <thead><tr>
-            <th>EDT</th><th>Serviço</th><th>Início</th><th>Término</th>
-            <th style="width:130px">% Plan.</th><th style="min-width:280px">Linha do tempo do mês</th>
-          </tr></thead>
+        <table class="t" style="min-width: 900px;">
+          <thead>
+            <tr>
+              <th style="width: 25%">Pacote / Serviço</th>
+              <th class="t-num" style="text-align: right; width: 10%">Qtd Total</th>
+              <th style="width: 15%">Término Alvo</th>
+              <th style="width: 15%">Produtividade/dia</th>
+              <th class="t-num" style="text-align: center; width: 10%">Duração</th>
+              <th style="width: 25%">Data Início Necessária</th>
+            </tr>
+          </thead>
           <tbody>
-            ${ativas.map(t => {
-              const tIni = t.ini < ini ? ini : t.ini;
-              const tFim = t.fim > fim ? fim : t.fim;
-              const left = ((tIni.getDate()-1)/dias)*100;
-              const width = ((tFim.getDate()-tIni.getDate()+1)/dias)*100;
-              return `
-                <tr>
-                  <td class="t-mono">${t.edt}</td>
-                  <td style="padding-left:${14 + Math.min(t.nivel,4)*12}px">${t.nome}</td>
-                  <td style="font-size:12px">${fmtData(t.ini)}</td>
-                  <td style="font-size:12px">${fmtData(t.fim)}</td>
-                  <td>
-                    <div style="display:flex;align-items:center;gap:6px">
-                      <div class="prog-bar-wrap" style="width:60px"><div class="prog-bar ${t.pct >= 0.999 ? 'completo' : t.pct > 0 ? 'parcial' : 'zero'}" style="width:${t.pct*100}%"></div></div>
-                      <span class="t-num" style="font-size:11px;min-width:36px">${fmtPct(t.pct)}</span>
-                    </div>
-                  </td>
-                  <td>
-                    <div style="position:relative;height:22px;background:var(--bg);border-radius:4px;overflow:hidden">
-                      <div style="position:absolute;left:${left}%;width:${width}%;top:3px;height:16px;background:var(--pri);border-radius:3px;display:flex;align-items:center;justify-content:center;font-size:9px;color:#fff;font-weight:600">${width > 12 ? tIni.getDate()+'-'+tFim.getDate() : ''}</div>
-                    </div>
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-            ${ativas.length === 0 ? '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--muted)">Nenhuma tarefa nesse mês.</td></tr>' : ''}
+            ${Object.entries(porFrente).map(([frente, pacotes]) => `
+              <tr class="summary"><td colspan="6">${frente}</td></tr>
+              ${pacotes.map(p => {
+                const pid = p['ID'];
+                const plan = PLAN_DADOS[pid] || { prod: '', dataFim: '' };
+                const qtdTotal = num(p['Qtd Estimada']);
+                const unid = p['Unidade Física'] || '';
+                
+                let duracaoDias = 0;
+                let dataInicioStr = '<span style="color:var(--muted)">Aguardando dados...</span>';
+                let alertClass = '';
+
+                if (plan.prod > 0 && plan.dataFim) {
+                  duracaoDias = qtdTotal / plan.prod;
+                  const dataInicio = calcularDataInicioReversa(plan.dataFim, duracaoDias);
+                  
+                  if (dataInicio) {
+                    const strFormatada = fmtData(dataInicio);
+                    // Se a data de início já passou do dia de hoje, está atrasado para começar
+                    if (dataInicio < hoje) {
+                      alertClass = 'color: var(--red); font-weight: bold;';
+                      dataInicioStr = `⚠️ ${strFormatada} (Atrasado!)`;
+                    } else {
+                      alertClass = 'color: var(--grn); font-weight: bold;';
+                      dataInicioStr = `✅ ${strFormatada} (No prazo)`;
+                    }
+                  }
+                }
+
+                return `
+                  <tr>
+                    <td><strong>${p['Pacote']}</strong></td>
+                    <td class="t-num">${fmtNum(qtdTotal)} ${unid}</td>
+                    <td>
+                      <input type="date" style="padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" 
+                             value="${plan.dataFim}" 
+                             onchange="atualizarPlan('${pid}', 'dataFim', this.value)">
+                    </td>
+                    <td>
+                      <div style="display:flex; align-items:center; gap: 4px;">
+                        <input type="number" style="width: 70px; padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" 
+                               placeholder="Ex: 40" value="${plan.prod}" 
+                               onkeyup="if(event.key==='Enter') atualizarPlan('${pid}', 'prod', this.value)"
+                               onblur="atualizarPlan('${pid}', 'prod', this.value)">
+                        <span style="font-size: 11px; color: var(--muted);">${unid}/dia</span>
+                      </div>
+                    </td>
+                    <td class="t-num" style="text-align: center;">
+                      ${duracaoDias > 0 ? Math.ceil(duracaoDias) + ' dias' : '—'}
+                    </td>
+                    <td style="font-size: 13px; ${alertClass}">
+                      ${dataInicioStr}
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            `).join('')}
           </tbody>
         </table>
       </div>
     </div>
-  `;
-}
-
-function renderCronoFases(tarefas) {
-  // Agrupar por nível 1 (FASE 0, FASE 1, ...) baseado no EDT
-  const fases = {};
-  tarefas.forEach(t => {
-    const edtParts = t.edt.split('.');
-    const root = edtParts[0];  // pega o "1.X.Y" → "1"
-    if (!fases[root]) {
-      fases[root] = { tarefas: [], nome: '', resumoTopo: null };
-    }
-    if (t.nivel === 2 && edtParts.length === 1) {
-      // É a tarefa de nível superior (resumo da fase)
-      fases[root].nome = t.nome;
-      fases[root].resumoTopo = t;
-    } else {
-      fases[root].tarefas.push(t);
-    }
-  });
-  
-  // Procurar nomes pelos resumos
-  tarefas.forEach(t => {
-    if (t.resumo && t.nivel <= 2) {
-      const root = t.edt.split('.')[0];
-      if (fases[root] && !fases[root].nome) fases[root].nome = t.nome;
-    }
-  });
-  
-  return `
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Cronograma por fase</div>
-          <div class="card-title-sub">Estrutura hierárquica do Project · % planejado</div>
-        </div>
-      </div>
-      <div class="card-body">
-        ${Object.entries(fases)
-          .sort((a,b) => parseInt(a[0]) - parseInt(b[0]))
-          .map(([rid, f]) => {
-            const sub = f.tarefas.filter(t => !t.resumo).slice(0, 80);
-            const pctMedio = sub.length > 0 ? sub.reduce((s,t)=>s+t.pct, 0)/sub.length : 0;
-            const inis = sub.map(t=>t.ini).filter(Boolean);
-            const fims = sub.map(t=>t.fim).filter(Boolean);
-            const dataIni = inis.length ? new Date(Math.min(...inis)) : null;
-            const dataFim = fims.length ? new Date(Math.max(...fims)) : null;
-            return `
-              <div style="margin-bottom:18px;border:1px solid var(--border);border-radius:var(--r);overflow:hidden">
-                <div style="padding:14px 18px;background:var(--surface-2);display:flex;justify-content:space-between;align-items:center;cursor:pointer;flex-wrap:wrap;gap:10px" onclick="document.getElementById('fase-${rid}').classList.toggle('hidden')">
-                  <div>
-                    <div style="font-size:14px;font-weight:600">FASE ${rid}: ${f.nome || '(sem título)'}</div>
-                    <div style="font-size:11px;color:var(--muted);margin-top:2px">
-                      ${dataIni ? fmtData(dataIni) : '—'} → ${dataFim ? fmtData(dataFim) : '—'}
-                      · ${sub.length} sub-tarefa${sub.length>1?'s':''}
-                    </div>
-                  </div>
-                  <div style="display:flex;align-items:center;gap:10px">
-                    <div class="prog-bar-wrap" style="width:120px"><div class="prog-bar ${pctMedio >= 0.999 ? 'completo' : pctMedio > 0 ? 'parcial' : 'zero'}" style="width:${pctMedio*100}%"></div></div>
-                    <span class="t-num" style="font-weight:600;min-width:48px">${fmtPct(pctMedio)}</span>
-                    <span style="color:var(--muted);font-size:14px">▾</span>
-                  </div>
-                </div>
-                <div id="fase-${rid}" class="hidden" style="padding:14px 18px">
-                  <table class="t">
-                    <tbody>
-                      ${sub.slice(0, 30).map(t => `
-                        <tr>
-                          <td class="t-mono" style="width:80px">${t.edt}</td>
-                          <td>${t.nome}</td>
-                          <td style="font-size:12px;color:var(--muted)">${fmtData(t.ini)} → ${fmtData(t.fim)}</td>
-                          <td style="width:140px">
-                            <div style="display:flex;align-items:center;gap:6px">
-                              <div class="prog-bar-wrap" style="width:60px"><div class="prog-bar ${t.pct >= 0.999 ? 'completo' : t.pct > 0 ? 'parcial' : 'zero'}" style="width:${t.pct*100}%"></div></div>
-                              <span class="t-num" style="font-size:11px">${fmtPct(t.pct)}</span>
-                            </div>
-                          </td>
-                        </tr>
-                      `).join('')}
-                      ${sub.length > 30 ? `<tr><td colspan="4" style="text-align:center;color:var(--muted);font-size:11px">+ ${sub.length - 30} tarefas adicionais</td></tr>` : ''}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            `;
-          }).join('')}
-      </div>
-    </div>
-    <style>.hidden{display:none}</style>
   `;
 }
 
