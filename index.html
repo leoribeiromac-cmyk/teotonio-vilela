@@ -1230,9 +1230,6 @@ function renderHeatmap(av) {
 }
 
 // ====================================================================
-// VIEW: CRONOGRAMA (visão por mês + visão por fase)
-// ====================================================================
-// ====================================================================
 // VIEW: CRONOGRAMA FÍSICO (Planejamento Reverso)
 // ====================================================================
 
@@ -1357,96 +1354,49 @@ function renderCronograma() {
                     // Compara com o dia de hoje pra ver se a tarefa já devia ter começado
                     if (dataInicio < hoje) {
                       alertClass = 'color: var(--red); font-weight: bold;';
-                      dataInicioStr = \`⚠️ \${strFormatada} (Atrasado!)\`;
+                      dataInicioStr = '⚠️ ' + strFormatada + ' (Atrasado!)';
                     } else {
                       alertClass = 'color: var(--blu); font-weight: bold;';
-                      dataInicioStr = \`📅 \${strFormatada}\`;
+                      dataInicioStr = '📅 ' + strFormatada;
                     }
                   }
                 }
 
-                return \`
+                return `
                   <tr>
                     <td>
-                        <strong>\${p['Pacote']}</strong>
-                        <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">Total: \${fmtNum(qtdTotal)} | Executado: \${fmtNum(qtdExecutada)}</div>
+                        <strong>${p['Pacote']}</strong>
+                        <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">Total: ${fmtNum(qtdTotal)} | Executado: ${fmtNum(qtdExecutada)}</div>
                     </td>
-                    <td class="t-num" style="color: \${saldo > 0 ? 'var(--text)' : 'var(--grn)'}; font-weight: 600; text-align: right;">
-                        \${fmtNum(saldo)} \${unid}
-                    </td>
-                    <td>
-                      \${saldo > 0 ? \`<input type="date" style="padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" 
-                             value="\${plan.dataFim}" 
-                             onchange="atualizarPlan('\${pid}', 'dataFim', this.value)">\` : '—'}
+                    <td class="t-num" style="color: ${saldo > 0 ? 'var(--text)' : 'var(--grn)'}; font-weight: 600; text-align: right;">
+                        ${fmtNum(saldo)} ${unid}
                     </td>
                     <td>
-                      \${saldo > 0 ? \`<div style="display:flex; align-items:center; gap: 4px;">
+                      ${saldo > 0 ? `<input type="date" style="padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" 
+                             value="${plan.dataFim}" 
+                             onchange="atualizarPlan('${pid}', 'dataFim', this.value)">` : '—'}
+                    </td>
+                    <td>
+                      ${saldo > 0 ? `<div style="display:flex; align-items:center; gap: 4px;">
                         <input type="number" style="width: 70px; padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" 
-                               placeholder="Ex: 40" value="\${plan.prod}" 
-                               onkeyup="if(event.key==='Enter') atualizarPlan('\${pid}', 'prod', this.value)"
-                               onblur="atualizarPlan('\${pid}', 'prod', this.value)">
-                        <span style="font-size: 11px; color: var(--muted);">\${unid}/dia</span>
-                      </div>\` : '—'}
+                               placeholder="Ex: 40" value="${plan.prod}" 
+                               onkeyup="if(event.key==='Enter') atualizarPlan('${pid}', 'prod', this.value)"
+                               onblur="atualizarPlan('${pid}', 'prod', this.value)">
+                        <span style="font-size: 11px; color: var(--muted);">${unid}/dia</span>
+                      </div>` : '—'}
                     </td>
                     <td class="t-num" style="text-align: center;">
-                      \${duracaoDias > 0 ? Math.ceil(duracaoDias) + ' dias' : '—'}
+                      ${duracaoDias > 0 ? Math.ceil(duracaoDias) + ' dias' : '—'}
                     </td>
-                    <td style="font-size: 13px; \${alertClass}">
-                      \${dataInicioStr}
+                    <td style="font-size: 13px; ${alertClass}">
+                      ${dataInicioStr}
                     </td>
                   </tr>
-                \`;
+                `;
               }).join('')}
             `).join('')}
           </tbody>
         </table>
-      </div>
-    </div>
-  `;
-}
-
-// ====================================================================
-// VIEW: APOIO À MEDIÇÃO
-// ====================================================================
-function renderMedicao() {
-  const av = calcularAvancoPorPacote();
-  const consumo = calcularConsumoItens(av);
-  const lista = Object.values(consumo).filter(x => x.consumido > 0)
-    .sort((a,b) => b.consumido - a.consumido);
-  
-  return `
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Consumo derivado por item contratual</div>
-          <div class="card-title-sub">Calculado a partir dos RDOs × matriz de coeficientes (33 pacotes × 104 coefs)</div>
-        </div>
-        <div style="font-size:11px;color:var(--muted)">${lista.length} itens com consumo</div>
-      </div>
-      <div class="card-body flush">
-        ${lista.length === 0 ?
-          '<div class="empty"><div class="empty-icon">⌗</div><div class="empty-title">Nada consumido ainda</div><div class="empty-sub">Quando você lançar RDOs com pacote e quantidade, esta tabela vai mostrar QUANTO de cada item contratual foi consumido — pronto pra montar a memória de cálculo da medição mensal.</div></div>' :
-          `<table class="t">
-            <thead>
-              <tr>
-                <th>Código</th><th>Descrição</th><th>Unid.</th>
-                <th class="t-num" style="text-align:right">Consumido</th>
-                <th>Pacotes que contribuíram</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${lista.map(x => `
-                <tr>
-                  <td class="t-mono"><strong>${x.item}</strong></td>
-                  <td>${x.descricao}</td>
-                  <td><span class="t-mono">${x.unidadeItem}</span></td>
-                  <td class="t-num" style="font-weight:600">${fmtNum(x.consumido)}</td>
-                  <td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>`
-        }
       </div>
     </div>
   `;
@@ -2330,7 +2280,7 @@ function renderFormularioTurno() {
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-outline" onclick="resetTurnoV4()">Limpar turno</button>
-        <button class="btn btn-acc" onclick="TurnoV4()">📊 PDF Interno do turno</button>
+        <button class="btn btn-acc" ">📊 PDF Interno do turno</button>
         <button class="btn btn-primary btn-lg" id="btnSalvarDiarioV4" onclick="salvarDiarioV4()">💾 Salvar turno</button>
       </div>
     </div>
