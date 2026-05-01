@@ -2071,7 +2071,7 @@ function renderRDODiarioV3() {
       <div class="card-header">
         <div>
           <div class="card-title">Identificação do dia</div>
-          <div class="card-title-sub">1 RDO por data · pode ter apontador diurno e noturno separados</div>
+          <div class="card-title-sub">1 RDO por data · apontadores Diurno e Noturno preenchem juntos</div>
         </div>
       </div>
       <div class="card-body">
@@ -2085,18 +2085,9 @@ function renderRDODiarioV3() {
             <input type="text" data-diario3="apontador_diurno" value="${d.apontador_diurno||''}" placeholder="Nome do apontador do dia">
           </div>
           <div class="field">
-            <label>Tem turno noturno?</label>
-            <div class="btn-toggle-group">
-              <button type="button" class="btn-toggle ${!d.tem_turno_noturno?'active':''}" onclick="setTurnoNoturnoV3(false)">Não</button>
-              <button type="button" class="btn-toggle ${d.tem_turno_noturno?'active':''}" onclick="setTurnoNoturnoV3(true)">Sim</button>
-            </div>
+            <label>Apontador Noturno</label>
+            <input type="text" data-diario3="apontador_noturno" value="${d.apontador_noturno||''}" placeholder="Nome do apontador da noite (se houver)">
           </div>
-          ${d.tem_turno_noturno ? `
-            <div class="field" style="grid-column:1/-1">
-              <label>Apontador Noturno</label>
-              <input type="text" data-diario3="apontador_noturno" value="${d.apontador_noturno||''}" placeholder="Nome do apontador da noite">
-            </div>
-          ` : ''}
         </div>
       </div>
     </div>
@@ -2132,8 +2123,8 @@ function renderRDODiarioV3() {
       </div>
     </div>
     
-    ${renderEfetivoBlock('INDIRETO', CATEGORIAS_INDIRETO, d.tem_turno_noturno, d, 'indireto')}
-    ${renderEfetivoBlock('DIRETO', CATEGORIAS_DIRETO, d.tem_turno_noturno, d, 'direto')}
+    ${renderEfetivoBlock('INDIRETO', CATEGORIAS_INDIRETO, true, d, 'indireto')}
+    ${renderEfetivoBlock('DIRETO', CATEGORIAS_DIRETO, true, d, 'direto')}
     
     <div class="card stagger-item" style="animation-delay:.3s">
       <div class="card-header">
@@ -2688,10 +2679,6 @@ function gerarPDFDiario(data) {
   // Limitar a 14 pra não estourar
   categorias = categorias.slice(0, 14);
   
-  // Pegar serviços pra coluna comentários
-  const servicosTodos = [...servicosDiurnos, ...servicosNoturnos];
-  let svcIdx = 0;
-  
   let tcd = 0, tci = 0, ttd = 0, tti = 0;
   categorias.forEach((cat, i) => {
     let diu, not;
@@ -2719,18 +2706,6 @@ function gerarPDFDiario(data) {
     if (tot > 0) { sf(6.5, 'bold', NAV); tx(String(tot), ML + CD + 4 * CN + CT / 2, y + EH * 0.72, { align: 'center' }); }
     rf(ML + CD + 4 * CN + CT, y, CO, EH, bg, BD);
     
-    // Coluna observações: nomes de serviços executados
-    if (svcIdx < servicosTodos.length) {
-      const s = servicosTodos[svcIdx];
-      const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
-      const frente = pacote ? (pacote['Frente'] || '') : '';
-      const turnoTag = (s['Turno'] === 'Noturno') ? '🌙' : '☀';
-      const linhaServ = `${turnoTag} ${frente ? frente + ' · ' : ''}${s['Pacote_Nome'] || ''} (${s['Local_Estaca'] || '-'})`;
-      sf(4.8, 'normal', [30, 30, 30]);
-      const sl = doc.splitTextToSize(linhaServ, CO - 2);
-      tx(sl[0], ML + CD + 4 * CN + CT + 1.2, y + EH * 0.72);
-      svcIdx++;
-    }
     y += EH;
   });
   
@@ -2753,19 +2728,23 @@ function gerarPDFDiario(data) {
   if (y < PH - 90) {
     function renderServicosBlock(titulo, lista, corBlock) {
       rf(ML, y, TW, 4.5, corBlock); sf(6.5, 'bold', W); tx(titulo, ML + 2, y + 3); y += 4.5;
-      const SH = 3.2;
+      const SH = 4;  // altura linha aumentada
+      // Larguras: PACOTE bem largo (60%), LOCAL (15%), QTD (8%), UN (5%), EQUIPE (12%)
+      const wPac = TW * 0.60, wLoc = TW * 0.15, wQtd = TW * 0.08, wUn = TW * 0.05, wEq = TW * 0.12;
+      const xPac = ML, xLoc = xPac + wPac, xQtd = xLoc + wLoc, xUn = xQtd + wQtd, xEq = xUn + wUn;
+      
       // Header
-      rf(ML, y, TW * 0.45, SH, LB, BD); sf(4.5, 'bold', NAV); tx('PACOTE', ML + 2, y + SH * 0.72);
-      rf(ML + TW * 0.45, y, TW * 0.18, SH, LB, BD); sf(4.5, 'bold', NAV); tx('LOCAL', ML + TW * 0.45 + 2, y + SH * 0.72);
-      rf(ML + TW * 0.63, y, TW * 0.10, SH, LB, BD); sf(4.5, 'bold', NAV); tx('QTD', ML + TW * 0.63 + TW * 0.05, y + SH * 0.72, { align: 'center' });
-      rf(ML + TW * 0.73, y, TW * 0.07, SH, LB, BD); sf(4.5, 'bold', NAV); tx('UN', ML + TW * 0.73 + TW * 0.035, y + SH * 0.72, { align: 'center' });
-      rf(ML + TW * 0.80, y, TW * 0.20, SH, LB, BD); sf(4.5, 'bold', NAV); tx('EQUIPE / SUBC.', ML + TW * 0.80 + 2, y + SH * 0.72);
+      rf(xPac, y, wPac, SH, LB, BD); sf(5, 'bold', NAV); tx('FRENTE / PACOTE', xPac + 2, y + SH * 0.72);
+      rf(xLoc, y, wLoc, SH, LB, BD); sf(5, 'bold', NAV); tx('LOCAL', xLoc + 2, y + SH * 0.72);
+      rf(xQtd, y, wQtd, SH, LB, BD); sf(5, 'bold', NAV); tx('QTD', xQtd + wQtd / 2, y + SH * 0.72, { align: 'center' });
+      rf(xUn, y, wUn, SH, LB, BD); sf(5, 'bold', NAV); tx('UN', xUn + wUn / 2, y + SH * 0.72, { align: 'center' });
+      rf(xEq, y, wEq, SH, LB, BD); sf(5, 'bold', NAV); tx('EQUIPE', xEq + 2, y + SH * 0.72);
       y += SH;
       
       if (lista.length === 0) {
-        rf(ML, y, TW, SH, [253, 246, 230], BD);
-        sf(5, 'italic', [140, 90, 30]);
-        tx('— sem serviços neste turno —', ML + TW/2, y + SH * 0.72, { align: 'center' });
+        rf(xPac, y, TW, SH, [253, 246, 230], BD);
+        sf(5.5, 'italic', [140, 90, 30]);
+        tx('— sem serviços neste turno —', xPac + TW / 2, y + SH * 0.72, { align: 'center' });
         y += SH;
       } else {
         lista.forEach((s, i) => {
@@ -2773,16 +2752,37 @@ function gerarPDFDiario(data) {
           const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
           const frente = pacote ? (pacote['Frente'] || '') : '';
           
-          rf(ML, y, TW * 0.45, SH, bg, BD); sf(5, 'normal', [0, 0, 0]);
-          tx((frente ? frente.substring(0,4) + '·' : '') + (s['Pacote_Nome'] || '').substring(0, 35), ML + 1.5, y + SH * 0.72);
-          rf(ML + TW * 0.45, y, TW * 0.18, SH, bg, BD); sf(5, 'normal', [40, 40, 40]);
-          tx(String(s['Local_Estaca'] || '').substring(0, 16), ML + TW * 0.45 + 1.5, y + SH * 0.72);
-          rf(ML + TW * 0.63, y, TW * 0.10, SH, bg, BD); sf(5, 'bold', NAV);
-          tx(fmtNum(num(s['Quantidade'])), ML + TW * 0.63 + TW * 0.045, y + SH * 0.72, { align: 'right' });
-          rf(ML + TW * 0.73, y, TW * 0.07, SH, bg, BD); sf(5, 'normal', DG);
-          tx(s['Unidade'] || '', ML + TW * 0.73 + TW * 0.035, y + SH * 0.72, { align: 'center' });
-          rf(ML + TW * 0.80, y, TW * 0.20, SH, bg, BD); sf(5, 'normal', [0, 0, 0]);
-          tx(String(s['Equipe'] || s['Subcontratado'] || '').substring(0, 22), ML + TW * 0.80 + 1.5, y + SH * 0.72);
+          // PACOTE: nome completo, com quebra de linha se necessário (até 2 linhas)
+          rf(xPac, y, wPac, SH, bg, BD); sf(5.5, 'normal', [0, 0, 0]);
+          const txtPacote = (frente ? frente + ' · ' : '') + (s['Pacote_Nome'] || '');
+          const linhasPac = doc.splitTextToSize(txtPacote, wPac - 3);
+          // Se cabe em 1 linha, centraliza vertical; senão usa as 2 primeiras
+          if (linhasPac.length === 1) {
+            tx(linhasPac[0], xPac + 1.5, y + SH * 0.72);
+          } else {
+            sf(4.8, 'normal', [0, 0, 0]);
+            tx(linhasPac[0], xPac + 1.5, y + SH * 0.45);
+            tx(linhasPac[1] || '', xPac + 1.5, y + SH * 0.85);
+          }
+          
+          // LOCAL: estaca completa
+          rf(xLoc, y, wLoc, SH, bg, BD); sf(5.5, 'normal', [40, 40, 40]);
+          tx(String(s['Local_Estaca'] || ''), xLoc + 1.5, y + SH * 0.72);
+          
+          // QTD
+          rf(xQtd, y, wQtd, SH, bg, BD); sf(5.5, 'bold', NAV);
+          tx(fmtNum(num(s['Quantidade'])), xQtd + wQtd - 2, y + SH * 0.72, { align: 'right' });
+          
+          // UN
+          rf(xUn, y, wUn, SH, bg, BD); sf(5, 'normal', DG);
+          tx(s['Unidade'] || '', xUn + wUn / 2, y + SH * 0.72, { align: 'center' });
+          
+          // EQUIPE: pode abreviar pq é menor
+          rf(xEq, y, wEq, SH, bg, BD); sf(5, 'normal', [0, 0, 0]);
+          const txtEq = String(s['Equipe'] || s['Subcontratado'] || '');
+          const linhasEq = doc.splitTextToSize(txtEq, wEq - 2);
+          tx(linhasEq[0] || '', xEq + 1.5, y + SH * 0.72);
+          
           y += SH;
         });
       }
