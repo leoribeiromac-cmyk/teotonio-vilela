@@ -3053,9 +3053,9 @@ function gerarPDFDiario(data) {
 }
 
 function gerarPDFInternoTurnoV4() {
-  // Reutiliza o gerarPDFInterno mas só do turno ativo
+  // Agora passamos o DIARIO_TURNO_ATIVO para a função saber qual turno isolar
   if (typeof gerarPDFInterno === 'function') {
-    gerarPDFInterno(DIARIO_V4.data);
+    gerarPDFInterno(DIARIO_V4.data, DIARIO_TURNO_ATIVO);
   } else {
     toast('PDF Interno indisponível', 'error');
   }
@@ -3074,7 +3074,7 @@ function gerarPDFDiarioV4(data) {
 // ====================================================================
 // PDF INTERNO — Visual, pra mandar no grupo (sem logos formais)
 // ====================================================================
-function gerarPDFInterno(data) {
+function gerarPDFInterno(data, turnoFocus) {
   const fromSheet = (STATE.rdodiario || []).find(r => {
     const rd = String(r['Data']);
     return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
@@ -3135,16 +3135,49 @@ function gerarPDFInterno(data) {
 
   if (!d) { toast('Não encontrei o RDO Diário pra gerar PDF', 'error'); return; }
 
-  const servicosDiurnos = STATE.rdoavanco.filter(r => {
+  // --- LÓGICA DE ISOLAMENTO DO TURNO ---
+  if (turnoFocus === 'diurno') {
+    d.tem_turno_noturno = false;
+    d.apontador_noturno = '';
+    d.efetivo_noturno = {};
+    d.equipamentos_noturno = {};
+    d.customIndireto_noturno = [];
+    d.customDireto_noturno = [];
+    d.customEquip_noturno = [];
+    if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
+      d.visitas = DIARIO_V4.diurno.visitas || '';
+      d.ocorrencias = DIARIO_V4.diurno.ocorrencias || '';
+      d.observacoes_gerais = DIARIO_V4.diurno.observacoes || '';
+    }
+  } else if (turnoFocus === 'noturno') {
+    d.tem_turno_noturno = false;
+    d.apontador_diurno = '';
+    d.efetivo_diurno = {};
+    d.equipamentos_diurno = {};
+    d.customIndireto_diurno = [];
+    d.customDireto_diurno = [];
+    d.customEquip_diurno = [];
+    if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
+      d.visitas = DIARIO_V4.noturno.visitas || '';
+      d.ocorrencias = DIARIO_V4.noturno.ocorrencias || '';
+      d.observacoes_gerais = DIARIO_V4.noturno.observacoes || '';
+    }
+  }
+
+  let servicosDiurnos = STATE.rdoavanco.filter(r => {
     const rd = parseISODate(r['Data']);
     if (!rd) return false;
     return fmtData(rd) === fmtData(data) && (r['Turno']||'Diurno') === 'Diurno';
   });
-  const servicosNoturnos = STATE.rdoavanco.filter(r => {
+  let servicosNoturnos = STATE.rdoavanco.filter(r => {
     const rd = parseISODate(r['Data']);
     if (!rd) return false;
     return fmtData(rd) === fmtData(data) && r['Turno'] === 'Noturno';
   });
+
+  if (turnoFocus === 'diurno') servicosNoturnos = [];
+  if (turnoFocus === 'noturno') servicosDiurnos = [];
+  // ------------------------------------
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -3189,7 +3222,9 @@ function gerarPDFInterno(data) {
   sf(8, 'normal', [180, 175, 168]);
   tx(diaSem.toUpperCase() + ' · ' + dataFmt, ML, 27);
 
-  const tipoTxt = d.tem_turno_noturno ? 'DIURNO + NOTURNO' : 'DIURNO';
+  let tipoTxt = d.tem_turno_noturno ? 'DIURNO + NOTURNO' : 'DIURNO';
+  if (turnoFocus) tipoTxt = turnoFocus.toUpperCase();
+  
   rect(PW - ML - 50, 8, 50, 18, TERRACOTA);
   sf(7, 'bold', [255, 255, 255]);
   tx('TURNO', PW - ML - 25, 13, { align: 'center' });
@@ -3305,7 +3340,7 @@ function gerarPDFInterno(data) {
   if (totalServicos === 0) {
     rect(ML, y, TW, 14, [253, 246, 230]);
     sf(9, 'italic', [140, 90, 30]);
-    tx('Nenhum serviço lançado pra esta data.', ML + 4, y + 9);
+    tx('Nenhum serviço lançado pra este turno.', ML + 4, y + 9);
     y += 18;
   }
 
@@ -3464,50 +3499,27 @@ function gerarPDFInterno(data) {
     }
   }
 
-  // RODAPÉ
+  // RODAPÉ COM NOME ESPECÍFICO DO APONTADOR DO TURNO
+  let rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—') + (d.apontador_noturno ? '  ·  Noturno: ' + d.apontador_noturno : '');
+  if (turnoFocus === 'diurno') rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—');
+  if (turnoFocus === 'noturno') rodapeTxt = 'Apontador Noturno: ' + (d.apontador_noturno || '—');
+
   rect(0, PH - 14, PW, 14, NAVY);
   sf(8, 'bold', [255, 255, 255]);
   tx('CONSÓRCIO ARVEK + GESTOR', ML, PH - 8);
   sf(7, 'normal', [180, 175, 168]);
-  tx('Apontador Diurno: ' + (d.apontador_diurno || '—') + (d.apontador_noturno ? '  ·  Noturno: ' + d.apontador_noturno : ''), ML, PH - 4);
+  tx(rodapeTxt, ML, PH - 4);
   
   sf(7, 'normal', [180, 175, 168]);
   tx('Gerado em ' + new Date().toLocaleString('pt-BR'), PW - ML, PH - 4, { align: 'right' });
 
-  const fname = 'RDO_INTERNO_' + data.replace(/-/g, '_') + '.pdf';
+  // Nomeia o arquivo de acordo com o turno para não sobrepor se salvarem ambos
+  let fname = 'RDO_INTERNO_' + data.replace(/-/g, '_');
+  if (turnoFocus) fname += '_' + turnoFocus.toUpperCase();
+  fname += '.pdf';
   doc.save(fname);
   toast('PDF Interno gerado: ' + fname, 'success');
 }
-
-
-function sheetRowToDiario(r) {
-  const d = {
-    data: parseISODate(r['Data']) ? parseISODate(r['Data']).toISOString().split('T')[0] : String(r['Data']),
-    encarregado: r['Encarregado']||'',
-    apontador: r['Apontador']||'',
-    clima_manha: r['Clima_Manha']||'',
-    clima_tarde: r['Clima_Tarde']||'',
-    clima_noite: r['Clima_Noite']||'',
-    tem_turno_noturno: r['Tem_Turno_Noturno'] === 'Sim',
-    visitas: r['Visitas']||'',
-    ocorrencias: r['Ocorrencias']||'',
-    observacoes_gerais: r['Observacoes_Gerais']||'',
-  };
-  CATEGORIAS_MO.forEach(c => {
-    const colDiu = Object.keys(r).find(k => k.toLowerCase().includes(c.key.toLowerCase()) && k.toLowerCase().includes('diurno'));
-    const colNot = Object.keys(r).find(k => k.toLowerCase().includes(c.key.toLowerCase()) && k.toLowerCase().includes('noturno'));
-    d[c.key + '_diurno'] = colDiu ? (r[colDiu]||'') : '';
-    d[c.key + '_noturno'] = colNot ? (r[colNot]||'') : '';
-  });
-  CATEGORIAS_EQUIP.forEach(c => {
-    const col = Object.keys(r).find(k => k.toLowerCase().replace(/_/g,'') === c.key.toLowerCase().replace(/_/g,''));
-    d[c.key] = col ? (r[col]||'') : '';
-  });
-  return d;
-}
-
-function navegacaoRDODiario() {} // placeholder pra compat
-
 // Export funções
 
 // ====================================================================
