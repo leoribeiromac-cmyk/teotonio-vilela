@@ -900,7 +900,7 @@ function render() {
   else if (STATE.currentPage === 'cronograma') page.innerHTML = renderCronograma();
   else if (STATE.currentPage === 'medicao') page.innerHTML = renderMedicao();
   else if (STATE.currentPage === 'rdo') { page.innerHTML = renderRDO(); attachRDOForm(); }
-  else if (STATE.currentPage === 'rdodiario') { page.innerHTML = renderRDODiario(); attachRDODiarioForm(); }
+  else if (STATE.currentPage === 'rdodiario') { page.innerHTML = renderRDODiarioV3(); attachRDODiarioV3Form(); }
   else if (STATE.currentPage === 'historico') page.innerHTML = renderHistorico();
   
   // Após render, montar gráficos se aplicável
@@ -2664,15 +2664,15 @@ function gerarPDFDiario(data) {
   
   // Cabeçalho 1
   rf(ML, y, CD, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('DESCRIÇÃO', ML + 2, y + EH);
-  rf(ML + CD, y, CN * 2, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('DIRETO', ML + CD + CN, y + EH, { align: 'center' });
-  rf(ML + CD + CN * 2, y, CN * 2, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('INDIRETO', ML + CD + CN * 3, y + EH, { align: 'center' });
+  rf(ML + CD, y, CN * 2, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('DIURNO', ML + CD + CN, y + EH, { align: 'center' });
+  rf(ML + CD + CN * 2, y, CN * 2, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('NOTURNO', ML + CD + CN * 3, y + EH, { align: 'center' });
   rf(ML + CD + CN * 4, y, CT, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('TOT.', ML + CD + CN * 4 + CT / 2, y + EH, { align: 'center' });
   rf(ML + CD + CN * 4 + CT, y, CO, EH * 1.5, LB, BD); sf(5, 'bold', NAV); tx('COMENTÁRIOS / ATIVIDADES', ML + CD + CN * 4 + CT + 2, y + EH);
   y += EH * 1.5;
   
   // Cabeçalho 2
   rf(ML, y, CD, EH, LB, BD);
-  ['Cons.', 'Contr.', 'Cons.', 'Contr.'].forEach((l, i) => {
+  ['Direto', 'Indireto', 'Direto', 'Indireto'].forEach((l, i) => {
     rf(ML + CD + i * CN, y, CN, EH, LB, BD); sf(4.5, 'bold', NAV);
     tx(l, ML + CD + (i + 0.5) * CN, y + EH * 0.72, { align: 'center' });
   });
@@ -2684,15 +2684,23 @@ function gerarPDFDiario(data) {
   // No antigo, "Direto" = Cons.+Contr. e "Indireto" = Cons.+Contr.
   // Vamos: Direto Cons. = Diurno; Direto Contr. = Noturno; Indireto = (zero por enquanto)
   // Para nossas 7 categorias, mostrar separadas e indicar Diurno como "Cons." e Noturno como "Contr."
-  const categorias = [
-    { key: 'servente', label: 'Servente' },
-    { key: 'pedreiro', label: 'Pedreiro' },
-    { key: 'armador', label: 'Armador' },
-    { key: 'carpinteiro', label: 'Carpinteiro' },
-    { key: 'opmaquina', label: 'Op. Máquina' },
-    { key: 'sinaleiro', label: 'Sinaleiro' },
-    { key: 'encarregado', label: 'Encarregado' },
-  ];
+  // Categorias: usa todas as 34 (17 indireto + 17 direto)
+  // Cada categoria tem um campo .tipo pra saber se vai na coluna Direto ou Indireto
+  const cats_diretas = (typeof CATEGORIAS_DIRETO !== 'undefined') ? CATEGORIAS_DIRETO.map(c => ({...c, tipo: 'direto'})) : [];
+  const cats_indiretas = (typeof CATEGORIAS_INDIRETO !== 'undefined') ? CATEGORIAS_INDIRETO.map(c => ({...c, tipo: 'indireto'})) : [];
+  // Filtra só as que têm valor (pra não poluir o PDF com 34 linhas vazias)
+  const todasCats = [...cats_indiretas, ...cats_diretas];
+  const categorias = todasCats.filter(c => {
+    const diu = parseInt(d.efetivo && d.efetivo[c.key + '_diurno']) || 0;
+    const not = parseInt(d.efetivo && d.efetivo[c.key + '_noturno']) || 0;
+    return (diu + not) > 0;
+  });
+  // Se nenhuma categoria tem valor, mostra pelo menos 7 placeholders pra preencher página
+  if (categorias.length === 0) {
+    [...cats_indiretas.slice(0,3), ...cats_diretas.slice(0,4)].forEach(c => categorias.push(c));
+  }
+  // Limita a 14 linhas pra não estourar página
+  categorias.length = Math.min(categorias.length, 14);
   
   // Pegar serviços para preencher coluna de comentários
   const servicosTodos = [...servicosDiurnos, ...servicosNoturnos];
@@ -2700,10 +2708,15 @@ function gerarPDFDiario(data) {
   
   let tcd = 0, tci = 0, ttd = 0, tti = 0;
   categorias.forEach((cat, i) => {
-    const cd = parseInt(d[cat.key + '_diurno']) || 0;
-    const ti = parseInt(d[cat.key + '_noturno']) || 0;
-    const ci = 0; // indireto cons. (sem mapping direto)
-    const td = 0; // indireto contr.
+    // Pega valores diurno/noturno - mesmo objeto pra todas categorias
+    const diu = parseInt(d.efetivo && d.efetivo[cat.key + '_diurno']) || 0;
+    const not = parseInt(d.efetivo && d.efetivo[cat.key + '_noturno']) || 0;
+    
+    // Distribui nas 4 colunas baseado no tipo (direto/indireto)
+    const cd = cat.tipo === 'direto' ? diu : 0;     // Diurno-Direto
+    const ci = cat.tipo === 'indireto' ? diu : 0;   // Diurno-Indireto
+    const td = cat.tipo === 'direto' ? not : 0;     // Noturno-Direto
+    const ti = cat.tipo === 'indireto' ? not : 0;   // Noturno-Indireto
     const tot = cd + ci + td + ti;
     tcd += cd; tci += ci; ttd += td; tti += ti;
     
