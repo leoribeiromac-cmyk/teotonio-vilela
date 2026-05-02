@@ -1234,6 +1234,46 @@ function renderHeatmap(av) {
 // ====================================================================
 
 // Estado local para salvar as simulações de prazo e produtividade
+  // Tabela de Produtividade Padrão por Pacote (Ajustada com a realidade da via)
+const PRODUTIVIDADE_PADRAO = {
+  'P01': 6,     // Tubo Ø500mm
+  'P02': 9,     // Tubo Ø600mm
+  'P03': 9,     // Tubo Ø800mm
+  'P04': 9,     // Tubo Ø1000mm
+  'P06': 0.33,  // Boca de Lobo Dupla (1 a cada 3 dias)
+  'P07': 0.25,  // Boca de Lobo Tripla (1 a cada 4 dias)
+  'P08': 0.33,  // PV Tipo 2 (1 a cada 3 dias)
+  'P09': 0.1,   // Bacia de Captação (1 a cada 10 dias)
+  'P10': 0.1,   // Bacia de Dissipação (1 a cada 10 dias)
+  'P11': 10,    // Demolição de sarjeta
+  'P12': 40,    // Demolição de passeio
+  'P13': 40,    // Demolição de piso rígido
+  'P14': 60,    // Demolição de pavimento asfáltico
+  'P15': 40,    // Guia PMSP 100 - via nova
+  'P16': 20,    // Guia PMSP 100 - reposição
+  'P17': 10,    // Superguia SPTrans
+  'P18': 20,    // Sarjeta
+  'P19': 10,    // Sarjetão
+  'P20': 40,    // Passeio cimentado
+  'P21': 8,     // Piso podotátil
+  'P22': 20,    // Vala técnica + dutos
+  'P23': 0.33,  // Caixa subterrânea R1 (1 a cada 3 dias)
+  'P24': 0.2,   // Caixa subterrânea R2 (1 a cada 5 dias)
+  'P25': 40,    // Rachão
+  'P26': 40,    // BGS
+  'P27': 40,    // BGTC
+  'P28': 700,   // Binder asfáltico
+  'P29': 700,   // SMA - Capa de rolamento
+  'P30A': 30,   // Pav. rígido: Preparo + Bases
+  'P30B': 210,  // Pav. rígido: Lona + Imprimações
+  'P30C': 105,  // Pav. rígido: Placa armada
+  'P31': 20,    // Pintura horizontal
+  'P32': 50,    // Tachas/Tachões
+  'P33': 20,    // Sinalização vertical
+  'P34': 0.1,   // Galeria (1 a cada 10 dias)
+  'P35': 50,    // Demolição de muros
+  'P36': 15     // Reconstrução de muros de divisa
+};
 let PLAN_DADOS = null;
 
 function loadPlanDados() {
