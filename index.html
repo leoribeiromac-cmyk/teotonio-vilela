@@ -2287,11 +2287,33 @@ async function salvarDiarioV4() {
   saveDiarioV4(d);
   
   // Verifica se já existe RDO Diário pra esta data na Sheet
-  const existe = (STATE.rdodiario || []).some(r => {
-    const rd = String(r['Data']);
+  const sheetRow = (STATE.rdodiario || []).find(r => {
+    const rd = String(r['Data']).replace(/\r/g,'').trim();
     return rd === d.data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === d.data);
   });
-  
+  const existe = !!sheetRow;
+
+  // Se já existe na sheet, garantir que o turno oposto vem da sheet (não da memória vazia)
+  if (sheetRow) {
+    let efetJson = {}, equipJson = {};
+    try { efetJson = JSON.parse(sheetRow['Efetivo_JSON'] || '{}'); } catch(e) {}
+    try { equipJson = JSON.parse(sheetRow['Equipamentos_JSON'] || '{}'); } catch(e) {}
+    const outroTurno = t === 'diurno' ? 'noturno' : 'diurno';
+    // Só preenche o outro turno se ele não tiver dados na memória local
+    if (!d[outroTurno].preenchido) {
+      d[outroTurno].apontador = sheetRow[outroTurno === 'diurno' ? 'Apontador_Diurno' : 'Apontador_Noturno'] || '';
+      d[outroTurno].efetivo = efetJson['padrao_' + outroTurno] || {};
+      d[outroTurno].equipamentos = equipJson['padrao_' + outroTurno] || {};
+      d[outroTurno].customIndireto = efetJson['customIndireto_' + outroTurno] || [];
+      d[outroTurno].customDireto = efetJson['customDireto_' + outroTurno] || [];
+      d[outroTurno].customEquip = equipJson['custom_' + outroTurno] || [];
+      d[outroTurno].visitas = sheetRow[outroTurno === 'diurno' ? 'Visitas_Diurno' : 'Visitas_Noturno'] || sheetRow['Visitas'] || '';
+      d[outroTurno].ocorrencias = sheetRow[outroTurno === 'diurno' ? 'Ocorrencias_Diurno' : 'Ocorrencias_Noturno'] || '';
+      d[outroTurno].observacoes = sheetRow[outroTurno === 'diurno' ? 'Obs_Diurno' : 'Obs_Noturno'] || '';
+      d[outroTurno].preenchido = !!d[outroTurno].apontador;
+    }
+  }
+
   // Construir JSON unificado (combinando os 2 turnos do estado local)
   const efetivoJSON = {
     padrao_diurno: d.diurno.efetivo || {},
@@ -3400,8 +3422,8 @@ function renderRDO() {
     <div class="card stagger-item" style="animation-delay:.05s">
       <div class="card-header">
         <div>
-          <div class="card-title">Cabeçalho do lançamento</div>
-          <div class="card-title-sub">Data, turno e apontador são compartilhados por todos os serviços</div>
+          <div class="card-title">Lançar Serviço</div>
+          <div class="card-title-sub">Data, turno e apontador compartilhados por todos os serviços</div>
         </div>
       </div>
       <div class="card-body">
@@ -3419,8 +3441,8 @@ function renderRDO() {
         <div style="margin-top:12px">
           <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Turno</label>
           <div class="btn-toggle-group">
-            <button class="btn-toggle ${draft.turno==='Diurno'?'active':''}" onclick="setTurno('Diurno')">&#9728;&#65039; Diurno</button>
-            <button class="btn-toggle ${draft.turno==='Noturno'?'active':''}" onclick="setTurno('Noturno')">&#127769; Noturno</button>
+            <button class="btn-toggle ${draft.turno==='Diurno'?'active':''}" onclick="setTurno('Diurno')">Diurno</button>
+            <button class="btn-toggle ${draft.turno==='Noturno'?'active':''}" onclick="setTurno('Noturno')">Noturno</button>
           </div>
         </div>
       </div>
@@ -3428,12 +3450,12 @@ function renderRDO() {
     <div id="servicos-container">
       ${draft.servicos.map((s, i) => renderServicoRow(s, i, frentesUnicas)).join('')}
     </div>
-    <button class="btn-add-servico" onclick="adicionarServico()">+ Adicionar servi&ccedil;o</button>
+    <button class="btn-add-servico" onclick="adicionarServico()">+ Adicionar serviço</button>
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px">
-      <div style="font-size:12px;color:var(--muted)">Cada linha &eacute; gravada individualmente na aba RDO_Avanco</div>
+      <div style="font-size:12px;color:var(--muted)">Cada linha é gravada individualmente na aba RDO_Avanco</div>
       <div style="display:flex;gap:10px">
         <button class="btn btn-outline" onclick="resetDraft()">Limpar tudo</button>
-        <button class="btn btn-primary btn-lg" id="btnSalvarRDO" onclick="salvarRDO()">Salvar servi&ccedil;os</button>
+        <button class="btn btn-primary btn-lg" id="btnSalvarRDO" onclick="salvarRDO()">Salvar serviços</button>
       </div>
     </div>
   `;
@@ -3446,44 +3468,44 @@ function renderServicoRow(s, i, frentesUnicas) {
     ? Array.from({length: CONFIG.estacasBC.fim - CONFIG.estacasBC.ini + 1}, (_, k) => 'E' + (CONFIG.estacasBC.ini + k))
     : Array.from({length: CONFIG.estacasCB.fim - CONFIG.estacasCB.ini + 1}, (_, k) => 'E' + (CONFIG.estacasCB.ini + k));
   const pacAtual = STATE.pacotes.find(p => p['ID'] === s.pacoteId);
-  const unidade = pacAtual ? (pacAtual['Unidade F\u00edsica'] || '') : '';
+  const unidade = pacAtual ? (pacAtual['Unidade Física'] || '') : '';
   return `
     <div class="servico-row stagger-item" id="servico-row-${i}" style="animation-delay:${.1+i*.05}s">
-      <span class="row-num">Servi&ccedil;o ${i+1}</span>
-      <button class="btn-remove" onclick="removerServico(${i})" title="Remover">&times;</button>
+      <span class="row-num">Serviço ${i+1}</span>
+      <button class="btn-remove" onclick="removerServico(${i})" title="Remover">×</button>
       <div class="form-grid" style="margin-top:10px">
         <div class="field">
           <label>Frente</label>
           <select onchange="selecionarFrente(${i}, this.value)">
-            <option value="">&#8212; todas as frentes &#8212;</option>
+            <option value="">— todas as frentes —</option>
             ${frentesUnicas.map(f => '<option value="'+f+'" '+(s.frente===f?'selected':'')+'>'+f+'</option>').join('')}
           </select>
         </div>
         <div class="field">
-          <label>Pacote / Servi&ccedil;o</label>
+          <label>Pacote</label>
           <select id="rdo-pacote-${i}" onchange="selecionarPacote(${i}, this.value)">
-            <option value="">&#8212; selecione &#8212;</option>
+            <option value="">— selecione —</option>
             ${pacotesDaFrente.map(p => '<option value="'+p['ID']+'" '+(s.pacoteId===p['ID']?'selected':'')+'>'+p['Pacote']+'</option>').join('')}
           </select>
         </div>
         <div class="field">
           <label>Sentido</label>
           <div class="btn-toggle-group">
-            <button class="btn-toggle ${sentido==='CB'?'active':''}" onclick="setSentido(${i},'CB')">&#8594; CB</button>
-            <button class="btn-toggle ${sentido==='BC'?'active':''}" onclick="setSentido(${i},'BC')">&#8592; BC</button>
+            <button class="btn-toggle ${sentido==='CB'?'active':''}" onclick="setSentido(${i},'CB')">CB</button>
+            <button class="btn-toggle ${sentido==='BC'?'active':''}" onclick="setSentido(${i},'BC')">BC</button>
           </div>
         </div>
         <div class="field">
-          <label>Estaca In&iacute;cio</label>
+          <label>Estaca Início</label>
           <select onchange="setEstaca(${i},'ini',this.value)">
-            <option value="">&#8212;</option>
+            <option value="">—</option>
             ${estacas.map(e => '<option value="'+e+'" '+(s.estacaIni===e?'selected':'')+'>'+e+'</option>').join('')}
           </select>
         </div>
         <div class="field">
           <label>Estaca Fim</label>
           <select onchange="setEstaca(${i},'fim',this.value)">
-            <option value="">&#8212;</option>
+            <option value="">—</option>
             ${estacas.map(e => '<option value="'+e+'" '+(s.estacaFim===e?'selected':'')+'>'+e+'</option>').join('')}
           </select>
         </div>
@@ -3493,12 +3515,12 @@ function renderServicoRow(s, i, frentesUnicas) {
             oninput="setServicoField(${i},'quantidade',this.value)">
         </div>
         <div class="field">
-          <label>Equipe / Subcontratado</label>
-          <input type="text" value="${s.equipe||''}" placeholder="ex: Pr&oacute;pria..."
+          <label>Equipe</label>
+          <input type="text" value="${s.equipe||''}" placeholder="ex: Própria..."
             oninput="setServicoField(${i},'equipe',this.value)">
         </div>
         <div class="field">
-          <label>Observa&ccedil;&atilde;o</label>
+          <label>Observação</label>
           <input type="text" value="${s.observacao||''}" placeholder="Opcional..."
             oninput="setServicoField(${i},'observacao',this.value)">
         </div>
@@ -3508,93 +3530,58 @@ function renderServicoRow(s, i, frentesUnicas) {
 }
 
 function attachRDOForm() {}
-
-function setDraftField(campo, valor) {
-  const d = getDraft(); d[campo] = valor; saveDraft(d);
-}
-function setServicoField(i, campo, valor) {
-  const d = getDraft();
-  if (d.servicos[i]) { d.servicos[i][campo] = valor; saveDraft(d); }
-}
-function adicionarServico() {
-  const d = getDraft();
-  d.servicos.push({ frente:'', pacoteId:'', sentido:'CB', estacaIni:'', estacaFim:'', quantidade:'', equipe:'', observacao:'' });
-  saveDraft(d); render();
-}
-function removerServico(i) {
-  const d = getDraft();
-  if (d.servicos.length <= 1) { toast('Precisa ter pelo menos 1 servi\u00e7o', 'error'); return; }
-  d.servicos.splice(i, 1); saveDraft(d); render();
-}
-function resetDraft() {
-  if (!confirm('Limpar todos os servi\u00e7os do rascunho?')) return;
-  clearDraft(); render();
-}
+function setDraftField(campo, valor) { const d=getDraft(); d[campo]=valor; saveDraft(d); }
+function setServicoField(i, campo, valor) { const d=getDraft(); if(d.servicos[i]){d.servicos[i][campo]=valor; saveDraft(d);} }
+function adicionarServico() { const d=getDraft(); d.servicos.push({frente:'',pacoteId:'',sentido:'CB',estacaIni:'',estacaFim:'',quantidade:'',equipe:'',observacao:''}); saveDraft(d); render(); }
+function removerServico(i) { const d=getDraft(); if(d.servicos.length<=1){toast('Mínimo 1 serviço','error');return;} d.servicos.splice(i,1); saveDraft(d); render(); }
+function resetDraft() { if(!confirm('Limpar rascunho?'))return; clearDraft(); render(); }
 function setTurno(t) { const d=getDraft(); d.turno=t; saveDraft(d); render(); }
-function setSentido(i, s) {
-  const d=getDraft();
-  d.servicos[i].sentido=s; d.servicos[i].estacaIni=''; d.servicos[i].estacaFim='';
-  saveDraft(d); render();
-}
-function selecionarFrente(i, frente) {
-  const d=getDraft(); d.servicos[i].frente=frente; d.servicos[i].pacoteId=''; saveDraft(d); render();
-}
-function selecionarPacote(i, pid) {
-  const d=getDraft(); d.servicos[i].pacoteId=pid; saveDraft(d);
-}
-function setEstaca(i, tipo, val) {
-  const d=getDraft();
-  if(tipo==='ini') d.servicos[i].estacaIni=val; else d.servicos[i].estacaFim=val;
-  saveDraft(d);
-}
+function setSentido(i,s) { const d=getDraft(); d.servicos[i].sentido=s; d.servicos[i].estacaIni=''; d.servicos[i].estacaFim=''; saveDraft(d); render(); }
+function selecionarFrente(i,frente) { const d=getDraft(); d.servicos[i].frente=frente; d.servicos[i].pacoteId=''; saveDraft(d); render(); }
+function selecionarPacote(i,pid) { const d=getDraft(); d.servicos[i].pacoteId=pid; saveDraft(d); }
+function setEstaca(i,tipo,val) { const d=getDraft(); if(tipo==='ini')d.servicos[i].estacaIni=val; else d.servicos[i].estacaFim=val; saveDraft(d); }
 async function salvarRDO() {
-  const draft = getDraft();
-  if (!draft.data) { toast('Preencha a data', 'error'); return; }
-  if (!draft.apontador || !draft.apontador.trim()) { toast('Preencha o nome do apontador', 'error'); return; }
-  for (let i = 0; i < draft.servicos.length; i++) {
-    const s = draft.servicos[i];
-    if (!s.pacoteId) { toast('Servi\u00e7o '+(i+1)+': selecione o pacote', 'error'); return; }
-    if (!s.quantidade || parseFloat(s.quantidade) <= 0) { toast('Servi\u00e7o '+(i+1)+': quantidade inv\u00e1lida', 'error'); return; }
+  const draft=getDraft();
+  if(!draft.data){toast('Preencha a data','error');return;}
+  if(!draft.apontador||!draft.apontador.trim()){toast('Preencha o apontador','error');return;}
+  for(let i=0;i<draft.servicos.length;i++){
+    const s=draft.servicos[i];
+    if(!s.pacoteId){toast('Serviço '+(i+1)+': selecione o pacote','error');return;}
+    if(!s.quantidade||parseFloat(s.quantidade)<=0){toast('Serviço '+(i+1)+': quantidade inválida','error');return;}
   }
-  const btn = document.getElementById('btnSalvarRDO');
-  const orig = btn ? btn.innerHTML : '';
-  if (btn) { btn.disabled = true; btn.innerHTML = 'Salvando...'; }
-  let salvos = 0, erros = 0;
-  for (const s of draft.servicos) {
-    const pacote = STATE.pacotes.find(p => p['ID'] === s.pacoteId);
-    if (!pacote) { erros++; continue; }
-    const localEstaca = [s.estacaIni, s.estacaFim].filter(Boolean).join('-') || '';
-    const params = {
-      action: 'addRDOAvanco',
-      data: draft.data,
-      turno: draft.turno || 'Diurno',
-      pacote_id: s.pacoteId,
-      pacote_nome: pacote['Pacote'] || '',
-      unidade: pacote['Unidade F\u00edsica'] || '',
-      quantidade: s.quantidade,
-      local_estaca: localEstaca,
-      equipe: s.equipe || '',
-      subcontratado: '',
-      apontador: draft.apontador,
-      observacao: s.observacao || '',
+  const btn=document.getElementById('btnSalvarRDO');
+  const orig=btn?btn.innerHTML:'';
+  if(btn){btn.disabled=true;btn.innerHTML='Salvando...';}
+  let salvos=0,erros=0;
+  for(const s of draft.servicos){
+    const pacote=STATE.pacotes.find(p=>p['ID']===s.pacoteId);
+    if(!pacote){erros++;continue;}
+    const params={
+      action:'addRDOAvanco',
+      data:draft.data,
+      turno:draft.turno||'Diurno',
+      pacote_id:s.pacoteId,
+      pacote_nome:pacote['Pacote']||'',
+      unidade:pacote['Unidade Física']||'',
+      quantidade:s.quantidade,
+      local_estaca:[s.estacaIni,s.estacaFim].filter(Boolean).join('-')||'',
+      equipe:s.equipe||'',
+      subcontratado:'',
+      apontador:draft.apontador,
+      observacao:s.observacao||'',
     };
-    try {
-      const result = await jsonp(CONFIG.appsScript, params);
-      if (!result.ok) throw new Error(result.error || 'Erro');
+    try{
+      const result=await jsonp(CONFIG.appsScript,params);
+      if(!result.ok)throw new Error(result.error||'Erro');
       salvos++;
-    } catch(e) {
+    }catch(e){
       erros++;
-      toast('Erro no servi\u00e7o '+(salvos+erros)+': '+e.message, 'error', 6000);
+      toast('Erro serviço '+(salvos+erros)+': '+e.message,'error',6000);
     }
   }
-  if (btn) { btn.disabled = false; btn.innerHTML = orig; }
-  if (salvos > 0) {
-    toast(salvos+' servi\u00e7o(s) salvo(s)'+(erros?' ('+erros+' com erro)':''), 'success', 5000);
-    clearDraft();
-    setTimeout(() => carregarTudo(), 800);
-  } else if (erros > 0) {
-    toast('Nenhum servi\u00e7o foi salvo. Verifique a conex\u00e3o.', 'error');
-  }
+  if(btn){btn.disabled=false;btn.innerHTML=orig;}
+  if(salvos>0){toast(salvos+' serviço(s) salvo(s)'+(erros?' ('+erros+' erro)':''),'success',5000);clearDraft();setTimeout(()=>carregarTudo(),800);}
+  else if(erros>0){toast('Nenhum salvo. Verifique a conexão.','error');}
 }
 
 
