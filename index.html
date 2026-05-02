@@ -1641,6 +1641,89 @@ function defaultDraft() {
     ]
   };
 }
+  // ====================================================================
+// VIEW: APOIO À MEDIÇÃO (Consumo Derivado)
+// ====================================================================
+function renderMedicao() {
+  // Pega o avanço atual de todos os pacotes
+  const av = calcularAvancoPorPacote();
+  
+  // Objeto para acumular as quantidades por Item Contratual
+  const consumoContratual = {};
+
+  // Cruza o avanço com a matriz de coeficientes
+  if (STATE.coeficientes && STATE.coeficientes.length > 0) {
+    STATE.coeficientes.forEach(c => {
+      const pid = c['Pacote_ID'] || c['Pacote_id'] || c['Pacote'];
+      const pacoteData = av[pid];
+
+      // Se o pacote teve avanço físico, calcula o consumo derivado
+      if (pacoteData && pacoteData.qtdExecutada > 0) {
+        const item = c['Item_Contratual'] || c['Item Contratual'] || c['Item'] || 'S/N';
+        const desc = c['Descrição'] || c['Descricao'] || '';
+        const und = c['Unidade'] || c['Und'] || '';
+        const coef = num(c['Coeficiente']);
+
+        const gerado = pacoteData.qtdExecutada * coef;
+
+        if (gerado > 0) {
+          if (!consumoContratual[item]) {
+            consumoContratual[item] = { item, desc, und, total: 0, pacotes: [] };
+          }
+          consumoContratual[item].total += gerado;
+          
+          // Guarda o rastro de auditoria (de qual pacote veio esse volume)
+          consumoContratual[item].pacotes.push(
+            `<span style="color:var(--text)">${pacoteData.pacote['Pacote']}:</span> ${fmtNum(gerado)} ${und}`
+          );
+        }
+      }
+    });
+  }
+
+  // Ordena os itens contratuais por código
+  const itens = Object.values(consumoContratual).sort((a,b) => a.item.localeCompare(b.item));
+
+  return `
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Apoio à Medição · Consumo Derivado</div>
+          <div class="card-title-sub">Geração automática de quantidades contratuais cruzando o avanço físico com a matriz de coeficientes</div>
+        </div>
+      </div>
+      <div class="card-body flush">
+        ${itens.length === 0 ?
+          '<div class="empty"><div class="empty-icon">⌗</div><div class="empty-title">Sem consumos gerados</div><div class="empty-sub">Lance RDOs e certifique-se de que a aba "Coeficientes" no Sheets está preenchida.</div></div>' :
+          `<table class="t">
+            <thead>
+              <tr>
+                <th>Item Contratual</th>
+                <th>Descrição do Serviço</th>
+                <th>Memória de Cálculo (Origem)</th>
+                <th style="text-align:right">Total Acumulado</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itens.map((i, idx) => `
+                <tr class="stagger-item" style="animation-delay:${idx * 0.03}s">
+                  <td style="white-space:nowrap"><strong>${i.item}</strong></td>
+                  <td style="font-size:12px; max-width:250px">${i.desc}</td>
+                  <td style="font-size:11px; color:var(--muted); max-width:300px; line-height:1.4">
+                    ${i.pacotes.join('<br>')}
+                  </td>
+                  <td class="t-num" style="font-size:14px; font-weight:bold; color:var(--pri)">
+                    ${fmtNum(i.total)} <span style="font-size:11px; font-weight:normal; color:var(--muted)">${i.und}</span>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>`
+        }
+      </div>
+    </div>
+  `;
+}
 
 function renderRDO() {
   if (!STATE.draft) STATE.draft = loadDraft() || defaultDraft();
