@@ -1905,11 +1905,9 @@ function carregarDiarioDaSheet(data) {
 // RENDER DO RDO DIÁRIO V4
 // ====================================================================
 function renderRDODiarioV4() {
-  const dataHoje = new Date().toISOString().split('T')[0];
-  
-  // Se não tem estado, inicializa
+  // Se não tem estado, inicializa com a data de hoje por padrão
   if (!DIARIO_V4) {
-    // Tenta carregar da Sheet, senão do localStorage, senão cria vazio
+    const dataHoje = new Date().toISOString().split('T')[0];
     DIARIO_V4 = carregarDiarioDaSheet(dataHoje) || loadDiarioV4(dataHoje) || defaultDiarioV4(dataHoje);
   }
   
@@ -3538,7 +3536,7 @@ function resetDraft() { if(!confirm('Limpar rascunho?'))return; clearDraft(); re
 function setTurno(t) { const d=getDraft(); d.turno=t; saveDraft(d); render(); }
 function setSentido(i,s) { const d=getDraft(); d.servicos[i].sentido=s; d.servicos[i].estacaIni=''; d.servicos[i].estacaFim=''; saveDraft(d); render(); }
 function selecionarFrente(i,frente) { const d=getDraft(); d.servicos[i].frente=frente; d.servicos[i].pacoteId=''; saveDraft(d); render(); }
-function selecionarPacote(i,pid) { const d=getDraft(); d.servicos[i].pacoteId=pid; saveDraft(d); }
+function selecionarPacote(i,pid) { const d=getDraft(); d.servicos[i].pacoteId=pid; saveDraft(d); render(); }
 function setEstaca(i,tipo,val) { const d=getDraft(); if(tipo==='ini')d.servicos[i].estacaIni=val; else d.servicos[i].estacaFim=val; saveDraft(d); }
 async function salvarRDO() {
   const draft=getDraft();
