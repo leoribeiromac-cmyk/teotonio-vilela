@@ -1641,6 +1641,220 @@ function defaultDraft() {
     ]
   };
 }
+
+function getDraft() { return loadDraft() || defaultDraft(); }
+
+function renderRDO() {
+  let draft = loadDraft();
+  if (!draft || !Array.isArray(draft.servicos)) draft = defaultDraft();
+  const frentesUnicas = [...new Set(STATE.pacotes.map(p => p['Frente']).filter(Boolean))].sort();
+
+  return `
+    <div class="card stagger-item" style="animation-delay:.05s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Cabeçalho do lançamento</div>
+          <div class="card-title-sub">Data, turno e apontador são compartilhados por todos os serviços</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label>Data</label>
+            <input type="date" id="rdo-data" value="${draft.data}" oninput="setDraftField('data',this.value)">
+          </div>
+          <div class="field">
+            <label>Apontador</label>
+            <input type="text" id="rdo-apontador" value="${draft.apontador||''}" placeholder="Seu nome"
+              oninput="setDraftField('apontador',this.value);localStorage.setItem(CONFIG.ls.apontador,this.value)">
+          </div>
+        </div>
+        <div style="margin-top:12px">
+          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:8px">Turno</label>
+          <div class="btn-toggle-group">
+            <button class="btn-toggle ${draft.turno==='Diurno'?'active':''}" onclick="setTurno('Diurno')">☀️ Diurno</button>
+            <button class="btn-toggle ${draft.turno==='Noturno'?'active':''}" onclick="setTurno('Noturno')">🌙 Noturno</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="servicos-container">
+      ${draft.servicos.map((s, i) => renderServicoRow(s, i, frentesUnicas)).join('')}
+    </div>
+
+    <button class="btn-add-servico" onclick="adicionarServico()">+ Adicionar serviço</button>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px">
+      <div style="font-size:12px;color:var(--muted)">Cada linha é gravada individualmente na aba RDO_Avanco</div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline" onclick="resetDraft()">Limpar tudo</button>
+        <button class="btn btn-primary btn-lg" id="btnSalvarRDO" onclick="salvarRDO()">💾 Salvar todos os serviços</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderServicoRow(s, i, frentesUnicas) {
+  const pacotesDaFrente = s.frente ? STATE.pacotes.filter(p => p['Frente'] === s.frente) : STATE.pacotes;
+  const sentido = s.sentido || 'CB';
+  const estacas = sentido === 'BC'
+    ? Array.from({length: CONFIG.estacasBC.fim - CONFIG.estacasBC.ini + 1}, (_, k) => 'E' + (CONFIG.estacasBC.ini + k))
+    : Array.from({length: CONFIG.estacasCB.fim - CONFIG.estacasCB.ini + 1}, (_, k) => 'E' + (CONFIG.estacasCB.ini + k));
+  const pacAtual = STATE.pacotes.find(p => p['ID'] === s.pacoteId);
+  const unidade = pacAtual ? (pacAtual['Unidade Física'] || '') : '';
+
+  return `
+    <div class="servico-row stagger-item" id="servico-row-${i}" style="animation-delay:${.1+i*.05}s">
+      <span class="row-num">Serviço ${i+1}</span>
+      <button class="btn-remove" onclick="removerServico(${i})" title="Remover">×</button>
+      <div class="form-grid" style="margin-top:10px">
+        <div class="field">
+          <label>Frente</label>
+          <select onchange="selecionarFrente(${i}, this.value)">
+            <option value="">— todas as frentes —</option>
+            ${frentesUnicas.map(f => `<option value="${f}" ${s.frente===f?'selected':''}>${f}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Pacote / Serviço</label>
+          <select id="rdo-pacote-${i}" onchange="selecionarPacote(${i}, this.value)">
+            <option value="">— selecione —</option>
+            ${pacotesDaFrente.map(p => `<option value="${p['ID']}" ${s.pacoteId===p['ID']?'selected':''}>${p['Pacote']}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Sentido</label>
+          <div class="btn-toggle-group">
+            <button class="btn-toggle ${sentido==='CB'?'active':''}" onclick="setSentido(${i},'CB')">→ CB</button>
+            <button class="btn-toggle ${sentido==='BC'?'active':''}" onclick="setSentido(${i},'BC')">← BC</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Estaca Início</label>
+          <select onchange="setEstaca(${i},'ini',this.value)">
+            <option value="">—</option>
+            ${estacas.map(e => `<option value="${e}" ${s.estacaIni===e?'selected':''}>${e}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Estaca Fim</label>
+          <select onchange="setEstaca(${i},'fim',this.value)">
+            <option value="">—</option>
+            ${estacas.map(e => `<option value="${e}" ${s.estacaFim===e?'selected':''}>${e}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Quantidade <span style="color:var(--muted);font-weight:400">${unidade}</span></label>
+          <input type="number" value="${s.quantidade||''}" placeholder="0" min="0" step="any"
+            oninput="setServicoField(${i},'quantidade',this.value)">
+        </div>
+        <div class="field">
+          <label>Equipe / Subcontratado</label>
+          <input type="text" value="${s.equipe||''}" placeholder="ex: Própria, Martins..."
+            oninput="setServicoField(${i},'equipe',this.value)">
+        </div>
+        <div class="field">
+          <label>Observação</label>
+          <input type="text" value="${s.observacao||''}" placeholder="Opcional..."
+            oninput="setServicoField(${i},'observacao',this.value)">
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function attachRDOForm() { /* eventos inline via oninput/onchange */ }
+
+function setDraftField(campo, valor) {
+  const d = getDraft(); d[campo] = valor; saveDraft(d);
+}
+function setServicoField(i, campo, valor) {
+  const d = getDraft();
+  if (d.servicos[i]) { d.servicos[i][campo] = valor; saveDraft(d); }
+}
+function adicionarServico() {
+  const d = getDraft();
+  d.servicos.push({ frente:'', pacoteId:'', sentido:'CB', estacaIni:'', estacaFim:'', quantidade:'', equipe:'', observacao:'' });
+  saveDraft(d); render();
+}
+function removerServico(i) {
+  const d = getDraft();
+  if (d.servicos.length <= 1) { toast('Precisa ter pelo menos 1 serviço', 'error'); return; }
+  d.servicos.splice(i, 1); saveDraft(d); render();
+}
+function resetDraft() {
+  if (!confirm('Limpar todos os serviços do rascunho?')) return;
+  clearDraft(); render();
+}
+function setTurno(t) { const d=getDraft(); d.turno=t; saveDraft(d); render(); }
+function setSentido(i, s) {
+  const d=getDraft();
+  d.servicos[i].sentido=s; d.servicos[i].estacaIni=''; d.servicos[i].estacaFim='';
+  saveDraft(d); render();
+}
+function selecionarFrente(i, frente) {
+  const d=getDraft(); d.servicos[i].frente=frente; d.servicos[i].pacoteId=''; saveDraft(d); render();
+}
+function selecionarPacote(i, pid) {
+  const d=getDraft(); d.servicos[i].pacoteId=pid; saveDraft(d);
+}
+function setEstaca(i, tipo, val) {
+  const d=getDraft();
+  if(tipo==='ini') d.servicos[i].estacaIni=val; else d.servicos[i].estacaFim=val;
+  saveDraft(d);
+}
+
+async function salvarRDO() {
+  const draft = getDraft();
+  if (!draft.data) { toast('Preencha a data', 'error'); return; }
+  if (!draft.apontador || !draft.apontador.trim()) { toast('Preencha o nome do apontador', 'error'); return; }
+  for (let i = 0; i < draft.servicos.length; i++) {
+    const s = draft.servicos[i];
+    if (!s.pacoteId) { toast(`Serviço ${i+1}: selecione o pacote`, 'error'); return; }
+    if (!s.quantidade || parseFloat(s.quantidade) <= 0) { toast(`Serviço ${i+1}: quantidade inválida`, 'error'); return; }
+  }
+  const btn = document.getElementById('btnSalvarRDO');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Salvando…'; }
+  let salvos = 0, erros = 0;
+  for (const s of draft.servicos) {
+    const pacote = STATE.pacotes.find(p => p['ID'] === s.pacoteId);
+    if (!pacote) { erros++; continue; }
+    const localEstaca = [s.estacaIni, s.estacaFim].filter(Boolean).join('-') || '';
+    const params = {
+      action: 'addRDOAvanco',
+      data: draft.data,
+      turno: draft.turno || 'Diurno',
+      pacote_id: s.pacoteId,
+      pacote_nome: pacote['Pacote'] || '',
+      unidade: pacote['Unidade Física'] || '',
+      quantidade: s.quantidade,
+      local_estaca: localEstaca,
+      equipe: s.equipe || '',
+      subcontratado: '',
+      apontador: draft.apontador,
+      observacao: s.observacao || '',
+    };
+    try {
+      const result = await jsonp(CONFIG.appsScript, params);
+      if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+      salvos++;
+    } catch(e) {
+      erros++;
+      toast(`Erro no serviço ${salvos+erros}: ${e.message}`, 'error', 6000);
+    }
+  }
+  if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  if (salvos > 0) {
+    toast(`✓ ${salvos} serviço${salvos>1?'s':''} salvo${salvos>1?'s':''}${erros?' ('+erros+' com erro)':''}`, 'success', 5000);
+    clearDraft();
+    setTimeout(() => carregarTudo(), 800);
+  } else if (erros > 0) {
+    toast('Nenhum serviço foi salvo. Verifique a conexão.', 'error');
+  }
+}
+
  // ====================================================================
 // VIEW: APOIO À MEDIÇÃO (Consumo Derivado)
 // ====================================================================
