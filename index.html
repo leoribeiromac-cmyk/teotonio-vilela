@@ -661,6 +661,61 @@ const STATE = {
   loaded: false, lastSync: null,
   currentPage: 'executivo',
   draft: null,  // rascunho do RDO
+  usuarioLogado: localStorage.getItem('teotonio_user') || null // Salva quem logou
+};
+
+// ====================================================================
+// CONTROLE DE ACESSO (Login Simples)
+// ====================================================================
+const ACESSO = {
+  'Leonardo': 'leo2026', // Sua senha (Acesso total)
+  'Wallace': 'wal123',       // Senha do apontador Diurno
+  'Guilherme': 'gui123'          // Senha do apontador Noturno
+};
+
+function renderLogin() {
+  return `
+    <div class="card" style="max-width: 400px; margin: 40px auto; border-top: 4px solid var(--acc);">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Acesso Restrito</div>
+          <div class="card-title-sub">Identifique-se para lançar serviços e RDOs no sistema</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="field" style="margin-bottom: 14px;">
+          <label>Usuário / Apontador</label>
+          <select id="loginUser">
+            <option value="">— selecione —</option>
+            ${Object.keys(ACESSO).map(u => `<option value="${u}">${u}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" style="margin-bottom: 18px;">
+          <label>Senha</label>
+          <input type="password" id="loginPass" placeholder="••••••••" onkeyup="if(event.key==='Enter') fazerLogin()">
+        </div>
+        <button class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">Entrar</button>
+      </div>
+    </div>
+  `;
+}
+
+window.fazerLogin = function() {
+  const u = document.getElementById('loginUser').value;
+  const p = document.getElementById('loginPass').value;
+  if (!u) { toast('Selecione um usuário', 'error'); return; }
+  if (ACESSO[u] !== p) { toast('Senha incorreta', 'error'); return; }
+  
+  STATE.usuarioLogado = u;
+  localStorage.setItem('teotonio_user', u);
+  toast('Acesso liberado!', 'success');
+  render(); // Recarrega a tela já liberada
+};
+
+window.fazerLogout = function() {
+  STATE.usuarioLogado = null;
+  localStorage.removeItem('teotonio_user');
+  render();
 };
 
 // ====================================================================
