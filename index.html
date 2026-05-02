@@ -699,7 +699,6 @@ function renderLogin() {
     </div>
   `;
 }
-
 window.fazerLogin = function() {
   const u = document.getElementById('loginUser').value;
   const p = document.getElementById('loginPass').value;
@@ -709,13 +708,26 @@ window.fazerLogin = function() {
   STATE.usuarioLogado = u;
   localStorage.setItem('teotonio_user', u);
   toast('Acesso liberado!', 'success');
-  render(); // Recarrega a tela já liberada
+  atualizarBotoesTopo(); // Atualiza a barra superior
+  render(); // Recarrega o miolo da tela
 };
 
 window.fazerLogout = function() {
   STATE.usuarioLogado = null;
   localStorage.removeItem('teotonio_user');
+  toast('Você saiu do sistema.', 'info');
+  atualizarBotoesTopo(); // Remove o botão de sair da barra superior
   render();
+};
+
+// Função nova para forçar a barra superior a se redesenhar
+window.atualizarBotoesTopo = function() {
+  const tb = document.getElementById('topbarActions');
+  if (tb) {
+    tb.innerHTML = (STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : '') +
+      '<button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>' +
+      '<button class="btn btn-primary btn-sm" onclick="navigate(\'rdo\')">+ Novo Serviço</button>';
+  }
 };
 
 // ====================================================================
