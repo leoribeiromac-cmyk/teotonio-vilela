@@ -3555,7 +3555,7 @@ async function salvarRDO() {
     const pacote=STATE.pacotes.find(p=>p['ID']===s.pacoteId);
     if(!pacote){erros++;continue;}
     const params={
-      action:'addRDOAvanco',
+      action:'addServico',
       data:draft.data,
       turno:draft.turno||'Diurno',
       pacote_id:s.pacoteId,
