@@ -1008,31 +1008,30 @@ function render() {
 // ====================================================================
 // VIEW: EXECUTIVO
 // ====================================================================
-function renderExecutivo() {
-  const av = calcularAvancoPorPacote();
-  const pacotes = Object.values(av).filter(a => a.pacote && a.pacote['Status'] !== 'Histórico');
+// Calcular o peso em dias para cada pacote baseado na produtividade padrão
+  pacotes.forEach(a => {
+    const pid = a.pacote['ID'];
+    const prod = PRODUTIVIDADE_PADRAO[pid] || 1; // Se não tiver padrão, divide por 1 pra não quebrar
+    a.diasEstimados = a.qtdEstimada / prod;
+    a.diasExecutados = a.pct * a.diasEstimados;
+  });
+
+  // % físico ponderado por DIAS DE ESFORÇO
+  const totalDiasEstimados = pacotes.reduce((s,a) => s + a.diasEstimados, 0);
+  const pctPond = totalDiasEstimados > 0 ?
+    pacotes.reduce((s,a) => s + a.diasExecutados, 0) / totalDiasEstimados : 0;
   
-  const totalPac = pacotes.length;
-  const iniciados = pacotes.filter(a => a.qtdExecutada > 0).length;
-  const concluidos = pacotes.filter(a => a.pct >= 0.999).length;
-  const totalRDOs = STATE.rdoavanco.length;
-  
-  // % físico ponderado pela qtd estimada (peso real, não média simples)
-  const totalEstim = pacotes.reduce((s,a) => s + a.qtdEstimada, 0);
-  const pctPond = totalEstim > 0 ?
-    pacotes.reduce((s,a) => s + a.pct * a.qtdEstimada, 0) / totalEstim : 0;
-  
-  // Avanço por frente (ponderado também)
+  // Avanço por frente (ponderado em dias de esforço)
   const porFrente = {};
   pacotes.forEach(a => {
     const f = a.pacote['Frente'] || 'Outros';
-    if (!porFrente[f]) porFrente[f] = { items: [], totalEstim: 0, totalExec: 0 };
+    if (!porFrente[f]) porFrente[f] = { items: [], totalDiasEstim: 0, totalDiasExec: 0 };
     porFrente[f].items.push(a);
-    porFrente[f].totalEstim += a.qtdEstimada;
-    porFrente[f].totalExec += a.qtdExecutada;
+    porFrente[f].totalDiasEstim += a.diasEstimados;
+    porFrente[f].totalDiasExec += a.diasExecutados;
   });
   Object.values(porFrente).forEach(f => {
-    f.pctPond = f.totalEstim > 0 ? f.totalExec / f.totalEstim : 0;
+    f.pctPond = f.totalDiasEstim > 0 ? f.totalDiasExec / f.totalDiasEstim : 0;
   });
   
   // Top pacotes ativos
@@ -3537,26 +3536,30 @@ function montarGraficos() {
     if (chartCurvaS) { try { chartCurvaS.destroy(); } catch(e){} chartCurvaS = null; }
     
     const av = calcularAvancoPorPacote();
-    const totalEstim = Object.values(av).filter(a => a.pacote['Status'] !== 'Histórico')
-      .reduce((s,a) => s + a.qtdEstimada, 0);
+ const pacotesAtivos = Object.values(av).filter(a => a.pacote['Status'] !== 'Histórico');
     
-    // Acumular por dia
+    // Peso total da obra em DIAS (pra Curva S)
+    const totalDiasObra = pacotesAtivos.reduce((s, a) => {
+      const prod = PRODUTIVIDADE_PADRAO[a.pacote['ID']] || 1;
+      return s + (a.qtdEstimada / prod);
+    }, 0);
+    
+    // Acumular avanço dia a dia (convertendo RDO em dias de esforço concluídos)
     const rdosPorDia = {};
     STATE.rdoavanco.forEach(r => {
       const d = parseISODate(r['Data']);
       if (!d) return;
       const dStr = d.toISOString().split('T')[0];
-      const pid = r['Pacote_ID'];
+      const pid = r['Pacote_ID'] || r['Pacote_id'];
       const pacote = STATE.pacotes.find(p => p['ID'] === pid);
       if (!pacote) return;
-      const qtdEstimP = num(pacote['Qtd Estimada']);
-      if (qtdEstimP <= 0) return;
-      const contrib = num(r['Quantidade']) / qtdEstimP * qtdEstimP / totalEstim;
-      // Equivalente a: cada % de avanço de um pacote contribui proporcionalmente ao seu peso
-      const contribPct = totalEstim > 0 ? num(r['Quantidade']) / totalEstim : 0;
+      
+      const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
+      const diasDesteRDO = num(r['Quantidade']) / prod;
+      const contribPct = totalDiasObra > 0 ? diasDesteRDO / totalDiasObra : 0;
+      
       rdosPorDia[dStr] = (rdosPorDia[dStr] || 0) + contribPct;
     });
-    
     const dias = Object.keys(rdosPorDia).sort();
     let acc = 0;
     const pontos = dias.map(d => {
