@@ -1340,106 +1340,73 @@ function renderCronograma() {
   const hoje = new Date();
   hoje.setHours(0,0,0,0);
 
-  return `
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Motor de Planejamento Reverso</div>
-          <div class="card-title-sub">Defina o término alvo e a produtividade. O sistema calcula quando você precisa iniciar o SALDO RESTANTE (descontando domingos).</div>
-        </div>
-      </div>
-      <div class="card-body flush" style="overflow-x:auto">
-        <table class="t" style="min-width: 900px;">
-          <thead>
-            <tr>
-              <th style="width: 25%">Pacote / Serviço</th>
-              <th class="t-num" style="text-align: right; width: 10%">Saldo a Executar</th>
-              <th style="width: 15%">Término Alvo</th>
-              <th style="width: 15%">Produtividade/dia</th>
-              <th class="t-num" style="text-align: center; width: 10%">Duração (Saldo)</th>
-              <th style="width: 25%">Data Início Necessária</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${Object.entries(porFrente).map(([frente, pacotes]) => `
-              <tr class="summary"><td colspan="6">${frente}</td></tr>
-              ${pacotes.map(p => {
-                const pid = p['ID'];
-                const plan = PLAN_DADOS[pid] || { prod: '', dataFim: '' };
-                
-                // Busca os dados de avanço real
-                const avancoPacote = av[pid];
-                const qtdTotal = num(p['Qtd Estimada']);
-                const qtdExecutada = avancoPacote ? avancoPacote.qtdExecutada : 0;
-                
-                // Calcula o saldo (garante que não fique negativo)
-                const saldo = Math.max(0, qtdTotal - qtdExecutada); 
-                
-                const unid = p['Unidade Física'] || '';
-                
-                let duracaoDias = 0;
-                let dataInicioStr = '<span style="color:var(--muted)">Aguardando dados...</span>';
-                let alertClass = '';
+  let html = '<div class="card"><div class="card-header"><div><div class="card-title">Motor de Planejamento Reverso</div><div class="card-title-sub">Defina o término alvo. O sistema calcula quando iniciar o SALDO RESTANTE usando a produtividade padrão (ou a que você digitar).</div></div></div><div class="card-body flush" style="overflow-x:auto"><table class="t" style="min-width: 900px;"><thead><tr><th style="width: 25%">Pacote / Serviço</th><th class="t-num" style="text-align: right; width: 10%">Saldo a Executar</th><th style="width: 15%">Término Alvo</th><th style="width: 15%">Produtividade/dia</th><th class="t-num" style="text-align: center; width: 10%">Duração (Saldo)</th><th style="width: 25%">Data Início Necessária</th></tr></thead><tbody>';
 
-                // Se o saldo for zero, já terminou
-                if (saldo === 0) {
-                     dataInicioStr = '<span style="color:var(--grn); font-weight:bold;">100% Concluído</span>';
-                } else if (plan.prod > 0 && plan.dataFim) {
-                  // O cálculo de dias é feito em cima do que FALTA FAZER
-                  duracaoDias = saldo / plan.prod;
-                  const dataInicio = calcularDataInicioReversa(plan.dataFim, duracaoDias);
-                  
-                  if (dataInicio) {
-                    const strFormatada = fmtData(dataInicio);
-                    // Compara com o dia de hoje pra ver se a tarefa já devia ter começado
-                    if (dataInicio < hoje) {
-                      alertClass = 'color: var(--red); font-weight: bold;';
-                      dataInicioStr = '⚠️ ' + strFormatada + ' (Atrasado!)';
-                    } else {
-                      alertClass = 'color: var(--blu); font-weight: bold;';
-                      dataInicioStr = '📅 ' + strFormatada;
-                    }
-                  }
-                }
+  Object.entries(porFrente).forEach(([frente, pacotes]) => {
+    html += '<tr class="summary"><td colspan="6">' + frente + '</td></tr>';
+    
+    pacotes.forEach(p => {
+      const pid = p['ID'];
+      const plan = PLAN_DADOS[pid] || {};
+      
+      // Aqui está a mágica: puxa do dicionário se o usuário não tiver digitado nada
+      const prodPadrao = PRODUTIVIDADE_PADRAO[pid] || '';
+      const prodAtual = (plan.prod !== undefined && plan.prod !== '') ? plan.prod : prodPadrao;
+      const dataFimAtual = plan.dataFim || '';
+      
+      const avancoPacote = av[pid];
+      const qtdTotal = num(p['Qtd Estimada']);
+      const qtdExecutada = avancoPacote ? avancoPacote.qtdExecutada : 0;
+      const saldo = Math.max(0, qtdTotal - qtdExecutada); 
+      const unid = p['Unidade Física'] || '';
+      
+      let duracaoDias = 0;
+      let dataInicioStr = '<span style="color:var(--muted)">Aguardando dados...</span>';
+      let alertClass = '';
 
-                return `
-                  <tr>
-                    <td>
-                        <strong>${p['Pacote']}</strong>
-                        <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">Total: ${fmtNum(qtdTotal)} | Executado: ${fmtNum(qtdExecutada)}</div>
-                    </td>
-                    <td class="t-num" style="color: ${saldo > 0 ? 'var(--text)' : 'var(--grn)'}; font-weight: 600; text-align: right;">
-                        ${fmtNum(saldo)} ${unid}
-                    </td>
-                    <td>
-                      ${saldo > 0 ? `<input type="date" style="padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" 
-                             value="${plan.dataFim}" 
-                             onchange="atualizarPlan('${pid}', 'dataFim', this.value)">` : '—'}
-                    </td>
-                    <td>
-                      ${saldo > 0 ? `<div style="display:flex; align-items:center; gap: 4px;">
-                        <input type="number" style="width: 70px; padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" 
-                               placeholder="Ex: 40" value="${plan.prod}" 
-                               onkeyup="if(event.key==='Enter') atualizarPlan('${pid}', 'prod', this.value)"
-                               onblur="atualizarPlan('${pid}', 'prod', this.value)">
-                        <span style="font-size: 11px; color: var(--muted);">${unid}/dia</span>
-                      </div>` : '—'}
-                    </td>
-                    <td class="t-num" style="text-align: center;">
-                      ${duracaoDias > 0 ? Math.ceil(duracaoDias) + ' dias' : '—'}
-                    </td>
-                    <td style="font-size: 13px; ${alertClass}">
-                      ${dataInicioStr}
-                    </td>
-                  </tr>
-                `;
-              }).join('')}
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  `;
+      if (saldo === 0) {
+           dataInicioStr = '<span style="color:var(--grn); font-weight:bold;">100% Concluído</span>';
+      } else if (prodAtual > 0 && dataFimAtual) {
+        duracaoDias = saldo / prodAtual;
+        const dataInicio = calcularDataInicioReversa(dataFimAtual, duracaoDias);
+        
+        if (dataInicio) {
+          const strFormatada = fmtData(dataInicio);
+          if (dataInicio < hoje) {
+            alertClass = 'color: var(--red); font-weight: bold;';
+            dataInicioStr = '⚠️ ' + strFormatada + ' (Atrasado!)';
+          } else {
+            alertClass = 'color: var(--blu); font-weight: bold;';
+            dataInicioStr = '📅 ' + strFormatada;
+          }
+        }
+      }
+
+      html += '<tr><td><strong>' + p['Pacote'] + '</strong>';
+      html += '<div style="font-size: 10px; color: var(--muted); margin-top: 2px;">Total: ' + fmtNum(qtdTotal) + ' | Executado: ' + fmtNum(qtdExecutada) + '</div></td>';
+      
+      const corSaldo = saldo > 0 ? 'var(--text)' : 'var(--grn)';
+      html += '<td class="t-num" style="color: ' + corSaldo + '; font-weight: 600; text-align: right;">' + fmtNum(saldo) + ' ' + unid + '</td>';
+      
+      if (saldo > 0) {
+        html += '<td><input type="date" style="padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" value="' + dataFimAtual + '" onchange="atualizarPlan(\'' + pid + '\', \'dataFim\', this.value)"></td>';
+        
+        const placeHolderTxt = prodPadrao ? 'Padrão: ' + prodPadrao : 'Livre';
+        const valProd = plan.prod !== undefined ? plan.prod : '';
+        html += '<td><div style="display:flex; align-items:center; gap: 4px;">';
+        html += '<input type="number" style="width: 70px; padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" placeholder="' + placeHolderTxt + '" value="' + valProd + '" onkeyup="if(event.key===\'Enter\') atualizarPlan(\'' + pid + '\', \'prod\', this.value)" onblur="atualizarPlan(\'' + pid + '\', \'prod\', this.value)">';
+        html += '<span style="font-size: 11px; color: var(--muted);">' + unid + '/dia</span></div></td>';
+      } else {
+        html += '<td>—</td><td>—</td>';
+      }
+      
+      html += '<td class="t-num" style="text-align: center;">' + (duracaoDias > 0 ? Math.ceil(duracaoDias) + ' dias' : '—') + '</td>';
+      html += '<td style="font-size: 13px; ' + alertClass + '">' + dataInicioStr + '</td></tr>';
+    });
+  });
+
+  html += '</tbody></table></div></div>';
+  return html;
 }
 
 // ====================================================================
