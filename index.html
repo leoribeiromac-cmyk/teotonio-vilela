@@ -539,7 +539,7 @@ function parseCSV(text) {
   const headers = lines[0].map(h => h.trim());
   return lines.slice(1).map(row => {
     const obj = {};
-    headers.forEach((h, i) => obj[h] = (row[i] || '').trim());
+    headers.forEach((h, i) => obj[h] = (row[i] || '').replace(/\r/g, '').trim());
     return obj;
   });
 }
@@ -1519,9 +1519,6 @@ function renderHistorico() {
 
 function renderHistoricoServicos() {
   const rdos = [...STATE.rdoavanco].reverse();
-  // Diagnóstico: mostrar valores únicos de Turno que chegam do CSV
-  const turnosUnicos = [...new Set(rdos.map(r => JSON.stringify(r['Turno'])))].join(', ');
-  const totalNoturno = rdos.filter(r => (r['Turno']||'').toLowerCase().includes('noturn')).length;
   return `
     <div class="card">
       <div class="card-header">
@@ -1531,9 +1528,6 @@ function renderHistoricoServicos() {
         </div>
       </div>
       <div class="card-body flush">
-        <div style="padding:10px 14px;background:var(--bg-2);border-bottom:1px solid var(--border);font-size:11px;color:var(--muted)">
-          🔍 <strong>Diagnóstico Turno (CSV):</strong> valores únicos → ${turnosUnicos || '(coluna vazia)'} · Noturnos encontrados: ${totalNoturno}
-        </div>
         ${rdos.length === 0 ?
           '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum serviço ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro serviço</button></div>' :
           `<table class="t">
@@ -1547,7 +1541,7 @@ function renderHistoricoServicos() {
                 <tr>
                   <td class="t-mono">${r['ID']||''}</td>
                   <td style="font-size:12px">${fmtData(r['Data'])}</td>
-                  <td><span class="pill ${r['Turno']==='Noturno'?'pill-blu':'pill-ylw'}">${r['Turno']||'Diurno'}</span></td>
+                  <td><span class="pill ${(r['Turno']||'').trim()==='Noturno'?'pill-blu':'pill-ylw'}">${(r['Turno']||'Diurno').trim()}</span></td>
                   <td><strong>${r['Pacote_Nome']||''}</strong></td>
                   <td class="t-num">${fmtNum(num(r['Quantidade']))} ${r['Unidade']||''}</td>
                   <td class="t-mono" style="font-size:11px">${r['Local_Estaca']||''}</td>
@@ -2421,12 +2415,12 @@ function gerarPDFDiario(data) {
   const servicosDiurnos = STATE.rdoavanco.filter(r => {
     const rd = parseISODate(r['Data']);
     if (!rd) return false;
-    return rd.toISOString().split('T')[0] === data && (r['Turno']||'Diurno') === 'Diurno';
+    return rd.toISOString().split('T')[0] === data && (r['Turno']||'Diurno').trim() !== 'Noturno';
   });
   const servicosNoturnos = STATE.rdoavanco.filter(r => {
     const rd = parseISODate(r['Data']);
     if (!rd) return false;
-    return rd.toISOString().split('T')[0] === data && r['Turno'] === 'Noturno';
+    return rd.toISOString().split('T')[0] === data && (r['Turno']||'').trim() === 'Noturno';
   });
   
   const { jsPDF } = window.jspdf;
