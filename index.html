@@ -905,8 +905,10 @@ function renderShell() {
           <div style="display:flex;align-items:center;gap:6px">
             <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
             <div>
-              <div class="topbar-title" id="pageTitle">Painel Executivo</div>
-              <div class="topbar-sub" id="pageSubtitle">Visão consolidada da obra</div>
+              <div style="display:flex;gap:8px" id="topbarActions">
+            ${STATE.usuarioLogado ? `<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (${STATE.usuarioLogado})</button>` : ''}
+            <button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>
+            <button class="btn btn-primary btn-sm" onclick="navigate('rdo')">+ Novo Serviço</button>
             </div>
           </div>
           <div style="display:flex;gap:8px">
@@ -946,14 +948,18 @@ function navigate(page) {
 
 function render() {
   if (!STATE.loaded) return;
-  
-  // Resetar animação de entrada da página
-  const pageEl = document.getElementById('page');
-  if (pageEl) {
-    pageEl.classList.remove('page-enter');
-    void pageEl.offsetWidth; // trigger reflow
-    pageEl.classList.add('page-enter');
+   
+  // --- INÍCIO DO BLOQUEIO DE TELA ---
+  const telasRestritas = ['rdo', 'rdodiario'];
+  if (telasRestritas.includes(STATE.currentPage) && !STATE.usuarioLogado) {
+    document.getElementById('pageTitle').textContent = 'Login Necessário';
+    document.getElementById('pageSubtitle').textContent = 'Área restrita à equipe de apontamento e engenharia';
+    page.innerHTML = renderLogin();
+    return; // Pára aqui e não carrega o formulário
   }
+  // --- FIM DO BLOQUEIO ---
+
+  if (STATE.currentPage === 'executivo') page.innerHTML = renderExecutivo();
   
   const titles = {
     executivo: ['Painel Executivo', 'Visão consolidada da obra · KPIs e curva S'],
