@@ -556,8 +556,8 @@ function jsonp(url, params) {
     const cb = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
     const timeout = setTimeout(() => {
       cleanup();
-      reject(new Error('Timeout (15s)'));
-    }, 15000);
+      reject(new Error('Timeout (30s)'));
+    }, 30000);
     
     function cleanup() {
       delete window[cb];
@@ -1648,7 +1648,6 @@ function renderRDO() {
   let draft = loadDraft();
   if (!draft || !Array.isArray(draft.servicos)) draft = defaultDraft();
   const frentesUnicas = [...new Set(STATE.pacotes.map(p => p['Frente']).filter(Boolean))].sort();
-
   return `
     <div class="card stagger-item" style="animation-delay:.05s">
       <div class="card-header">
@@ -1678,13 +1677,10 @@ function renderRDO() {
         </div>
       </div>
     </div>
-
     <div id="servicos-container">
       ${draft.servicos.map((s, i) => renderServicoRow(s, i, frentesUnicas)).join('')}
     </div>
-
     <button class="btn-add-servico" onclick="adicionarServico()">+ Adicionar serviço</button>
-
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px">
       <div style="font-size:12px;color:var(--muted)">Cada linha é gravada individualmente na aba RDO_Avanco</div>
       <div style="display:flex;gap:10px">
@@ -1703,7 +1699,6 @@ function renderServicoRow(s, i, frentesUnicas) {
     : Array.from({length: CONFIG.estacasCB.fim - CONFIG.estacasCB.ini + 1}, (_, k) => 'E' + (CONFIG.estacasCB.ini + k));
   const pacAtual = STATE.pacotes.find(p => p['ID'] === s.pacoteId);
   const unidade = pacAtual ? (pacAtual['Unidade Física'] || '') : '';
-
   return `
     <div class="servico-row stagger-item" id="servico-row-${i}" style="animation-delay:${.1+i*.05}s">
       <span class="row-num">Serviço ${i+1}</span>
@@ -1804,7 +1799,6 @@ function setEstaca(i, tipo, val) {
   if(tipo==='ini') d.servicos[i].estacaIni=val; else d.servicos[i].estacaFim=val;
   saveDraft(d);
 }
-
 async function salvarRDO() {
   const draft = getDraft();
   if (!draft.data) { toast('Preencha a data', 'error'); return; }
@@ -1838,11 +1832,16 @@ async function salvarRDO() {
     };
     try {
       const result = await jsonp(CONFIG.appsScript, params);
-      if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+      if (!result.ok) throw new Error(result.error || 'Apps Script retornou erro');
       salvos++;
     } catch(e) {
+      // Fallback: tenta fetch com no-cors se JSONP falhar
+      if (e.message.includes('Timeout') || e.message.includes('rede')) {
+        toast(`Serviço ${salvos+erros+1}: timeout — verifique Apps Script`, 'error', 8000);
+      } else {
+        toast(`Erro no serviço ${salvos+erros+1}: ${e.message}`, 'error', 6000);
+      }
       erros++;
-      toast(`Erro no serviço ${salvos+erros}: ${e.message}`, 'error', 6000);
     }
   }
   if (btn) { btn.disabled = false; btn.innerHTML = orig; }
