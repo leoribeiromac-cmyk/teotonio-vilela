@@ -661,6 +661,73 @@ const STATE = {
   loaded: false, lastSync: null,
   currentPage: 'executivo',
   draft: null,  // rascunho do RDO
+  usuarioLogado: localStorage.getItem('teotonio_user') || null // Salva quem logou
+};
+
+// ====================================================================
+// CONTROLE DE ACESSO (Login Simples)
+// ====================================================================
+const ACESSO = {
+  'Leonardo': 'leo2026', // Sua senha (Acesso total)
+  'Wallace': 'wal123',       // Senha do apontador Diurno
+  'Guilherme': 'gui123'          // Senha do apontador Noturno
+};
+
+function renderLogin() {
+  return `
+    <div class="card" style="max-width: 400px; margin: 40px auto; border-top: 4px solid var(--acc);">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Acesso Restrito</div>
+          <div class="card-title-sub">Identifique-se para lançar serviços e RDOs no sistema</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="field" style="margin-bottom: 14px;">
+          <label>Usuário / Apontador</label>
+          <select id="loginUser">
+            <option value="">— selecione —</option>
+            ${Object.keys(ACESSO).map(u => `<option value="${u}">${u}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" style="margin-bottom: 18px;">
+          <label>Senha</label>
+          <input type="password" id="loginPass" placeholder="••••••••" onkeyup="if(event.key==='Enter') fazerLogin()">
+        </div>
+        <button class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">Entrar</button>
+      </div>
+    </div>
+  `;
+}
+window.fazerLogin = function() {
+  const u = document.getElementById('loginUser').value;
+  const p = document.getElementById('loginPass').value;
+  if (!u) { toast('Selecione um usuário', 'error'); return; }
+  if (ACESSO[u] !== p) { toast('Senha incorreta', 'error'); return; }
+  
+  STATE.usuarioLogado = u;
+  localStorage.setItem('teotonio_user', u);
+  toast('Acesso liberado!', 'success');
+  atualizarBotoesTopo(); // Atualiza a barra superior
+  render(); // Recarrega o miolo da tela
+};
+
+window.fazerLogout = function() {
+  STATE.usuarioLogado = null;
+  localStorage.removeItem('teotonio_user');
+  toast('Você saiu do sistema.', 'info');
+  atualizarBotoesTopo(); // Remove o botão de sair da barra superior
+  render();
+};
+
+// Função nova para forçar a barra superior a se redesenhar
+window.atualizarBotoesTopo = function() {
+  const tb = document.getElementById('topbarActions');
+  if (tb) {
+    tb.innerHTML = (STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : '') +
+      '<button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>' +
+      '<button class="btn btn-primary btn-sm" onclick="navigate(\'rdo\')">+ Novo Serviço</button>';
+  }
 };
 
 // ====================================================================
@@ -781,13 +848,14 @@ function listarEstacas() {
 }
 
 // ====================================================================
-// LAYOUT PRINCIPAL (sidebar + main)
+// LAYOUT PRINCIPAL E NAVEGAÇÃO
 // ====================================================================
 function renderShell() {
   const root = document.getElementById('root');
+  if (!root) return;
   root.innerHTML = `
     <div class="app">
-      <div class="sidebar-overlay" id="sidebarOverlay"></div>
+      <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar(false)"></div>
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-logo">
           <div class="badge-obra">CONSÓRCIO ARVEK + GESTOR</div>
@@ -797,19 +865,19 @@ function renderShell() {
         
         <div class="nav-group">
           <div class="nav-label">Análise</div>
-          <div class="nav-item" data-page="executivo">
+          <div class="nav-item" data-page="executivo" onclick="navigate('executivo')">
             <span class="nav-icon">◆</span>
             <span>Executivo</span>
           </div>
-          <div class="nav-item" data-page="avancofisico">
+          <div class="nav-item" data-page="avancofisico" onclick="navigate('avancofisico')">
             <span class="nav-icon">◰</span>
             <span>Avanço Físico</span>
           </div>
-          <div class="nav-item" data-page="cronograma">
+          <div class="nav-item" data-page="cronograma" onclick="navigate('cronograma')">
             <span class="nav-icon">◷</span>
             <span>Cronograma</span>
           </div>
-          <div class="nav-item" data-page="medicao">
+          <div class="nav-item" data-page="medicao" onclick="navigate('medicao')">
             <span class="nav-icon">⌗</span>
             <span>Apoio Medição</span>
           </div>
@@ -819,17 +887,17 @@ function renderShell() {
         
         <div class="nav-group">
           <div class="nav-label">Operação</div>
-          <div class="nav-item" data-page="rdo">
+          <div class="nav-item" data-page="rdo" onclick="navigate('rdo')">
             <span class="nav-icon">⊕</span>
             <span>Lançar Serviço</span>
             <span class="nav-counter" id="rdoCount">0</span>
           </div>
-          <div class="nav-item" data-page="rdodiario">
+          <div class="nav-item" data-page="rdodiario" onclick="navigate('rdodiario')">
             <span class="nav-icon">📋</span>
             <span>RDO Diário</span>
             <span class="nav-counter" id="diarioCount">0</span>
           </div>
-          <div class="nav-item" data-page="historico">
+          <div class="nav-item" data-page="historico" onclick="navigate('historico')">
             <span class="nav-icon">≡</span>
             <span>Histórico</span>
           </div>
@@ -854,7 +922,8 @@ function renderShell() {
               <div class="topbar-sub" id="pageSubtitle">Visão consolidada da obra</div>
             </div>
           </div>
-          <div style="display:flex;gap:8px">
+          <div style="display:flex;gap:8px" id="topbarActions">
+            ${STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : ''}
             <button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>
             <button class="btn btn-primary btn-sm" onclick="navigate('rdo')">+ Novo Serviço</button>
           </div>
@@ -863,12 +932,6 @@ function renderShell() {
       </main>
     </div>
   `;
-  
-  // Bind navegação
-  document.querySelectorAll('.nav-item').forEach(el => {
-    el.onclick = () => navigate(el.dataset.page);
-  });
-  document.getElementById('sidebarOverlay').onclick = () => toggleSidebar(false);
 }
 
 function toggleSidebar(open) {
@@ -889,10 +952,39 @@ function navigate(page) {
   render();
 }
 
+window.fazerLogin = function() {
+  const u = document.getElementById('loginUser').value;
+  const p = document.getElementById('loginPass').value;
+  if (!u) { toast('Selecione um usuário', 'error'); return; }
+  if (ACESSO[u] !== p) { toast('Senha incorreta', 'error'); return; }
+  
+  STATE.usuarioLogado = u;
+  localStorage.setItem('teotonio_user', u);
+  toast('Acesso liberado!', 'success');
+  atualizarBotoesTopo();
+  render();
+};
+
+window.fazerLogout = function() {
+  STATE.usuarioLogado = null;
+  localStorage.removeItem('teotonio_user');
+  toast('Você saiu do sistema.', 'info');
+  atualizarBotoesTopo();
+  render();
+};
+
+window.atualizarBotoesTopo = function() {
+  const tb = document.getElementById('topbarActions');
+  if (tb) {
+    tb.innerHTML = (STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : '') +
+      '<button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>' +
+      '<button class="btn btn-primary btn-sm" onclick="navigate(\'rdo\')">+ Novo Serviço</button>';
+  }
+};
+
 function render() {
   if (!STATE.loaded) return;
   
-  // Resetar animação de entrada da página
   const pageEl = document.getElementById('page');
   if (pageEl) {
     pageEl.classList.remove('page-enter');
@@ -916,6 +1008,15 @@ function render() {
   document.getElementById('diarioCount').textContent = (STATE.rdodiario||[]).length;
   
   const page = document.getElementById('page');
+  
+  const telasRestritas = ['rdo', 'rdodiario'];
+  if (telasRestritas.includes(STATE.currentPage) && !STATE.usuarioLogado) {
+    document.getElementById('pageTitle').textContent = 'Login Necessário';
+    document.getElementById('pageSubtitle').textContent = 'Área restrita à equipe de apontamento e engenharia';
+    page.innerHTML = renderLogin();
+    return;
+  }
+
   if (STATE.currentPage === 'executivo') page.innerHTML = renderExecutivo();
   else if (STATE.currentPage === 'avancofisico') page.innerHTML = renderAvancoFisico();
   else if (STATE.currentPage === 'cronograma') page.innerHTML = renderCronograma();
@@ -924,30 +1025,11 @@ function render() {
   else if (STATE.currentPage === 'rdodiario') { page.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
   else if (STATE.currentPage === 'historico') page.innerHTML = renderHistorico();
   
-  // Após render, montar gráficos se aplicável
   setTimeout(montarGraficos, 50);
 }
 
-function renderError(e) {
-  const page = document.getElementById('page');
-  if (!page) return;
-  page.innerHTML = `
-    <div class="card">
-      <div class="card-body">
-        <div class="empty">
-          <div class="empty-icon">⚠</div>
-          <div class="empty-title">Não consegui carregar os dados</div>
-          <div class="empty-sub">${e.message}<br><br>Verifique se os CSVs estão publicados na Sheets e tente novamente.</div>
-          <br>
-          <button class="btn btn-primary" onclick="carregarTudo()">↻ Tentar de novo</button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
 // ====================================================================
-// VIEW: EXECUTIVO
+// VIEW: EXECUTIVO (Agora Ponderado por Esforço)
 // ====================================================================
 function renderExecutivo() {
   const av = calcularAvancoPorPacote();
@@ -958,31 +1040,34 @@ function renderExecutivo() {
   const concluidos = pacotes.filter(a => a.pct >= 0.999).length;
   const totalRDOs = STATE.rdoavanco.length;
   
-  // % físico ponderado pela qtd estimada (peso real, não média simples)
-  const totalEstim = pacotes.reduce((s,a) => s + a.qtdEstimada, 0);
-  const pctPond = totalEstim > 0 ?
-    pacotes.reduce((s,a) => s + a.pct * a.qtdEstimada, 0) / totalEstim : 0;
+  pacotes.forEach(a => {
+    const pid = a.pacote['ID'];
+    const prod = PRODUTIVIDADE_PADRAO[pid] || 1; 
+    a.diasEstimados = a.qtdEstimada / prod;
+    a.diasExecutados = a.pct * a.diasEstimados;
+  });
+
+  const totalDiasEstimados = pacotes.reduce((s,a) => s + a.diasEstimados, 0);
+  const pctPond = totalDiasEstimados > 0 ?
+    pacotes.reduce((s,a) => s + a.diasExecutados, 0) / totalDiasEstimados : 0;
   
-  // Avanço por frente (ponderado também)
   const porFrente = {};
   pacotes.forEach(a => {
     const f = a.pacote['Frente'] || 'Outros';
-    if (!porFrente[f]) porFrente[f] = { items: [], totalEstim: 0, totalExec: 0 };
+    if (!porFrente[f]) porFrente[f] = { items: [], totalDiasEstim: 0, totalDiasExec: 0 };
     porFrente[f].items.push(a);
-    porFrente[f].totalEstim += a.qtdEstimada;
-    porFrente[f].totalExec += a.qtdExecutada;
+    porFrente[f].totalDiasEstim += a.diasEstimados;
+    porFrente[f].totalDiasExec += a.diasExecutados;
   });
   Object.values(porFrente).forEach(f => {
-    f.pctPond = f.totalEstim > 0 ? f.totalExec / f.totalEstim : 0;
+    f.pctPond = f.totalDiasEstim > 0 ? f.totalDiasExec / f.totalDiasEstim : 0;
   });
   
-  // Top pacotes ativos
   const ativosOrdenados = pacotes
     .filter(a => a.qtdExecutada > 0)
     .sort((a,b) => (b.ultimaData || 0) - (a.ultimaData || 0))
     .slice(0, 8);
   
-  // Curva S (acumulado por dia)
   const rdosOrdenados = [...STATE.rdoavanco]
     .map(r => ({ data: parseISODate(r['Data']), pid: r['Pacote_ID'], qtd: num(r['Quantidade']) }))
     .filter(r => r.data && r.pid)
@@ -991,7 +1076,7 @@ function renderExecutivo() {
   return `
     <div class="kpi-grid">
       <div class="kpi-card kpi-hero stagger-item" style="animation-delay:.05s">
-        <div class="kpi-label">AVANÇO FÍSICO GERAL · PONDERADO</div>
+        <div class="kpi-label">AVANÇO FÍSICO GERAL · PONDERADO (DIAS)</div>
         <div class="kpi-value">${fmtPct(pctPond)}</div>
         <div class="kpi-sub">${totalRDOs} registros de serviço · ${iniciados} de ${totalPac} pacotes iniciados</div>
         <div class="kpi-bar-wrap" style="background:rgba(255,255,255,.15);margin-top:10px">
@@ -1021,7 +1106,7 @@ function renderExecutivo() {
         <div class="card-header">
           <div>
             <div class="card-title">Curva S — avanço acumulado</div>
-            <div class="card-title-sub">% acumulado por dia (RDOs reais)</div>
+            <div class="card-title-sub">% ponderada pelo esforço (dias)</div>
           </div>
         </div>
         <div class="card-body">
@@ -1035,7 +1120,7 @@ function renderExecutivo() {
         <div class="card-header">
           <div>
             <div class="card-title">Avanço por frente</div>
-            <div class="card-title-sub">Ponderado por quantidade estimada</div>
+            <div class="card-title-sub">Ponderado pelo peso do serviço (dias)</div>
           </div>
         </div>
         <div class="card-body">
@@ -1068,7 +1153,7 @@ function renderExecutivo() {
       </div>
       <div class="card-body flush">
         ${ativosOrdenados.length === 0 ?
-          '<div class="empty"><div class="empty-icon">⊕</div><div class="empty-title">Nenhum RDO ainda</div><div class="empty-sub">Comece lançando o primeiro serviço pra ver o sistema funcionar.</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro RDO</button></div>' :
+          '<div class="empty"><div class="empty-icon">⊕</div><div class="empty-title">Nenhum RDO ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro RDO</button></div>' :
           `<table class="t">
             <thead>
               <tr><th>Pacote</th><th>Frente</th><th>Executado</th><th>Avanço</th><th>Última atividade</th></tr>
@@ -1095,7 +1180,6 @@ function renderExecutivo() {
     </div>
   `;
 }
-
 // ====================================================================
 // VIEW: AVANÇO FÍSICO (heatmap + tabela)
 // ====================================================================
@@ -1556,6 +1640,89 @@ function defaultDraft() {
       { frente: '', pacoteId: '', sentido: 'CB', estacaIni: '', estacaFim: '', quantidade: '', equipe: '', observacao: '' }
     ]
   };
+}
+  // ====================================================================
+// VIEW: APOIO À MEDIÇÃO (Consumo Derivado)
+// ====================================================================
+function renderMedicao() {
+  // Pega o avanço atual de todos os pacotes
+  const av = calcularAvancoPorPacote();
+  
+  // Objeto para acumular as quantidades por Item Contratual
+  const consumoContratual = {};
+
+  // Cruza o avanço com a matriz de coeficientes
+  if (STATE.coeficientes && STATE.coeficientes.length > 0) {
+    STATE.coeficientes.forEach(c => {
+      const pid = c['Pacote_ID'] || c['Pacote_id'] || c['Pacote'];
+      const pacoteData = av[pid];
+
+      // Se o pacote teve avanço físico, calcula o consumo derivado
+      if (pacoteData && pacoteData.qtdExecutada > 0) {
+        const item = c['Item_Contratual'] || c['Item Contratual'] || c['Item'] || 'S/N';
+        const desc = c['Descrição'] || c['Descricao'] || '';
+        const und = c['Unidade'] || c['Und'] || '';
+        const coef = num(c['Coeficiente']);
+
+        const gerado = pacoteData.qtdExecutada * coef;
+
+        if (gerado > 0) {
+          if (!consumoContratual[item]) {
+            consumoContratual[item] = { item, desc, und, total: 0, pacotes: [] };
+          }
+          consumoContratual[item].total += gerado;
+          
+          // Guarda o rastro de auditoria (de qual pacote veio esse volume)
+          consumoContratual[item].pacotes.push(
+            `<span style="color:var(--text)">${pacoteData.pacote['Pacote']}:</span> ${fmtNum(gerado)} ${und}`
+          );
+        }
+      }
+    });
+  }
+
+  // Ordena os itens contratuais por código
+  const itens = Object.values(consumoContratual).sort((a,b) => a.item.localeCompare(b.item));
+
+  return `
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Apoio à Medição · Consumo Derivado</div>
+          <div class="card-title-sub">Geração automática de quantidades contratuais cruzando o avanço físico com a matriz de coeficientes</div>
+        </div>
+      </div>
+      <div class="card-body flush">
+        ${itens.length === 0 ?
+          '<div class="empty"><div class="empty-icon">⌗</div><div class="empty-title">Sem consumos gerados</div><div class="empty-sub">Lance RDOs e certifique-se de que a aba "Coeficientes" no Sheets está preenchida.</div></div>' :
+          `<table class="t">
+            <thead>
+              <tr>
+                <th>Item Contratual</th>
+                <th>Descrição do Serviço</th>
+                <th>Memória de Cálculo (Origem)</th>
+                <th style="text-align:right">Total Acumulado</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${itens.map((i, idx) => `
+                <tr class="stagger-item" style="animation-delay:${idx * 0.03}s">
+                  <td style="white-space:nowrap"><strong>${i.item}</strong></td>
+                  <td style="font-size:12px; max-width:250px">${i.desc}</td>
+                  <td style="font-size:11px; color:var(--muted); max-width:300px; line-height:1.4">
+                    ${i.pacotes.join('<br>')}
+                  </td>
+                  <td class="t-num" style="font-size:14px; font-weight:bold; color:var(--pri)">
+                    ${fmtNum(i.total)} <span style="font-size:11px; font-weight:normal; color:var(--muted)">${i.und}</span>
+                  </td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>`
+        }
+      </div>
+    </div>
+  `;
 }
 
 function renderRDO() {
@@ -3478,26 +3645,30 @@ function montarGraficos() {
     if (chartCurvaS) { try { chartCurvaS.destroy(); } catch(e){} chartCurvaS = null; }
     
     const av = calcularAvancoPorPacote();
-    const totalEstim = Object.values(av).filter(a => a.pacote['Status'] !== 'Histórico')
-      .reduce((s,a) => s + a.qtdEstimada, 0);
+ const pacotesAtivos = Object.values(av).filter(a => a.pacote['Status'] !== 'Histórico');
     
-    // Acumular por dia
+    // Peso total da obra em DIAS (pra Curva S)
+    const totalDiasObra = pacotesAtivos.reduce((s, a) => {
+      const prod = PRODUTIVIDADE_PADRAO[a.pacote['ID']] || 1;
+      return s + (a.qtdEstimada / prod);
+    }, 0);
+    
+    // Acumular avanço dia a dia (convertendo RDO em dias de esforço concluídos)
     const rdosPorDia = {};
     STATE.rdoavanco.forEach(r => {
       const d = parseISODate(r['Data']);
       if (!d) return;
       const dStr = d.toISOString().split('T')[0];
-      const pid = r['Pacote_ID'];
+      const pid = r['Pacote_ID'] || r['Pacote_id'];
       const pacote = STATE.pacotes.find(p => p['ID'] === pid);
       if (!pacote) return;
-      const qtdEstimP = num(pacote['Qtd Estimada']);
-      if (qtdEstimP <= 0) return;
-      const contrib = num(r['Quantidade']) / qtdEstimP * qtdEstimP / totalEstim;
-      // Equivalente a: cada % de avanço de um pacote contribui proporcionalmente ao seu peso
-      const contribPct = totalEstim > 0 ? num(r['Quantidade']) / totalEstim : 0;
+      
+      const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
+      const diasDesteRDO = num(r['Quantidade']) / prod;
+      const contribPct = totalDiasObra > 0 ? diasDesteRDO / totalDiasObra : 0;
+      
       rdosPorDia[dStr] = (rdosPorDia[dStr] || 0) + contribPct;
     });
-    
     const dias = Object.keys(rdosPorDia).sort();
     let acc = 0;
     const pontos = dias.map(d => {
