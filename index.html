@@ -3634,87 +3634,103 @@ function gerarPDFInterno(data, turnoFocus) {
 // Export funções
 
 // ====================================================================
-// GRÁFICOS (Chart.js)
+// GRÁFICOS (Curva S)
 // ====================================================================
-let chartCurvaS = null;
-
 function montarGraficos() {
-  // Curva S
-  const cv = document.getElementById('curvaS');
-  if (cv) {
-    if (chartCurvaS) { try { chartCurvaS.destroy(); } catch(e){} chartCurvaS = null; }
-    
-    const av = calcularAvancoPorPacote();
- const pacotesAtivos = Object.values(av).filter(a => a.pacote['Status'] !== 'Histórico');
-    
-    // Peso total da obra em DIAS (pra Curva S)
-    const totalDiasObra = pacotesAtivos.reduce((s, a) => {
-      const prod = PRODUTIVIDADE_PADRAO[a.pacote['ID']] || 1;
-      return s + (a.qtdEstimada / prod);
-    }, 0);
-    
-    // Acumular avanço dia a dia (convertendo RDO em dias de esforço concluídos)
-    const rdosPorDia = {};
-    STATE.rdoavanco.forEach(r => {
-      const d = parseISODate(r['Data']);
-      if (!d) return;
-      const dStr = d.toISOString().split('T')[0];
-      const pid = r['Pacote_ID'] || r['Pacote_id'];
-      const pacote = STATE.pacotes.find(p => p['ID'] === pid);
-      if (!pacote) return;
-      
-      const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
-      const diasDesteRDO = num(r['Quantidade']) / prod;
-      const contribPct = totalDiasObra > 0 ? diasDesteRDO / totalDiasObra : 0;
-      
-      rdosPorDia[dStr] = (rdosPorDia[dStr] || 0) + contribPct;
-    });
-    const dias = Object.keys(rdosPorDia).sort();
-    let acc = 0;
-    const pontos = dias.map(d => {
-      acc += rdosPorDia[d];
-      return { x: d, y: acc * 100 };
-    });
-    
-    if (pontos.length > 0) {
-      chartCurvaS = new Chart(cv, {
-        type: 'line',
-        data: {
-          datasets: [{
-            label: 'Avanço acumulado real (%)',
-            data: pontos,
-            borderColor: 'oklch(0.45 0.14 240)',
-            backgroundColor: 'oklch(0.45 0.14 240 / 0.1)',
-            tension: 0.2,
-            fill: true,
-            borderWidth: 2,
-            pointRadius: 3,
-            pointBackgroundColor: 'oklch(0.45 0.14 240)',
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            x: {
-              type: 'time',
-              time: { unit: 'day', displayFormats: { day: 'dd/MM' } },
-              grid: { display: false },
-              ticks: { font: { size: 10 } }
-            },
-            y: {
-              beginAtZero: true,
-              ticks: { font: { size: 10 }, callback: v => v.toFixed(1) + '%' },
-              grid: { color: '#eee' }
+  if (STATE.currentPage !== 'executivo') return;
+  const ctx = document.getElementById('curvaS');
+  if (!ctx) return;
+
+  // Destrói o gráfico anterior para não encavalar se o usuário redimensionar a tela
+  if (window.meuGraficoCurvaS) {
+    window.meuGraficoCurvaS.destroy();
+  }
+
+  const av = calcularAvancoPorPacote();
+  const pacotesAtivos = Object.values(av).filter(a => a.pacote && a.pacote['Status'] !== 'Histórico');
+
+  // 1. Calcular o peso total da obra em DIAS
+  const totalDiasObra = pacotesAtivos.reduce((s, a) => {
+    const pid = a.pacote['ID'];
+    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
+    return s + (a.qtdEstimada / prod);
+  }, 0);
+
+  if (totalDiasObra === 0) return;
+
+  // 2. Acumular os RDOs dia a dia (convertendo a quantidade em dias de esforço)
+  const rdosPorDia = {};
+  STATE.rdoavanco.forEach(r => {
+    const d = parseISODate(r['Data']);
+    if (!d) return;
+    const dStr = d.toISOString().split('T')[0];
+    const pid = r['Pacote_ID'] || r['Pacote_id'];
+    const pacoteInfo = pacotesAtivos.find(p => p.pacote['ID'] === pid);
+
+    if (!pacoteInfo) return; // Ignora pacotes deletados/históricos
+
+    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
+    const diasDesteRDO = num(r['Quantidade']) / prod;
+    const contribPct = diasDesteRDO / totalDiasObra;
+
+    rdosPorDia[dStr] = (rdosPorDia[dStr] || 0) + contribPct;
+  });
+
+  // 3. Preparar os dados para a linha do gráfico
+  const diasOrdenados = Object.keys(rdosPorDia).sort();
+  const labels = [];
+  const dataAcumulada = [];
+  let acumulado = 0;
+
+  diasOrdenados.forEach(d => {
+    acumulado += rdosPorDia[d];
+    const [ano, mes, dia] = d.split('-');
+    labels.push(`${dia}/${mes}`); // Formato DD/MM
+    dataAcumulada.push((acumulado * 100).toFixed(2));
+  });
+
+  // 4. Desenhar o gráfico usando Chart.js
+  window.meuGraficoCurvaS = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Avanço Físico Real (%)',
+        data: dataAcumulada,
+        borderColor: '#2563eb', // Azul vivo
+        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+        borderWidth: 2,
+        fill: true,
+        tension: 0.3, // Deixa a curva suave
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100,
+          ticks: {
+            callback: function(value) { return value + '%' }
+          }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return 'Avanço: ' + context.parsed.y + '%';
             }
           }
         }
-      });
+      }
     }
-  }
+  });
 }
-
 // ====================================================================
 // BOOT
 // ====================================================================
