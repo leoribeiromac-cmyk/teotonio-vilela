@@ -661,73 +661,6 @@ const STATE = {
   loaded: false, lastSync: null,
   currentPage: 'executivo',
   draft: null,  // rascunho do RDO
-  usuarioLogado: localStorage.getItem('teotonio_user') || null // Salva quem logou
-};
-
-// ====================================================================
-// CONTROLE DE ACESSO (Login Simples)
-// ====================================================================
-const ACESSO = {
-  'Leonardo': 'leo2026', // Sua senha (Acesso total)
-  'Wallace': 'wal123',       // Senha do apontador Diurno
-  'Guilherme': 'gui123'          // Senha do apontador Noturno
-};
-
-function renderLogin() {
-  return `
-    <div class="card" style="max-width: 400px; margin: 40px auto; border-top: 4px solid var(--acc);">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Acesso Restrito</div>
-          <div class="card-title-sub">Identifique-se para lançar serviços e RDOs no sistema</div>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="field" style="margin-bottom: 14px;">
-          <label>Usuário / Apontador</label>
-          <select id="loginUser">
-            <option value="">— selecione —</option>
-            ${Object.keys(ACESSO).map(u => `<option value="${u}">${u}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field" style="margin-bottom: 18px;">
-          <label>Senha</label>
-          <input type="password" id="loginPass" placeholder="••••••••" onkeyup="if(event.key==='Enter') fazerLogin()">
-        </div>
-        <button class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">Entrar</button>
-      </div>
-    </div>
-  `;
-}
-window.fazerLogin = function() {
-  const u = document.getElementById('loginUser').value;
-  const p = document.getElementById('loginPass').value;
-  if (!u) { toast('Selecione um usuário', 'error'); return; }
-  if (ACESSO[u] !== p) { toast('Senha incorreta', 'error'); return; }
-  
-  STATE.usuarioLogado = u;
-  localStorage.setItem('teotonio_user', u);
-  toast('Acesso liberado!', 'success');
-  atualizarBotoesTopo(); // Atualiza a barra superior
-  render(); // Recarrega o miolo da tela
-};
-
-window.fazerLogout = function() {
-  STATE.usuarioLogado = null;
-  localStorage.removeItem('teotonio_user');
-  toast('Você saiu do sistema.', 'info');
-  atualizarBotoesTopo(); // Remove o botão de sair da barra superior
-  render();
-};
-
-// Função nova para forçar a barra superior a se redesenhar
-window.atualizarBotoesTopo = function() {
-  const tb = document.getElementById('topbarActions');
-  if (tb) {
-    tb.innerHTML = (STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : '') +
-      '<button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>' +
-      '<button class="btn btn-primary btn-sm" onclick="navigate(\'rdo\')">+ Novo Serviço</button>';
-  }
 };
 
 // ====================================================================
@@ -848,14 +781,13 @@ function listarEstacas() {
 }
 
 // ====================================================================
-// LAYOUT PRINCIPAL E NAVEGAÇÃO
+// LAYOUT PRINCIPAL (sidebar + main)
 // ====================================================================
 function renderShell() {
   const root = document.getElementById('root');
-  if (!root) return;
   root.innerHTML = `
     <div class="app">
-      <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar(false)"></div>
+      <div class="sidebar-overlay" id="sidebarOverlay"></div>
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-logo">
           <div class="badge-obra">CONSÓRCIO ARVEK + GESTOR</div>
@@ -865,19 +797,19 @@ function renderShell() {
         
         <div class="nav-group">
           <div class="nav-label">Análise</div>
-          <div class="nav-item" data-page="executivo" onclick="navigate('executivo')">
+          <div class="nav-item" data-page="executivo">
             <span class="nav-icon">◆</span>
             <span>Executivo</span>
           </div>
-          <div class="nav-item" data-page="avancofisico" onclick="navigate('avancofisico')">
+          <div class="nav-item" data-page="avancofisico">
             <span class="nav-icon">◰</span>
             <span>Avanço Físico</span>
           </div>
-          <div class="nav-item" data-page="cronograma" onclick="navigate('cronograma')">
+          <div class="nav-item" data-page="cronograma">
             <span class="nav-icon">◷</span>
             <span>Cronograma</span>
           </div>
-          <div class="nav-item" data-page="medicao" onclick="navigate('medicao')">
+          <div class="nav-item" data-page="medicao">
             <span class="nav-icon">⌗</span>
             <span>Apoio Medição</span>
           </div>
@@ -887,17 +819,17 @@ function renderShell() {
         
         <div class="nav-group">
           <div class="nav-label">Operação</div>
-          <div class="nav-item" data-page="rdo" onclick="navigate('rdo')">
+          <div class="nav-item" data-page="rdo">
             <span class="nav-icon">⊕</span>
             <span>Lançar Serviço</span>
             <span class="nav-counter" id="rdoCount">0</span>
           </div>
-          <div class="nav-item" data-page="rdodiario" onclick="navigate('rdodiario')">
+          <div class="nav-item" data-page="rdodiario">
             <span class="nav-icon">📋</span>
             <span>RDO Diário</span>
             <span class="nav-counter" id="diarioCount">0</span>
           </div>
-          <div class="nav-item" data-page="historico" onclick="navigate('historico')">
+          <div class="nav-item" data-page="historico">
             <span class="nav-icon">≡</span>
             <span>Histórico</span>
           </div>
@@ -922,8 +854,7 @@ function renderShell() {
               <div class="topbar-sub" id="pageSubtitle">Visão consolidada da obra</div>
             </div>
           </div>
-          <div style="display:flex;gap:8px" id="topbarActions">
-            ${STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : ''}
+          <div style="display:flex;gap:8px">
             <button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>
             <button class="btn btn-primary btn-sm" onclick="navigate('rdo')">+ Novo Serviço</button>
           </div>
@@ -932,6 +863,12 @@ function renderShell() {
       </main>
     </div>
   `;
+  
+  // Bind navegação
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.onclick = () => navigate(el.dataset.page);
+  });
+  document.getElementById('sidebarOverlay').onclick = () => toggleSidebar(false);
 }
 
 function toggleSidebar(open) {
@@ -952,39 +889,10 @@ function navigate(page) {
   render();
 }
 
-window.fazerLogin = function() {
-  const u = document.getElementById('loginUser').value;
-  const p = document.getElementById('loginPass').value;
-  if (!u) { toast('Selecione um usuário', 'error'); return; }
-  if (ACESSO[u] !== p) { toast('Senha incorreta', 'error'); return; }
-  
-  STATE.usuarioLogado = u;
-  localStorage.setItem('teotonio_user', u);
-  toast('Acesso liberado!', 'success');
-  atualizarBotoesTopo();
-  render();
-};
-
-window.fazerLogout = function() {
-  STATE.usuarioLogado = null;
-  localStorage.removeItem('teotonio_user');
-  toast('Você saiu do sistema.', 'info');
-  atualizarBotoesTopo();
-  render();
-};
-
-window.atualizarBotoesTopo = function() {
-  const tb = document.getElementById('topbarActions');
-  if (tb) {
-    tb.innerHTML = (STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : '') +
-      '<button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>' +
-      '<button class="btn btn-primary btn-sm" onclick="navigate(\'rdo\')">+ Novo Serviço</button>';
-  }
-};
-
 function render() {
   if (!STATE.loaded) return;
   
+  // Resetar animação de entrada da página
   const pageEl = document.getElementById('page');
   if (pageEl) {
     pageEl.classList.remove('page-enter');
@@ -1008,15 +916,6 @@ function render() {
   document.getElementById('diarioCount').textContent = (STATE.rdodiario||[]).length;
   
   const page = document.getElementById('page');
-  
-  const telasRestritas = ['rdo', 'rdodiario'];
-  if (telasRestritas.includes(STATE.currentPage) && !STATE.usuarioLogado) {
-    document.getElementById('pageTitle').textContent = 'Login Necessário';
-    document.getElementById('pageSubtitle').textContent = 'Área restrita à equipe de apontamento e engenharia';
-    page.innerHTML = renderLogin();
-    return;
-  }
-
   if (STATE.currentPage === 'executivo') page.innerHTML = renderExecutivo();
   else if (STATE.currentPage === 'avancofisico') page.innerHTML = renderAvancoFisico();
   else if (STATE.currentPage === 'cronograma') page.innerHTML = renderCronograma();
@@ -1025,11 +924,30 @@ function render() {
   else if (STATE.currentPage === 'rdodiario') { page.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
   else if (STATE.currentPage === 'historico') page.innerHTML = renderHistorico();
   
+  // Após render, montar gráficos se aplicável
   setTimeout(montarGraficos, 50);
 }
 
+function renderError(e) {
+  const page = document.getElementById('page');
+  if (!page) return;
+  page.innerHTML = `
+    <div class="card">
+      <div class="card-body">
+        <div class="empty">
+          <div class="empty-icon">⚠</div>
+          <div class="empty-title">Não consegui carregar os dados</div>
+          <div class="empty-sub">${e.message}<br><br>Verifique se os CSVs estão publicados na Sheets e tente novamente.</div>
+          <br>
+          <button class="btn btn-primary" onclick="carregarTudo()">↻ Tentar de novo</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 // ====================================================================
-// VIEW: EXECUTIVO (Agora Ponderado por Esforço)
+// VIEW: EXECUTIVO
 // ====================================================================
 function renderExecutivo() {
   const av = calcularAvancoPorPacote();
@@ -1040,34 +958,31 @@ function renderExecutivo() {
   const concluidos = pacotes.filter(a => a.pct >= 0.999).length;
   const totalRDOs = STATE.rdoavanco.length;
   
-  pacotes.forEach(a => {
-    const pid = a.pacote['ID'];
-    const prod = PRODUTIVIDADE_PADRAO[pid] || 1; 
-    a.diasEstimados = a.qtdEstimada / prod;
-    a.diasExecutados = a.pct * a.diasEstimados;
-  });
-
-  const totalDiasEstimados = pacotes.reduce((s,a) => s + a.diasEstimados, 0);
-  const pctPond = totalDiasEstimados > 0 ?
-    pacotes.reduce((s,a) => s + a.diasExecutados, 0) / totalDiasEstimados : 0;
+  // % físico ponderado pela qtd estimada (peso real, não média simples)
+  const totalEstim = pacotes.reduce((s,a) => s + a.qtdEstimada, 0);
+  const pctPond = totalEstim > 0 ?
+    pacotes.reduce((s,a) => s + a.pct * a.qtdEstimada, 0) / totalEstim : 0;
   
+  // Avanço por frente (ponderado também)
   const porFrente = {};
   pacotes.forEach(a => {
     const f = a.pacote['Frente'] || 'Outros';
-    if (!porFrente[f]) porFrente[f] = { items: [], totalDiasEstim: 0, totalDiasExec: 0 };
+    if (!porFrente[f]) porFrente[f] = { items: [], totalEstim: 0, totalExec: 0 };
     porFrente[f].items.push(a);
-    porFrente[f].totalDiasEstim += a.diasEstimados;
-    porFrente[f].totalDiasExec += a.diasExecutados;
+    porFrente[f].totalEstim += a.qtdEstimada;
+    porFrente[f].totalExec += a.qtdExecutada;
   });
   Object.values(porFrente).forEach(f => {
-    f.pctPond = f.totalDiasEstim > 0 ? f.totalDiasExec / f.totalDiasEstim : 0;
+    f.pctPond = f.totalEstim > 0 ? f.totalExec / f.totalEstim : 0;
   });
   
+  // Top pacotes ativos
   const ativosOrdenados = pacotes
     .filter(a => a.qtdExecutada > 0)
     .sort((a,b) => (b.ultimaData || 0) - (a.ultimaData || 0))
     .slice(0, 8);
   
+  // Curva S (acumulado por dia)
   const rdosOrdenados = [...STATE.rdoavanco]
     .map(r => ({ data: parseISODate(r['Data']), pid: r['Pacote_ID'], qtd: num(r['Quantidade']) }))
     .filter(r => r.data && r.pid)
@@ -1076,7 +991,7 @@ function renderExecutivo() {
   return `
     <div class="kpi-grid">
       <div class="kpi-card kpi-hero stagger-item" style="animation-delay:.05s">
-        <div class="kpi-label">AVANÇO FÍSICO GERAL · PONDERADO (DIAS)</div>
+        <div class="kpi-label">AVANÇO FÍSICO GERAL · PONDERADO</div>
         <div class="kpi-value">${fmtPct(pctPond)}</div>
         <div class="kpi-sub">${totalRDOs} registros de serviço · ${iniciados} de ${totalPac} pacotes iniciados</div>
         <div class="kpi-bar-wrap" style="background:rgba(255,255,255,.15);margin-top:10px">
@@ -1106,7 +1021,7 @@ function renderExecutivo() {
         <div class="card-header">
           <div>
             <div class="card-title">Curva S — avanço acumulado</div>
-            <div class="card-title-sub">% ponderada pelo esforço (dias)</div>
+            <div class="card-title-sub">% acumulado por dia (RDOs reais)</div>
           </div>
         </div>
         <div class="card-body">
@@ -1120,7 +1035,7 @@ function renderExecutivo() {
         <div class="card-header">
           <div>
             <div class="card-title">Avanço por frente</div>
-            <div class="card-title-sub">Ponderado pelo peso do serviço (dias)</div>
+            <div class="card-title-sub">Ponderado por quantidade estimada</div>
           </div>
         </div>
         <div class="card-body">
@@ -1153,7 +1068,7 @@ function renderExecutivo() {
       </div>
       <div class="card-body flush">
         ${ativosOrdenados.length === 0 ?
-          '<div class="empty"><div class="empty-icon">⊕</div><div class="empty-title">Nenhum RDO ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro RDO</button></div>' :
+          '<div class="empty"><div class="empty-icon">⊕</div><div class="empty-title">Nenhum RDO ainda</div><div class="empty-sub">Comece lançando o primeiro serviço pra ver o sistema funcionar.</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro RDO</button></div>' :
           `<table class="t">
             <thead>
               <tr><th>Pacote</th><th>Frente</th><th>Executado</th><th>Avanço</th><th>Última atividade</th></tr>
@@ -1180,6 +1095,7 @@ function renderExecutivo() {
     </div>
   `;
 }
+
 // ====================================================================
 // VIEW: AVANÇO FÍSICO (heatmap + tabela)
 // ====================================================================
@@ -1641,90 +1557,353 @@ function defaultDraft() {
     ]
   };
 }
- // ====================================================================
-// VIEW: APOIO À MEDIÇÃO (Consumo Derivado)
-// ====================================================================
-function renderMedicao() {
-  // Pega o avanço atual de todos os pacotes
-  const av = calcularAvancoPorPacote();
+
+function renderRDO() {
+  if (!STATE.draft) STATE.draft = loadDraft() || defaultDraft();
+  const d = STATE.draft;
   
-  // Objeto para acumular as quantidades por Item Contratual
-  const consumoContratual = {};
-
-  // Cruza o avanço com a matriz de coeficientes
-  if (STATE.coeficientes && STATE.coeficientes.length > 0) {
-    STATE.coeficientes.forEach(c => {
-      // MAPEAMENTO AJUSTADO EXATAMENTE PARA O SEU CABEÇALHO DO SHEETS
-      const pid = c['Pacote ID'] || c['Pacote_ID'];
-      const pacoteData = av[pid];
-
-      // Se o pacote teve avanço físico, calcula o consumo derivado
-      if (pacoteData && pacoteData.qtdExecutada > 0) {
-        const item = c['Item Contratual'] || 'S/N';
-        const desc = c['Descrição Item'] || '';
-        const und = c['Unid Item'] || '';
-        const coef = num(c['Coef']);
-
-        const gerado = pacoteData.qtdExecutada * coef;
-
-        if (gerado > 0) {
-          if (!consumoContratual[item]) {
-            consumoContratual[item] = { item, desc, und, total: 0, pacotes: [] };
-          }
-          consumoContratual[item].total += gerado;
-          
-          // Guarda o rastro de auditoria (de qual pacote veio esse volume)
-          consumoContratual[item].pacotes.push(
-            `<span style="color:var(--text)">${pacoteData.pacote['Pacote']}:</span> ${fmtNum(gerado)} ${und}`
-          );
-        }
-      }
-    });
-  }
-
-  // Ordena os itens contratuais por código
-  const itens = Object.values(consumoContratual).sort((a,b) => a.item.localeCompare(b.item));
-
+  const estacasCB = []; for (let i = CONFIG.estacasCB.ini; i <= CONFIG.estacasCB.fim; i++) estacasCB.push('E' + i);
+  const estacasBC = []; for (let i = CONFIG.estacasBC.ini; i <= CONFIG.estacasBC.fim; i++) estacasBC.push('E' + i);
+  const estacasUsar = d.sentido === 'CB' ? estacasCB : estacasBC;
+  
+  const frentes = [...new Set(STATE.pacotes
+    .filter(p => p['Status'] !== 'Histórico' && p['Frente'])
+    .map(p => p['Frente']))].sort();
+  
+  const temRascunho = !!loadDraft();
+  
   return `
+    ${temRascunho ? `
+      <div style="background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+        <div style="font-size:13px;color:var(--ylw-d)">📝 Rascunho restaurado da última sessão.</div>
+        <button class="btn btn-sm btn-outline" onclick="resetDraft()">Limpar e começar novo</button>
+      </div>
+    ` : ''}
+    
     <div class="card">
       <div class="card-header">
         <div>
-          <div class="card-title">Apoio à Medição · Consumo Derivado</div>
-          <div class="card-title-sub">Geração automática de quantidades contratuais cruzando o avanço físico com a matriz de coeficientes</div>
+          <div class="card-title">Identificação</div>
+          <div class="card-title-sub">Data, turno e seu nome — cada serviço tem sua própria estaca</div>
         </div>
       </div>
-      <div class="card-body flush">
-        ${itens.length === 0 ?
-          '<div class="empty"><div class="empty-icon">⌗</div><div class="empty-title">Sem consumos gerados</div><div class="empty-sub">Lance RDOs e certifique-se de que a aba "Coeficientes" no Sheets está preenchida.</div></div>' :
-          `<table class="t">
-            <thead>
-              <tr>
-                <th>Item Contratual</th>
-                <th>Descrição do Serviço</th>
-                <th>Memória de Cálculo (Origem)</th>
-                <th style="text-align:right">Total Acumulado</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${itens.map((i, idx) => `
-                <tr class="stagger-item" style="animation-delay:${idx * 0.03}s">
-                  <td style="white-space:nowrap"><strong>${i.item}</strong></td>
-                  <td style="font-size:12px; max-width:250px">${i.desc}</td>
-                  <td style="font-size:11px; color:var(--muted); max-width:300px; line-height:1.4">
-                    ${i.pacotes.join('<br>')}
-                  </td>
-                  <td class="t-num" style="font-size:14px; font-weight:bold; color:var(--pri)">
-                    ${fmtNum(i.total)} <span style="font-size:11px; font-weight:normal; color:var(--muted)">${i.und}</span>
-                  </td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>`
-        }
+      <div class="card-body">
+        <div class="form-grid">
+          <div class="field">
+            <label>Data</label>
+            <input type="date" data-draft="data" value="${d.data}">
+          </div>
+          <div class="field">
+            <label>Turno</label>
+            <div class="btn-toggle-group">
+              <button type="button" class="btn-toggle ${d.turno==='Diurno'?'active':''}" onclick="setTurno('Diurno')">☀ Diurno</button>
+              <button type="button" class="btn-toggle ${d.turno==='Noturno'?'active':''}" onclick="setTurno('Noturno')">🌙 Noturno</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Apontador</label>
+            <input type="text" data-draft="apontador" value="${d.apontador}" placeholder="Seu nome">
+          </div>
+          <div class="field" style="grid-column:1/-1">
+            <label>Observação geral (opcional)</label>
+            <input type="text" data-draft="observacaoGeral" value="${d.observacaoGeral}" placeholder="ex: Continuar amanhã">
+          </div>
+        </div>
+        <div style="margin-top:12px;padding:10px 14px;background:var(--blu-l);border-radius:var(--r);font-size:12px;color:var(--blu)">
+          ℹ Efetivo, equipamentos e clima vão na aba <strong>RDO Diário</strong> (1× por dia, separadamente).
+        </div>
+      </div>
+    </div>
+    
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Serviços executados</div>
+          <div class="card-title-sub">Adicione 1 linha por pacote · cada linha vira 1 lançamento em RDO_Avanco</div>
+        </div>
+        <span style="font-size:11px;color:var(--muted)">${d.servicos.length} serviço${d.servicos.length>1?'s':''}</span>
+      </div>
+      <div class="card-body">
+        <div id="servicosList">
+          ${d.servicos.map((s, i) => renderServicoRow(s, i, frentes)).join('')}
+        </div>
+        <button class="btn-add-servico" onclick="adicionarServico()">+ Adicionar outro serviço</button>
+      </div>
+    </div>
+    
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px">
+      <div style="font-size:12px;color:var(--muted);max-width:520px">
+        ⓘ Cada serviço vira 1 linha em <strong>RDO_Avanco</strong>. O dashboard atualiza em até 5 min.
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-outline" onclick="resetDraft()">Limpar</button>
+        <button class="btn btn-primary btn-lg" id="btnSalvarRDO" onclick="salvarRDO()">💾 Salvar Serviços</button>
       </div>
     </div>
   `;
 }
+
+function renderServicoRow(s, idx, frentes) {
+  // Pacotes filtrados pela frente selecionada
+  const pacotesDaFrente = s.frente ? 
+    STATE.pacotes.filter(p => p['Frente'] === s.frente && p['Status'] !== 'Histórico') :
+    [];
+  const pacoteSelecionado = STATE.pacotes.find(p => p['ID'] === s.pacoteId);
+  const unidade = pacoteSelecionado ? (pacoteSelecionado['Unidade Física'] || '') : '';
+  
+  // Estacas conforme sentido deste serviço
+  const sentido = s.sentido || 'CB';
+  const estacasCB = []; for (let i = CONFIG.estacasCB.ini; i <= CONFIG.estacasCB.fim; i++) estacasCB.push('E' + i);
+  const estacasBC = []; for (let i = CONFIG.estacasBC.ini; i <= CONFIG.estacasBC.fim; i++) estacasBC.push('E' + i);
+  const estacasUsar = sentido === 'CB' ? estacasCB : estacasBC;
+  
+  return `
+    <div class="servico-row" data-idx="${idx}">
+      <span class="row-num">SERVIÇO ${idx + 1}</span>
+      ${idx > 0 ? `<button class="btn-remove" onclick="removerServico(${idx})" title="Remover">×</button>` : ''}
+      <div class="form-grid" style="margin-top:6px">
+        <div class="field">
+          <label>Frente</label>
+          <select data-svc="${idx}" data-field="frente">
+            <option value="">— escolher —</option>
+            ${frentes.map(f => `<option ${s.frente===f?'selected':''}>${f}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Pacote / Serviço</label>
+          <select data-svc="${idx}" data-field="pacoteId" ${!s.frente ? 'disabled' : ''}>
+            <option value="">${s.frente ? '— escolher pacote —' : '↑ escolha frente primeiro'}</option>
+            ${pacotesDaFrente.map(p => `<option value="${p['ID']}" ${s.pacoteId===p['ID']?'selected':''}>${p['Pacote']} (${p['Unidade Física']||''})</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Sentido da via</label>
+          <select data-svc="${idx}" data-field="sentido">
+            <option value="CB" ${sentido==='CB'?'selected':''}>Centro→Bairro (E${CONFIG.estacasCB.ini}–E${CONFIG.estacasCB.fim})</option>
+            <option value="BC" ${sentido==='BC'?'selected':''}>Bairro→Centro (E${CONFIG.estacasBC.ini}–E${CONFIG.estacasBC.fim})</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Estaca início</label>
+          <select data-svc="${idx}" data-field="estacaIni">
+            <option value="">— início —</option>
+            ${estacasUsar.map(e => `<option ${s.estacaIni===e?'selected':''}>${e}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Estaca fim</label>
+          <select data-svc="${idx}" data-field="estacaFim">
+            <option value="">— fim —</option>
+            ${estacasUsar.map(e => `<option ${s.estacaFim===e?'selected':''}>${e}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Quantidade ${unidade ? `(${unidade})` : ''}</label>
+          <input type="number" data-svc="${idx}" data-field="quantidade" value="${s.quantidade}" placeholder="0" step="0.01" min="0">
+        </div>
+        <div class="field">
+          <label>Equipe / Subcontratado</label>
+          <input type="text" data-svc="${idx}" data-field="equipe" value="${s.equipe}" placeholder="ex: Sena Obras">
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Observação do serviço (opcional)</label>
+          <input type="text" data-svc="${idx}" data-field="observacao" value="${s.observacao}" placeholder="ex: Continuar amanhã">
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function attachRDOForm() {
+  // Bind inputs do cabeçalho
+  document.querySelectorAll('[data-draft]').forEach(el => {
+    el.oninput = el.onchange = () => {
+      STATE.draft[el.dataset.draft] = el.value;
+      if (el.dataset.draft === 'apontador') {
+        try { localStorage.setItem(CONFIG.ls.apontador, el.value); } catch(e) {}
+      }
+      saveDraft(STATE.draft);
+    };
+  });
+  
+  // Bind inputs dos serviços (delegação)
+  document.getElementById('servicosList').addEventListener('input', svcInputHandler);
+  document.getElementById('servicosList').addEventListener('change', svcInputHandler);
+}
+
+function svcInputHandler(ev) {
+  const el = ev.target;
+  if (!el.dataset.svc) return;
+  const idx = parseInt(el.dataset.svc);
+  const field = el.dataset.field;
+  STATE.draft.servicos[idx][field] = el.value;
+  
+  // Se mudou frente, limpa pacote e re-renderiza
+  if (field === 'frente') {
+    STATE.draft.servicos[idx].pacoteId = '';
+    rerenderServicoRow(idx);
+  }
+  // Se mudou pacote, atualiza unidade exibida
+  if (field === 'pacoteId') {
+    rerenderServicoRow(idx);
+  }
+  // Se mudou sentido, limpa as estacas e re-renderiza
+  if (field === 'sentido') {
+    STATE.draft.servicos[idx].estacaIni = '';
+    STATE.draft.servicos[idx].estacaFim = '';
+    rerenderServicoRow(idx);
+  }
+  saveDraft(STATE.draft);
+}
+
+function rerenderServicoRow(idx) {
+  const frentes = [...new Set(STATE.pacotes
+    .filter(p => p['Status'] !== 'Histórico' && p['Frente'])
+    .map(p => p['Frente']))].sort();
+  const html = renderServicoRow(STATE.draft.servicos[idx], idx, frentes);
+  const old = document.querySelector(`.servico-row[data-idx="${idx}"]`);
+  if (old) {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    old.replaceWith(tmp.firstElementChild);
+  }
+}
+
+function setTurno(t) {
+  STATE.draft.turno = t;
+  saveDraft(STATE.draft);
+  render();
+}
+
+function adicionarServico() {
+  // Herda sentido do último serviço pra acelerar lançamento
+  const ultimo = STATE.draft.servicos[STATE.draft.servicos.length - 1];
+  STATE.draft.servicos.push({
+    frente: '', pacoteId: '',
+    sentido: ultimo ? ultimo.sentido : 'CB',
+    estacaIni: '', estacaFim: '',
+    quantidade: '', equipe: '', observacao: ''
+  });
+  saveDraft(STATE.draft);
+  render();
+}
+
+function removerServico(idx) {
+  STATE.draft.servicos.splice(idx, 1);
+  if (STATE.draft.servicos.length === 0) {
+    STATE.draft.servicos.push({ frente: '', pacoteId: '', quantidade: '', equipe: '', observacao: '' });
+  }
+  saveDraft(STATE.draft);
+  render();
+}
+
+function resetDraft() {
+  if (!confirm('Limpar todos os dados desse RDO? Não tem como desfazer.')) return;
+  clearDraft();
+  STATE.draft = defaultDraft();
+  render();
+}
+
+function validarRDO(d) {
+  const erros = [];
+  if (!d.data) erros.push('Data é obrigatória');
+  if (!d.apontador.trim()) erros.push('Apontador é obrigatório');
+  
+  const servicosValidos = d.servicos.filter(s => s.pacoteId && num(s.quantidade) > 0);
+  if (servicosValidos.length === 0) {
+    erros.push('Adicione pelo menos 1 serviço com pacote e quantidade > 0');
+    return erros;
+  }
+  // Cada serviço precisa ter suas estacas
+  for (let i = 0; i < d.servicos.length; i++) {
+    const s = d.servicos[i];
+    if (s.pacoteId && num(s.quantidade) > 0) {
+      if (!s.estacaIni || !s.estacaFim) {
+        erros.push(`Serviço ${i+1}: estaca início e fim obrigatórias`);
+        break;
+      }
+    }
+  }
+  return erros;
+}
+
+async function salvarRDO() {
+  const d = STATE.draft;
+  const erros = validarRDO(d);
+  if (erros.length > 0) {
+    toast(erros.join(' · '), 'error', 5000);
+    return;
+  }
+  
+  const btn = document.getElementById('btnSalvarRDO');
+  const btnTxtOriginal = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Salvando…';
+  
+  // Montar batch — cada serviço usa SUAS PRÓPRIAS estacas
+  const batch = d.servicos
+    .filter(s => s.pacoteId && num(s.quantidade) > 0)
+    .map(s => {
+      const p = STATE.pacotes.find(pp => pp['ID'] === s.pacoteId);
+      const obsCompleta = [d.observacaoGeral, s.observacao].filter(x => x && x.trim()).join(' · ');
+      // Estaca específica deste serviço
+      let localEstaca = '';
+      if (s.estacaIni && s.estacaFim) localEstaca = `${s.estacaIni} a ${s.estacaFim} (${s.sentido||'CB'})`;
+      else if (s.estacaIni) localEstaca = `${s.estacaIni} (${s.sentido||'CB'})`;
+      return {
+        data: d.data,
+        turno: d.turno || 'Diurno',
+        pacote_id: s.pacoteId,
+        pacote_nome: p ? p['Pacote'] : '',
+        quantidade: num(s.quantidade),
+        unidade: p ? (p['Unidade Física']||'') : '',
+        local_estaca: localEstaca,
+        equipe: s.equipe,
+        subcontratado: s.equipe,
+        efetivo_total: 0,
+        equipamentos: '',
+        clima: '',
+        paralisado_motivo: '',
+        foto_link: '',
+        observacao: obsCompleta,
+        apontador: d.apontador
+      };
+    });
+  
+  try {
+    const result = await jsonp(CONFIG.appsScript, {
+      action: 'addBatchRDO',
+      batch: JSON.stringify(batch)
+    });
+    
+    if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+    
+    toast(`✓ ${batch.length} serviço${batch.length>1?'s':''} salvo${batch.length>1?'s':''} (${d.turno})`, 'success', 4000);
+    
+    clearDraft();
+    STATE.draft = {
+      ...defaultDraft(),
+      apontador: d.apontador,
+      sentido: d.sentido,
+      turno: d.turno,
+    };
+    
+    // Forçar refresh dos dados (vai aparecer em ~5min depois da republicação)
+    setTimeout(() => carregarTudo(), 800);
+    
+    // Voltar pra tela executiva
+    HISTORICO_TAB = 'servicos';
+    setTimeout(() => navigate('historico'), 600);
+    
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = btnTxtOriginal;
+    toast('Falha ao salvar: ' + e.message, 'error', 6000);
+  }
+}
+
+
+
 
 // ====================================================================
 // CATEGORIAS DE EFETIVO (v4 - Direto/Indireto + fluxo por turno)
@@ -3288,102 +3467,81 @@ function gerarPDFInterno(data, turnoFocus) {
 // Export funções
 
 // ====================================================================
-// GRÁFICOS (Curva S)
+// GRÁFICOS (Chart.js)
 // ====================================================================
+let chartCurvaS = null;
+
 function montarGraficos() {
-  if (STATE.currentPage !== 'executivo') return;
-  const ctx = document.getElementById('curvaS');
-  if (!ctx) return;
-
-  // Destrói o gráfico anterior para não encavalar se o usuário redimensionar a tela
-  if (window.meuGraficoCurvaS) {
-    window.meuGraficoCurvaS.destroy();
-  }
-
-  const av = calcularAvancoPorPacote();
-  const pacotesAtivos = Object.values(av).filter(a => a.pacote && a.pacote['Status'] !== 'Histórico');
-
-  // 1. Calcular o peso total da obra em DIAS
-  const totalDiasObra = pacotesAtivos.reduce((s, a) => {
-    const pid = a.pacote['ID'];
-    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
-    return s + (a.qtdEstimada / prod);
-  }, 0);
-
-  if (totalDiasObra === 0) return;
-
-  // 2. Acumular os RDOs dia a dia (convertendo a quantidade em dias de esforço)
-  const rdosPorDia = {};
-  STATE.rdoavanco.forEach(r => {
-    const d = parseISODate(r['Data']);
-    if (!d) return;
-    const dStr = d.toISOString().split('T')[0];
-    const pid = r['Pacote_ID'] || r['Pacote_id'];
-    const pacoteInfo = pacotesAtivos.find(p => p.pacote['ID'] === pid);
-
-    if (!pacoteInfo) return; // Ignora pacotes deletados/históricos
-
-    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
-    const diasDesteRDO = num(r['Quantidade']) / prod;
-    const contribPct = diasDesteRDO / totalDiasObra;
-
-    rdosPorDia[dStr] = (rdosPorDia[dStr] || 0) + contribPct;
-  });
-
-  // 3. Preparar os dados para a linha do gráfico
-  const diasOrdenados = Object.keys(rdosPorDia).sort();
-  const labels = [];
-  const dataAcumulada = [];
-  let acumulado = 0;
-
-  diasOrdenados.forEach(d => {
-    acumulado += rdosPorDia[d];
-    const [ano, mes, dia] = d.split('-');
-    labels.push(`${dia}/${mes}`); // Formato DD/MM
-    dataAcumulada.push((acumulado * 100).toFixed(2));
-  });
-
-  // 4. Desenhar o gráfico usando Chart.js
-  window.meuGraficoCurvaS = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Avanço Físico Real (%)',
-        data: dataAcumulada,
-        borderColor: '#2563eb', // Azul vivo
-        backgroundColor: 'rgba(37, 99, 235, 0.1)',
-        borderWidth: 2,
-        fill: true,
-        tension: 0.3, // Deixa a curva suave
-        pointRadius: 4,
-        pointHoverRadius: 6
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: {
-          beginAtZero: true,
-          max: 100,
-          ticks: {
-            callback: function(value) { return value + '%' }
-          }
-        }
-      },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              return 'Avanço: ' + context.parsed.y + '%';
+  // Curva S
+  const cv = document.getElementById('curvaS');
+  if (cv) {
+    if (chartCurvaS) { try { chartCurvaS.destroy(); } catch(e){} chartCurvaS = null; }
+    
+    const av = calcularAvancoPorPacote();
+    const totalEstim = Object.values(av).filter(a => a.pacote['Status'] !== 'Histórico')
+      .reduce((s,a) => s + a.qtdEstimada, 0);
+    
+    // Acumular por dia
+    const rdosPorDia = {};
+    STATE.rdoavanco.forEach(r => {
+      const d = parseISODate(r['Data']);
+      if (!d) return;
+      const dStr = d.toISOString().split('T')[0];
+      const pid = r['Pacote_ID'];
+      const pacote = STATE.pacotes.find(p => p['ID'] === pid);
+      if (!pacote) return;
+      const qtdEstimP = num(pacote['Qtd Estimada']);
+      if (qtdEstimP <= 0) return;
+      const contrib = num(r['Quantidade']) / qtdEstimP * qtdEstimP / totalEstim;
+      // Equivalente a: cada % de avanço de um pacote contribui proporcionalmente ao seu peso
+      const contribPct = totalEstim > 0 ? num(r['Quantidade']) / totalEstim : 0;
+      rdosPorDia[dStr] = (rdosPorDia[dStr] || 0) + contribPct;
+    });
+    
+    const dias = Object.keys(rdosPorDia).sort();
+    let acc = 0;
+    const pontos = dias.map(d => {
+      acc += rdosPorDia[d];
+      return { x: d, y: acc * 100 };
+    });
+    
+    if (pontos.length > 0) {
+      chartCurvaS = new Chart(cv, {
+        type: 'line',
+        data: {
+          datasets: [{
+            label: 'Avanço acumulado real (%)',
+            data: pontos,
+            borderColor: 'oklch(0.45 0.14 240)',
+            backgroundColor: 'oklch(0.45 0.14 240 / 0.1)',
+            tension: 0.2,
+            fill: true,
+            borderWidth: 2,
+            pointRadius: 3,
+            pointBackgroundColor: 'oklch(0.45 0.14 240)',
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: {
+              type: 'time',
+              time: { unit: 'day', displayFormats: { day: 'dd/MM' } },
+              grid: { display: false },
+              ticks: { font: { size: 10 } }
+            },
+            y: {
+              beginAtZero: true,
+              ticks: { font: { size: 10 }, callback: v => v.toFixed(1) + '%' },
+              grid: { color: '#eee' }
             }
           }
         }
-      }
+      });
     }
-  });
+  }
 }
 
 // ====================================================================
