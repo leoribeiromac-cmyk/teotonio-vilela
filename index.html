@@ -710,40 +710,42 @@ function listarEstacas() {
 }
 
 // ====================================================================
-// GEMINI API INTEGRATION
+// AI INTEGRATION (via Lovable Cloud Edge Function)
 // ====================================================================
 async function callGeminiAPI(promptText) {
-  const apiKey = "";
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-  const payload = {
-    contents: [{ parts: [{ text: promptText }] }],
-    systemInstruction: { 
-      parts: [{ text: "Atue como um Analista Diretor de Obra experiente. Avalie os dados de progresso e resuma a situação atual da obra. Identifique gargalos (pacotes pouco executados) e frentes mais ativas. Seja profissional, direto e utilize Português de Portugal. Estruture sua resposta em HTML limpo, usando tags como <h3>, <p>, <ul>, <li> e <strong>. Nunca inclua blocos markdown (```html) na resposta final, apenas o conteúdo." }] 
-    }
-  };
+  const SUPABASE_URL = 'https://catkiwchpjfnwblyaqlm.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhdGtpd2NocGpmbndibHlhcWxtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc4NTE5MjIsImV4cCI6MjA5MzQyNzkyMn0.A4qNb8DckmSXH4hduJE2SzQczRAIgb9NoJ7HRAqGrXw';
+  
+  const url = SUPABASE_URL + '/functions/v1/analista-ia';
 
-  let retries = 5;
+  let retries = 3;
   let delay = 1000;
   
   for (let i = 0; i < retries; i++) {
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+          'apikey': SUPABASE_ANON_KEY,
+        },
+        body: JSON.stringify({ prompt: promptText })
       });
       
-      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+      if (!response.ok) throw new Error('HTTP Error: ' + response.status);
       
       const data = await response.json();
-      if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
-        return data.candidates[0].content.parts[0].text;
+      if (data.error) throw new Error(data.error);
+      if (data.text) {
+        let clean = data.text.replace(/```html/g, '').replace(/```/g, '');
+        return clean;
       } else {
         throw new Error('Formato de resposta inesperado.');
       }
     } catch (err) {
       if (i === retries - 1) {
-        throw new Error('Falha ao comunicar com a IA após várias tentativas.');
+        throw new Error('Falha ao comunicar com a IA: ' + err.message);
       }
       await new Promise(r => setTimeout(r, delay));
       delay *= 2;
@@ -3793,104 +3795,6 @@ function gerarPDFInterno(data, turnoFocus) {
 // Export funções
 
 // ====================================================================
-// GRÁFICOS (Curva S)
-// ====================================================================
-function montarGraficos() {
-  if (STATE.currentPage !== 'executivo') return;
-  const ctx = document.getElementById('curvaS');
-  if (!ctx) return;
-
-  // Destrói o gráfico anterior para não encavalar se o usuário redimensionar a tela
-  if (window.meuGraficoCurvaS) {
-    window.meuGraficoCurvaS.destroy();
-  }
-
-  const av = calcularAvancoPorPacote();
-  const pacotesAtivos = Object.values(av).filter(a => a.pacote && a.pacote['Status'] !== 'Histórico');
-
-  // 1. Calcular o peso total da obra em DIAS
-  const totalDiasObra = pacotesAtivos.reduce((s, a) => {
-    const pid = a.pacote['ID'];
-    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
-    return s + (a.qtdEstimada / prod);
-  }, 0);
-
-  if (totalDiasObra === 0) return;
-
-  // 2. Acumular os RDOs dia a dia (convertendo a quantidade em dias de esforço)
-  const rdosPorDia = {};
-  STATE.rdoavanco.forEach(r => {
-    const d = parseISODate(r['Data']);
-    if (!d) return;
-    const dStr = d.toISOString().split('T')[0];
-    const pid = r['Pacote_ID'] || r['Pacote_id'];
-    const pacoteInfo = pacotesAtivos.find(p => p.pacote['ID'] === pid);
-
-    if (!pacoteInfo) return; // Ignora pacotes deletados/históricos
-
-    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
-    const diasDesteRDO = num(r['Quantidade']) / prod;
-    const contribPct = diasDesteRDO / totalDiasObra;
-
-    rdosPorDia[dStr] = (rdosPorDia[dStr] || 0) + contribPct;
-  });
-
-  // 3. Preparar os dados para a linha do gráfico
-  const diasOrdenados = Object.keys(rdosPorDia).sort();
-  const labels = [];
-  const dataAcumulada = [];
-  let acumulado = 0;
-
-  diasOrdenados.forEach(d => {
-    acumulado += rdosPorDia[d];
-    const [ano, mes, dia] = d.split('-');
-    labels.push(`${dia}/${mes}`); // Formato DD/MM
-    dataAcumulada.push((acumulado * 100).toFixed(2));
-  });
-
-  // 4. Desenhar o gráfico usando Chart.js
-  window.meuGraficoCurvaS = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Avanço Físico Real (%)',
-        data: dataAcumulada,
-        borderColor: '#2563eb', // Azul vivo
-        backgroundColor: 'rgba(37, 99, 235, 0.1)',
-        borderWidth: 2,
-        fill: true,
-        tension: 0.3, // Deixa a curva suave
-        pointRadius: 4,
-        pointHoverRadius: 6
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        y: {
-          beginAtZero: true,
-          max: 100,
-          ticks: {
-            callback: function(value) { return value + '%' }
-          }
-        }
-      },
-      plugins: {
-        legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: function(context) {
-              return 'Avanço: ' + context.parsed.y + '%';
-            }
-          }
-        }
-      }
-    }
-  });
-}
-// ====================================================================
 // BOOT
 // ====================================================================
 document.addEventListener('DOMContentLoaded', () => {
@@ -3906,10 +3810,10 @@ document.addEventListener('DOMContentLoaded', () => {
 window.carregarTudo = carregarTudo;
 window.navigate = navigate;
 window.toggleSidebar = toggleSidebar;
-window.setCronoView = setCronoView;
-window.setCronoMes = setCronoMes;
+// window.setCronoView removed - function not defined
+// window.setCronoMes removed - function not defined
 window.setTurno = setTurno;
-window.navegacaoRDODiario = navegacaoRDODiario;
+// window.navegacaoRDODiario removed - function not defined
 window.gerarPDFDiario = gerarPDFDiario;
 window.setHistoricoTab = setHistoricoTab;
 window.selecionarTurnoV4 = selecionarTurnoV4;
