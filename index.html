@@ -1133,24 +1133,47 @@ function render() {
 }
 
 // ====================================================================
-// VIEW: ✨ ANALISTA IA
+// VIEW: ✨ ANALISTA IA (ATUALIZADO)
 // ====================================================================
 function renderAnalistaIA() {
   return `
     <div class="card stagger-item">
       <div class="card-header">
         <div>
-          <div class="card-title">✨ Analista IA</div>
-          <div class="card-title-sub">Obtenha um resumo executivo inteligente baseado no avanço e nos RDOs atuais.</div>
+          <div class="card-title">✨ Analista IA Avançado</div>
+          <div class="card-title-sub">Gere análises, projeções de prazos e detete gargalos da obra com base no contexto recente.</div>
         </div>
-        <button class="btn btn-primary" id="btnRunAI" onclick="runAIAnalysis()">Gerar Relatório IA</button>
+      </div>
+      <div class="card-body" style="border-bottom: 1px solid var(--border); background: var(--surface-2);">
+         <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: end;">
+            <div class="field">
+                <label>Tipo de Análise</label>
+                <select id="aiAnalysisType">
+                    <option value="completa">Resumo Completo (Geral + Projeções)</option>
+                    <option value="projecoes">Apenas Projeções e Prazos</option>
+                    <option value="gargalos">Identificação de Gargalos e Alertas</option>
+                    <option value="eficiencia">Eficiência de Efetivo e Produção</option>
+                </select>
+            </div>
+            <div class="field">
+                <label>Contexto Histórico</label>
+                <select id="aiContextDays">
+                    <option value="7">Últimos 7 dias (Curto Prazo)</option>
+                    <option value="15" selected>Últimos 15 dias (Médio Prazo)</option>
+                    <option value="30">Últimos 30 dias (Longo Prazo)</option>
+                </select>
+            </div>
+            <div class="field">
+                <button class="btn btn-primary" id="btnRunAI" style="width: 100%; height: 38px; justify-content: center;" onclick="runAIAnalysis()">Gerar Relatório IA</button>
+            </div>
+         </div>
       </div>
       <div class="card-body">
         <div id="ai-output" class="ai-content">
           <div class="empty">
             <div class="empty-icon">✨</div>
-            <div class="empty-title">Pronto para analisar</div>
-            <div class="empty-sub">Clique no botão "Gerar Relatório IA" para compilar o desempenho das frentes de trabalho.</div>
+            <div class="empty-title">Aguardando Parâmetros</div>
+            <div class="empty-sub">Selecione o tipo de análise e o contexto histórico acima, depois clique em "Gerar Relatório IA" para obter os insights.</div>
           </div>
         </div>
       </div>
@@ -1161,41 +1184,73 @@ function renderAnalistaIA() {
 window.runAIAnalysis = async function() {
   const btn = document.getElementById('btnRunAI');
   const output = document.getElementById('ai-output');
+  const type = document.getElementById('aiAnalysisType').value;
+  const days = parseInt(document.getElementById('aiContextDays').value, 10);
   
   if (!btn || !output) return;
 
   btn.disabled = true;
   btn.innerHTML = "A analisar os dados...";
-  output.innerHTML = `<div style="text-align:center; padding: 40px;"><div class="loader-spinner"></div><p style="margin-top:10px; color:var(--muted)">A ler RDOs e a calcular métricas...</p></div>`;
+  output.innerHTML = `<div style="text-align:center; padding: 40px;"><div class="loader-spinner"></div><p style="margin-top:10px; color:var(--muted)">A ler RDOs, calcular ritmos recentes e gerar conclusões...</p></div>`;
 
   try {
+    // Determinar data limite para o contexto
+    const limiteData = new Date();
+    limiteData.setDate(limiteData.getDate() - days);
+    limiteData.setHours(0,0,0,0);
+
     const av = calcularAvancoPorPacote();
     const pacotesAtivos = Object.values(av).filter(a => a.pct > 0 && a.pacote && getCSVField(a.pacote, 'Status') !== 'Histórico');
     
-    let contextData = `Dados do Avanço da Obra (Hoje: ${new Date().toLocaleDateString('pt-BR')}):\n`;
-    contextData += `Total de RDOs Lançados: ${STATE.rdoavanco.length}\n`;
-    contextData += `Pacotes em Andamento ou Concluídos:\n`;
+    // Filtrar RDOs dentro do contexto de dias selecionado
+    const rdosRecentes = STATE.rdoavanco.filter(r => {
+        const d = parseISODate(getCSVField(r, 'Data'));
+        return d && d >= limiteData;
+    });
+    
+    let contextData = `DADOS GERAIS DA OBRA (Atualizado a: ${new Date().toLocaleDateString('pt-PT')}):\n`;
+    contextData += `Total de registos (RDOs) no histórico: ${STATE.rdoavanco.length}\n`;
+    contextData += `RDOs registados nos últimos ${days} dias: ${rdosRecentes.length}\n\n`;
+    
+    contextData += `SITUAÇÃO DOS PACOTES EM ANDAMENTO:\n`;
     
     pacotesAtivos.forEach(a => {
       const f = getCSVField(a.pacote, 'Frente') || 'Desconhecida';
       const p = getCSVField(a.pacote, 'Pacote');
       const pct = (a.pct * 100).toFixed(1);
-      contextData += `- Frente: ${f} | Pacote: ${p} | Avanço: ${pct}%\n`;
+      const estimativa = num(getCSVField(a.pacote, 'Qtd Estimada'));
+      const executada = a.qtdExecutada;
+      const saldo = Math.max(0, estimativa - executada).toFixed(2);
+      const unid = getCSVField(a.pacote, 'Unidade Física') || '';
+
+      // Calcula produção específica deste pacote no período selecionado
+      const rdosNestePacote = rdosRecentes.filter(r => (getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')) === getCSVField(a.pacote, 'ID'));
+      const producaoRecente = rdosNestePacote.reduce((acc, r) => acc + num(getCSVField(r, 'Quantidade')), 0);
+
+      contextData += `- Frente: ${f} | Pacote: ${p} | Avanço Total: ${pct}% | Saldo a Executar: ${saldo} ${unid} | Produção últimos ${days} dias: ${producaoRecente.toFixed(2)} ${unid}\n`;
     });
 
-    const prompt = `Analise os seguintes dados de avanço da obra e forneça um breve resumo executivo:\n\n${contextData}\n\nPor favor, saliente as frentes que estão a avançar bem e aquelas que podem precisar de maior atenção ou que ainda não começaram a atingir volumes significativos.`;
-    
+    let prompt = "";
+    if (type === 'completa') {
+        prompt = `Analise os seguintes dados de avanço de obra de engenharia.\n\n${contextData}\n\nFornece um resumo executivo. Destaca as frentes com bom ritmo de produção nos últimos ${days} dias. Identifica gargalos (frentes que pararam ou abrandaram) e faz uma breve projeção matemática dos pacotes que precisam de acelerar o ritmo. Utiliza linguagem técnica de planeamento.`;
+    } else if (type === 'projecoes') {
+        prompt = `Foca-te ESTRITAMENTE EM PROJEÇÕES E PRAZOS. Lê os dados:\n\n${contextData}\n\nPara os pacotes mais críticos, calcula matematicamente o ritmo médio diário (Produção nos últimos ${days} dias a dividir por ${days}). Depois, estima quantos dias serão necessários para terminar o "Saldo a Executar" mantendo esse ritmo recente. Apresenta os resultados de forma clara, preferencialmente numa tabela.`;
+    } else if (type === 'gargalos') {
+        prompt = `Foca-te em GARGALOS E ALERTAS CRÍTICOS:\n\n${contextData}\n\nIdentifica rapidamente quais os pacotes que estão parados (produção = 0) ou com produção muito baixa nos últimos ${days} dias, apesar de estarem sinalizados em andamento. Sugere possíveis causas e que medidas a direção de obra deve tomar imediatamente para reverter os atrasos.`;
+    } else if (type === 'eficiencia') {
+        prompt = `Analisa a eficiência do avanço da obra no contexto dos últimos ${days} dias:\n\n${contextData}\n\nQuais foram os pacotes que mais alavancaram o avanço geral neste período? Compara o volume executado nos últimos ${days} dias com o avanço global do pacote para destacares onde a obra está a aplicar mais esforços atualmente.`;
+    }
+
     const analysisHTML = await callGeminiAPI(prompt);
-    let cleanHTML = analysisHTML.replace(/```html/g, '').replace(/```/g, '');
     
-    output.innerHTML = cleanHTML;
+    output.innerHTML = analysisHTML;
     toast('Relatório IA gerado com sucesso!', 'success');
   } catch (err) {
     output.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Erro na Análise</div><div class="empty-sub">${err.message}</div></div>`;
     toast('Erro ao gerar relatório', 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = "Atualizar Relatório";
+    btn.innerHTML = "Gerar Relatório IA";
   }
 };
 
