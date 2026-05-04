@@ -3404,7 +3404,29 @@ function gerarPDFInterno(data, turnoFocus) {
   });
 
   let d;
-  if (fromSheet) {
+  if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
+    const v4 = DIARIO_V4;
+    d = {
+      data: data,
+      tem_turno_noturno: (v4.diurno.preenchido && v4.noturno.preenchido) ? true : false,
+      apontador_diurno: v4.diurno.apontador || '',
+      apontador_noturno: v4.noturno.apontador || '',
+      clima_manha: v4.clima_manha, clima_tarde: v4.clima_tarde, clima_noite: v4.clima_noite,
+      visitas: [v4.diurno.visitas, v4.noturno.visitas].filter(x=>x).join(' / ') || '',
+      ocorrencias: [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / ') || '',
+      observacoes_gerais: [v4.diurno.observacoes, v4.noturno.observacoes].filter(x=>x).join(' / ') || '',
+      efetivo_diurno: v4.diurno.efetivo || {},
+      efetivo_noturno: v4.noturno.efetivo || {},
+      equipamentos_diurno: v4.diurno.equipamentos || {},
+      equipamentos_noturno: v4.noturno.equipamentos || {},
+      customIndireto_diurno: v4.diurno.customIndireto || [],
+      customIndireto_noturno: v4.noturno.customIndireto || [],
+      customDireto_diurno: v4.diurno.customDireto || [],
+      customDireto_noturno: v4.noturno.customDireto || [],
+      customEquip_diurno: v4.diurno.customEquip || [],
+      customEquip_noturno: v4.noturno.customEquip || []
+    };
+  } else if (fromSheet) {
     let efetJson = {}, equipJson = {};
     try { efetJson = JSON.parse(fromSheet['Efetivo_JSON'] || '{}'); } catch(e) {}
     try { equipJson = JSON.parse(fromSheet['Equipamentos_JSON'] || '{}'); } catch(e) {}
@@ -3429,28 +3451,6 @@ function gerarPDFInterno(data, turnoFocus) {
       customDireto_noturno: efetJson.customDireto_noturno || [],
       customEquip_diurno: equipJson.custom_diurno || [],
       customEquip_noturno: equipJson.custom_noturno || []
-    };
-  } else if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
-    const v4 = DIARIO_V4;
-    d = {
-      data: data,
-      tem_turno_noturno: (v4.diurno.preenchido && v4.noturno.preenchido) ? true : false,
-      apontador_diurno: v4.diurno.apontador || '',
-      apontador_noturno: v4.noturno.apontador || '',
-      clima_manha: v4.clima_manha, clima_tarde: v4.clima_tarde, clima_noite: v4.clima_noite,
-      visitas: [v4.diurno.visitas, v4.noturno.visitas].filter(x=>x).join(' / ') || '',
-      ocorrencias: [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / ') || '',
-      observacoes_gerais: [v4.diurno.observacoes, v4.noturno.observacoes].filter(x=>x).join(' / ') || '',
-      efetivo_diurno: v4.diurno.efetivo || {},
-      efetivo_noturno: v4.noturno.efetivo || {},
-      equipamentos_diurno: v4.diurno.equipamentos || {},
-      equipamentos_noturno: v4.noturno.equipamentos || {},
-      customIndireto_diurno: v4.diurno.customIndireto || [],
-      customIndireto_noturno: v4.noturno.customIndireto || [],
-      customDireto_diurno: v4.diurno.customDireto || [],
-      customDireto_noturno: v4.noturno.customDireto || [],
-      customEquip_diurno: v4.diurno.customEquip || [],
-      customEquip_noturno: v4.noturno.customEquip || []
     };
   } else {
     d = null;
