@@ -65,11 +65,11 @@
 }
 
 @keyframes pageEnter {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes staggerIn {
-  from { opacity: 0; transform: translateY(18px); }
+  from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
 @keyframes cellPop {
@@ -85,8 +85,45 @@
   50% { opacity: 0.25; }
 }
 
-.page-enter { animation: pageEnter calc(0.35s * var(--anim-speed)) cubic-bezier(0.2,0,0,1); }
+/* Transições suaves para navegação */
+.page-transition {
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+}
+
+.page-enter { animation: pageEnter calc(0.4s * var(--anim-speed)) cubic-bezier(0.2,0,0,1); }
 .stagger-item { animation: staggerIn calc(0.4s * var(--anim-speed)) cubic-bezier(0.2,0,0,1) both; }
+
+/* Filtros */
+.filter-bar {
+  display: flex; gap: 12px; margin-bottom: 18px; align-items: center;
+  background: var(--surface); padding: 12px 18px; border-radius: var(--r); border: 1px solid var(--border);
+  box-shadow: var(--sh);
+}
+.filter-bar select {
+  padding: 8px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-sm);
+  background: var(--bg); font-family: inherit; font-size: 13px; font-weight: 500;
+  color: var(--text); cursor: pointer; outline: none; transition: all .2s;
+}
+.filter-bar select:hover { border-color: var(--pri); }
+.filter-bar select:focus { border-color: var(--pri); box-shadow: 0 0 0 3px var(--pri-l); }
+.filter-active-tag {
+  background: var(--pri-l); color: var(--pri); padding: 4px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;
+}
+.filter-clear { cursor: pointer; opacity: 0.6; transition: .2s; }
+.filter-clear:hover { opacity: 1; color: var(--red); }
+
+/* Interatividade nas frentes */
+.frente-row {
+  padding: 10px; border-radius: var(--r-sm); border: 1px solid transparent;
+  transition: all 0.2s ease; cursor: pointer;
+}
+.frente-row:hover {
+  background: var(--surface-2); border-color: var(--border-strong); transform: translateX(4px);
+}
+.frente-row.active {
+  background: var(--pri-l); border-color: var(--pri);
+}
 
 html,body{
   height:100%;
@@ -192,8 +229,8 @@ html,body{
   white-space:nowrap;
 }
 .btn-primary{background:var(--pri);color:#fff}
-.btn-primary:hover{background:var(--pri-d);transform:translateY(-1px)}
-.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.btn-primary:hover{background:var(--pri-d);transform:translateY(-1px);box-shadow:var(--sh)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
 .btn-outline{background:transparent;color:var(--text);border:1px solid var(--border)}
 .btn-outline:hover{background:var(--bg);border-color:var(--border-strong)}
 .btn-ghost{background:transparent;color:var(--muted);border:none;padding:8px 10px}
@@ -205,7 +242,8 @@ html,body{
 
 .page{flex:1;padding:24px 28px;display:flex;flex-direction:column;gap:18px;max-width:1600px;width:100%;margin:0 auto}
 
-.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden; transition: box-shadow 0.3s;}
+.card:hover{box-shadow: var(--sh);}
 .card-header{
   padding:16px 22px 14px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
@@ -221,7 +259,7 @@ html,body{
 .kpi-card{
   position:relative;overflow:hidden;
   background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
-  padding:18px 20px;display:flex;flex-direction:column;gap:6px;
+  padding:18px 20px;display:flex;flex-direction:column;gap:6px; cursor: pointer;
   transition:transform calc(.2s*var(--anim-speed)),box-shadow calc(.2s*var(--anim-speed)),border-color calc(.2s*var(--anim-speed));
 }
 .kpi-card::after{
@@ -230,7 +268,7 @@ html,body{
   transform:scaleX(0);transform-origin:left;
   transition:transform calc(.4s * var(--anim-speed)) cubic-bezier(.2,0,0,1);
 }
-.kpi-card:hover{transform:translateY(-2px);box-shadow:var(--sh-md);border-color:var(--border-strong);}
+.kpi-card:hover{transform:translateY(-3px);box-shadow:var(--sh-md);border-color:var(--pri-l);}
 .kpi-card:hover::after{transform:scaleX(1);}
 .kpi-card.kpi-acc::after{background:linear-gradient(90deg,var(--acc),var(--acc-d));}
 .kpi-label{font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
@@ -248,8 +286,9 @@ html,body{
 .kpi-hero{
   grid-column:span 2;
   background:var(--sidebar-bg);
-  color:#fff;border:none;
+  color:#fff;border:none; cursor: default;
 }
+.kpi-hero:hover{transform:translateY(-3px);box-shadow:var(--sh-lg);}
 .kpi-hero::after{background:linear-gradient(90deg,var(--acc),oklch(0.72 0.18 60));}
 .kpi-hero .kpi-label{color:rgba(255,255,255,.5)}
 .kpi-hero .kpi-value{color:#fff;font-size:calc(var(--kpi-size,42px) * 1.1);}
@@ -272,7 +311,7 @@ table.t th{
   border-bottom:1px solid var(--border);background:var(--surface-2);
   position:sticky;top:0;
 }
-table.t td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px}
+table.t td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:13px; transition: background 0.2s;}
 table.t tr:last-child td{border-bottom:none}
 table.t tr:hover td{background:var(--bg)}
 table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);font-size:12px;text-transform:uppercase;letter-spacing:.04em;padding:8px 14px}
@@ -298,7 +337,7 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .f-Sinaliza{background:#d5f5e3;color:#196f3d}
 
 .prog-bar-wrap{width:100%;min-width:60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle}
-.prog-bar{height:100%;border-radius:3px;transition:width .6s ease}
+.prog-bar{height:100%;border-radius:3px;transition:width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1)}
 .prog-bar.zero{background:var(--muted-2)}
 .prog-bar.parcial{background:var(--ylw)}
 .prog-bar.completo{background:var(--grn)}
@@ -431,6 +470,7 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   .kpi-card{padding:14px}
   .kpi-value{font-size:22px}
   .kpi-hero .kpi-value{font-size:30px}
+  .filter-bar{flex-direction: column; align-items: stretch;}
 }
 
 /* Botões para remover items custom */
@@ -454,7 +494,6 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 }
 .btn-remove-custom-row:hover{background:var(--red);color:#fff;}
 
-
 /* Botões grandes de seleção de turno (RDO Diário v4) */
 .btn-turno-grande{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -472,6 +511,14 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .btn-turno-diurno:hover{border-color:#d4a810;background:#fff8e1}
 .btn-turno-noturno:hover{border-color:#326496;background:#e8f0f8}
 
+/* Buttons & IA Styles */
+.ai-content { line-height: 1.6; font-size: 14px; color: var(--text); }
+.ai-content h3 { margin-top: 15px; margin-bottom: 10px; color: var(--pri); font-size: 16px; }
+.ai-content p { margin-bottom: 10px; }
+.ai-content ul { padding-left: 20px; margin-bottom: 15px; }
+.ai-content li { margin-bottom: 5px; }
+.ai-content strong { color: var(--text-2); font-weight: 700; }
+.loader-spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--pri); border-radius: 50%; animation: spin 0.8s linear infinite; }
 </style>
 </head>
 <body>
@@ -483,7 +530,6 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 // CONFIGURAÇÃO
 // ====================================================================
 const CONFIG = {
-  // CSVs publicados (leitura)
   csv: {
     cronograma:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=565093066&single=true&output=csv',
     pacotes:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=386002450&single=true&output=csv',
@@ -491,28 +537,17 @@ const CONFIG = {
     rdoavanco:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1906961773&single=true&output=csv',
     rdodiario:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1234324544&single=true&output=csv',
   },
-  // Apps Script (escrita) - JSONP
   appsScript: 'https://script.google.com/macros/s/AKfycbwfslMjc5bmKbZ3y6OpUZyi8MD2KGriocjAVBUci5FOMiI7ho0KgTXvtAioDGWkpk5I/exec',
-  
-  // Estacas reais (corrigidas pelo Leonardo)
   estacasCB: { ini: 99, fim: 141, label: 'Centro→Bairro' },
   estacasBC: { ini: 201, fim: 244, label: 'Bairro→Centro' },
-  
-  // Refresh automático (5 min)
   refreshMs: 5 * 60 * 1000,
-  
-  // localStorage keys
-  ls: {
-    rdoDraft: 'teotonio_rdo_draft_v1',
-    apontador: 'teotonio_apontador_v1',
-  }
+  ls: { rdoDraft: 'teotonio_rdo_draft_v1', apontador: 'teotonio_apontador_v1' }
 };
 
 // ====================================================================
 // UTILITIES
 // ====================================================================
 
-// Função blindada para evitar erros de Case-Sensitivity nos cabeçalhos CSV
 function getCSVField(row, fieldName) {
   if (!row) return '';
   if (row[fieldName] !== undefined) return row[fieldName];
@@ -521,7 +556,6 @@ function getCSVField(row, fieldName) {
   return key ? row[key] : '';
 }
 
-// Extrai a data local (AAAA-MM-DD) sem sofer influência do fuso (UTC shift)
 function getLocalISODate(d) {
   if (!d) return '';
   const pad = n => (n < 10 ? '0' : '') + n;
@@ -567,7 +601,6 @@ async function fetchCSV(url) {
   return parseCSV(await res.text());
 }
 
-// JSONP request para Apps Script (evita CORS)
 function jsonp(url, params) {
   return new Promise((resolve, reject) => {
     const cb = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
@@ -614,12 +647,10 @@ function parseISODate(s) {
   if (!s) return null;
   if (s instanceof Date) return s;
   const str = String(s);
-  // Se vier com barras (ex: 25/12/2026)
   if (str.includes('/')) {
     const p = str.split('/');
     return new Date(parseInt(p[2].slice(0,4)), parseInt(p[1])-1, parseInt(p[0]));
   }
-  // Corrige o bug do fuso horário forçando a extração local
   if (str.includes('-') && str.length >= 10) {
      const parts = str.slice(0,10).split('-');
      return new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
@@ -654,9 +685,6 @@ function frenteSlug(f) {
   return 'default';
 }
 
-// ====================================================================
-// TOAST SYSTEM
-// ====================================================================
 function toast(msg, type = 'info', durationMs = 3500) {
   const wrap = document.getElementById('toastWrap');
   const t = document.createElement('div');
@@ -670,24 +698,134 @@ function toast(msg, type = 'info', durationMs = 3500) {
   }, durationMs);
 }
 
+function listarEstacas() {
+  const out = [];
+  for (let i = CONFIG.estacasCB.ini; i <= CONFIG.estacasCB.fim; i++) {
+    out.push({ id: 'E' + i, num: i, sentido: 'CB' });
+  }
+  for (let i = CONFIG.estacasBC.ini; i <= CONFIG.estacasBC.fim; i++) {
+    out.push({ id: 'E' + i, num: i, sentido: 'BC' });
+  }
+  return out;
+}
+
 // ====================================================================
-// ESTADO GLOBAL (sem React, manipulação direta de DOM)
+// GEMINI API INTEGRATION
+// ====================================================================
+async function callGeminiAPI(promptText) {
+  const apiKey = "";
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+  const payload = {
+    contents: [{ parts: [{ text: promptText }] }],
+    systemInstruction: { 
+      parts: [{ text: "Atue como um Analista Diretor de Obra experiente. Avalie os dados de progresso e resuma a situação atual da obra. Identifique gargalos (pacotes pouco executados) e frentes mais ativas. Seja profissional, direto e utilize Português de Portugal. Estruture sua resposta em HTML limpo, usando tags como <h3>, <p>, <ul>, <li> e <strong>. Nunca inclua blocos markdown (```html) na resposta final, apenas o conteúdo." }] 
+    }
+  };
+
+  let retries = 5;
+  let delay = 1000;
+  
+  for (let i = 0; i < retries; i++) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+      
+      const data = await response.json();
+      if (data.candidates && data.candidates[0].content && data.candidates[0].content.parts) {
+        return data.candidates[0].content.parts[0].text;
+      } else {
+        throw new Error('Formato de resposta inesperado.');
+      }
+    } catch (err) {
+      if (i === retries - 1) {
+        throw new Error('Falha ao comunicar com a IA após várias tentativas.');
+      }
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+}
+
+
+// ====================================================================
+// ESTADO GLOBAL E PRODUTIVIDADE
 // ====================================================================
 const STATE = {
   cronograma: [], pacotes: [], coeficientes: [], rdoavanco: [], rdodiario: [],
   loaded: false, lastSync: null,
   currentPage: 'executivo',
-  draft: null,  // rascunho do RDO
-  usuarioLogado: localStorage.getItem('teotonio_user') || null // Salva quem logou
+  filtros: { mes: '', frente: '' },
+  draft: null, 
+  usuarioLogado: localStorage.getItem('teotonio_user') || null
+};
+
+const PRODUTIVIDADE_PADRAO = {
+  'P01': 6, 'P02': 9, 'P03': 9, 'P04': 9, 'P06': 0.33, 'P07': 0.25, 'P08': 0.33, 'P09': 0.1, 'P10': 0.1,
+  'P11': 10, 'P12': 40, 'P13': 40, 'P14': 60, 'P15': 40, 'P16': 20, 'P17': 10, 'P18': 20, 'P19': 10,
+  'P20': 40, 'P21': 8, 'P22': 20, 'P23': 0.33, 'P24': 0.2, 'P25': 40, 'P26': 40, 'P27': 40,
+  'P28': 700, 'P29': 700, 'P30A': 30, 'P30B': 210, 'P30C': 105, 'P31': 20, 'P32': 50, 'P33': 20,
+  'P34': 0.1, 'P35': 50, 'P36': 15
+};
+
+function transitionTo(actionFn) {
+  const pageEl = document.getElementById('page');
+  if (!pageEl) { actionFn(); return; }
+  
+  pageEl.style.transition = 'opacity 0.15s ease-out, transform 0.15s ease-out';
+  pageEl.style.opacity = '0';
+  pageEl.style.transform = 'translateY(10px)';
+  
+  setTimeout(() => {
+    actionFn();
+    void pageEl.offsetWidth; 
+    pageEl.style.opacity = '1';
+    pageEl.style.transform = 'translateY(0)';
+    setTimeout(montarGraficos, 50);
+  }, 160);
+}
+
+function navigate(page) {
+  if (STATE.currentPage === page) return;
+  STATE.currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.page === page);
+  });
+  toggleSidebar(false);
+  transitionTo(render);
+}
+
+window.atualizarFiltro = function(tipo, valor) {
+  if (tipo === 'frente' && STATE.filtros.frente === valor) {
+    STATE.filtros.frente = '';
+  } else {
+    STATE.filtros[tipo] = valor;
+  }
+  transitionTo(() => {
+    const page = document.getElementById('page');
+    page.innerHTML = renderExecutivo();
+  });
+};
+
+window.limparFiltros = function() {
+  STATE.filtros = { mes: '', frente: '' };
+  transitionTo(() => {
+    const page = document.getElementById('page');
+    page.innerHTML = renderExecutivo();
+  });
 };
 
 // ====================================================================
 // CONTROLE DE ACESSO (Login Simples)
 // ====================================================================
 const ACESSO = {
-  'Leonardo': 'leo2026', // Sua senha (Acesso total)
-  'Wallace': 'wal123',       // Senha do apontador Diurno
-  'Guilherme': 'gui123'          // Senha do apontador Noturno
+  'Leonardo': 'leo2026',
+  'Wallace': 'wal123',
+  'Guilherme': 'gui123'
 };
 
 function renderLogin() {
@@ -725,19 +863,18 @@ window.fazerLogin = function() {
   STATE.usuarioLogado = u;
   localStorage.setItem('teotonio_user', u);
   toast('Acesso liberado!', 'success');
-  atualizarBotoesTopo(); // Atualiza a barra superior
-  render(); // Recarrega o miolo da tela
+  atualizarBotoesTopo();
+  transitionTo(render);
 };
 
 window.fazerLogout = function() {
   STATE.usuarioLogado = null;
   localStorage.removeItem('teotonio_user');
   toast('Você saiu do sistema.', 'info');
-  atualizarBotoesTopo(); // Remove o botão de sair da barra superior
-  render();
+  atualizarBotoesTopo();
+  transitionTo(render);
 };
 
-// Função nova para forçar a barra superior a se redesenhar
 window.atualizarBotoesTopo = function() {
   const tb = document.getElementById('topbarActions');
   if (tb) {
@@ -767,7 +904,7 @@ async function carregarTudo() {
     STATE.rdodiario = d || [];
     STATE.loaded = true;
     STATE.lastSync = new Date();
-    setSyncStatus('ok', `Sincronizado · ${p.length} pacotes, ${r.length} serviços, ${(d||[]).length} RDOs diários`);
+    setSyncStatus('ok', `Sincronizado · ${p.length} pacotes, ${r.length} serviços`);
     render();
   } catch(e) {
     STATE.loaded = false;
@@ -786,9 +923,9 @@ function setSyncStatus(state, text) {
 // ====================================================================
 // CÁLCULOS DERIVADOS
 // ====================================================================
-function calcularAvancoPorPacote() {
+function calcularAvancoPorPacote(rdos = STATE.rdoavanco, pacotes = STATE.pacotes) {
   const m = {};
-  STATE.pacotes.forEach(p => {
+  pacotes.forEach(p => {
     const id = getCSVField(p, 'ID');
     if (!id) return;
     m[id] = {
@@ -797,10 +934,11 @@ function calcularAvancoPorPacote() {
       qtdExecutada: 0,
       lancamentos: 0,
       ultimaData: null,
-      porEstaca: {},  // { 'E105': qtd, 'E106': qtd, ... }
+      porEstaca: {},
     };
   });
-  STATE.rdoavanco.forEach(r => {
+  
+  rdos.forEach(r => {
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
     if (!pid || !m[pid]) return;
     const q = num(getCSVField(r, 'Quantidade'));
@@ -809,7 +947,6 @@ function calcularAvancoPorPacote() {
     const d = parseISODate(getCSVField(r, 'Data'));
     if (d && (!m[pid].ultimaData || d > m[pid].ultimaData)) m[pid].ultimaData = d;
     
-    // Mapeamento estaca → quantidade
     const est = String(getCSVField(r, 'Local_Estaca') || '').toUpperCase().match(/E?\d{2,3}/g);
     if (est) {
       const qPorEstaca = q / est.length;
@@ -852,19 +989,8 @@ function calcularConsumoItens(avanco) {
   return out;
 }
 
-function listarEstacas() {
-  const out = [];
-  for (let i = CONFIG.estacasCB.ini; i <= CONFIG.estacasCB.fim; i++) {
-    out.push({ id: 'E' + i, num: i, sentido: 'CB' });
-  }
-  for (let i = CONFIG.estacasBC.ini; i <= CONFIG.estacasBC.fim; i++) {
-    out.push({ id: 'E' + i, num: i, sentido: 'BC' });
-  }
-  return out;
-}
-
 // ====================================================================
-// LAYOUT PRINCIPAL E NAVEGAÇÃO
+// LAYOUT PRINCIPAL
 // ====================================================================
 function renderShell() {
   const root = document.getElementById('root');
@@ -881,9 +1007,9 @@ function renderShell() {
         
         <div class="nav-group">
           <div class="nav-label">Análise</div>
-          <div class="nav-item" data-page="executivo" onclick="navigate('executivo')">
+          <div class="nav-item active" data-page="executivo" onclick="navigate('executivo')">
             <span class="nav-icon">◆</span>
-            <span>Executivo</span>
+            <span>Painel Executivo</span>
           </div>
           <div class="nav-item" data-page="avancofisico" onclick="navigate('avancofisico')">
             <span class="nav-icon">◰</span>
@@ -896,6 +1022,10 @@ function renderShell() {
           <div class="nav-item" data-page="medicao" onclick="navigate('medicao')">
             <span class="nav-icon">⌗</span>
             <span>Apoio Medição</span>
+          </div>
+          <div class="nav-item" data-page="analista" onclick="navigate('analista')">
+            <span class="nav-icon">✨</span>
+            <span>Analista IA</span>
           </div>
         </div>
         
@@ -944,7 +1074,7 @@ function renderShell() {
             <button class="btn btn-primary btn-sm" onclick="navigate('rdo')">+ Novo Serviço</button>
           </div>
         </div>
-        <div class="page page-enter" id="page" key=""></div>
+        <div class="page page-enter" id="page"></div>
       </main>
     </div>
   `;
@@ -959,32 +1089,19 @@ function toggleSidebar(open) {
   ov.classList.toggle('open', open);
 }
 
-function navigate(page) {
-  STATE.currentPage = page;
-  document.querySelectorAll('.nav-item').forEach(el => {
-    el.classList.toggle('active', el.dataset.page === page);
-  });
-  toggleSidebar(false);
-  render();
-}
-
 function render() {
   if (!STATE.loaded) return;
   
   const pageEl = document.getElementById('page');
-  if (pageEl) {
-    pageEl.classList.remove('page-enter');
-    void pageEl.offsetWidth; // trigger reflow
-    pageEl.classList.add('page-enter');
-  }
   
   const titles = {
-    executivo: ['Painel Executivo', 'Visão consolidada da obra · KPIs e curva S'],
+    executivo: ['Painel Executivo', 'Visão consolidada da obra · KPIs interativos'],
     avancofisico: ['Avanço Físico', 'Pacotes, mapa de estacas e produtividade'],
     cronograma: ['Cronograma', 'Tarefas do Project · 11 fases'],
     medicao: ['Apoio à Medição', 'Consumo derivado por item contratual'],
+    analista: ['✨ Analista IA', 'Resumo inteligente da obra'],
     rdo: ['Lançar Serviço', 'Registra serviços executados · grava em RDO_Avanco'],
-    rdodiario: ['RDO Diário', 'Cabeçalho do dia · efetivo, equipamentos, clima · gera PDF'],
+    rdodiario: ['RDO Diário', 'Cabeçalho do dia · efetivo, equipamentos, clima'],
     historico: ['Histórico', 'Serviços e RDOs diários lançados'],
   };
   const [t, s] = titles[STATE.currentPage] || ['', ''];
@@ -993,52 +1110,152 @@ function render() {
   document.getElementById('rdoCount').textContent = STATE.rdoavanco.length;
   document.getElementById('diarioCount').textContent = (STATE.rdodiario||[]).length;
   
-  const page = document.getElementById('page');
-  
   const telasRestritas = ['rdo', 'rdodiario'];
   if (telasRestritas.includes(STATE.currentPage) && !STATE.usuarioLogado) {
     document.getElementById('pageTitle').textContent = 'Login Necessário';
     document.getElementById('pageSubtitle').textContent = 'Área restrita à equipe de apontamento e engenharia';
-    page.innerHTML = renderLogin();
+    pageEl.innerHTML = renderLogin();
     return;
   }
 
-  if (STATE.currentPage === 'executivo') page.innerHTML = renderExecutivo();
-  else if (STATE.currentPage === 'avancofisico') page.innerHTML = renderAvancoFisico();
-  else if (STATE.currentPage === 'cronograma') page.innerHTML = renderCronograma();
-  else if (STATE.currentPage === 'medicao') page.innerHTML = renderMedicao();
-  else if (STATE.currentPage === 'rdo') { page.innerHTML = renderRDO(); attachRDOForm(); }
-  else if (STATE.currentPage === 'rdodiario') { page.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
-  else if (STATE.currentPage === 'historico') page.innerHTML = renderHistorico();
+  if (STATE.currentPage === 'executivo') pageEl.innerHTML = renderExecutivo();
+  else if (STATE.currentPage === 'avancofisico') pageEl.innerHTML = renderAvancoFisico();
+  else if (STATE.currentPage === 'cronograma') pageEl.innerHTML = renderCronograma();
+  else if (STATE.currentPage === 'medicao') pageEl.innerHTML = renderMedicao();
+  else if (STATE.currentPage === 'analista') pageEl.innerHTML = renderAnalistaIA();
+  else if (STATE.currentPage === 'rdo') { pageEl.innerHTML = renderRDO(); attachRDOForm(); }
+  else if (STATE.currentPage === 'rdodiario') { pageEl.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
+  else if (STATE.currentPage === 'historico') pageEl.innerHTML = renderHistorico();
   
   setTimeout(montarGraficos, 50);
 }
 
 // ====================================================================
-// VIEW: EXECUTIVO (Agora Ponderado por Esforço)
+// VIEW: ✨ ANALISTA IA
+// ====================================================================
+function renderAnalistaIA() {
+  return `
+    <div class="card stagger-item">
+      <div class="card-header">
+        <div>
+          <div class="card-title">✨ Analista IA</div>
+          <div class="card-title-sub">Obtenha um resumo executivo inteligente baseado no avanço e nos RDOs atuais.</div>
+        </div>
+        <button class="btn btn-primary" id="btnRunAI" onclick="runAIAnalysis()">Gerar Relatório IA</button>
+      </div>
+      <div class="card-body">
+        <div id="ai-output" class="ai-content">
+          <div class="empty">
+            <div class="empty-icon">✨</div>
+            <div class="empty-title">Pronto para analisar</div>
+            <div class="empty-sub">Clique no botão "Gerar Relatório IA" para compilar o desempenho das frentes de trabalho.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+window.runAIAnalysis = async function() {
+  const btn = document.getElementById('btnRunAI');
+  const output = document.getElementById('ai-output');
+  
+  if (!btn || !output) return;
+
+  btn.disabled = true;
+  btn.innerHTML = "A analisar os dados...";
+  output.innerHTML = `<div style="text-align:center; padding: 40px;"><div class="loader-spinner"></div><p style="margin-top:10px; color:var(--muted)">A ler RDOs e a calcular métricas...</p></div>`;
+
+  try {
+    const av = calcularAvancoPorPacote();
+    const pacotesAtivos = Object.values(av).filter(a => a.pct > 0 && a.pacote && getCSVField(a.pacote, 'Status') !== 'Histórico');
+    
+    let contextData = `Dados do Avanço da Obra (Hoje: ${new Date().toLocaleDateString('pt-BR')}):\n`;
+    contextData += `Total de RDOs Lançados: ${STATE.rdoavanco.length}\n`;
+    contextData += `Pacotes em Andamento ou Concluídos:\n`;
+    
+    pacotesAtivos.forEach(a => {
+      const f = getCSVField(a.pacote, 'Frente') || 'Desconhecida';
+      const p = getCSVField(a.pacote, 'Pacote');
+      const pct = (a.pct * 100).toFixed(1);
+      contextData += `- Frente: ${f} | Pacote: ${p} | Avanço: ${pct}%\n`;
+    });
+
+    const prompt = `Analise os seguintes dados de avanço da obra e forneça um breve resumo executivo:\n\n${contextData}\n\nPor favor, saliente as frentes que estão a avançar bem e aquelas que podem precisar de maior atenção ou que ainda não começaram a atingir volumes significativos.`;
+    
+    const analysisHTML = await callGeminiAPI(prompt);
+    let cleanHTML = analysisHTML.replace(/```html/g, '').replace(/```/g, '');
+    
+    output.innerHTML = cleanHTML;
+    toast('Relatório IA gerado com sucesso!', 'success');
+  } catch (err) {
+    output.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Erro na Análise</div><div class="empty-sub">${err.message}</div></div>`;
+    toast('Erro ao gerar relatório', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Atualizar Relatório";
+  }
+};
+
+// ====================================================================
+// VIEW: EXECUTIVO COM FILTROS E INTERATIVIDADE
 // ====================================================================
 function renderExecutivo() {
-  const av = calcularAvancoPorPacote();
-  const pacotes = Object.values(av).filter(a => a.pacote && getCSVField(a.pacote, 'Status') !== 'Histórico');
+  const todasFrentes = [...new Set(STATE.pacotes.map(p => getCSVField(p, 'Frente')).filter(Boolean))].sort();
+  const todosMesesSet = new Set();
+  STATE.rdoavanco.forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if(d) {
+      const m = (d.getMonth() + 1).toString().padStart(2, '0');
+      const y = d.getFullYear();
+      todosMesesSet.add(`${y}-${m}`);
+    }
+  });
+  const todosMeses = [...todosMesesSet].sort().reverse();
   
-  const totalPac = pacotes.length;
-  const iniciados = pacotes.filter(a => a.qtdExecutada > 0).length;
-  const concluidos = pacotes.filter(a => a.pct >= 0.999).length;
-  const totalRDOs = STATE.rdoavanco.length;
+  let pacotesAtivos = STATE.pacotes.filter(p => getCSVField(p, 'Status') !== 'Histórico' && getCSVField(p, 'ID'));
+  let rdosAtivos = STATE.rdoavanco;
+
+  if (STATE.filtros.frente) {
+    pacotesAtivos = pacotesAtivos.filter(p => getCSVField(p, 'Frente') === STATE.filtros.frente);
+    const pacotesIds = pacotesAtivos.map(p => getCSVField(p, 'ID'));
+    rdosAtivos = rdosAtivos.filter(r => pacotesIds.includes(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
+  }
+
+  let LabelPeriodo = 'GERAL';
+  if (STATE.filtros.mes) {
+    rdosAtivos = rdosAtivos.filter(r => {
+      const d = parseISODate(getCSVField(r, 'Data'));
+      if(!d) return false;
+      const m = (d.getMonth() + 1).toString().padStart(2, '0');
+      const y = d.getFullYear();
+      return `${y}-${m}` === STATE.filtros.mes;
+    });
+    const [y, m] = STATE.filtros.mes.split('-');
+    const nomeMes = new Date(y, parseInt(m)-1, 1).toLocaleString('pt-BR', {month:'short'}).toUpperCase();
+    LabelPeriodo = `${nomeMes}/${y}`;
+  }
+
+  const av = calcularAvancoPorPacote(rdosAtivos, pacotesAtivos);
+  const pacotesFiltrados = Object.values(av).filter(a => a.pacote);
   
-  pacotes.forEach(a => {
+  const totalPac = pacotesFiltrados.length;
+  const iniciados = pacotesFiltrados.filter(a => a.qtdExecutada > 0).length;
+  const concluidos = pacotesFiltrados.filter(a => a.pct >= 0.999).length;
+  const totalRDOs = rdosAtivos.length;
+  
+  pacotesFiltrados.forEach(a => {
     const pid = getCSVField(a.pacote, 'ID');
     const prod = PRODUTIVIDADE_PADRAO[pid] || 1; 
     a.diasEstimados = a.qtdEstimada / prod;
     a.diasExecutados = a.pct * a.diasEstimados;
   });
 
-  const totalDiasEstimados = pacotes.reduce((s,a) => s + a.diasEstimados, 0);
-  const pctPond = totalDiasEstimados > 0 ?
-    pacotes.reduce((s,a) => s + a.diasExecutados, 0) / totalDiasEstimados : 0;
+  const totalDiasEstimados = pacotesFiltrados.reduce((s,a) => s + a.diasEstimados, 0);
+  const pctPond = totalDiasEstimados > 0 ? pacotesFiltrados.reduce((s,a) => s + a.diasExecutados, 0) / totalDiasEstimados : 0;
   
   const porFrente = {};
-  pacotes.forEach(a => {
+  pacotesFiltrados.forEach(a => {
     const f = getCSVField(a.pacote, 'Frente') || 'Outros';
     if (!porFrente[f]) porFrente[f] = { items: [], totalDiasEstim: 0, totalDiasExec: 0 };
     porFrente[f].items.push(a);
@@ -1049,20 +1266,44 @@ function renderExecutivo() {
     f.pctPond = f.totalDiasEstim > 0 ? f.totalDiasExec / f.totalDiasEstim : 0;
   });
   
-  const ativosOrdenados = pacotes
+  const ativosOrdenados = pacotesFiltrados
     .filter(a => a.qtdExecutada > 0)
     .sort((a,b) => (b.ultimaData || 0) - (a.ultimaData || 0))
     .slice(0, 8);
   
-  const rdosOrdenados = [...STATE.rdoavanco]
+  const rdosOrdenados = [...rdosAtivos]
     .map(r => ({ data: parseISODate(getCSVField(r, 'Data')), pid: getCSVField(r, 'Pacote_ID'), qtd: num(getCSVField(r, 'Quantidade')) }))
     .filter(r => r.data && r.pid)
     .sort((a,b) => a.data - b.data);
   
+  STATE.dashData = {
+     totalDiasEstimados, pacotesAtivos, rdosAtivos
+  };
+
   return `
+    <div class="filter-bar stagger-item">
+      <span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em">Filtros:</span>
+      <select onchange="atualizarFiltro('mes', this.value)">
+        <option value="">Todos os meses</option>
+        ${todosMeses.map(m => {
+           const d = new Date(m + '-01T12:00:00');
+           const label = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+           return `<option value="${m}" ${STATE.filtros.mes === m ? 'selected' : ''}>${label.charAt(0).toUpperCase() + label.slice(1)}</option>`;
+        }).join('')}
+      </select>
+      
+      <select onchange="atualizarFiltro('frente', this.value)">
+        <option value="">Todas as frentes</option>
+        ${todasFrentes.map(f => `<option value="${f}" ${STATE.filtros.frente === f ? 'selected' : ''}>Frente: ${f}</option>`).join('')}
+      </select>
+
+      ${(STATE.filtros.mes || STATE.filtros.frente) ? 
+        `<div class="filter-clear" onclick="limparFiltros()">Limpar Filtros ✕</div>` : ''}
+    </div>
+
     <div class="kpi-grid">
       <div class="kpi-card kpi-hero stagger-item" style="animation-delay:.05s">
-        <div class="kpi-label">AVANÇO FÍSICO GERAL · PONDERADO (DIAS)</div>
+        <div class="kpi-label">AVANÇO ${LabelPeriodo} · PONDERADO (DIAS)</div>
         <div class="kpi-value">${fmtPct(pctPond)}</div>
         <div class="kpi-sub">${totalRDOs} registros de serviço · ${iniciados} de ${totalPac} pacotes iniciados</div>
         <div class="kpi-bar-wrap" style="background:rgba(255,255,255,.15);margin-top:10px">
@@ -1070,50 +1311,50 @@ function renderExecutivo() {
         </div>
       </div>
       <div class="kpi-card kpi-acc stagger-item" style="animation-delay:.1s">
-        <div class="kpi-label">Pacotes</div>
+        <div class="kpi-label">Pacotes Envolvidos</div>
         <div class="kpi-value">${iniciados}<span style="color:var(--muted);font-size:18px">/${totalPac}</span></div>
-        <div class="kpi-sub">${concluidos} concluídos</div>
-        <div class="kpi-bar-wrap"><div class="kpi-bar" style="background:var(--pri);width:${iniciados/totalPac*100}%"></div></div>
+        <div class="kpi-sub">${concluidos} concluídos neste escopo</div>
+        <div class="kpi-bar-wrap"><div class="kpi-bar" style="background:var(--pri);width:${totalPac>0 ? iniciados/totalPac*100 : 0}%"></div></div>
       </div>
       <div class="kpi-card stagger-item" style="animation-delay:.15s">
-        <div class="kpi-label">RDOs Lançados</div>
+        <div class="kpi-label">RDOs Filtrados</div>
         <div class="kpi-value">${totalRDOs}</div>
         <div class="kpi-sub">${rdosOrdenados.length > 0 ? `Último: ${fmtData(rdosOrdenados[rdosOrdenados.length-1].data)}` : 'nenhum lançamento'}</div>
       </div>
       <div class="kpi-card kpi-acc stagger-item" style="animation-delay:.2s">
         <div class="kpi-label">Frentes ativas</div>
         <div class="kpi-value">${Object.keys(porFrente).length}</div>
-        <div class="kpi-sub">${Object.entries(porFrente).filter(([,f]) => f.pctPond > 0).length} com avanço</div>
+        <div class="kpi-sub">${Object.entries(porFrente).filter(([,f]) => f.pctPond > 0).length} com avanço no período</div>
       </div>
     </div>
     
     <div class="grid-2">
-      <div class="card">
+      <div class="card stagger-item" style="animation-delay:.25s">
         <div class="card-header">
           <div>
-            <div class="card-title">Curva S — avanço acumulado</div>
-            <div class="card-title-sub">% ponderada pelo esforço (dias)</div>
+            <div class="card-title">Curva S — velocidade do avanço</div>
+            <div class="card-title-sub">Acumulado do período e frente selecionados</div>
           </div>
         </div>
         <div class="card-body">
           ${rdosOrdenados.length > 0 ?
             '<canvas id="curvaS" height="200"></canvas>' :
-            '<div class="empty"><div class="empty-icon">◷</div><div class="empty-title">Sem dados ainda</div><div class="empty-sub">Lance o primeiro RDO pra ver a curva S aparecer aqui</div></div>'}
+            '<div class="empty"><div class="empty-icon">◷</div><div class="empty-title">Sem dados no filtro</div><div class="empty-sub">Altere o filtro de mês ou frente.</div></div>'}
         </div>
       </div>
       
-      <div class="card">
+      <div class="card stagger-item" style="animation-delay:.3s">
         <div class="card-header">
           <div>
             <div class="card-title">Avanço por frente</div>
-            <div class="card-title-sub">Ponderado pelo peso do serviço (dias)</div>
+            <div class="card-title-sub">Clique numa frente para isolar no painel</div>
           </div>
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding-top:10px">
           ${Object.entries(porFrente)
             .sort((a,b) => b[1].pctPond - a[1].pctPond)
             .map(([f, d]) => `
-              <div style="margin-bottom:14px">
+              <div class="frente-row ${STATE.filtros.frente === f ? 'active' : ''}" onclick="atualizarFiltro('frente', '${f}')">
                 <div style="display:flex;justify-content:space-between;margin-bottom:5px;align-items:center">
                   <div>
                     <span class="f-tag f-${frenteSlug(f)}">${f}</span>
@@ -1130,23 +1371,23 @@ function renderExecutivo() {
       </div>
     </div>
     
-    <div class="card">
+    <div class="card stagger-item" style="animation-delay:.35s">
       <div class="card-header">
         <div>
           <div class="card-title">Pacotes mais ativos</div>
-          <div class="card-title-sub">Últimos lançamentos no canteiro</div>
+          <div class="card-title-sub">Últimos lançamentos de acordo com o filtro</div>
         </div>
       </div>
       <div class="card-body flush">
         ${ativosOrdenados.length === 0 ?
-          '<div class="empty"><div class="empty-icon">⊕</div><div class="empty-title">Nenhum RDO ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro RDO</button></div>' :
+          '<div class="empty"><div class="empty-icon">⊕</div><div class="empty-title">Nenhum RDO neste filtro</div></div>' :
           `<table class="t">
             <thead>
-              <tr><th>Pacote</th><th>Frente</th><th>Executado</th><th>Avanço</th><th>Última atividade</th></tr>
+              <tr><th>Pacote</th><th>Frente</th><th>Executado</th><th>Avanço Relativo</th><th>Última atividade</th></tr>
             </thead>
             <tbody>
-              ${ativosOrdenados.map((a, idx) => `
-                <tr class="stagger-item" style="animation-delay:${.3 + idx * .04}s">
+              ${ativosOrdenados.map(a => `
+                <tr>
                   <td><strong>${getCSVField(a.pacote, 'Pacote')}</strong></td>
                   <td><span class="f-tag f-${frenteSlug(getCSVField(a.pacote, 'Frente'))}">${getCSVField(a.pacote, 'Frente')||''}</span></td>
                   <td class="t-num">${fmtNum(a.qtdExecutada)} <span style="color:var(--muted);font-size:11px">/ ${fmtNum(a.qtdEstimada,0)} ${getCSVField(a.pacote, 'Unidade Física')||''}</span></td>
@@ -1167,14 +1408,90 @@ function renderExecutivo() {
   `;
 }
 
+function montarGraficos() {
+  if (STATE.currentPage !== 'executivo') return;
+  const ctx = document.getElementById('curvaS');
+  if (!ctx || !STATE.dashData) return;
+
+  if (window.meuGraficoCurvaS) { window.meuGraficoCurvaS.destroy(); }
+
+  const totalDiasObra = STATE.dashData.totalDiasEstimados;
+  if (totalDiasObra === 0) return;
+
+  const rdosPorDia = {};
+  STATE.dashData.rdosAtivos.forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (!d) return;
+    const dStr = getLocalISODate(d);
+    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    const pacoteInfo = STATE.dashData.pacotesAtivos.find(p => getCSVField(p, 'ID') === pid);
+
+    if (!pacoteInfo) return; 
+
+    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
+    const diasDesteRDO = num(getCSVField(r, 'Quantidade')) / prod;
+    const contribPct = diasDesteRDO / totalDiasObra;
+
+    rdosPorDia[dStr] = (rdosPorDia[dStr] || 0) + contribPct;
+  });
+
+  const diasOrdenados = Object.keys(rdosPorDia).sort();
+  const labels = [];
+  const dataAcumulada = [];
+  let acumulado = 0;
+
+  diasOrdenados.forEach(d => {
+    acumulado += rdosPorDia[d];
+    const [ano, mes, dia] = d.split('-');
+    labels.push(`${dia}/${mes}`); 
+    dataAcumulada.push((acumulado * 100).toFixed(2));
+  });
+
+  window.meuGraficoCurvaS = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Avanço do Período Selecionado (%)',
+        data: dataAcumulada,
+        borderColor: '#d4a810',
+        backgroundColor: 'rgba(212, 168, 16, 0.15)',
+        borderWidth: 3,
+        fill: true,
+        tension: 0.3, 
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        pointBackgroundColor: '#fff'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 800, easing: 'easeOutQuart' },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { callback: function(value) { return value + '%' } },
+          grid: { color: 'rgba(0,0,0,0.05)' }
+        },
+        x: { grid: { display: false } }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: { label: function(context) { return 'Avanço: ' + context.parsed.y + '%'; } }
+        }
+      }
+    }
+  });
+}
+
 // ====================================================================
-// VIEW: AVANÇO FÍSICO (heatmap + tabela)
+// VIEW: AVANÇO FÍSICO
 // ====================================================================
 function renderAvancoFisico() {
   const av = calcularAvancoPorPacote();
   const pacotes = Object.values(av).filter(a => a.pacote);
-  
-  // Agrupar por frente
   const porFrente = {};
   pacotes.forEach(a => {
     const f = getCSVField(a.pacote, 'Frente') || 'Outros';
@@ -1183,7 +1500,7 @@ function renderAvancoFisico() {
   });
   
   return `
-    <div class="card">
+    <div class="card stagger-item">
       <div class="card-header">
         <div>
           <div class="card-title">Mapa de avanço por estaca</div>
@@ -1195,7 +1512,7 @@ function renderAvancoFisico() {
       </div>
     </div>
     
-    <div class="card">
+    <div class="card stagger-item" style="animation-delay: .1s">
       <div class="card-header">
         <div>
           <div class="card-title">Avanço detalhado por pacote</div>
@@ -1244,8 +1561,7 @@ function renderAvancoFisico() {
 function renderHeatmap(av) {
   const estacas = listarEstacas();
   const pacotesAtivos = Object.values(av).filter(a => a.pacote && getCSVField(a.pacote, 'Status') !== 'Histórico')
-    .filter(a => a.qtdExecutada > 0 || true) 
-    .slice(0, 15); 
+    .filter(a => a.qtdExecutada > 0 || true).slice(0, 15); 
   
   if (pacotesAtivos.length === 0) {
     return '<div class="empty"><div class="empty-icon">▦</div><div class="empty-title">Mapa vazio</div><div class="empty-sub">Lance RDOs com estaca preenchida pra ver o mapa se construir</div></div>';
@@ -1300,45 +1616,6 @@ function renderHeatmap(av) {
 // ====================================================================
 // VIEW: CRONOGRAMA FÍSICO (Planejamento Reverso)
 // ====================================================================
-const PRODUTIVIDADE_PADRAO = {
-  'P01': 6,     // Tubo Ø500mm
-  'P02': 9,     // Tubo Ø600mm
-  'P03': 9,     // Tubo Ø800mm
-  'P04': 9,     // Tubo Ø1000mm
-  'P06': 0.33,  // Boca de Lobo Dupla (1 a cada 3 dias)
-  'P07': 0.25,  // Boca de Lobo Tripla (1 a cada 4 dias)
-  'P08': 0.33,  // PV Tipo 2 (1 a cada 3 dias)
-  'P09': 0.1,   // Bacia de Captação (1 a cada 10 dias)
-  'P10': 0.1,   // Bacia de Dissipação (1 a cada 10 dias)
-  'P11': 10,    // Demolição de sarjeta
-  'P12': 40,    // Demolição de passeio
-  'P13': 40,    // Demolição de piso rígido
-  'P14': 60,    // Demolição de pavimento asfáltico
-  'P15': 40,    // Guia PMSP 100 - via nova
-  'P16': 20,    // Guia PMSP 100 - reposição
-  'P17': 10,    // Superguia SPTrans
-  'P18': 20,    // Sarjeta
-  'P19': 10,    // Sarjetão
-  'P20': 40,    // Passeio cimentado
-  'P21': 8,     // Piso podotátil
-  'P22': 20,    // Vala técnica + dutos
-  'P23': 0.33,  // Caixa subterrânea R1 (1 a cada 3 dias)
-  'P24': 0.2,   // Caixa subterrânea R2 (1 a cada 5 dias)
-  'P25': 40,    // Rachão
-  'P26': 40,    // BGS
-  'P27': 40,    // BGTC
-  'P28': 700,   // Binder asfáltico
-  'P29': 700,   // SMA - Capa de rolamento
-  'P30A': 30,   // Pav. rígido: Preparo + Bases
-  'P30B': 210,  // Pav. rígido: Lona + Imprimações
-  'P30C': 105,  // Pav. rígido: Placa armada
-  'P31': 20,    // Pintura horizontal
-  'P32': 50,    // Tachas/Tachões
-  'P33': 20,    // Sinalização vertical
-  'P34': 0.1,   // Galeria (1 a cada 10 dias)
-  'P35': 50,    // Demolição de muros
-  'P36': 15     // Reconstrução de muros de divisa
-};
 let PLAN_DADOS = null;
 
 function loadPlanDados() {
@@ -1360,7 +1637,7 @@ window.atualizarPlan = function(pacoteId, campo, valor) {
   if (!PLAN_DADOS[pacoteId]) PLAN_DADOS[pacoteId] = { prod: '', dataFim: '' };
   PLAN_DADOS[pacoteId][campo] = valor;
   salvarPlanDados();
-  render();
+  transitionTo(render);
 };
 
 function calcularDataInicioReversa(dataFimStr, diasDuracao) {
@@ -1396,7 +1673,7 @@ function renderCronograma() {
   const hoje = new Date();
   hoje.setHours(0,0,0,0);
 
-  let html = '<div class="card"><div class="card-header"><div><div class="card-title">Motor de Planejamento Reverso</div><div class="card-title-sub">Defina o término alvo. O sistema calcula quando iniciar o SALDO RESTANTE usando a produtividade padrão (ou a que você digitar).</div></div></div><div class="card-body flush" style="overflow-x:auto"><table class="t" style="min-width: 900px;"><thead><tr><th style="width: 25%">Pacote / Serviço</th><th class="t-num" style="text-align: right; width: 10%">Saldo a Executar</th><th style="width: 15%">Término Alvo</th><th style="width: 15%">Produtividade/dia</th><th class="t-num" style="text-align: center; width: 10%">Duração (Saldo)</th><th style="width: 25%">Data Início Necessária</th></tr></thead><tbody>';
+  let html = '<div class="card stagger-item"><div class="card-header"><div><div class="card-title">Motor de Planejamento Reverso</div><div class="card-title-sub">Defina o término alvo. O sistema calcula quando iniciar o SALDO RESTANTE usando a produtividade padrão (ou a que você digitar).</div></div></div><div class="card-body flush" style="overflow-x:auto"><table class="t" style="min-width: 900px;"><thead><tr><th style="width: 25%">Pacote / Serviço</th><th class="t-num" style="text-align: right; width: 10%">Saldo a Executar</th><th style="width: 15%">Término Alvo</th><th style="width: 15%">Produtividade/dia</th><th class="t-num" style="text-align: center; width: 10%">Duração (Saldo)</th><th style="width: 25%">Data Início Necessária</th></tr></thead><tbody>';
 
   Object.entries(porFrente).forEach(([frente, pacotes]) => {
     html += '<tr class="summary"><td colspan="6">' + frente + '</td></tr>';
@@ -1465,18 +1742,36 @@ function renderCronograma() {
 }
 
 // ====================================================================
+// VIEW: APOIO MEDIÇÃO
+// ====================================================================
+function renderMedicao(){
+  const av=calcularAvancoPorPacote();
+  const consumo=calcularConsumoItens(av);
+  const lista=Object.values(consumo).filter(x=>x.consumido>0).sort((a,b)=>b.consumido-a.consumido);
+  return`<div class="card stagger-item">
+    <div class="card-header"><div><div class="card-title">Consumo por item contratual</div><div class="card-title-sub">Calculado a partir dos RDOs × matriz de coeficientes</div></div><div style="font-size:11px;color:var(--muted)">${lista.length} itens com consumo</div></div>
+    <div class="card-body flush">
+      ${lista.length===0?'<div class="empty"><div class="empty-icon">⌗</div><div class="empty-title">Nada consumido ainda</div><div class="empty-sub">Lance RDOs com pacote e quantidade para ver os itens contratuais derivados aparecerem aqui.</div></div>':`
+      <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">Consumido</th><th>Pacotes</th></tr></thead>
+      <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${x.item}</strong></td><td>${x.descricao}</td><td class="t-mono">${x.unidadeItem}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td></tr>`).join('')}</tbody>
+      </table>`}
+    </div>
+  </div>`;
+}
+
+// ====================================================================
 // VIEW: HISTÓRICO (com tabs Serviços | RDOs Diários)
 // ====================================================================
 let HISTORICO_TAB = 'servicos';
 
 function setHistoricoTab(t) {
   HISTORICO_TAB = t;
-  render();
+  transitionTo(render);
 }
 
 function renderHistorico() {
   return `
-    <div class="btn-toggle-group" style="margin-bottom:0">
+    <div class="btn-toggle-group stagger-item" style="margin-bottom:0">
       <button class="btn-toggle ${HISTORICO_TAB==='servicos'?'active':''}" onclick="setHistoricoTab('servicos')">
         Serviços (${STATE.rdoavanco.length})
       </button>
@@ -1526,7 +1821,7 @@ function renderHistoricoServicos() {
   }
   
   return `
-    <div class="card">
+    <div class="card stagger-item" style="animation-delay: .1s">
       <div class="card-header">
         <div>
           <div class="card-title">Serviços lançados</div>
@@ -1560,6 +1855,7 @@ function renderHistoricoDiarios() {
          (ef.customDireto_noturno || []).forEach(v => total += parseInt(v.qtd) || 0);
          (ef.customIndireto_noturno || []).forEach(v => total += parseInt(v.qtd) || 0);
       } catch(e) {
+         // Fallback para dados V3 antigos
          const cats = ['Servente','Pedreiro','Armador','Carpinteiro','OpMaquina','Sinaleiro','Encarregado'];
          cats.forEach(c => {
            total += parseInt(getCSVField(r, c+'_Diurno')) || 0;
@@ -1604,7 +1900,7 @@ function renderHistoricoDiarios() {
   }
   
   return `
-    <div class="card">
+    <div class="card stagger-item" style="animation-delay: .1s">
       <div class="card-header">
         <div>
           <div class="card-title">RDOs Diários</div>
@@ -1650,48 +1946,6 @@ function defaultDraft() {
   };
 }
 
-function renderMedicao(){
-  const av = calcularAvancoPorPacote();
-  const consumo = calcularConsumoItens(av);
-  const lista = Object.values(consumo).filter(x => x.consumido > 0).sort((a,b) => b.consumido - a.consumido);
-  
-  let bodyContent = '';
-  if (lista.length === 0) {
-    bodyContent = '<div class="empty"><div class="empty-icon">⌗</div><div class="empty-title">Nada consumido ainda</div><div class="empty-sub">Lance RDOs com pacote e quantidade para ver os itens contratuais derivados aparecerem aqui.</div></div>';
-  } else {
-    const tableRows = lista.map((x,i) => `
-      <tr style="animation:staggerIn calc(0.3s*var(--anim-speed)) ${i*20}ms both">
-        <td class="t-mono"><strong>${x.item}</strong></td>
-        <td>${x.descricao}</td>
-        <td class="t-mono">${x.unidadeItem}</td>
-        <td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td>
-        <td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td>
-      </tr>
-    `).join('');
-    
-    bodyContent = `
-      <table class="t">
-        <thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">Consumido</th><th>Pacotes</th></tr></thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-    `;
-  }
-  
-  return `
-  <div class="card">
-    <div class="card-header">
-      <div>
-        <div class="card-title">Consumo por item contratual</div>
-        <div class="card-title-sub">Calculado a partir dos RDOs × matriz de coeficientes</div>
-      </div>
-      <div style="font-size:11px;color:var(--muted)">${lista.length} itens com consumo</div>
-    </div>
-    <div class="card-body flush">
-      ${bodyContent}
-    </div>
-  </div>`;
-}
-
 function renderRDO() {
   if (!STATE.draft) STATE.draft = loadDraft() || defaultDraft();
   const d = STATE.draft;
@@ -1708,13 +1962,13 @@ function renderRDO() {
   
   return `
     ${temRascunho ? `
-      <div style="background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+      <div style="background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
         <div style="font-size:13px;color:var(--ylw-d)">📝 Rascunho restaurado da última sessão.</div>
         <button class="btn btn-sm btn-outline" onclick="resetDraft()">Limpar e começar novo</button>
       </div>
     ` : ''}
     
-    <div class="card">
+    <div class="card stagger-item">
       <div class="card-header">
         <div>
           <div class="card-title">Identificação</div>
@@ -1749,7 +2003,7 @@ function renderRDO() {
       </div>
     </div>
     
-    <div class="card">
+    <div class="card stagger-item" style="animation-delay:.1s">
       <div class="card-header">
         <div>
           <div class="card-title">Serviços executados</div>
@@ -1765,7 +2019,7 @@ function renderRDO() {
       </div>
     </div>
     
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px">
+    <div class="stagger-item" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;animation-delay:.2s">
       <div style="font-size:12px;color:var(--muted);max-width:520px">
         ⓘ Cada serviço vira 1 linha em <strong>RDO_Avanco</strong>. O dashboard atualiza em até 5 min.
       </div>
@@ -1899,7 +2153,7 @@ function rerenderServicoRow(idx) {
 function setTurno(t) {
   STATE.draft.turno = t;
   saveDraft(STATE.draft);
-  render();
+  transitionTo(render);
 }
 
 function adicionarServico() {
@@ -1911,7 +2165,7 @@ function adicionarServico() {
     quantidade: '', equipe: '', observacao: ''
   });
   saveDraft(STATE.draft);
-  render();
+  transitionTo(render);
 }
 
 function removerServico(idx) {
@@ -1920,14 +2174,14 @@ function removerServico(idx) {
     STATE.draft.servicos.push({ frente: '', pacoteId: '', quantidade: '', equipe: '', observacao: '' });
   }
   saveDraft(STATE.draft);
-  render();
+  transitionTo(render);
 }
 
 function resetDraft() {
   if (!confirm('Limpar todos os dados desse RDO? Não tem como desfazer.')) return;
   clearDraft();
   STATE.draft = defaultDraft();
-  render();
+  transitionTo(render);
 }
 
 function validarRDO(d) {
@@ -2096,7 +2350,7 @@ const CATEGORIAS_EQUIP_PADRAO = [
 const CLIMAS = ['Bom', 'Encoberto', 'Garoa', 'Chuva', 'Chuva forte'];
 
 // ====================================================================
-// ESTADO DO RDO DIÁRIO V4
+// ESTADO DO RDO DIÁRIO V4 E LÓGICA DE TURNOS
 // ====================================================================
 let DIARIO_V4 = null;
 let DIARIO_TURNO_ATIVO = null; 
@@ -2134,7 +2388,6 @@ function defaultDiarioV4(data) {
   };
 }
 
-// Carrega do Sheets se já existir RDO Diário pra esta data
 function carregarDiarioDaSheet(data) {
   const sheetRow = (STATE.rdodiario || []).find(r => {
     const rd = parseISODate(getCSVField(r, 'Data'));
@@ -2179,9 +2432,6 @@ function carregarDiarioDaSheet(data) {
   return d;
 }
 
-// ====================================================================
-// RENDER DO RDO DIÁRIO V4
-// ====================================================================
 function renderRDODiarioV4() {
   const dataHoje = getLocalISODate(new Date());
   if (!DIARIO_V4) {
@@ -2204,7 +2454,7 @@ function renderSeletorTurno() {
   }
 
   return `
-    <div class="card stagger-item" style="animation-delay:.05s;max-width:680px;margin:0 auto">
+    <div class="card stagger-item" style="max-width:680px;margin:0 auto">
       <div class="card-header">
         <div>
           <div class="card-title">RDO Diário</div>
@@ -2268,7 +2518,7 @@ function renderFormularioTurno() {
   }
   
   return `
-    <div style="background:${cor};color:#fff;padding:14px 20px;border-radius:var(--r);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <div class="stagger-item" style="background:${cor};color:#fff;padding:14px 20px;border-radius:var(--r);margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;animation-delay:0s">
       <div>
         <div style="font-size:11px;opacity:.85;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Você está preenchendo</div>
         <div style="font-size:18px;font-weight:700;margin-top:2px">${turnoIcon} TURNO ${turnoLabel} · ${fmtData(d.data)}</div>
@@ -2316,7 +2566,7 @@ function renderFormularioTurno() {
     ${renderEfetivoV4('INDIRETO', CATEGORIAS_INDIRETO, td, 'indireto', cor)}
     ${renderEfetivoV4('DIRETO', CATEGORIAS_DIRETO, td, 'direto', cor)}
     
-    <div class="card stagger-item" style="animation-delay:.3s">
+    <div class="card stagger-item" style="animation-delay:.2s">
       <div class="card-header">
         <div>
           <div class="card-title">Equipamentos do turno ${turnoLabel}</div>
@@ -2349,7 +2599,7 @@ function renderFormularioTurno() {
       </div>
     </div>
     
-    <div class="card stagger-item" style="animation-delay:.35s">
+    <div class="card stagger-item" style="animation-delay:.25s">
       <div class="card-header">
         <div>
           <div class="card-title">Observações do turno ${turnoLabel}</div>
@@ -2373,7 +2623,7 @@ function renderFormularioTurno() {
       </div>
     </div>
     
-    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px">
+    <div class="stagger-item" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;animation-delay:.3s">
       <div style="font-size:12px;color:var(--muted);max-width:480px">
         ℹ Salva os dados do turno ${turnoLabel} no RDO Diário desta data. Se já houver outro turno, não é sobrescrito.
       </div>
@@ -2408,7 +2658,7 @@ function renderEfetivoV4(titulo, categorias, td, prefix, corBorda) {
   }
   
   return `
-    <div class="card stagger-item" style="animation-delay:.${prefix==='indireto'?'15':'25'}s">
+    <div class="card stagger-item" style="animation-delay:.${prefix==='indireto'?'10':'15'}s">
       <div class="card-header" style="border-left:3px solid ${corBorda}">
         <div>
           <div class="card-title">EFETIVO ${titulo}</div>
@@ -2431,16 +2681,13 @@ function renderEfetivoV4(titulo, categorias, td, prefix, corBorda) {
   `;
 }
 
-// ====================================================================
-// EVENTOS
-// ====================================================================
 function attachRDODiarioV4Form() {
   const dataInput = document.querySelector('[data-diario4-data]');
   if (dataInput) {
     dataInput.onchange = () => {
       const novaData = dataInput.value;
       DIARIO_V4 = carregarDiarioDaSheet(novaData) || loadDiarioV4(novaData) || defaultDiarioV4(novaData);
-      render();
+      transitionTo(render);
     };
   }
   
@@ -2496,19 +2743,19 @@ function attachRDODiarioV4Form() {
 
 function selecionarTurnoV4(turno) {
   DIARIO_TURNO_ATIVO = turno;
-  render();
+  transitionTo(render);
 }
 
 function voltarSeletorTurnoV4() {
   DIARIO_TURNO_ATIVO = null;
-  render();
+  transitionTo(render);
 }
 
 function resetTurnoV4() {
   if (!confirm('Limpar todos os dados do turno ' + DIARIO_TURNO_ATIVO.toUpperCase() + '?')) return;
   DIARIO_V4[DIARIO_TURNO_ATIVO] = defaultDiarioV4(DIARIO_V4.data)[DIARIO_TURNO_ATIVO];
   saveDiarioV4(DIARIO_V4);
-  render();
+  transitionTo(render);
 }
 
 function adicionarFuncaoCustomV4(prefix) {
@@ -2516,7 +2763,7 @@ function adicionarFuncaoCustomV4(prefix) {
   const list = prefix === 'indireto' ? td.customIndireto : td.customDireto;
   list.push({ label: '', qtd: '' });
   saveDiarioV4(DIARIO_V4);
-  render();
+  transitionTo(render);
 }
 
 function removerFuncaoCustomV4(prefix, idx) {
@@ -2524,7 +2771,7 @@ function removerFuncaoCustomV4(prefix, idx) {
   const list = prefix === 'indireto' ? td.customIndireto : td.customDireto;
   list.splice(idx, 1);
   saveDiarioV4(DIARIO_V4);
-  render();
+  transitionTo(render);
 }
 
 function adicionarEquipCustomV4() {
@@ -2532,13 +2779,13 @@ function adicionarEquipCustomV4() {
   if (!label || !label.trim()) return;
   DIARIO_V4[DIARIO_TURNO_ATIVO].customEquip.push({ label: label.trim(), qtd: '' });
   saveDiarioV4(DIARIO_V4);
-  render();
+  transitionTo(render);
 }
 
 function removerEquipCustomV4(idx) {
   DIARIO_V4[DIARIO_TURNO_ATIVO].customEquip.splice(idx, 1);
   saveDiarioV4(DIARIO_V4);
-  render();
+  transitionTo(render);
 }
 
 async function salvarDiarioV4() {
@@ -2610,17 +2857,13 @@ async function salvarDiarioV4() {
 }
 
 // ====================================================================
-// LOGOS RDO OFICIAL (base64 PNG)
+// LOGOS RDO OFICIAL E GERAÇÃO PDF
 // ====================================================================
 const RDO_LOGO_L1 = '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';
 const RDO_LOGO_L2 = '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';
 const RDO_LOGO_L3 = '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';
 
-// ====================================================================
-// PDF DO RDO DIÁRIO OFICIAL — Layout SP-Obras com 3 logos
-// ====================================================================
 function gerarPDFDiario(data) {
-  // Buscar dados do RDO Diário (preferir Sheets, senão usar DIARIO_V4 local)
   const fromSheet = (STATE.rdodiario || []).find(r => {
     const rd = parseISODate(getCSVField(r, 'Data'));
     return rd && getLocalISODate(rd) === data;
@@ -2734,7 +2977,6 @@ function gerarPDFDiario(data) {
   
   let y = MT;
   
-  // Cabeçalho 22mm
   rf(ML, y, TW, 22, W, NAV, 0.5);
   try { doc.addImage('data:image/png;base64,' + RDO_LOGO_L1, 'PNG', ML + 1, y + 1, 20, 20); } catch(e) {}
   try { doc.addImage('data:image/png;base64,' + RDO_LOGO_L2, 'PNG', ML + 22, y + 1, 24, 20); } catch(e) {}
@@ -2751,7 +2993,6 @@ function gerarPDFDiario(data) {
   doc.text(respLines.slice(0, 2), cxMid, y + 17.5, { align: 'center' });
   y += 22;
   
-  // Objeto 10mm
   rf(ML, y, TW, 10, LB, BD);
   sf(5, 'bold', NAV); tx('OBJETO', ML + 2, y + 3.5);
   sf(5, 'normal', [0, 0, 0]);
@@ -2760,7 +3001,6 @@ function gerarPDFDiario(data) {
   doc.text(objL.slice(0, 2), ML + 2, y + 6.5);
   y += 10;
   
-  // Local/Data/Nº/Prazo
   const nrRDO = (d.sheetId) ? String(d.sheetId).replace(/^D0*/, '') || '1' : '—';
   const H3 = 6;
   rf(ML, y, TW * 0.55, H3, LB, BD); sf(5, 'bold', NAV); tx('LOCAL', ML + 2, y + H3 * 0.72);
@@ -2775,7 +3015,6 @@ function gerarPDFDiario(data) {
   rf(ML + TW * 0.89, y, TW * 0.11, H3, W, BD); sf(6, 'bold', NAV); tx('669', ML + TW * 0.89 + TW * 0.055, y + H3 * 0.72, { align: 'center' });
   y += H3;
   
-  // Dia/Jornada/Clima
   const JH = 5;
   const dCW = TW * 0.038, jW = TW * 0.25, cW = TW - 7 * dCW - jW;
   const jcw = jW / 4, ccw = cW / 4;
@@ -2808,9 +3047,6 @@ function gerarPDFDiario(data) {
   });
   y += JH + 2;
   
-  // ════════════════════════════
-  // EFETIVO (Diurno + Noturno)
-  // ════════════════════════════
   rf(ML, y, TW, 5, NAV); sf(6.5, 'bold', W); tx('EFETIVO — Apontador Diurno: ' + (d.apontador_diurno || '—') + '  |  Noturno: ' + (d.apontador_noturno || '—'), ML + 2, y + 3.3); y += 5;
   
   const CD = 60, CN = 12, CT = 12, CO = TW - CD - 4 * CN - CT;
@@ -2836,14 +3072,12 @@ function gerarPDFDiario(data) {
     ...CATEGORIAS_DIRETO.map(c => ({...c, tipo: 'direto'})),
   ];
   
-  // Filtra categorias com valor
   let categorias = todasCats.filter(c => {
     const diu = parseInt(d.efetivo_diurno[c.key]) || 0;
     const not = parseInt(d.efetivo_noturno[c.key]) || 0;
     return (diu + not) > 0;
   });
   
-  // Adicionar customs
   (d.customIndireto_diurno || []).forEach(f => {
     const diu = parseInt(f.qtd) || 0;
     if (f.label && diu > 0) categorias.push({ key: '__cid_' + f.label, label: f.label + ' ✱', tipo: 'indireto', _customDiu: diu, _customNot: 0 });
@@ -2869,7 +3103,6 @@ function gerarPDFDiario(data) {
     }
   });
   
-  // Min 12 linhas pra ocupar página
   if (categorias.length < 12) {
     const placeholders = todasCats.filter(c => !categorias.some(ec => ec.key === c.key)).slice(0, 12 - categorias.length);
     categorias = [...categorias, ...placeholders];
@@ -2886,7 +3119,7 @@ function gerarPDFDiario(data) {
       not = parseInt(d.efetivo_noturno[cat.key]) || 0;
     }
     const cd = cat.tipo === 'direto' ? diu : 0;
-    const ci = cat.tipo === 'indireto' ? diu : 0;
+const ci = cat.tipo === 'indireto' ? diu : 0;
     const td = cat.tipo === 'direto' ? not : 0;
     const ti = cat.tipo === 'indireto' ? not : 0;
     const tot = cd + ci + td + ti;
@@ -3014,8 +3247,8 @@ function gerarPDFDiario(data) {
     } else {
       lista.forEach((s, i) => {
         const bg = i % 2 === 0 ? W : LG;
-        const pacote = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === s['Pacote_ID']);
-        const frente = pacote ? (getCSVField(pacote, 'Frente') || '') : '';
+        const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
+        const frente = pacote ? (pacote['Frente'] || '') : '';
         rf(xPac, y, wPac, SH, bg, BD); sf(5.5, 'normal', [0, 0, 0]);
         const txtPacote = (frente ? frente + ' · ' : '') + (s['Pacote_Nome'] || '');
         const linhasPac = doc.splitTextToSize(txtPacote, wPac - 3);
@@ -3083,6 +3316,7 @@ function gerarPDFDiario(data) {
 }
 
 function gerarPDFInternoTurnoV4() {
+  // Agora passamos o DIARIO_TURNO_ATIVO para a função saber qual turno isolar
   if (typeof gerarPDFInterno === 'function') {
     gerarPDFInterno(DIARIO_V4.data, DIARIO_TURNO_ATIVO);
   } else {
@@ -3091,6 +3325,7 @@ function gerarPDFInternoTurnoV4() {
 }
 
 function gerarPDFDiarioV4(data) {
+  // Chama o PDF Oficial completo (gerado de gerarPDFDiario)
   if (typeof gerarPDFDiario === 'function') {
     gerarPDFDiario(data);
   } else {
@@ -3098,19 +3333,47 @@ function gerarPDFDiarioV4(data) {
   }
 }
 
+
 // ====================================================================
 // PDF INTERNO — Visual, pra mandar no grupo (sem logos formais)
 // ====================================================================
 function gerarPDFInterno(data, turnoFocus) {
+  // Tornando a função à prova de falhas: se o botão não enviou o turno, ela mesma descobre qual tela está aberta
   const focus = turnoFocus || (typeof DIARIO_TURNO_ATIVO !== 'undefined' ? DIARIO_TURNO_ATIVO : null);
 
   const fromSheet = (STATE.rdodiario || []).find(r => {
-    const rd = parseISODate(getCSVField(r, 'Data'));
-    return rd && getLocalISODate(rd) === data;
+    const rd = String(r['Data']);
+    return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
   });
 
   let d;
-  if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
+  if (fromSheet) {
+    let efetJson = {}, equipJson = {};
+    try { efetJson = JSON.parse(fromSheet['Efetivo_JSON'] || '{}'); } catch(e) {}
+    try { equipJson = JSON.parse(fromSheet['Equipamentos_JSON'] || '{}'); } catch(e) {}
+    d = {
+      data: data,
+      tem_turno_noturno: (fromSheet['Apontador_Diurno'] && fromSheet['Apontador_Noturno']) ? true : false,
+      apontador_diurno: fromSheet['Apontador_Diurno'] || '',
+      apontador_noturno: fromSheet['Apontador_Noturno'] || '',
+      clima_manha: fromSheet['Clima_Manha'] || '',
+      clima_tarde: fromSheet['Clima_Tarde'] || '',
+      clima_noite: fromSheet['Clima_Noite'] || '',
+      visitas: fromSheet['Visitas'] || '',
+      ocorrencias: fromSheet['Ocorrencias'] || '',
+      observacoes_gerais: fromSheet['Observacoes_Gerais'] || '',
+      efetivo_diurno: efetJson.padrao_diurno || {},
+      efetivo_noturno: efetJson.padrao_noturno || {},
+      equipamentos_diurno: equipJson.padrao_diurno || {},
+      equipamentos_noturno: equipJson.padrao_noturno || {},
+      customIndireto_diurno: efetJson.customIndireto_diurno || [],
+      customIndireto_noturno: efetJson.customIndireto_noturno || [],
+      customDireto_diurno: efetJson.customDireto_diurno || [],
+      customDireto_noturno: efetJson.customDireto_noturno || [],
+      customEquip_diurno: equipJson.custom_diurno || [],
+      customEquip_noturno: equipJson.custom_noturno || []
+    };
+  } else if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
     const v4 = DIARIO_V4;
     d = {
       data: data,
@@ -3132,38 +3395,13 @@ function gerarPDFInterno(data, turnoFocus) {
       customEquip_diurno: v4.diurno.customEquip || [],
       customEquip_noturno: v4.noturno.customEquip || []
     };
-  } else if (fromSheet) {
-    let efetJson = {}, equipJson = {};
-    try { efetJson = JSON.parse(getCSVField(fromSheet, 'Efetivo_JSON') || getCSVField(fromSheet, 'efetivo_json') || '{}'); } catch(e) {}
-    try { equipJson = JSON.parse(getCSVField(fromSheet, 'Equipamentos_JSON') || getCSVField(fromSheet, 'equipamentos_json') || '{}'); } catch(e) {}
-    d = {
-      data: data,
-      tem_turno_noturno: (getCSVField(fromSheet, 'Apontador_Diurno') && getCSVField(fromSheet, 'Apontador_Noturno')) ? true : false,
-      apontador_diurno: getCSVField(fromSheet, 'Apontador_Diurno') || '',
-      apontador_noturno: getCSVField(fromSheet, 'Apontador_Noturno') || '',
-      clima_manha: getCSVField(fromSheet, 'Clima_Manha') || '',
-      clima_tarde: getCSVField(fromSheet, 'Clima_Tarde') || '',
-      clima_noite: getCSVField(fromSheet, 'Clima_Noite') || '',
-      visitas: getCSVField(fromSheet, 'Visitas') || '',
-      ocorrencias: getCSVField(fromSheet, 'Ocorrencias') || '',
-      observacoes_gerais: getCSVField(fromSheet, 'Observacoes_Gerais') || '',
-      efetivo_diurno: efetJson.padrao_diurno || {},
-      efetivo_noturno: efetJson.padrao_noturno || {},
-      equipamentos_diurno: equipJson.padrao_diurno || {},
-      equipamentos_noturno: equipJson.padrao_noturno || {},
-      customIndireto_diurno: efetJson.customIndireto_diurno || [],
-      customIndireto_noturno: efetJson.customIndireto_noturno || [],
-      customDireto_diurno: efetJson.customDireto_diurno || [],
-      customDireto_noturno: efetJson.customDireto_noturno || [],
-      customEquip_diurno: equipJson.custom_diurno || [],
-      customEquip_noturno: equipJson.custom_noturno || []
-    };
   } else {
     d = null;
   }
 
   if (!d) { toast('Não encontrei o RDO Diário pra gerar PDF', 'error'); return; }
 
+  // --- LÓGICA DE ISOLAMENTO DO TURNO ---
   if (focus === 'diurno') {
     d.tem_turno_noturno = false;
     d.apontador_noturno = '';
@@ -3192,22 +3430,24 @@ function gerarPDFInterno(data, turnoFocus) {
     }
   }
 
+  // Filtro robusto que ignora letras maiúsculas/minúsculas e espaços em branco
   let servicosDiurnos = STATE.rdoavanco.filter(r => {
-    const rd = parseISODate(getCSVField(r, 'Data'));
+    const rd = parseISODate(r['Data']);
     if (!rd) return false;
-    const t = String(getCSVField(r, 'Turno') || 'Diurno').trim().toLowerCase();
+    const t = String(r['Turno'] || 'Diurno').trim().toLowerCase();
     return fmtData(rd) === fmtData(data) && t !== 'noturno';
   });
   
   let servicosNoturnos = STATE.rdoavanco.filter(r => {
-    const rd = parseISODate(getCSVField(r, 'Data'));
+    const rd = parseISODate(r['Data']);
     if (!rd) return false;
-    const t = String(getCSVField(r, 'Turno') || '').trim().toLowerCase();
+    const t = String(r['Turno'] || '').trim().toLowerCase();
     return fmtData(rd) === fmtData(data) && t === 'noturno';
   });
 
   if (focus === 'diurno') servicosNoturnos = [];
   if (focus === 'noturno') servicosDiurnos = [];
+  // ------------------------------------
 
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -3282,7 +3522,7 @@ function gerarPDFInterno(data, turnoFocus) {
 
   const estacasTrabalhadas = new Set();
   [...servicosDiurnos, ...servicosNoturnos].forEach(s => {
-    const m = (getCSVField(s, 'Local_Estaca') || '').match(/E?\d+(\.\d+)?/g);
+    const m = (s['Local_Estaca'] || '').match(/E?\d+(\.\d+)?/g);
     if (m) m.forEach(e => estacasTrabalhadas.add(e));
   });
 
@@ -3347,18 +3587,18 @@ function gerarPDFInterno(data, turnoFocus) {
       const bg = i % 2 === 0 ? null : [252, 250, 246];
       if (bg) rect(ML, y, TW, 5, bg);
       
-      const pacote = (STATE && STATE.pacotes) ? STATE.pacotes.find(pp => getCSVField(pp, 'ID') === getCSVField(s, 'Pacote_ID')) : null;
-      const frente = pacote ? (getCSVField(pacote, 'Frente') || '') : '';
+      const pacote = (STATE && STATE.pacotes) ? STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']) : null;
+      const frente = pacote ? (pacote['Frente'] || '') : '';
       
       sf(7, 'bold', NAVY);
-      tx((frente ? frente + ' · ' : '') + (getCSVField(s, 'Pacote_Nome') || ''), ML + 3, y + 3.5);
+      tx((frente ? frente + ' · ' : '') + (s['Pacote_Nome'] || ''), ML + 3, y + 3.5);
       sf(7, 'normal', [50, 50, 50]);
-      tx(getCSVField(s, 'Local_Estaca') || '', ML + 75, y + 3.5);
+      tx(s['Local_Estaca'] || '', ML + 75, y + 3.5);
       sf(7, 'bold', TERRA_DARK);
-      tx(parseFloat(getCSVField(s, 'Quantidade')||0).toLocaleString('pt-BR'), ML + 130, y + 3.5, { align: 'right' });
+      tx(parseFloat(s['Quantidade']||0).toLocaleString('pt-BR'), ML + 130, y + 3.5, { align: 'right' });
       sf(7, 'normal', CINZA);
-      tx(getCSVField(s, 'Unidade') || '', ML + 138, y + 3.5);
-      tx(getCSVField(s, 'Equipe') || getCSVField(s, 'Subcontratado') || '', ML + 152, y + 3.5);
+      tx(s['Unidade'] || '', ML + 138, y + 3.5);
+      tx(s['Equipe'] || s['Subcontratado'] || '', ML + 152, y + 3.5);
       y += 5;
     });
     y += 3;
@@ -3543,12 +3783,14 @@ function gerarPDFInterno(data, turnoFocus) {
   sf(7, 'normal', [180, 175, 168]);
   tx('Gerado em ' + new Date().toLocaleString('pt-BR'), PW - ML, PH - 4, { align: 'right' });
 
+  // Nomeia o arquivo de acordo com o turno para não sobrepor se salvarem ambos
   let fname = 'RDO_INTERNO_' + data.replace(/-/g, '_');
   if (focus) fname += '_' + focus.toUpperCase();
   fname += '.pdf';
   doc.save(fname);
   toast('PDF Interno gerado: ' + fname, 'success');
 }
+// Export funções
 
 // ====================================================================
 // GRÁFICOS (Curva S)
@@ -3558,38 +3800,42 @@ function montarGraficos() {
   const ctx = document.getElementById('curvaS');
   if (!ctx) return;
 
+  // Destrói o gráfico anterior para não encavalar se o usuário redimensionar a tela
   if (window.meuGraficoCurvaS) {
     window.meuGraficoCurvaS.destroy();
   }
 
   const av = calcularAvancoPorPacote();
-  const pacotesAtivos = Object.values(av).filter(a => a.pacote && getCSVField(a.pacote, 'Status') !== 'Histórico');
+  const pacotesAtivos = Object.values(av).filter(a => a.pacote && a.pacote['Status'] !== 'Histórico');
 
+  // 1. Calcular o peso total da obra em DIAS
   const totalDiasObra = pacotesAtivos.reduce((s, a) => {
-    const pid = getCSVField(a.pacote, 'ID');
+    const pid = a.pacote['ID'];
     const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
     return s + (a.qtdEstimada / prod);
   }, 0);
 
   if (totalDiasObra === 0) return;
 
+  // 2. Acumular os RDOs dia a dia (convertendo a quantidade em dias de esforço)
   const rdosPorDia = {};
   STATE.rdoavanco.forEach(r => {
-    const d = parseISODate(getCSVField(r, 'Data'));
+    const d = parseISODate(r['Data']);
     if (!d) return;
-    const dStr = getLocalISODate(d);
-    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
-    const pacoteInfo = pacotesAtivos.find(p => getCSVField(p.pacote, 'ID') === pid);
+    const dStr = d.toISOString().split('T')[0];
+    const pid = r['Pacote_ID'] || r['Pacote_id'];
+    const pacoteInfo = pacotesAtivos.find(p => p.pacote['ID'] === pid);
 
-    if (!pacoteInfo) return; 
+    if (!pacoteInfo) return; // Ignora pacotes deletados/históricos
 
     const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
-    const diasDesteRDO = num(getCSVField(r, 'Quantidade')) / prod;
+    const diasDesteRDO = num(r['Quantidade']) / prod;
     const contribPct = diasDesteRDO / totalDiasObra;
 
     rdosPorDia[dStr] = (rdosPorDia[dStr] || 0) + contribPct;
   });
 
+  // 3. Preparar os dados para a linha do gráfico
   const diasOrdenados = Object.keys(rdosPorDia).sort();
   const labels = [];
   const dataAcumulada = [];
@@ -3598,10 +3844,11 @@ function montarGraficos() {
   diasOrdenados.forEach(d => {
     acumulado += rdosPorDia[d];
     const [ano, mes, dia] = d.split('-');
-    labels.push(`${dia}/${mes}`); 
+    labels.push(`${dia}/${mes}`); // Formato DD/MM
     dataAcumulada.push((acumulado * 100).toFixed(2));
   });
 
+  // 4. Desenhar o gráfico usando Chart.js
   window.meuGraficoCurvaS = new Chart(ctx, {
     type: 'line',
     data: {
@@ -3609,11 +3856,11 @@ function montarGraficos() {
       datasets: [{
         label: 'Avanço Físico Real (%)',
         data: dataAcumulada,
-        borderColor: '#2563eb', 
+        borderColor: '#2563eb', // Azul vivo
         backgroundColor: 'rgba(37, 99, 235, 0.1)',
         borderWidth: 2,
         fill: true,
-        tension: 0.3, 
+        tension: 0.3, // Deixa a curva suave
         pointRadius: 4,
         pointHoverRadius: 6
       }]
@@ -3643,7 +3890,6 @@ function montarGraficos() {
     }
   });
 }
-
 // ====================================================================
 // BOOT
 // ====================================================================
@@ -3652,13 +3898,18 @@ document.addEventListener('DOMContentLoaded', () => {
   navigate('executivo');
   carregarTudo();
   
+  // Auto-refresh a cada 5min
   setInterval(carregarTudo, CONFIG.refreshMs);
 });
 
+// Expor pro escopo global pra usar em onclick="..."
 window.carregarTudo = carregarTudo;
 window.navigate = navigate;
 window.toggleSidebar = toggleSidebar;
+window.setCronoView = setCronoView;
+window.setCronoMes = setCronoMes;
 window.setTurno = setTurno;
+window.navegacaoRDODiario = navegacaoRDODiario;
 window.gerarPDFDiario = gerarPDFDiario;
 window.setHistoricoTab = setHistoricoTab;
 window.selecionarTurnoV4 = selecionarTurnoV4;
