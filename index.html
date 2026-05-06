@@ -1827,17 +1827,10 @@ function renderGanttHTML() {
   const { nodes, dataInicioProj, sorted } = calcularGantt();
   const hoje = new Date(); hoje.setHours(0,0,0,0);
 
-  // Compute timeline bounds: leftward from earliest segment/node date, rightward to at least Dec 2027
-  let tlStart = new Date(dataInicioProj.getTime());
-  Object.values(nodes).forEach(n => {
-    if (n.dataInicio && n.dataInicio < tlStart) tlStart = new Date(n.dataInicio.getTime());
-    if (n.segmentos) n.segmentos.forEach(s => {
-      if (s.dataInicio && s.dataInicio < tlStart) tlStart = new Date(s.dataInicio.getTime());
-    });
-  });
-  tlStart = new Date(tlStart.getFullYear(), tlStart.getMonth(), 1); // snap to month start
+  // Timeline: start = dataInicioProj (user-defined), end = at least Dec 2026
+  const tlStart = new Date(dataInicioProj.getFullYear(), dataInicioProj.getMonth(), 1);
 
-  const minEnd = new Date(2027, 11, 31); // Dec 31 2027 minimum
+  const minEnd = new Date(2026, 11, 31); // Dec 31 2026 minimum
   let maxData = minEnd;
   Object.values(nodes).forEach(n => { if (n.dataFim && n.dataFim > maxData) maxData = n.dataFim; });
   maxData = new Date(maxData.getFullYear(), maxData.getMonth() + 1, 1); // snap to next month start
