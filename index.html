@@ -1888,42 +1888,34 @@ function renderGanttHTML() {
       } else if (n.duracao === 0) {
         pill = '<span class="gantt-pill" style="background:#9E9E9E;color:#fff">Sem dados</span>';
       } else if (n.segmentos && n.segmentos.length) {
-        // Sort segments chronologically and detect time-overlap to decide layout
+        // Each trecho gets its own gantt-bar-area stacked in a flex column — no manual top calculations
         const segs = n.segmentos.filter(s => s.dataInicio).slice().sort((a, b) => a.dataInicio - b.dataInicio);
-        // Assign each segment to a "lane" (vertical track) so overlapping ones stack, sequential ones share a lane
-        const laneEnds = []; // last end-date in each lane
-        const laneAssign = segs.map(seg => {
-          const dFim = seg.dataFim || seg.dataInicio;
-          for (let i = 0; i < laneEnds.length; i++) {
-            if (seg.dataInicio >= laneEnds[i]) { laneEnds[i] = dFim; return i; }
-          }
-          laneEnds.push(dFim); return laneEnds.length - 1;
-        });
-        const nLanes = Math.max(1, laneEnds.length);
-        const barH = nLanes === 1 ? 24 : 26;
-        const totalNeeded = nLanes * barH + (nLanes - 1) * 4 + 8;
+        let segAreasHtml = '';
         segs.forEach((seg, i) => {
           const dFim = seg.dataFim || seg.dataInicio;
-          const sLeft = pctPos(seg.dataInicio);
-          const sW = Math.max(0.6, pctWid(seg.dataInicio, dFim));
           const localStr = seg.estacaIni && seg.estacaFim
             ? `${seg.estacaIni}→${seg.estacaFim} (${seg.sentido||'CB'})`
             : seg.estacaIni ? `${seg.estacaIni} (${seg.sentido||'CB'})` : '';
           const titleAttr = [localStr, fmtData(seg.dataInicio) + ' → ' + fmtData(dFim)].filter(Boolean).join(' · ');
-          const atrasadoSeg = dFim < hoje && n.pct < 0.99;
-          const lane = laneAssign[i];
-          const topStyle = nLanes === 1
-            ? 'top:50%;transform:translateY(-50%);'
-            : `top:${4 + lane * (barH + 4)}px;transform:none;`;
-          barHtml += `<div class="gantt-bar${atrasadoSeg?' gantt-bar-atrasado':''}"
-            title="${titleAttr}"
-            style="${topStyle}height:${barH}px;left:${sLeft.toFixed(2)}%;width:${sW.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
-            <div class="gantt-bar-progress" style="width:${(n.pct*100).toFixed(1)}%;background:${cor}bb"></div>
-            <span class="gantt-bar-label" style="font-size:9px;overflow:hidden;white-space:nowrap">${localStr}</span>
-          </div>`;
+          let areaHtml = gridLines;
+          if (seg.dataInicio && !(dFim <= tlStart || seg.dataInicio >= maxData)) {
+            const visStart = seg.dataInicio < tlStart ? tlStart : seg.dataInicio;
+            const visEnd   = dFim > maxData ? maxData : dFim;
+            const sLeft = (visStart - tlStart) / totalMs * 100;
+            const sW    = Math.max(0.6, (visEnd - visStart) / totalMs * 100);
+            const atrasadoSeg = dFim < hoje && n.pct < 0.99;
+            areaHtml += `<div class="gantt-bar${atrasadoSeg?' gantt-bar-atrasado':''}"
+              title="${titleAttr}"
+              style="height:24px;left:${sLeft.toFixed(2)}%;width:${sW.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
+              <div class="gantt-bar-progress" style="width:${(n.pct*100).toFixed(1)}%;background:${cor}bb"></div>
+              <span class="gantt-bar-label" style="font-size:9px;overflow:hidden;white-space:nowrap">${localStr}</span>
+            </div>`;
+          }
+          if (hojeOk) areaHtml += `<div class="gantt-hoje" style="left:${hojeLeft.toFixed(2)}%"></div>`;
+          const bdr = i < segs.length - 1 ? 'border-bottom:1px solid rgba(0,0,0,0.07)' : '';
+          segAreasHtml += `<div class="gantt-bar-area" style="min-height:36px;${bdr}">${areaHtml}</div>`;
         });
-        n._segLanes = nLanes;
-        n._segRowH = totalNeeded;
+        n._multiAreaHtml = segAreasHtml;
         const nSeg = n.segmentos.length;
         pill = `<span class="gantt-pill" style="background:#5C4033;color:#fff;font-size:9px">📍 ${nSeg} trecho${nSeg>1?'s':''}</span>`;
         if (n.pct > 0 && n.pct < 0.99) pill += '<span class="gantt-pill" style="background:#1565C0;color:#fff">Em curso</span>';
@@ -1949,10 +1941,10 @@ function renderGanttHTML() {
         ? '<span class="gantt-pill" style="background:#5C4033;color:#fff;font-size:9px">📐 Project</span>'
         : '';
 
-      const rowH = n._segLanes && n._segLanes > 1
-        ? `min-height:${n._segRowH}px`
-        : '';
-      rows += `<div class="gantt-row" data-pid="${n.pid}" style="${rowH}">
+      const barCell = n._multiAreaHtml
+        ? `<div style="display:flex;flex-direction:column">${n._multiAreaHtml}</div>`
+        : `<div class="gantt-bar-area">${barHtml}</div>`;
+      rows += `<div class="gantt-row" data-pid="${n.pid}">
         <div class="gantt-label-cell">
           <div class="gantt-label-nome" title="${nome}">${nome}</div>
           <div class="gantt-label-meta">
@@ -1966,7 +1958,7 @@ function renderGanttHTML() {
             ${n.fromSegmentos ? `<button class="gantt-edit-btn" onclick="ganttLimparSegmentos('${n.pid}')" title="Remover trechos" style="color:#c62828">✕ trechos</button>` : ''}
           </div>
         </div>
-        <div class="gantt-bar-area">${barHtml}</div>
+        ${barCell}
       </div>`;
     });
   });
