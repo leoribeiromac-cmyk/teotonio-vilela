@@ -10,6 +10,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -1776,13 +1777,26 @@ function calcularGantt() {
 
   sorted.forEach(pid => {
     const n = nodes[pid];
-    let inicio = new Date(dataInicioProj.getTime());
-    n.predecessores.forEach(predId => {
-      const pred = nodes[predId];
-      if (pred && pred.dataFim && pred.dataFim > inicio) inicio = new Date(pred.dataFim.getTime());
-    });
-    n.dataInicio = inicio;
-    n.dataFim = n.duracao > 0 ? addWorkingDays(inicio, n.duracao) : new Date(inicio.getTime());
+    const g = gDados[pid] || {};
+
+    if (g.dataProjetada && g.dataInicioProject) {
+      // Use Project-imported dates directly
+      n.dataInicio = parseISODate(g.dataInicioProject);
+      n.dataFim    = g.dataFimProject ? parseISODate(g.dataFimProject) : n.dataInicio;
+      if (n.dataInicio && n.dataFim) {
+        n.duracao = Math.max(1, Math.round((n.dataFim - n.dataInicio) / 86400000));
+      }
+      n.fromProject = true;
+    } else {
+      // Calculate from predecessors + productivity
+      let inicio = new Date(dataInicioProj.getTime());
+      n.predecessores.forEach(predId => {
+        const pred = nodes[predId];
+        if (pred && pred.dataFim && pred.dataFim > inicio) inicio = new Date(pred.dataFim.getTime());
+      });
+      n.dataInicio = inicio;
+      n.dataFim = n.duracao > 0 ? addWorkingDays(inicio, n.duracao) : new Date(inicio.getTime());
+    }
   });
 
   return { nodes, dataInicioProj, sorted };
@@ -1868,17 +1882,21 @@ function renderGanttHTML() {
 
       const ini = n.dataInicio ? fmtData(n.dataInicio) : '—';
       const fim = n.dataFim ? fmtData(n.dataFim) : '—';
+      const projectBadge = n.fromProject
+        ? '<span class="gantt-pill" style="background:#5C4033;color:#fff;font-size:9px">📐 Project</span>'
+        : '';
 
       rows += `<div class="gantt-row" data-pid="${n.pid}">
         <div class="gantt-label-cell">
           <div class="gantt-label-nome" title="${nome}">${nome}</div>
           <div class="gantt-label-meta">
-            ${pill}
+            ${pill}${projectBadge}
             <span class="gantt-label-datas">${ini} → ${fim} · ${n.duracao}d</span>
           </div>
           <div class="gantt-label-pred">
             <span style="color:var(--muted);font-size:10px">Pred: ${predStr}</span>
             <button class="gantt-edit-btn" onclick="ganttEditarPacote('${n.pid}')" title="Editar predecessoras e produtividade">✏</button>
+            ${n.fromProject ? `<button class="gantt-edit-btn" onclick="ganttLimparDatasProject('${n.pid}')" title="Remover datas do Project" style="color:#c62828">✕</button>` : ''}
           </div>
         </div>
         <div class="gantt-bar-area">${barHtml}</div>
@@ -1904,6 +1922,7 @@ function renderGanttHTML() {
               style="padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px"
               onchange="ganttSetDataInicio(this.value)">
           </div>
+          <button class="btn btn-outline btn-sm" onclick="ganttAbrirImportProject()" title="Importar datas e serviços do Excel exportado pelo MS Project">📥 Importar Project</button>
           <button class="btn btn-outline btn-sm" onclick="ganttExportarPDF()">⬇ PDF</button>
         </div>
       </div>
@@ -2023,6 +2042,219 @@ window.ganttExportarPDF = function() {
 
 window.setCronogramaAba = function(aba) {
   CRONOGRAMA_ABA = aba;
+  transitionTo(render);
+};
+
+// ====================================================================
+// IMPORTAÇÃO DO MS PROJECT (EXCEL)
+// ====================================================================
+window.ganttAbrirImportProject = function() {
+  if (typeof XLSX === 'undefined') {
+    toast('Biblioteca de Excel não carregada. Verifique a internet.', 'error', 5000);
+    return;
+  }
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.xlsx,.xls';
+  input.onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    toast('Lendo arquivo…', 'info', 2000);
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try { ganttProcessarExcel(ev.target.result); }
+      catch(err) { toast('Erro ao ler arquivo: ' + err.message, 'error', 6000); }
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  input.click();
+};
+
+function ganttProcessarExcel(buffer) {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+  if (!rows.length) { toast('Arquivo vazio ou sem dados reconhecidos.', 'error'); return; }
+
+  // Detect column names (case-insensitive)
+  const firstRow = rows[0];
+  function findKey(obj, candidates) {
+    const keys = Object.keys(obj).map(k => k.trim());
+    for (const c of candidates) {
+      const found = keys.find(k => k.toLowerCase() === c.toLowerCase());
+      if (found) return found;
+    }
+    return null;
+  }
+  const kNivel   = findKey(firstRow, ['Nivel','Nível','Level']);
+  const kNome    = findKey(firstRow, ['Nome','Name','Task Name']);
+  const kInicio  = findKey(firstRow, ['Inicio','Início','Start']);
+  const kTermino = findKey(firstRow, ['Termino','Término','Finish']);
+  const kEdt     = findKey(firstRow, ['EDT','WBS']);
+  const kId      = findKey(firstRow, ['ID','Id']);
+
+  if (!kNivel || !kNome || !kInicio) {
+    toast('Colunas não encontradas. Certifique-se de usar o arquivo exportado do Project.', 'error', 6000);
+    return;
+  }
+
+  // Collect nivel=2 names (quadra/section labels)
+  const quadraNames = {};
+  rows.forEach(r => {
+    const nivel = parseFloat(r[kNivel]);
+    const edt   = String(r[kEdt] || '').trim();
+    const nome  = String(r[kNome] || '').trim();
+    if (nivel === 2 && edt && nome) quadraNames[edt] = nome;
+  });
+
+  // Collect nivel=3 tasks (service group summaries)
+  const nivel3 = rows
+    .filter(r => {
+      const n = parseFloat(r[kNivel]);
+      return n >= 3 && n < 4 && String(r[kNome] || '').trim() && String(r[kInicio] || '').trim();
+    })
+    .map(r => {
+      const edt = String(r[kEdt] || '').trim();
+      const parentEdt = edt.split('.').slice(0, 2).join('.');
+      return {
+        id:      String(r[kId] || '').trim(),
+        edt,
+        nome:    String(r[kNome] || '').trim(),
+        inicio:  String(r[kInicio] || '').trim(),
+        termino: String(r[kTermino] || '').trim(),
+        quadra:  quadraNames[parentEdt] || ('Seção ' + parentEdt),
+      };
+    })
+    .filter(t => t.inicio);
+
+  if (!nivel3.length) {
+    toast('Nenhuma tarefa de nível 3 encontrada no arquivo.', 'error'); return;
+  }
+
+  window._IMPORT_DATA = nivel3;
+  ganttMostrarMapeamento(nivel3);
+}
+
+function ganttMostrarMapeamento(nivel3) {
+  const pacotes = STATE.pacotes
+    .filter(p => getCSVField(p, 'ID'))
+    .sort((a, b) => String(getCSVField(a,'ID')).localeCompare(String(getCSVField(b,'ID'))));
+
+  const pacoteOpts = '<option value="">— não mapear —</option>' +
+    pacotes.map(p => {
+      const pid  = getCSVField(p, 'ID');
+      const nome = getCSVField(p, 'Pacote') || '';
+      return `<option value="${pid}">${pid} — ${nome}</option>`;
+    }).join('');
+
+  // Pre-select based on keyword match between task name and package name/frente
+  function autoMatch(taskNome) {
+    const tn = taskNome.toLowerCase();
+    for (const p of pacotes) {
+      const pn = (getCSVField(p,'Pacote') + ' ' + getCSVField(p,'Frente')).toLowerCase();
+      // Simple keyword overlap
+      const words = tn.split(/\s+/).filter(w => w.length > 3);
+      if (words.some(w => pn.includes(w))) return getCSVField(p, 'ID');
+    }
+    return '';
+  }
+
+  const tRows = nivel3.map((t, i) => {
+    const auto = autoMatch(t.nome);
+    const opts = pacoteOpts.replace(`value="${auto}"`, `value="${auto}" selected`);
+    return `<tr>
+      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${t.quadra.substring(0,30)}</td>
+      <td style="font-weight:600;font-size:12px">${t.nome}</td>
+      <td class="t-mono" style="font-size:11px;white-space:nowrap">${t.inicio}</td>
+      <td class="t-mono" style="font-size:11px;white-space:nowrap">${t.termino || '—'}</td>
+      <td><select data-idx="${i}" style="font-size:11px;padding:3px 5px;border:1px solid var(--border);border-radius:3px;width:100%;min-width:180px">${opts}</select></td>
+    </tr>`;
+  }).join('');
+
+  const panel = document.getElementById('gantt-edit-panel');
+  if (!panel) { toast('Abra o Cronograma → aba Gantt primeiro.', 'info'); return; }
+  panel.style.display = 'block';
+  panel.dataset.pid = '';
+  panel.innerHTML = `
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-weight:700;font-size:13px">Mapeamento: Tarefas do Project → Pacotes</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Selecione qual pacote do sistema corresponde a cada tarefa do Project. Datas serão importadas automaticamente.</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="ganttAplicarMapeamento()">✓ Aplicar datas ao Gantt</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('gantt-edit-panel').style.display='none'">Cancelar</button>
+        </div>
+      </div>
+      <div style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:6px">
+        <table class="t">
+          <thead style="position:sticky;top:0;z-index:1">
+            <tr><th>Seção (Project)</th><th>Tipo de Serviço</th><th>Início</th><th>Término</th><th style="min-width:200px">Pacote do Sistema</th></tr>
+          </thead>
+          <tbody>${tRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+window.ganttLimparDatasProject = function(pid) {
+  loadGanttDados();
+  if (!GANTT_DADOS.pacotes || !GANTT_DADOS.pacotes[pid]) return;
+  delete GANTT_DADOS.pacotes[pid].dataProjetada;
+  delete GANTT_DADOS.pacotes[pid].dataInicioProject;
+  delete GANTT_DADOS.pacotes[pid].dataFimProject;
+  salvarGanttDados();
+  transitionTo(render);
+  toast('Datas do Project removidas — voltando ao cálculo por produtividade.', 'info');
+};
+
+window.ganttAplicarMapeamento = function() {
+  const nivel3 = window._IMPORT_DATA;
+  if (!nivel3) { toast('Nenhum dado importado.', 'error'); return; }
+  loadGanttDados();
+  if (!GANTT_DADOS.pacotes) GANTT_DADOS.pacotes = {};
+
+  const selects = document.querySelectorAll('#gantt-edit-panel select[data-idx]');
+  // Aggregate dates per package (min start, max end)
+  const mapa = {};
+  selects.forEach(sel => {
+    const pid = sel.value; if (!pid) return;
+    const t = nivel3[parseInt(sel.dataset.idx)];
+    if (!t || !t.inicio) return;
+    const ini = parseISODate(t.inicio);
+    const fim = t.termino ? parseISODate(t.termino) : null;
+    if (!ini || isNaN(ini.getTime())) return;
+    if (!mapa[pid]) mapa[pid] = { inicio: ini, termino: fim };
+    else {
+      if (ini < mapa[pid].inicio) mapa[pid].inicio = ini;
+      if (fim && (!mapa[pid].termino || fim > mapa[pid].termino)) mapa[pid].termino = fim;
+    }
+  });
+
+  let count = 0;
+  Object.entries(mapa).forEach(([pid, datas]) => {
+    if (!GANTT_DADOS.pacotes[pid]) GANTT_DADOS.pacotes[pid] = { predecessores: [] };
+    GANTT_DADOS.pacotes[pid].dataProjetada    = true;
+    GANTT_DADOS.pacotes[pid].dataInicioProject = getLocalISODate(datas.inicio);
+    GANTT_DADOS.pacotes[pid].dataFimProject    = datas.termino ? getLocalISODate(datas.termino) : null;
+    count++;
+  });
+
+  // Set project start to earliest imported date
+  const inicios = Object.values(mapa).map(d => d.inicio).filter(Boolean);
+  if (inicios.length) {
+    const min = new Date(Math.min(...inicios.map(d => d.getTime())));
+    GANTT_DADOS.dataInicio = getLocalISODate(min);
+  }
+
+  salvarGanttDados();
+  const panel = document.getElementById('gantt-edit-panel');
+  if (panel) panel.style.display = 'none';
+  window._IMPORT_DATA = null;
+  toast(`${count} pacote${count !== 1 ? 's' : ''} atualizado${count !== 1 ? 's' : ''} com datas do Project!`, 'success', 4000);
   transitionTo(render);
 };
 
