@@ -1797,6 +1797,26 @@ function calcularGantt() {
       n.dataInicio = inicio;
       n.dataFim = n.duracao > 0 ? addWorkingDays(inicio, n.duracao) : new Date(inicio.getTime());
     }
+
+    // Segments override: each segment has its own date range and location
+    if (g.segmentos && g.segmentos.length) {
+      const parsed = g.segmentos
+        .filter(s => s.dataInicio || s.dataFim)
+        .map(s => ({
+          ...s,
+          dataInicio: s.dataInicio ? parseISODate(s.dataInicio) : null,
+          dataFim:    s.dataFim    ? parseISODate(s.dataFim)    : null,
+        }));
+      if (parsed.length) {
+        n.segmentos = parsed;
+        const inicios = parsed.map(s => s.dataInicio).filter(Boolean);
+        const fins    = parsed.map(s => s.dataFim).filter(Boolean);
+        if (inicios.length) n.dataInicio = new Date(Math.min(...inicios.map(d => d.getTime())));
+        if (fins.length)    n.dataFim    = new Date(Math.max(...fins.map(d => d.getTime())));
+        if (n.dataInicio && n.dataFim) n.duracao = Math.max(1, Math.round((n.dataFim - n.dataInicio) / 86400000));
+        n.fromSegmentos = true;
+      }
+    }
   });
 
   return { nodes, dataInicioProj, sorted };
@@ -1864,6 +1884,28 @@ function renderGanttHTML() {
         pill = '<span class="gantt-pill" style="background:#2E7D32;color:#fff">✓ Concluído</span>';
       } else if (n.duracao === 0) {
         pill = '<span class="gantt-pill" style="background:#9E9E9E;color:#fff">Sem dados</span>';
+      } else if (n.segmentos && n.segmentos.length) {
+        // Multiple bars — one per segment with its own location
+        n.segmentos.forEach(seg => {
+          if (!seg.dataInicio) return;
+          const dFim = seg.dataFim || seg.dataInicio;
+          const sLeft = pctPos(seg.dataInicio);
+          const sW = Math.max(0.6, pctWid(seg.dataInicio, dFim));
+          const localStr = seg.estacaIni && seg.estacaFim
+            ? `${seg.estacaIni}→${seg.estacaFim} (${seg.sentido||'CB'})`
+            : seg.estacaIni ? `${seg.estacaIni} (${seg.sentido||'CB'})` : '';
+          const titleAttr = [localStr, fmtData(seg.dataInicio) + ' → ' + fmtData(dFim)].filter(Boolean).join(' · ');
+          const atrasadoSeg = dFim < hoje && n.pct < 0.99;
+          barHtml += `<div class="gantt-bar${atrasadoSeg?' gantt-bar-atrasado':''}"
+            title="${titleAttr}"
+            style="left:${sLeft.toFixed(2)}%;width:${sW.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
+            <div class="gantt-bar-progress" style="width:${(n.pct*100).toFixed(1)}%;background:${cor}bb"></div>
+            <span class="gantt-bar-label" style="font-size:9px;overflow:hidden;white-space:nowrap">${localStr}</span>
+          </div>`;
+        });
+        const nSeg = n.segmentos.length;
+        pill = `<span class="gantt-pill" style="background:#5C4033;color:#fff;font-size:9px">📍 ${nSeg} trecho${nSeg>1?'s':''}</span>`;
+        if (n.pct > 0 && n.pct < 0.99) pill += '<span class="gantt-pill" style="background:#1565C0;color:#fff">Em curso</span>';
       } else {
         const left = pctPos(n.dataInicio);
         const w = pctWid(n.dataInicio, n.dataFim);
@@ -1895,8 +1937,9 @@ function renderGanttHTML() {
           </div>
           <div class="gantt-label-pred">
             <span style="color:var(--muted);font-size:10px">Pred: ${predStr}</span>
-            <button class="gantt-edit-btn" onclick="ganttEditarPacote('${n.pid}')" title="Editar predecessoras e produtividade">✏</button>
+            <button class="gantt-edit-btn" onclick="ganttEditarPacote('${n.pid}')" title="Editar predecessoras, produtividade e trechos">✏</button>
             ${n.fromProject ? `<button class="gantt-edit-btn" onclick="ganttLimparDatasProject('${n.pid}')" title="Remover datas do Project" style="color:#c62828">✕</button>` : ''}
+            ${n.fromSegmentos ? `<button class="gantt-edit-btn" onclick="ganttLimparSegmentos('${n.pid}')" title="Remover trechos" style="color:#c62828">✕ trechos</button>` : ''}
           </div>
         </div>
         <div class="gantt-bar-area">${barHtml}</div>
@@ -1960,31 +2003,105 @@ window.ganttEditarPacote = function(pid) {
   const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid);
   const nome = p ? getCSVField(p, 'Pacote') : pid;
   const unid = p ? (getCSVField(p, 'Unidade Física') || '') : '';
+  const segmentos = g.segmentos || [];
 
   if (panel.dataset.pid === pid && panel.style.display !== 'none') {
     panel.style.display = 'none'; panel.dataset.pid = ''; return;
   }
   panel.dataset.pid = pid;
   panel.style.display = 'block';
+
+  function buildEstOpts(list, sel) {
+    return list.map(e => `<option${sel===e?' selected':''}>${e}</option>`).join('');
+  }
+  function buildSegRow(seg) {
+    const sentido = seg.sentido || 'CB';
+    const estList = sentido === 'CB'
+      ? (()=>{ const a=[]; for(let i=CONFIG.estacasCB.ini;i<=CONFIG.estacasCB.fim;i++) a.push('E'+i); return a; })()
+      : (()=>{ const a=[]; for(let i=CONFIG.estacasBC.ini;i<=CONFIG.estacasBC.fim;i++) a.push('E'+i); return a; })();
+    return `<tr>
+      <td><input type="date" class="seg-ini" value="${seg.dataInicio||''}" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:3px"></td>
+      <td><input type="date" class="seg-fim" value="${seg.dataFim||''}" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:3px"></td>
+      <td><select class="seg-sentido" onchange="ganttSegSentidoChange(this)" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">
+        <option value="CB"${sentido==='CB'?' selected':''}>CB</option>
+        <option value="BC"${sentido==='BC'?' selected':''}>BC</option>
+      </select></td>
+      <td><select class="seg-estaca-ini" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">${buildEstOpts(estList,seg.estacaIni)}</select></td>
+      <td><select class="seg-estaca-fim" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">${buildEstOpts(estList,seg.estacaFim)}</select></td>
+      <td><button onclick="ganttRemoveSegmento(this)" title="Remover trecho" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:14px;padding:2px 6px">✕</button></td>
+    </tr>`;
+  }
+  const segRows = segmentos.map(s => buildSegRow(s)).join('');
+
   panel.innerHTML = `
-    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
-      <div style="flex:1;min-width:220px">
-        <div style="font-weight:700;font-size:13px;margin-bottom:8px">${nome}</div>
-        <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">PREDECESSORAS (IDs separados por vírgula — ex: P01, P03)</label>
-        <input id="gantt-pred-input" type="text" value="${predStr}" placeholder="ex: P01, P03"
-          style="width:100%;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box">
+    <div>
+      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:12px">
+        <div style="flex:1;min-width:220px">
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px">${nome}</div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">PREDECESSORAS (IDs separados por vírgula — ex: P01, P03)</label>
+          <input id="gantt-pred-input" type="text" value="${predStr}" placeholder="ex: P01, P03"
+            style="width:100%;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box">
+        </div>
+        <div style="min-width:160px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">PRODUTIVIDADE/DIA (${unid}/dia)</label>
+          <input id="gantt-prod-input" type="number" min="0" value="${prod}" placeholder="${prodPadrao ? 'Padrão: '+prodPadrao : 'Livre'}"
+            style="width:100%;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box">
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:2px;margin-top:auto">
+          <button class="btn btn-primary btn-sm" onclick="ganttSalvarEdicao('${pid}')">Salvar</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('gantt-edit-panel').style.display='none'">Cancelar</button>
+        </div>
       </div>
-      <div style="min-width:160px">
-        <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">PRODUTIVIDADE/DIA (${unid}/dia)</label>
-        <input id="gantt-prod-input" type="number" min="0" value="${prod}" placeholder="${prodPadrao ? 'Padrão: '+prodPadrao : 'Livre'}"
-          style="width:100%;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box">
-      </div>
-      <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:2px;margin-top:auto">
-        <button class="btn btn-primary btn-sm" onclick="ganttSalvarEdicao('${pid}')">Salvar</button>
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('gantt-edit-panel').style.display='none'">Cancelar</button>
+      <div style="border-top:1px solid var(--border);padding-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label style="font-size:11px;font-weight:600;color:var(--muted)">TRECHOS DE EXECUÇÃO — local onde cada etapa acontece (datas independentes por trecho)</label>
+          <button class="btn btn-outline btn-sm" onclick="ganttAddSegmento()">+ Adicionar trecho</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="t" style="min-width:580px">
+            <thead><tr><th>Início</th><th>Término</th><th>Sentido</th><th>Estaca Ini</th><th>Estaca Fim</th><th style="width:32px"></th></tr></thead>
+            <tbody id="gantt-seg-tbody">${segRows}</tbody>
+          </table>
+          ${!segmentos.length ? '<div style="text-align:center;padding:8px 0;font-size:12px;color:var(--muted)">Nenhum trecho cadastrado — clique em "+ Adicionar trecho" para definir onde o serviço executa</div>' : ''}
+        </div>
       </div>
     </div>`;
   panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
+
+window.ganttAddSegmento = function() {
+  const tbody = document.getElementById('gantt-seg-tbody');
+  if (!tbody) return;
+  const estOpts = (()=>{ const a=[]; for(let i=CONFIG.estacasCB.ini;i<=CONFIG.estacasCB.fim;i++) a.push('E'+i); return a; })()
+    .map(e=>`<option>${e}</option>`).join('');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="date" class="seg-ini" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:3px"></td>
+    <td><input type="date" class="seg-fim" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:3px"></td>
+    <td><select class="seg-sentido" onchange="ganttSegSentidoChange(this)" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">
+      <option value="CB">CB</option><option value="BC">BC</option>
+    </select></td>
+    <td><select class="seg-estaca-ini" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">${estOpts}</select></td>
+    <td><select class="seg-estaca-fim" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">${estOpts}</select></td>
+    <td><button onclick="ganttRemoveSegmento(this)" title="Remover trecho" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:14px;padding:2px 6px">✕</button></td>`;
+  tbody.appendChild(tr);
+};
+
+window.ganttSegSentidoChange = function(sel) {
+  const tr = sel.closest('tr');
+  if (!tr) return;
+  const sentido = sel.value;
+  const list = sentido === 'BC'
+    ? (()=>{ const a=[]; for(let i=CONFIG.estacasBC.ini;i<=CONFIG.estacasBC.fim;i++) a.push('E'+i); return a; })()
+    : (()=>{ const a=[]; for(let i=CONFIG.estacasCB.ini;i<=CONFIG.estacasCB.fim;i++) a.push('E'+i); return a; })();
+  const opts = list.map(e=>`<option>${e}</option>`).join('');
+  tr.querySelector('.seg-estaca-ini').innerHTML = opts;
+  tr.querySelector('.seg-estaca-fim').innerHTML = opts;
+};
+
+window.ganttRemoveSegmento = function(btn) {
+  const tr = btn.closest('tr');
+  if (tr) tr.remove();
 };
 
 window.ganttSalvarEdicao = function(pid) {
@@ -1996,7 +2113,28 @@ window.ganttSalvarEdicao = function(pid) {
   const predecessores = predInput.value.trim()
     ? predInput.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
     : [];
-  GANTT_DADOS.pacotes[pid] = { predecessores, prod: prodInput.value.trim() };
+
+  const segmentos = [];
+  const tbody = document.getElementById('gantt-seg-tbody');
+  if (tbody) {
+    tbody.querySelectorAll('tr').forEach(tr => {
+      const ini       = tr.querySelector('.seg-ini')?.value || '';
+      const fim       = tr.querySelector('.seg-fim')?.value || '';
+      const sentido   = tr.querySelector('.seg-sentido')?.value || 'CB';
+      const estacaIni = tr.querySelector('.seg-estaca-ini')?.value || '';
+      const estacaFim = tr.querySelector('.seg-estaca-fim')?.value || '';
+      if (ini || fim || estacaIni) segmentos.push({ dataInicio: ini, dataFim: fim, sentido, estacaIni, estacaFim });
+    });
+  }
+
+  const existing = GANTT_DADOS.pacotes[pid] || {};
+  GANTT_DADOS.pacotes[pid] = Object.assign({}, existing, {
+    predecessores,
+    prod: prodInput.value.trim(),
+  });
+  if (segmentos.length) GANTT_DADOS.pacotes[pid].segmentos = segmentos;
+  else delete GANTT_DADOS.pacotes[pid].segmentos;
+
   salvarGanttDados();
   const panel = document.getElementById('gantt-edit-panel');
   if (panel) { panel.style.display = 'none'; panel.dataset.pid = ''; }
@@ -2209,6 +2347,15 @@ window.ganttLimparDatasProject = function(pid) {
   salvarGanttDados();
   transitionTo(render);
   toast('Datas do Project removidas — voltando ao cálculo por produtividade.', 'info');
+};
+
+window.ganttLimparSegmentos = function(pid) {
+  loadGanttDados();
+  if (!GANTT_DADOS.pacotes || !GANTT_DADOS.pacotes[pid]) return;
+  delete GANTT_DADOS.pacotes[pid].segmentos;
+  salvarGanttDados();
+  transitionTo(render);
+  toast('Trechos removidos — voltando ao cálculo por produtividade.', 'info');
 };
 
 window.ganttAplicarMapeamento = function() {
