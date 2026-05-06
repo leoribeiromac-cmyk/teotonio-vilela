@@ -1888,9 +1888,21 @@ function renderGanttHTML() {
       } else if (n.duracao === 0) {
         pill = '<span class="gantt-pill" style="background:#9E9E9E;color:#fff">Sem dados</span>';
       } else if (n.segmentos && n.segmentos.length) {
-        // Multiple bars — one per segment with its own location
-        n.segmentos.forEach((seg, segIdx) => {
-          if (!seg.dataInicio) return;
+        // Sort segments chronologically and detect time-overlap to decide layout
+        const segs = n.segmentos.filter(s => s.dataInicio).slice().sort((a, b) => a.dataInicio - b.dataInicio);
+        // Assign each segment to a "lane" (vertical track) so overlapping ones stack, sequential ones share a lane
+        const laneEnds = []; // last end-date in each lane
+        const laneAssign = segs.map(seg => {
+          const dFim = seg.dataFim || seg.dataInicio;
+          for (let i = 0; i < laneEnds.length; i++) {
+            if (seg.dataInicio >= laneEnds[i]) { laneEnds[i] = dFim; return i; }
+          }
+          laneEnds.push(dFim); return laneEnds.length - 1;
+        });
+        const nLanes = Math.max(1, laneEnds.length);
+        const barH = nLanes === 1 ? 24 : 26;
+        const totalNeeded = nLanes * barH + (nLanes - 1) * 4 + 8;
+        segs.forEach((seg, i) => {
           const dFim = seg.dataFim || seg.dataInicio;
           const sLeft = pctPos(seg.dataInicio);
           const sW = Math.max(0.6, pctWid(seg.dataInicio, dFim));
@@ -1899,14 +1911,19 @@ function renderGanttHTML() {
             : seg.estacaIni ? `${seg.estacaIni} (${seg.sentido||'CB'})` : '';
           const titleAttr = [localStr, fmtData(seg.dataInicio) + ' → ' + fmtData(dFim)].filter(Boolean).join(' · ');
           const atrasadoSeg = dFim < hoje && n.pct < 0.99;
-          const topPx = segIdx * 32 + 4;
+          const lane = laneAssign[i];
+          const topStyle = nLanes === 1
+            ? 'top:50%;transform:translateY(-50%);'
+            : `top:${4 + lane * (barH + 4)}px;transform:none;`;
           barHtml += `<div class="gantt-bar${atrasadoSeg?' gantt-bar-atrasado':''}"
             title="${titleAttr}"
-            style="top:${topPx}px;transform:none;height:28px;left:${sLeft.toFixed(2)}%;width:${sW.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
+            style="${topStyle}height:${barH}px;left:${sLeft.toFixed(2)}%;width:${sW.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
             <div class="gantt-bar-progress" style="width:${(n.pct*100).toFixed(1)}%;background:${cor}bb"></div>
             <span class="gantt-bar-label" style="font-size:9px;overflow:hidden;white-space:nowrap">${localStr}</span>
           </div>`;
         });
+        n._segLanes = nLanes;
+        n._segRowH = totalNeeded;
         const nSeg = n.segmentos.length;
         pill = `<span class="gantt-pill" style="background:#5C4033;color:#fff;font-size:9px">📍 ${nSeg} trecho${nSeg>1?'s':''}</span>`;
         if (n.pct > 0 && n.pct < 0.99) pill += '<span class="gantt-pill" style="background:#1565C0;color:#fff">Em curso</span>';
@@ -1932,8 +1949,8 @@ function renderGanttHTML() {
         ? '<span class="gantt-pill" style="background:#5C4033;color:#fff;font-size:9px">📐 Project</span>'
         : '';
 
-      const rowH = n.segmentos && n.segmentos.length > 1
-        ? `min-height:${n.segmentos.length * 32 + 8}px`
+      const rowH = n._segLanes && n._segLanes > 1
+        ? `min-height:${n._segRowH}px`
         : '';
       rows += `<div class="gantt-row" data-pid="${n.pid}" style="${rowH}">
         <div class="gantt-label-cell">
