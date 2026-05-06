@@ -1827,22 +1827,32 @@ function renderGanttHTML() {
   const { nodes, dataInicioProj, sorted } = calcularGantt();
   const hoje = new Date(); hoje.setHours(0,0,0,0);
 
-  let maxData = new Date(dataInicioProj.getTime());
-  maxData.setMonth(maxData.getMonth() + 4);
-  Object.values(nodes).forEach(n => { if (n.dataFim && n.dataFim > maxData) maxData = n.dataFim; });
-  maxData = new Date(maxData.getTime() + 14 * 86400000);
+  // Compute timeline bounds: leftward from earliest segment/node date, rightward to at least Dec 2027
+  let tlStart = new Date(dataInicioProj.getTime());
+  Object.values(nodes).forEach(n => {
+    if (n.dataInicio && n.dataInicio < tlStart) tlStart = new Date(n.dataInicio.getTime());
+    if (n.segmentos) n.segmentos.forEach(s => {
+      if (s.dataInicio && s.dataInicio < tlStart) tlStart = new Date(s.dataInicio.getTime());
+    });
+  });
+  tlStart = new Date(tlStart.getFullYear(), tlStart.getMonth(), 1); // snap to month start
 
-  const totalMs = Math.max(maxData - dataInicioProj, 1);
-  const pctPos  = d => Math.max(0, Math.min(100, (d - dataInicioProj) / totalMs * 100));
+  const minEnd = new Date(2027, 11, 31); // Dec 31 2027 minimum
+  let maxData = minEnd;
+  Object.values(nodes).forEach(n => { if (n.dataFim && n.dataFim > maxData) maxData = n.dataFim; });
+  maxData = new Date(maxData.getFullYear(), maxData.getMonth() + 1, 1); // snap to next month start
+
+  const totalMs = Math.max(maxData - tlStart, 1);
+  const pctPos  = d => Math.max(0, Math.min(100, (d - tlStart) / totalMs * 100));
   const pctWid  = (d1, d2) => Math.max(0.4, (d2 - d1) / totalMs * 100);
 
   // Month grid headers
   const meses = [];
-  let cur = new Date(dataInicioProj.getFullYear(), dataInicioProj.getMonth(), 1);
+  let cur = new Date(tlStart.getFullYear(), tlStart.getMonth(), 1);
   while (cur <= maxData) {
     const left = pctPos(cur);
     const nxt = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
-    const w = Math.min(100 - left, pctWid(Math.max(cur, dataInicioProj), nxt));
+    const w = Math.min(100 - left, (nxt - cur) / totalMs * 100);
     meses.push({ label: cur.toLocaleString('pt-BR', {month:'short', year:'2-digit'}).toUpperCase(), left, width: w });
     cur = nxt;
   }
