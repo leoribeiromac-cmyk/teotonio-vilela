@@ -1886,7 +1886,7 @@ function renderGanttHTML() {
         pill = '<span class="gantt-pill" style="background:#9E9E9E;color:#fff">Sem dados</span>';
       } else if (n.segmentos && n.segmentos.length) {
         // Multiple bars — one per segment with its own location
-        n.segmentos.forEach(seg => {
+        n.segmentos.forEach((seg, segIdx) => {
           if (!seg.dataInicio) return;
           const dFim = seg.dataFim || seg.dataInicio;
           const sLeft = pctPos(seg.dataInicio);
@@ -1896,9 +1896,10 @@ function renderGanttHTML() {
             : seg.estacaIni ? `${seg.estacaIni} (${seg.sentido||'CB'})` : '';
           const titleAttr = [localStr, fmtData(seg.dataInicio) + ' → ' + fmtData(dFim)].filter(Boolean).join(' · ');
           const atrasadoSeg = dFim < hoje && n.pct < 0.99;
+          const topPx = segIdx * 32 + 4;
           barHtml += `<div class="gantt-bar${atrasadoSeg?' gantt-bar-atrasado':''}"
             title="${titleAttr}"
-            style="left:${sLeft.toFixed(2)}%;width:${sW.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
+            style="top:${topPx}px;transform:none;height:28px;left:${sLeft.toFixed(2)}%;width:${sW.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
             <div class="gantt-bar-progress" style="width:${(n.pct*100).toFixed(1)}%;background:${cor}bb"></div>
             <span class="gantt-bar-label" style="font-size:9px;overflow:hidden;white-space:nowrap">${localStr}</span>
           </div>`;
@@ -1928,7 +1929,10 @@ function renderGanttHTML() {
         ? '<span class="gantt-pill" style="background:#5C4033;color:#fff;font-size:9px">📐 Project</span>'
         : '';
 
-      rows += `<div class="gantt-row" data-pid="${n.pid}">
+      const rowH = n.segmentos && n.segmentos.length > 1
+        ? `min-height:${n.segmentos.length * 32 + 8}px`
+        : '';
+      rows += `<div class="gantt-row" data-pid="${n.pid}" style="${rowH}">
         <div class="gantt-label-cell">
           <div class="gantt-label-nome" title="${nome}">${nome}</div>
           <div class="gantt-label-meta">
