@@ -1888,19 +1888,10 @@ function renderGanttHTML() {
       } else if (n.duracao === 0) {
         pill = '<span class="gantt-pill" style="background:#9E9E9E;color:#fff">Sem dados</span>';
       } else if (n.segmentos && n.segmentos.length) {
-        // Sort segments chronologically and detect time-overlap to decide layout
+        // Each trecho gets its own dedicated row (lane), always separated
         const segs = n.segmentos.filter(s => s.dataInicio).slice().sort((a, b) => a.dataInicio - b.dataInicio);
-        // Assign each segment to a "lane" (vertical track) so overlapping ones stack, sequential ones share a lane
-        const laneEnds = []; // last end-date in each lane
-        const laneAssign = segs.map(seg => {
-          const dFim = seg.dataFim || seg.dataInicio;
-          for (let i = 0; i < laneEnds.length; i++) {
-            if (seg.dataInicio >= laneEnds[i]) { laneEnds[i] = dFim; return i; }
-          }
-          laneEnds.push(dFim); return laneEnds.length - 1;
-        });
-        const nLanes = Math.max(1, laneEnds.length);
-        const barH = nLanes === 1 ? 24 : 26;
+        const nLanes = Math.max(1, segs.length);
+        const barH = 24;
         const totalNeeded = nLanes * barH + (nLanes - 1) * 4 + 8;
         segs.forEach((seg, i) => {
           const dFim = seg.dataFim || seg.dataInicio;
@@ -1916,10 +1907,7 @@ function renderGanttHTML() {
             : seg.estacaIni ? `${seg.estacaIni} (${seg.sentido||'CB'})` : '';
           const titleAttr = [localStr, fmtData(seg.dataInicio) + ' → ' + fmtData(dFim)].filter(Boolean).join(' · ');
           const atrasadoSeg = dFim < hoje && n.pct < 0.99;
-          const lane = laneAssign[i];
-          const topStyle = nLanes === 1
-            ? 'top:50%;transform:translateY(-50%);'
-            : `top:${4 + lane * (barH + 4)}px;transform:none;`;
+          const topStyle = `top:${4 + i * (barH + 4)}px;transform:none;`;
           barHtml += `<div class="gantt-bar${atrasadoSeg?' gantt-bar-atrasado':''}"
             title="${titleAttr}"
             style="${topStyle}height:${barH}px;left:${sLeft.toFixed(2)}%;width:${sW.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
