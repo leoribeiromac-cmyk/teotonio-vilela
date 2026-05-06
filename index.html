@@ -2773,7 +2773,8 @@ function defaultDraft() {
     observacaoGeral: '',
     servicos: [
       { frente: '', pacoteId: '', sentido: 'CB', estacaIni: '', estacaFim: '', quantidade: '', equipe: '', observacao: '' }
-    ]
+    ],
+    outrosServicos: []
   };
 }
 
@@ -2850,6 +2851,22 @@ function renderRDO() {
       </div>
     </div>
     
+    <div class="card stagger-item" style="animation-delay:.15s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Outros Serviços</div>
+          <div class="card-title-sub">Serviços avulsos que não afetam pacotes — descrição livre pelo apontador</div>
+        </div>
+        <span style="font-size:11px;color:var(--muted)">${(d.outrosServicos||[]).length} item${(d.outrosServicos||[]).length!==1?'s':''}</span>
+      </div>
+      <div class="card-body">
+        <div id="outrosServicosList">
+          ${(d.outrosServicos||[]).map((o, i) => renderOutroServicoRow(o, i)).join('')}
+        </div>
+        <button class="btn-add-servico" onclick="adicionarOutroServico()">+ Adicionar outro serviço</button>
+      </div>
+    </div>
+
     <div class="stagger-item" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;animation-delay:.2s">
       <div style="font-size:12px;color:var(--muted);max-width:520px">
         ⓘ Cada serviço vira 1 linha em <strong>RDO_Avanco</strong>. O dashboard atualiza em até 5 min.
@@ -2931,6 +2948,30 @@ function renderServicoRow(s, idx, frentes) {
   `;
 }
 
+function renderOutroServicoRow(o, idx) {
+  return `
+    <div class="servico-row" data-outro-idx="${idx}">
+      <span class="row-num">ITEM ${idx + 1}</span>
+      <button class="btn-remove" onclick="removerOutroServico(${idx})" title="Remover">×</button>
+      <div class="form-grid" style="margin-top:6px">
+        <div class="field" style="grid-column:1/-1">
+          <label>Descrição do serviço</label>
+          <input type="text" data-outro="${idx}" data-field="descricao" value="${o.descricao||''}"
+            placeholder="ex: Limpeza manual da faixa de obra, remoção de entulho…">
+        </div>
+        <div class="field">
+          <label>Equipe / Responsável (opcional)</label>
+          <input type="text" data-outro="${idx}" data-field="equipe" value="${o.equipe||''}" placeholder="ex: Sena Obras">
+        </div>
+        <div class="field">
+          <label>Local / Referência (opcional)</label>
+          <input type="text" data-outro="${idx}" data-field="local" value="${o.local||''}" placeholder="ex: E110 a E120, canteiro, etc.">
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function attachRDOForm() {
   document.querySelectorAll('[data-draft]').forEach(el => {
     el.oninput = el.onchange = () => {
@@ -2944,6 +2985,12 @@ function attachRDOForm() {
   
   document.getElementById('servicosList').addEventListener('input', svcInputHandler);
   document.getElementById('servicosList').addEventListener('change', svcInputHandler);
+
+  const outrosList = document.getElementById('outrosServicosList');
+  if (outrosList) {
+    outrosList.addEventListener('input', outrosInputHandler);
+    outrosList.addEventListener('change', outrosInputHandler);
+  }
 }
 
 function svcInputHandler(ev) {
@@ -3008,6 +3055,31 @@ function removerServico(idx) {
   transitionTo(render);
 }
 
+function outrosInputHandler(ev) {
+  const el = ev.target;
+  if (el.dataset.outro === undefined) return;
+  const idx = parseInt(el.dataset.outro);
+  const field = el.dataset.field;
+  if (!STATE.draft.outrosServicos) STATE.draft.outrosServicos = [];
+  if (!STATE.draft.outrosServicos[idx]) STATE.draft.outrosServicos[idx] = {};
+  STATE.draft.outrosServicos[idx][field] = el.value;
+  saveDraft(STATE.draft);
+}
+
+function adicionarOutroServico() {
+  if (!STATE.draft.outrosServicos) STATE.draft.outrosServicos = [];
+  STATE.draft.outrosServicos.push({ descricao: '', equipe: '', local: '' });
+  saveDraft(STATE.draft);
+  transitionTo(render);
+}
+
+function removerOutroServico(idx) {
+  if (!STATE.draft.outrosServicos) return;
+  STATE.draft.outrosServicos.splice(idx, 1);
+  saveDraft(STATE.draft);
+  transitionTo(render);
+}
+
 function resetDraft() {
   if (!confirm('Limpar todos os dados desse RDO? Não tem como desfazer.')) return;
   clearDraft();
@@ -3019,10 +3091,12 @@ function validarRDO(d) {
   const erros = [];
   if (!d.data) erros.push('Data é obrigatória');
   if (!d.apontador.trim()) erros.push('Apontador é obrigatório');
-  
+
   const servicosValidos = d.servicos.filter(s => s.pacoteId && num(s.quantidade) > 0);
-  if (servicosValidos.length === 0) {
-    erros.push('Adicione pelo menos 1 serviço com pacote e quantidade > 0');
+  const outrosValidos = (d.outrosServicos || []).filter(o => o.descricao && o.descricao.trim());
+
+  if (servicosValidos.length === 0 && outrosValidos.length === 0) {
+    erros.push('Adicione pelo menos 1 serviço com pacote e quantidade > 0, ou 1 outro serviço descrito');
     return erros;
   }
   for (let i = 0; i < d.servicos.length; i++) {
@@ -3046,14 +3120,17 @@ async function salvarRDO() {
   }
   
   const servicosValidos = d.servicos.filter(s => s.pacoteId && num(s.quantidade) > 0);
-  if (!confirm(`Confirmar envio de ${servicosValidos.length} serviço${servicosValidos.length > 1 ? 's' : ''}?\nData: ${d.data}  ·  Turno: ${d.turno}`)) return;
+  const outrosValidos = (d.outrosServicos || []).filter(o => o.descricao && o.descricao.trim());
+  const totalItens = servicosValidos.length + outrosValidos.length;
+  const outrosStr = outrosValidos.length ? `\n+ ${outrosValidos.length} outro${outrosValidos.length>1?'s':''} serviço${outrosValidos.length>1?'s':''}` : '';
+  if (!confirm(`Confirmar envio de ${servicosValidos.length} serviço${servicosValidos.length !== 1 ? 's' : ''}${outrosStr}?\nData: ${d.data}  ·  Turno: ${d.turno}`)) return;
 
   const btn = document.getElementById('btnSalvarRDO');
   const btnTxtOriginal = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '⏳ Salvando…';
 
-  const batch = d.servicos
+  const batchPacotes = d.servicos
     .filter(s => s.pacoteId && num(s.quantidade) > 0)
     .map(s => {
       const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === s.pacoteId);
@@ -3080,16 +3157,37 @@ async function salvarRDO() {
         apontador: d.apontador
       };
     });
-  
+
+  const batchOutros = outrosValidos.map(o => ({
+    data: d.data,
+    turno: d.turno || 'Diurno',
+    pacote_id: 'OUTRO',
+    pacote_nome: o.descricao.trim(),
+    quantidade: 0,
+    unidade: '',
+    local_estaca: o.local ? o.local.trim() : '',
+    equipe: o.equipe ? o.equipe.trim() : '',
+    subcontratado: o.equipe ? o.equipe.trim() : '',
+    efetivo_total: 0,
+    equipamentos: '',
+    clima: '',
+    paralisado_motivo: '',
+    foto_link: '',
+    observacao: [d.observacaoGeral, 'Serviço avulso'].filter(x => x && x.trim()).join(' · '),
+    apontador: d.apontador
+  }));
+
+  const batch = [...batchPacotes, ...batchOutros];
+
   try {
     const result = await jsonp(CONFIG.appsScript, {
       action: 'addBatchRDO',
       batch: JSON.stringify(batch)
     });
-    
+
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
-    
-    toast(`✓ ${batch.length} serviço${batch.length>1?'s':''} salvo${batch.length>1?'s':''} (${d.turno})`, 'success', 4000);
+
+    toast(`✓ ${totalItens} item${totalItens>1?'s':''} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
     
     clearDraft();
     STATE.draft = {
