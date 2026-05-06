@@ -519,6 +519,33 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .ai-content li { margin-bottom: 5px; }
 .ai-content strong { color: var(--text-2); font-weight: 700; }
 .loader-spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--pri); border-radius: 50%; animation: spin 0.8s linear infinite; }
+
+/* ===== GANTT ===== */
+.gantt-wrap { overflow-x: auto; min-height: 160px; }
+.gantt-grid { display: grid; grid-template-columns: 230px 1fr; border-bottom: 1px solid var(--border); background: var(--bg-2); }
+.gantt-labels-header { padding: 8px 12px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; border-right: 1px solid var(--border); }
+.gantt-timeline-header { position: relative; height: 32px; min-width: 600px; overflow: hidden; }
+.gantt-mes { position: absolute; top: 0; height: 100%; display: flex; align-items: center; padding: 0 6px; font-size: 10px; font-weight: 700; color: var(--muted); border-right: 1px solid var(--border); box-sizing: border-box; overflow: hidden; }
+.gantt-hoje-header { position: absolute; bottom: 2px; transform: translateX(-50%); font-size: 9px; font-weight: 700; color: #f44336; background: #fff0f0; padding: 1px 4px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+.gantt-body { min-width: 830px; }
+.gantt-frente-header { display: grid; grid-template-columns: 230px 1fr; background: var(--frente-cor, var(--pri)); color: #fff; font-size: 11px; font-weight: 700; padding: 5px 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+.gantt-row { display: grid; grid-template-columns: 230px 1fr; border-bottom: 1px solid var(--border); min-height: 56px; }
+.gantt-row:hover { background: var(--bg-2); }
+.gantt-label-cell { border-right: 1px solid var(--border); padding: 6px 10px; display: flex; flex-direction: column; justify-content: center; gap: 2px; overflow: hidden; }
+.gantt-label-nome { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gantt-label-meta { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.gantt-label-datas { font-size: 10px; color: var(--muted); }
+.gantt-label-pred { display: flex; align-items: center; gap: 4px; }
+.gantt-pill { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 10px; white-space: nowrap; }
+.gantt-edit-btn { background: none; border: 1px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; padding: 1px 5px; color: var(--muted); line-height: 1.4; }
+.gantt-edit-btn:hover { background: var(--acc); color: #fff; border-color: var(--acc); }
+.gantt-bar-area { position: relative; min-width: 600px; }
+.gantt-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 24px; border-radius: 4px; overflow: hidden; min-width: 4px; }
+.gantt-bar-atrasado { border-width: 2px !important; box-shadow: 0 0 0 1px #f4433640; }
+.gantt-bar-progress { position: absolute; left: 0; top: 0; height: 100%; }
+.gantt-bar-label { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 9px; font-weight: 700; color: rgba(0,0,0,0.6); white-space: nowrap; mix-blend-mode: multiply; }
+.gantt-hoje { position: absolute; top: 0; bottom: 0; width: 2px; background: #f44336; opacity: 0.75; pointer-events: none; z-index: 2; }
+.gantt-grid-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); opacity: 0.5; pointer-events: none; }
 </style>
 </head>
 <body>
@@ -653,6 +680,7 @@ function parseISODate(s) {
   }
   if (str.includes('-') && str.length >= 10) {
      const parts = str.slice(0,10).split('-');
+     if (parts.length < 3) return null;
      return new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
   }
   return new Date(str);
@@ -906,11 +934,13 @@ async function carregarTudo() {
     STATE.rdodiario = d || [];
     STATE.loaded = true;
     STATE.lastSync = new Date();
-    setSyncStatus('ok', `Sincronizado · ${p.length} pacotes, ${r.length} serviços`);
+    const hm = STATE.lastSync.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    setSyncStatus('ok', `Sincronizado às ${hm} · ${p.length} pacotes, ${r.length} serviços`);
     render();
   } catch(e) {
     STATE.loaded = false;
-    setSyncStatus('error', 'Erro: ' + e.message);
+    setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar novamente</span>');
+    toast('Sem conexão com Google Sheets. Verifique sua internet.', 'error', 6000);
   }
 }
 
@@ -1303,8 +1333,8 @@ function renderExecutivo() {
   
   pacotesFiltrados.forEach(a => {
     const pid = getCSVField(a.pacote, 'ID');
-    const prod = PRODUTIVIDADE_PADRAO[pid] || 1; 
-    a.diasEstimados = a.qtdEstimada / prod;
+    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
+    a.diasEstimados = prod > 0 ? a.qtdEstimada / prod : 0;
     a.diasExecutados = a.pct * a.diasEstimados;
   });
 
@@ -1671,6 +1701,332 @@ function renderHeatmap(av) {
 }
 
 // ====================================================================
+// VIEW: GANTT COM PREDECESSORAS
+// ====================================================================
+let GANTT_DADOS = null;
+let CRONOGRAMA_ABA = 'gantt';
+
+function loadGanttDados() {
+  if (GANTT_DADOS) return GANTT_DADOS;
+  try {
+    const raw = localStorage.getItem('teotonio_gantt_v1');
+    if (raw) GANTT_DADOS = JSON.parse(raw);
+    else GANTT_DADOS = { dataInicio: getLocalISODate(new Date()), pacotes: {} };
+  } catch(e) { GANTT_DADOS = { dataInicio: getLocalISODate(new Date()), pacotes: {} }; }
+  return GANTT_DADOS;
+}
+
+function salvarGanttDados() {
+  try { localStorage.setItem('teotonio_gantt_v1', JSON.stringify(GANTT_DADOS)); } catch(e) {}
+}
+
+function addWorkingDays(date, days) {
+  let d = new Date(date.getTime());
+  let added = 0;
+  const total = Math.ceil(Math.max(0, days));
+  while (added < total) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0) added++;
+  }
+  return d;
+}
+
+function calcularGantt() {
+  loadGanttDados();
+  const av = calcularAvancoPorPacote();
+  const pacotesAtivos = STATE.pacotes.filter(p => getCSVField(p, 'Status') !== 'Histórico' && getCSVField(p, 'ID'));
+  const dataInicioProj = parseISODate(GANTT_DADOS.dataInicio) || new Date();
+  const gDados = GANTT_DADOS.pacotes || {};
+
+  const nodes = {};
+  pacotesAtivos.forEach(p => {
+    const pid = getCSVField(p, 'ID');
+    const g = gDados[pid] || {};
+    const avP = av[pid];
+    const qtdTotal = num(getCSVField(p, 'Qtd Estimada'));
+    const qtdExec = avP ? avP.qtdExecutada : 0;
+    const saldo = Math.max(0, qtdTotal - qtdExec);
+    const pct = avP ? avP.pct : 0;
+    const prodOverride = g.prod ? parseFloat(g.prod) : null;
+    const prodPadrao = PRODUTIVIDADE_PADRAO[pid] || 1;
+    const prod = (prodOverride && prodOverride > 0) ? prodOverride : prodPadrao;
+    const predecessores = (g.predecessores || []).filter(id => pacotesAtivos.some(p2 => getCSVField(p2, 'ID') === id));
+    nodes[pid] = { pacote: p, pid, pct, saldo, duracao: prod > 0 ? Math.ceil(saldo / prod) : 0, predecessores, dataInicio: null, dataFim: null };
+  });
+
+  // Kahn's topological sort
+  const inDeg = {};
+  Object.keys(nodes).forEach(id => { inDeg[id] = 0; });
+  Object.values(nodes).forEach(n => {
+    n.predecessores.forEach(pid => { if (nodes[pid]) inDeg[n.pid] = (inDeg[n.pid] || 0) + 1; });
+  });
+  const queue = Object.keys(nodes).filter(id => (inDeg[id] || 0) === 0);
+  const sorted = [];
+  while (queue.length > 0) {
+    const id = queue.shift();
+    sorted.push(id);
+    Object.values(nodes).forEach(n => {
+      if (n.predecessores.includes(id)) {
+        inDeg[n.pid]--;
+        if (inDeg[n.pid] === 0) queue.push(n.pid);
+      }
+    });
+  }
+  Object.keys(nodes).forEach(id => { if (!sorted.includes(id)) sorted.push(id); });
+
+  sorted.forEach(pid => {
+    const n = nodes[pid];
+    let inicio = new Date(dataInicioProj.getTime());
+    n.predecessores.forEach(predId => {
+      const pred = nodes[predId];
+      if (pred && pred.dataFim && pred.dataFim > inicio) inicio = new Date(pred.dataFim.getTime());
+    });
+    n.dataInicio = inicio;
+    n.dataFim = n.duracao > 0 ? addWorkingDays(inicio, n.duracao) : new Date(inicio.getTime());
+  });
+
+  return { nodes, dataInicioProj, sorted };
+}
+
+function renderGanttHTML() {
+  loadGanttDados();
+  const { nodes, dataInicioProj, sorted } = calcularGantt();
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+
+  let maxData = new Date(dataInicioProj.getTime());
+  maxData.setMonth(maxData.getMonth() + 4);
+  Object.values(nodes).forEach(n => { if (n.dataFim && n.dataFim > maxData) maxData = n.dataFim; });
+  maxData = new Date(maxData.getTime() + 14 * 86400000);
+
+  const totalMs = Math.max(maxData - dataInicioProj, 1);
+  const pctPos  = d => Math.max(0, Math.min(100, (d - dataInicioProj) / totalMs * 100));
+  const pctWid  = (d1, d2) => Math.max(0.4, (d2 - d1) / totalMs * 100);
+
+  // Month grid headers
+  const meses = [];
+  let cur = new Date(dataInicioProj.getFullYear(), dataInicioProj.getMonth(), 1);
+  while (cur <= maxData) {
+    const left = pctPos(cur);
+    const nxt = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+    const w = Math.min(100 - left, pctWid(Math.max(cur, dataInicioProj), nxt));
+    meses.push({ label: cur.toLocaleString('pt-BR', {month:'short', year:'2-digit'}).toUpperCase(), left, width: w });
+    cur = nxt;
+  }
+  const hojeLeft = pctPos(hoje);
+  const hojeOk = hojeLeft >= 0 && hojeLeft <= 100;
+
+  const frenteCores = { 'Dren':'#1565C0','Demo':'#c62828','Pavi':'#546E7A','Vala':'#F9A825','Sina':'#2E7D32','Via ':'#E65100' };
+  function corFrente(f) {
+    const slug = (f||'').substring(0,4);
+    return frenteCores[slug] || '#616161';
+  }
+
+  // Group by frente preserving sort order
+  const porFrente = {};
+  sorted.forEach(pid => {
+    const n = nodes[pid];
+    const f = getCSVField(n.pacote, 'Frente') || 'Outros';
+    if (!porFrente[f]) porFrente[f] = [];
+    porFrente[f].push(n);
+  });
+
+  const dataInicioStr = GANTT_DADOS.dataInicio || getLocalISODate(new Date());
+  let rows = '';
+
+  const gridLines = meses.map(m => `<div class="gantt-grid-line" style="left:${m.left.toFixed(2)}%"></div>`).join('');
+
+  Object.entries(porFrente).forEach(([frente, items]) => {
+    const cor = corFrente(frente);
+    rows += `<div class="gantt-frente-header" style="--frente-cor:${cor}"><div>${frente}</div><div></div></div>`;
+    items.forEach(n => {
+      const nome = getCSVField(n.pacote, 'Pacote') || n.pid;
+      const unid = getCSVField(n.pacote, 'Unidade Física') || '';
+      const g = (GANTT_DADOS.pacotes || {})[n.pid] || {};
+      const predStr = (g.predecessores || []).join(', ') || '—';
+      let barHtml = gridLines;
+      let pill = '';
+
+      if (n.pct >= 1) {
+        pill = '<span class="gantt-pill" style="background:#2E7D32;color:#fff">✓ Concluído</span>';
+      } else if (n.duracao === 0) {
+        pill = '<span class="gantt-pill" style="background:#9E9E9E;color:#fff">Sem dados</span>';
+      } else {
+        const left = pctPos(n.dataInicio);
+        const w = pctWid(n.dataInicio, n.dataFim);
+        const progW = n.pct * 100;
+        const atrasado = n.dataFim < hoje && n.pct < 0.99;
+        const emCurso = n.pct > 0 && n.pct < 0.99;
+        barHtml += `<div class="gantt-bar ${atrasado ? 'gantt-bar-atrasado' : ''}"
+          style="left:${left.toFixed(2)}%;width:${w.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
+          <div class="gantt-bar-progress" style="width:${progW.toFixed(1)}%;background:${cor}bb"></div>
+          <span class="gantt-bar-label">${n.pct > 0.04 ? fmtPct(n.pct) : ''}</span>
+        </div>`;
+        if (atrasado) pill = '<span class="gantt-pill" style="background:#c62828;color:#fff">⚠ Atrasado</span>';
+        else if (emCurso) pill = '<span class="gantt-pill" style="background:#1565C0;color:#fff">Em curso</span>';
+      }
+      if (hojeOk) barHtml += `<div class="gantt-hoje" style="left:${hojeLeft.toFixed(2)}%"></div>`;
+
+      const ini = n.dataInicio ? fmtData(n.dataInicio) : '—';
+      const fim = n.dataFim ? fmtData(n.dataFim) : '—';
+
+      rows += `<div class="gantt-row" data-pid="${n.pid}">
+        <div class="gantt-label-cell">
+          <div class="gantt-label-nome" title="${nome}">${nome}</div>
+          <div class="gantt-label-meta">
+            ${pill}
+            <span class="gantt-label-datas">${ini} → ${fim} · ${n.duracao}d</span>
+          </div>
+          <div class="gantt-label-pred">
+            <span style="color:var(--muted);font-size:10px">Pred: ${predStr}</span>
+            <button class="gantt-edit-btn" onclick="ganttEditarPacote('${n.pid}')" title="Editar predecessoras e produtividade">✏</button>
+          </div>
+        </div>
+        <div class="gantt-bar-area">${barHtml}</div>
+      </div>`;
+    });
+  });
+
+  const headerMeses = meses.map(m =>
+    `<div class="gantt-mes" style="left:${m.left.toFixed(2)}%;width:${m.width.toFixed(2)}%">${m.label}</div>`
+  ).join('');
+
+  return `
+    <div class="card stagger-item">
+      <div class="card-header">
+        <div>
+          <div class="card-title">📊 Gantt com Predecessoras</div>
+          <div class="card-title-sub">Clique em ✏ para definir predecessoras e produtividade de cada pacote</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px">
+            <label style="color:var(--muted);font-weight:600;white-space:nowrap">Início do projeto:</label>
+            <input type="date" value="${dataInicioStr}"
+              style="padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px"
+              onchange="ganttSetDataInicio(this.value)">
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="ganttExportarPDF()">⬇ PDF</button>
+        </div>
+      </div>
+      <div id="gantt-edit-panel" style="display:none;padding:12px 16px;background:var(--bg-2);border-bottom:1px solid var(--border)"></div>
+      <div class="card-body" style="padding:0;overflow:hidden">
+        <div class="gantt-wrap">
+          <div class="gantt-grid">
+            <div class="gantt-labels-header">Pacote</div>
+            <div class="gantt-timeline-header">
+              ${headerMeses}
+              ${hojeOk ? `<div class="gantt-hoje-header" style="left:${hojeLeft.toFixed(2)}%">Hoje</div>` : ''}
+            </div>
+          </div>
+          <div class="gantt-body">${rows}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+window.ganttSetDataInicio = function(val) {
+  loadGanttDados();
+  GANTT_DADOS.dataInicio = val;
+  salvarGanttDados();
+  transitionTo(render);
+};
+
+window.ganttEditarPacote = function(pid) {
+  const panel = document.getElementById('gantt-edit-panel');
+  if (!panel) return;
+  loadGanttDados();
+  const g = (GANTT_DADOS.pacotes || {})[pid] || {};
+  const predStr = (g.predecessores || []).join(', ');
+  const prod = g.prod || '';
+  const prodPadrao = PRODUTIVIDADE_PADRAO[pid] || '';
+  const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid);
+  const nome = p ? getCSVField(p, 'Pacote') : pid;
+  const unid = p ? (getCSVField(p, 'Unidade Física') || '') : '';
+
+  if (panel.dataset.pid === pid && panel.style.display !== 'none') {
+    panel.style.display = 'none'; panel.dataset.pid = ''; return;
+  }
+  panel.dataset.pid = pid;
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <div style="font-weight:700;font-size:13px;margin-bottom:8px">${nome}</div>
+        <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">PREDECESSORAS (IDs separados por vírgula — ex: P01, P03)</label>
+        <input id="gantt-pred-input" type="text" value="${predStr}" placeholder="ex: P01, P03"
+          style="width:100%;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box">
+      </div>
+      <div style="min-width:160px">
+        <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">PRODUTIVIDADE/DIA (${unid}/dia)</label>
+        <input id="gantt-prod-input" type="number" min="0" value="${prod}" placeholder="${prodPadrao ? 'Padrão: '+prodPadrao : 'Livre'}"
+          style="width:100%;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box">
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:2px;margin-top:auto">
+        <button class="btn btn-primary btn-sm" onclick="ganttSalvarEdicao('${pid}')">Salvar</button>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('gantt-edit-panel').style.display='none'">Cancelar</button>
+      </div>
+    </div>`;
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
+
+window.ganttSalvarEdicao = function(pid) {
+  loadGanttDados();
+  if (!GANTT_DADOS.pacotes) GANTT_DADOS.pacotes = {};
+  const predInput = document.getElementById('gantt-pred-input');
+  const prodInput = document.getElementById('gantt-prod-input');
+  if (!predInput || !prodInput) return;
+  const predecessores = predInput.value.trim()
+    ? predInput.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+    : [];
+  GANTT_DADOS.pacotes[pid] = { predecessores, prod: prodInput.value.trim() };
+  salvarGanttDados();
+  const panel = document.getElementById('gantt-edit-panel');
+  if (panel) { panel.style.display = 'none'; panel.dataset.pid = ''; }
+  transitionTo(render);
+  toast('Cronograma atualizado', 'success');
+};
+
+window.ganttExportarPDF = function() {
+  try {
+    loadGanttDados();
+    const { nodes, sorted } = calcularGantt();
+    const hoje = new Date();
+    const doc = new jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
+    doc.text('Cronograma Gantt — Av. Senador Teotônio Vilela', 14, 16);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
+    doc.text('Gerado em ' + fmtData(hoje), 14, 22);
+    const cols = ['Pacote', 'Frente', 'Predecessoras', 'Início', 'Término', 'Dur. (dias)', '% Concl.'];
+    const rows = sorted.map(pid => {
+      const n = nodes[pid];
+      const g = (GANTT_DADOS.pacotes || {})[pid] || {};
+      return [
+        getCSVField(n.pacote, 'Pacote') || pid,
+        getCSVField(n.pacote, 'Frente') || '',
+        (g.predecessores || []).join(', ') || '—',
+        n.dataInicio ? fmtData(n.dataInicio) : '—',
+        n.dataFim ? fmtData(n.dataFim) : '—',
+        String(n.duracao || '—'),
+        fmtPct(n.pct)
+      ];
+    });
+    doc.autoTable({
+      head: [cols], body: rows, startY: 26,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [26, 22, 18], textColor: 255, fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [245, 243, 239] },
+      margin: { left: 14, right: 14 }
+    });
+    doc.save('Gantt_TeotônioVilela_' + getLocalISODate(hoje) + '.pdf');
+    toast('PDF do Gantt gerado!', 'success');
+  } catch(e) { toast('Erro ao gerar PDF: ' + e.message, 'error'); }
+};
+
+window.setCronogramaAba = function(aba) {
+  CRONOGRAMA_ABA = aba;
+  transitionTo(render);
+};
+
+// ====================================================================
 // VIEW: CRONOGRAMA FÍSICO (Planejamento Reverso)
 // ====================================================================
 let PLAN_DADOS = null;
@@ -1716,6 +2072,20 @@ function calcularDataInicioReversa(dataFimStr, diasDuracao) {
 }
 
 function renderCronograma() {
+  return `
+    <div class="btn-toggle-group stagger-item" style="margin-bottom:0">
+      <button class="btn-toggle ${CRONOGRAMA_ABA==='gantt'?'active':''}" onclick="setCronogramaAba('gantt')">
+        📊 Gantt / Predecessoras
+      </button>
+      <button class="btn-toggle ${CRONOGRAMA_ABA==='reverso'?'active':''}" onclick="setCronogramaAba('reverso')">
+        ↩ Planejamento Reverso
+      </button>
+    </div>
+    ${CRONOGRAMA_ABA === 'gantt' ? renderGanttHTML() : renderCronogramaReverso()}
+  `;
+}
+
+function renderCronogramaReverso() {
   loadPlanDados();
   const av = calcularAvancoPorPacote();
   const pacotesAtivos = STATE.pacotes.filter(p => getCSVField(p, 'Status') !== 'Histórico' && getCSVField(p, 'ID'));
@@ -1884,6 +2254,7 @@ function renderHistoricoServicos() {
           <div class="card-title">Serviços lançados</div>
           <div class="card-title-sub">Cada linha = 1 pacote executado · alimenta avanço físico e medição</div>
         </div>
+        ${rdos.length > 0 ? `<button class="btn btn-outline btn-sm" onclick="exportarHistoricoCSV()">⬇ CSV</button>` : ''}
       </div>
       <div class="card-body flush">
         ${bodyContent}
@@ -1891,6 +2262,30 @@ function renderHistoricoServicos() {
     </div>
   `;
 }
+
+window.exportarHistoricoCSV = function() {
+  const rdos = [...STATE.rdoavanco].reverse();
+  const header = ['ID','Data','Turno','Pacote','Quantidade','Unidade','Estaca','Equipe','Apontador'];
+  const rows = rdos.map(r => [
+    getCSVField(r,'ID')||'',
+    fmtData(getCSVField(r,'Data')),
+    getCSVField(r,'Turno')||'',
+    getCSVField(r,'Pacote_Nome')||'',
+    fmtNum(num(getCSVField(r,'Quantidade'))),
+    getCSVField(r,'Unidade')||'',
+    getCSVField(r,'Local_Estaca')||'',
+    getCSVField(r,'Equipe')||getCSVField(r,'Subcontratado')||'',
+    getCSVField(r,'Apontador')||''
+  ].map(v => `"${String(v).replace(/"/g,'""')}"`));
+  const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'Historico_Servicos.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  toast('CSV exportado com sucesso!', 'success');
+};
 
 function renderHistoricoDiarios() {
   const diarios = [...(STATE.rdodiario||[])].reverse();
@@ -2271,11 +2666,14 @@ async function salvarRDO() {
     return;
   }
   
+  const servicosValidos = d.servicos.filter(s => s.pacoteId && num(s.quantidade) > 0);
+  if (!confirm(`Confirmar envio de ${servicosValidos.length} serviço${servicosValidos.length > 1 ? 's' : ''}?\nData: ${d.data}  ·  Turno: ${d.turno}`)) return;
+
   const btn = document.getElementById('btnSalvarRDO');
   const btnTxtOriginal = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '⏳ Salvando…';
-  
+
   const batch = d.servicos
     .filter(s => s.pacoteId && num(s.quantidade) > 0)
     .map(s => {
