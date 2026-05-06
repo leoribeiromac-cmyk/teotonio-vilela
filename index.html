@@ -1904,8 +1904,13 @@ function renderGanttHTML() {
         const totalNeeded = nLanes * barH + (nLanes - 1) * 4 + 8;
         segs.forEach((seg, i) => {
           const dFim = seg.dataFim || seg.dataInicio;
-          const sLeft = pctPos(seg.dataInicio);
-          const sW = Math.max(0.6, pctWid(seg.dataInicio, dFim));
+          // Skip bars completely outside the visible timeline window
+          if (!seg.dataInicio || dFim <= tlStart || seg.dataInicio >= maxData) return;
+          // Clip bar to the visible window so position matches actual dates
+          const visStart = seg.dataInicio < tlStart ? tlStart : seg.dataInicio;
+          const visEnd   = dFim > maxData ? maxData : dFim;
+          const sLeft = (visStart - tlStart) / totalMs * 100;
+          const sW    = Math.max(0.6, (visEnd - visStart) / totalMs * 100);
           const localStr = seg.estacaIni && seg.estacaFim
             ? `${seg.estacaIni}→${seg.estacaFim} (${seg.sentido||'CB'})`
             : seg.estacaIni ? `${seg.estacaIni} (${seg.sentido||'CB'})` : '';
