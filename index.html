@@ -2612,27 +2612,115 @@ function renderHistoricoServicos() {
   if (rdos.length === 0) {
     bodyContent = '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum serviço ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro serviço</button></div>';
   } else {
-    const tableRows = rdos.slice(0, 100).map(r => `
-      <tr>
-        <td class="t-mono">${getCSVField(r, 'ID')||''}</td>
-        <td style="font-size:12px">${fmtData(getCSVField(r, 'Data'))}</td>
-        <td><span class="pill ${getCSVField(r, 'Turno')==='Noturno'?'pill-blu':'pill-ylw'}">${getCSVField(r, 'Turno')||'Diurno'}</span></td>
-        <td><strong>${getCSVField(r, 'Pacote_Nome')||''}</strong></td>
-        <td class="t-num">${fmtNum(num(getCSVField(r, 'Quantidade')))} ${getCSVField(r, 'Unidade')||''}</td>
-        <td class="t-mono" style="font-size:11px">${getCSVField(r, 'Local_Estaca')||''}</td>
-        <td style="font-size:12px">${getCSVField(r, 'Equipe') || getCSVField(r, 'Subcontratado') || ''}</td>
-        <td style="font-size:12px">${getCSVField(r, 'Apontador')||''}</td>
-      </tr>
-    `).join('');
-    
-    const moreText = rdos.length > 100 ? `<tr><td colspan="8" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${rdos.length}</td></tr>` : '';
-    
+    const tableRows = rdos.slice(0, 100).map((r, idx) => {
+      const id         = getCSVField(r, 'ID') || '';
+      const dataVal    = getCSVField(r, 'Data') || '';
+      const turno      = getCSVField(r, 'Turno') || 'Diurno';
+      const pacoteId   = getCSVField(r, 'Pacote_ID') || '';
+      const qtd        = getCSVField(r, 'Quantidade') || '';
+      const localEstaca= getCSVField(r, 'Local_Estaca') || '';
+      const equipe     = getCSVField(r, 'Equipe') || getCSVField(r, 'Subcontratado') || '';
+      const apontador  = getCSVField(r, 'Apontador') || '';
+      const obs        = getCSVField(r, 'Observacao') || '';
+
+      // Parse "E99 a E141 (CB)" or "E99 (CB)" back to components
+      let estIni = '', estFim = '', sentido = 'CB';
+      const m1 = localEstaca.match(/^(E\d+)\s+a\s+(E\d+)\s+\((\w+)\)/);
+      const m2 = localEstaca.match(/^(E\d+)\s+\((\w+)\)/);
+      if (m1) { estIni = m1[1]; estFim = m1[2]; sentido = m1[3]; }
+      else if (m2) { estIni = m2[1]; sentido = m2[2]; }
+
+      const pacoteOpts = STATE.pacotes
+        .filter(p => getCSVField(p, 'Status') !== 'Histórico')
+        .map(p => `<option value="${getCSVField(p,'ID')}"${getCSVField(p,'ID')===pacoteId?' selected':''}>${getCSVField(p,'Pacote')}</option>`)
+        .join('');
+
+      const esc = v => String(v).replace(/"/g,'&quot;');
+
+      return `
+        <tr>
+          <td class="t-mono">${id}</td>
+          <td style="font-size:12px">${fmtData(dataVal)}</td>
+          <td><span class="pill ${turno==='Noturno'?'pill-blu':'pill-ylw'}">${turno}</span></td>
+          <td><strong>${getCSVField(r,'Pacote_Nome')||''}</strong></td>
+          <td class="t-num">${fmtNum(num(qtd))} ${getCSVField(r,'Unidade')||''}</td>
+          <td class="t-mono" style="font-size:11px">${localEstaca}</td>
+          <td style="font-size:12px">${equipe}</td>
+          <td style="font-size:12px">${apontador}</td>
+          <td style="text-align:center;white-space:nowrap">
+            <button class="gantt-edit-btn" id="hedit-toggle-${idx}" onclick="histEditarServico(${idx})" title="Editar este lançamento">✏</button>
+          </td>
+        </tr>
+        <tr id="hist-edit-row-${idx}" style="display:none">
+          <td colspan="9" style="padding:0">
+            <div style="padding:12px 16px;background:var(--bg-2);border-left:3px solid var(--primary)">
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Data</div>
+                  <input type="date" id="hedit-data-${idx}" value="${dataVal}" style="padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Turno</div>
+                  <select id="hedit-turno-${idx}" style="padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                    <option${turno==='Diurno'?' selected':''}>Diurno</option>
+                    <option${turno==='Noturno'?' selected':''}>Noturno</option>
+                  </select>
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Pacote</div>
+                  <select id="hedit-pacote-${idx}" style="padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px;max-width:220px">
+                    ${pacoteOpts}
+                  </select>
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Quantidade</div>
+                  <input type="number" id="hedit-qtd-${idx}" value="${esc(qtd)}" min="0" step="any" style="width:90px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Sentido</div>
+                  <select id="hedit-sentido-${idx}" style="padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                    <option${sentido==='CB'?' selected':''}>CB</option>
+                    <option${sentido==='BC'?' selected':''}>BC</option>
+                  </select>
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Est. Ini</div>
+                  <input type="text" id="hedit-estini-${idx}" value="${esc(estIni)}" placeholder="E99" style="width:68px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Est. Fim</div>
+                  <input type="text" id="hedit-estfim-${idx}" value="${esc(estFim)}" placeholder="E141" style="width:68px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Equipe</div>
+                  <input type="text" id="hedit-equipe-${idx}" value="${esc(equipe)}" style="width:110px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                </div>
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Apontador</div>
+                  <input type="text" id="hedit-apontador-${idx}" value="${esc(apontador)}" style="width:110px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                </div>
+                <div style="flex:1;min-width:160px">
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Observação</div>
+                  <input type="text" id="hedit-obs-${idx}" value="${esc(obs)}" style="width:100%;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                </div>
+                <div style="display:flex;gap:6px;padding-bottom:1px">
+                  <button class="btn btn-primary btn-sm" id="hedit-btn-${idx}" onclick="histSalvarEdicao(${idx})">Salvar</button>
+                  <button class="btn btn-ghost btn-sm" onclick="histCancelarEdicao(${idx})">Cancelar</button>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+    }).join('');
+
+    const moreText = rdos.length > 100 ? `<tr><td colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${rdos.length}</td></tr>` : '';
+
     bodyContent = `
       <table class="t">
         <thead><tr>
           <th>ID</th><th>Data</th><th>Turno</th><th>Pacote</th>
           <th class="t-num" style="text-align:right">Qtd</th>
-          <th>Estaca</th><th>Equipe</th><th>Apontador</th>
+          <th>Estaca</th><th>Equipe</th><th>Apontador</th><th></th>
         </tr></thead>
         <tbody>
           ${tableRows}
@@ -2680,6 +2768,71 @@ window.exportarHistoricoCSV = function() {
   document.body.appendChild(a); a.click();
   document.body.removeChild(a); URL.revokeObjectURL(url);
   toast('CSV exportado com sucesso!', 'success');
+};
+
+window.histEditarServico = function(idx) {
+  const row = document.getElementById(`hist-edit-row-${idx}`);
+  if (!row) return;
+  const isOpen = row.style.display !== 'none';
+  document.querySelectorAll('[id^="hist-edit-row-"]').forEach(r => { r.style.display = 'none'; });
+  document.querySelectorAll('[id^="hedit-toggle-"]').forEach(b => { b.style.color = ''; });
+  if (!isOpen) {
+    row.style.display = '';
+    const toggle = document.getElementById(`hedit-toggle-${idx}`);
+    if (toggle) toggle.style.color = 'var(--primary)';
+    row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+};
+
+window.histCancelarEdicao = function(idx) {
+  const row = document.getElementById(`hist-edit-row-${idx}`);
+  if (row) row.style.display = 'none';
+  const toggle = document.getElementById(`hedit-toggle-${idx}`);
+  if (toggle) toggle.style.color = '';
+};
+
+window.histSalvarEdicao = async function(idx) {
+  const rdos = [...STATE.rdoavanco].reverse();
+  const r = rdos[idx];
+  const id = getCSVField(r, 'ID');
+  if (!id) { toast('ID do lançamento não encontrado', 'error'); return; }
+
+  const data      = (document.getElementById(`hedit-data-${idx}`)?.value || '').trim();
+  const turno     = document.getElementById(`hedit-turno-${idx}`)?.value || 'Diurno';
+  const pacoteId  = document.getElementById(`hedit-pacote-${idx}`)?.value || '';
+  const qtd       = parseFloat(document.getElementById(`hedit-qtd-${idx}`)?.value) || 0;
+  const sentido   = document.getElementById(`hedit-sentido-${idx}`)?.value || 'CB';
+  const estIni    = (document.getElementById(`hedit-estini-${idx}`)?.value || '').trim();
+  const estFim    = (document.getElementById(`hedit-estfim-${idx}`)?.value || '').trim();
+  const equipe    = (document.getElementById(`hedit-equipe-${idx}`)?.value || '').trim();
+  const apontador = (document.getElementById(`hedit-apontador-${idx}`)?.value || '').trim();
+  const obs       = (document.getElementById(`hedit-obs-${idx}`)?.value || '').trim();
+
+  if (!data) { toast('Informe a data', 'error'); return; }
+
+  let localEstaca = '';
+  if (estIni && estFim) localEstaca = `${estIni} a ${estFim} (${sentido})`;
+  else if (estIni) localEstaca = `${estIni} (${sentido})`;
+
+  const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pacoteId);
+  const pacoteNome = p ? getCSVField(p, 'Pacote') : getCSVField(r, 'Pacote_Nome');
+  const unidade    = p ? (getCSVField(p, 'Unidade Física') || '') : (getCSVField(r, 'Unidade') || '');
+
+  const payload = { id, data, turno, pacote_id: pacoteId, pacote_nome: pacoteNome, quantidade: qtd, unidade, local_estaca: localEstaca, equipe, subcontratado: equipe, apontador, observacao: obs };
+
+  const btn = document.getElementById(`hedit-btn-${idx}`);
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳'; }
+
+  try {
+    const result = await jsonp(CONFIG.appsScript, { action: 'updateRDO', payload: JSON.stringify(payload) });
+    if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+    toast('✓ Lançamento atualizado', 'success');
+    histCancelarEdicao(idx);
+    setTimeout(() => carregarTudo(), 800);
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Salvar'; }
+    toast('Falha ao atualizar: ' + e.message, 'error', 6000);
+  }
 };
 
 function renderHistoricoDiarios() {
