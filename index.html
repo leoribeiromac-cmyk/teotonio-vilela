@@ -3938,7 +3938,7 @@ async function salvarDiarioV4() {
     visitas: [d.diurno.visitas, d.noturno.visitas].filter(x=>x).join(' / ') || '',
     ocorrencias: [d.diurno.ocorrencias, d.noturno.ocorrencias].filter(x=>x).join(' / ') || '',
     observacoes_gerais: [d.diurno.observacoes, d.noturno.observacoes].filter(x=>x).join(' / ') || '',
-    tem_turno_noturno: (d.diurno.preenchido && d.noturno.preenchido) ? 'true' : 'false',
+    tem_turno_noturno: d.noturno.preenchido ? 'true' : 'false',
     efetivo_json: JSON.stringify(efetivoJSON),
     equipamentos_json: JSON.stringify(equipJSON),
   };
