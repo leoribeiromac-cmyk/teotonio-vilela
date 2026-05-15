@@ -1283,6 +1283,8 @@ window.runAIAnalysis = async function() {
     } else if (type === 'eficiencia') {
         prompt = `Analisa a eficiência do avanço da obra no contexto dos últimos ${days} dias:\n\n${contextData}\n\nQuais foram os pacotes que mais alavancaram o avanço geral neste período? Compara o volume executado nos últimos ${days} dias com o avanço global do pacote para destacares onde a obra está a aplicar mais esforços atualmente.`;
     }
+    
+    prompt += "\n\nIMPORTANTE: Formate a sua resposta EXCLUSIVAMENTE em HTML estruturado (use <h3>, <h4>, <ul>, <li>, <p>, <strong>, <br>, etc.). NÃO use formatação Markdown (como ## ou **). Retorne APENAS o código HTML limpo, sem blocos de código (```html).";
 
     const analysisHTML = await callGeminiAPI(prompt);
     
