@@ -429,6 +429,17 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .toast.success{border-left:4px solid var(--grn)}
 .toast.error{border-left:4px solid var(--red)}
 .toast.info{border-left:4px solid var(--blu)}
+.toast-fechar{cursor:pointer;font-weight:700;opacity:.45;padding:0 2px 0 6px;flex-shrink:0;font-size:15px}
+.toast-fechar:hover{opacity:1}
+#outboxIndicator{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:1100;
+  display:none;align-items:center;gap:8px;cursor:pointer;
+  background:#1f2937;color:#fff;padding:10px 18px;border-radius:999px;
+  box-shadow:0 4px 16px rgba(0,0,0,.28);font-size:13px;font-weight:600;
+  max-width:92vw;animation:slideIn .25s cubic-bezier(.2,0,0,1);
+}
+#outboxIndicator:active{transform:translateX(-50%) scale(.97)}
+.campo-invalido{border:2px solid var(--red)!important;background:var(--red-l)!important}
 @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 
 /* ===================== EMPTY / LOADING ===================== */
@@ -692,6 +703,95 @@ function jsonp(url, params, retries = 2, retryDelay = 3000, onRetry = null) {
   return run(retries);
 }
 
+// ====================================================================
+// OUTBOX — fila de envio offline
+// Guarda lançamentos que falharam por falta de internet e reenvia
+// sozinho quando o sinal volta. O reenvio é seguro: o addBatchRDO do
+// backend usa clientId pra não duplicar, e o RDO Diário grava por data.
+// ====================================================================
+const OUTBOX_KEY = 'teotonio_outbox_v1';
+let _flushEmAndamento = false;
+
+function ehErroDeRede(e) {
+  const m = String((e && e.message) || e || '');
+  return !navigator.onLine || /rede|offline|Timeout|Failed to fetch|NetworkError/i.test(m);
+}
+
+function outboxLer() {
+  try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); }
+  catch(e) { return []; }
+}
+
+function outboxGravar(itens) {
+  try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(itens)); } catch(e) {}
+}
+
+function outboxAdicionar(item) {
+  const itens = outboxLer();
+  itens.push({
+    id: 'o_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    criadoEm: Date.now(),
+    ...item
+  });
+  outboxGravar(itens);
+  atualizarIndicadorOutbox();
+}
+
+function outboxRemover(id) {
+  outboxGravar(outboxLer().filter(it => it.id !== id));
+  atualizarIndicadorOutbox();
+}
+
+// Reenvia os itens da fila, um por um, na ordem. Para no primeiro erro de rede.
+async function outboxFlush(manual = false) {
+  if (_flushEmAndamento) return;
+  const itens = outboxLer();
+  if (itens.length === 0) return;
+  if (!navigator.onLine) {
+    if (manual) toast('Ainda sem internet. Vou reenviar sozinho quando o sinal voltar.', 'info', 4000);
+    return;
+  }
+  _flushEmAndamento = true;
+  let enviados = 0;
+  try {
+    for (const item of itens) {
+      try {
+        const result = await jsonp(CONFIG.appsScript, item.params, 1, 2000);
+        if (!result.ok) throw new Error('servidor: ' + (result.error || 'erro'));
+        outboxRemover(item.id);
+        enviados++;
+      } catch(e) {
+        if (ehErroDeRede(e)) break; // segue offline — tenta tudo de novo depois
+        // Erro do servidor: reenviar não vai resolver. Remove e avisa.
+        outboxRemover(item.id);
+        toast('Um RDO guardado não pôde ser enviado (' + (item.descricao || '') + '): ' + e.message, 'error', 0);
+      }
+    }
+  } finally {
+    _flushEmAndamento = false;
+  }
+  if (enviados > 0) {
+    toast(`✓ ${enviados} RDO${enviados>1?'s':''} guardado${enviados>1?'s':''} enviado${enviados>1?'s':''} agora`, 'success', 4500);
+    carregarTudo();
+  }
+  atualizarIndicadorOutbox();
+}
+
+// Indicador flutuante fixo na tela — visível também no celular.
+function atualizarIndicadorOutbox() {
+  let el = document.getElementById('outboxIndicator');
+  const n = outboxLer().length;
+  if (n === 0) { if (el) el.style.display = 'none'; return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'outboxIndicator';
+    el.onclick = () => outboxFlush(true);
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
+  el.innerHTML = `<span style="font-size:15px">📡</span><span>${n} RDO${n>1?'s':''} aguardando envio · toque para tentar agora</span>`;
+}
+
 function num(s) {
   if (s === null || s === undefined || s === '') return 0;
   const cleaned = String(s).replace(/\./g, '').replace(',', '.');
@@ -747,12 +847,20 @@ function toast(msg, type = 'info', durationMs = 3500) {
   const t = document.createElement('div');
   t.className = `toast ${type}`;
   const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'i';
-  t.innerHTML = `<span style="font-weight:700">${icon}</span><span>${msg}</span>`;
-  wrap.appendChild(t);
-  setTimeout(() => {
+  // durationMs <= 0: toast fixo, só some quando o usuário fecha
+  const fixo = durationMs <= 0;
+  t.innerHTML = `<span style="font-weight:700">${icon}</span><span style="flex:1">${msg}</span>`
+    + (fixo ? `<span class="toast-fechar" title="Fechar">✕</span>` : '');
+  const fechar = () => {
     t.style.animation = 'slideIn .2s reverse';
     setTimeout(() => t.remove(), 200);
-  }, durationMs);
+  };
+  wrap.appendChild(t);
+  if (fixo) {
+    t.querySelector('.toast-fechar').addEventListener('click', fechar);
+  } else {
+    setTimeout(fechar, durationMs);
+  }
 }
 
 function listarEstacas() {
@@ -3003,6 +3111,31 @@ function renderRDO() {
     ? new Date(draftSalvo._savedAt).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})
     : null;
 
+  // Banner "já lancei hoje?" — conta lançamentos do dia + pendentes na fila offline
+  const hojeISO = getLocalISODate(new Date());
+  const lancHoje = (STATE.rdoavanco || []).filter(r => {
+    const rd = parseISODate(getCSVField(r, 'Data'));
+    return rd && getLocalISODate(rd) === hojeISO;
+  });
+  const turnosHoje = {};
+  lancHoje.forEach(r => {
+    const tn = getCSVField(r, 'Turno') || '—';
+    turnosHoje[tn] = (turnosHoje[tn] || 0) + 1;
+  });
+  const pendentesRdo = outboxLer().filter(it => it.kind === 'rdo').length;
+  const hojeBR = hojeISO.split('-').reverse().slice(0, 2).join('/');
+  let bannerHoje;
+  if (lancHoje.length === 0 && pendentesRdo === 0) {
+    bannerHoje = `<div style="background:var(--surface);border:1px dashed var(--border);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--muted)">Nenhum serviço lançado hoje (${hojeBR}) ainda.</div>`;
+  } else {
+    const partes = Object.entries(turnosHoje).map(([t, n]) => `${n} ${t}`).join(', ');
+    const pend = pendentesRdo > 0 ? ` · <strong>${pendentesRdo} aguardando envio</strong>` : '';
+    const txt = lancHoje.length > 0
+      ? `✓ Hoje (${hojeBR}) já tem ${lancHoje.length} lançamento${lancHoje.length>1?'s':''}: ${partes}${pend}`
+      : `Hoje (${hojeBR}): ${pendentesRdo} lançamento${pendentesRdo>1?'s':''} aguardando envio`;
+    bannerHoje = `<div style="background:var(--grn-l);border:1px solid var(--grn);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--grn)">${txt}</div>`;
+  }
+
   return `
     ${temRascunho ? `
       <div style="background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
@@ -3010,6 +3143,7 @@ function renderRDO() {
         <button class="btn btn-sm btn-outline" onclick="resetDraft()">Limpar e começar novo</button>
       </div>
     ` : ''}
+    ${bannerHoje}
     
     <div class="card stagger-item">
       <div class="card-header">
@@ -3322,11 +3456,32 @@ function validarRDO(d) {
   return erros;
 }
 
+// Pinta de vermelho os campos com problema e rola a tela até o primeiro.
+function destacarCamposRDO(d) {
+  document.querySelectorAll('.campo-invalido').forEach(el => el.classList.remove('campo-invalido'));
+  let primeiro = null;
+  const marcar = (sel) => {
+    const el = document.querySelector(sel);
+    if (el) { el.classList.add('campo-invalido'); if (!primeiro) primeiro = el; }
+  };
+  if (!d.data) marcar('[data-draft="data"]');
+  if (!d.apontador || !d.apontador.trim()) marcar('[data-draft="apontador"]');
+  for (let i = 0; i < d.servicos.length; i++) {
+    const s = d.servicos[i];
+    if (s.pacoteId && num(s.quantidade) > 0 && (!s.estacaIni || !s.estacaFim)) {
+      if (!s.estacaIni) marcar(`[data-svc="${i}"][data-field="estacaIni"]`);
+      if (!s.estacaFim) marcar(`[data-svc="${i}"][data-field="estacaFim"]`);
+    }
+  }
+  if (primeiro) primeiro.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
 async function salvarRDO() {
   const d = STATE.draft;
   const erros = validarRDO(d);
   if (erros.length > 0) {
-    toast(erros.join(' · '), 'error', 5000);
+    toast('Confira: ' + erros.join(' · '), 'error', 0);
+    destacarCamposRDO(d);
     return;
   }
   
@@ -3390,17 +3545,11 @@ async function salvarRDO() {
   }));
 
   const batch = [...batchPacotes, ...batchOutros];
+  const clientId = 'b_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  const reqParams = { action: 'addBatchRDO', batch: JSON.stringify(batch), clientId: clientId };
+  const descricaoFila = `${totalItens} serviço${totalItens>1?'s':''} · ${d.turno} · ${d.data}`;
 
-  try {
-    const result = await jsonp(CONFIG.appsScript, {
-      action: 'addBatchRDO',
-      batch: JSON.stringify(batch)
-    }, 2, 3000, onRetryRDO);
-
-    if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
-
-    toast(`✓ ${totalItens} item${totalItens>1?'s':''} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
-    
+  function limparFormularioRDO() {
     clearDraft();
     STATE.draft = {
       ...defaultDraft(),
@@ -3408,16 +3557,41 @@ async function salvarRDO() {
       sentido: d.sentido,
       turno: d.turno,
     };
-    
+  }
+
+  // Sem internet: guarda na fila na hora, sem fazer o usuário esperar
+  if (!navigator.onLine) {
+    outboxAdicionar({ kind: 'rdo', params: reqParams, descricao: descricaoFila });
+    toast('Sem internet — RDO guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
+    limparFormularioRDO();
+    transitionTo(render);
+    return;
+  }
+
+  try {
+    const result = await jsonp(CONFIG.appsScript, reqParams, 2, 3000, onRetryRDO);
+
+    if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+
+    toast(`✓ ${totalItens} item${totalItens>1?'s':''} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
+
+    limparFormularioRDO();
     setTimeout(() => carregarTudo(), 800);
-    
+
     HISTORICO_TAB = 'servicos';
     setTimeout(() => navigate('historico'), 600);
-    
+
   } catch(e) {
     btn.disabled = false;
     btn.innerHTML = btnTxtOriginal;
-    toast('Falha ao salvar: ' + e.message, 'error', 6000);
+    if (ehErroDeRede(e)) {
+      outboxAdicionar({ kind: 'rdo', params: reqParams, descricao: descricaoFila });
+      toast('Sem internet — RDO guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
+      limparFormularioRDO();
+      transitionTo(render);
+    } else {
+      toast('Falha ao salvar: ' + e.message, 'error', 0);
+    }
   }
 }
 
@@ -3590,7 +3764,12 @@ function renderRDODiarioV4() {
 
 function renderSeletorTurno() {
   const d = DIARIO_V4;
-  
+
+  const pendentesDiario = outboxLer().filter(it => it.kind === 'diario').length;
+  const bannerPend = pendentesDiario > 0
+    ? `<div style="max-width:680px;margin:0 auto 14px;background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:10px 14px;font-size:13px;color:var(--ylw-d)">📡 ${pendentesDiario} turno${pendentesDiario>1?'s':''} aguardando envio — vai enviar sozinho quando o sinal voltar.</div>`
+    : '';
+
   let botoesHtml = '';
   if (d.diurno.preenchido || d.noturno.preenchido) {
     botoesHtml += `<div style="margin-top:16px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r-sm);font-size:12px;color:var(--muted)">ℹ Selecionar um turno já preenchido permite editar os dados.</div>`;
@@ -3598,6 +3777,7 @@ function renderSeletorTurno() {
   }
 
   return `
+    ${bannerPend}
     <div class="card stagger-item" style="max-width:680px;margin:0 auto">
       <div class="card-header">
         <div>
@@ -3938,7 +4118,7 @@ async function salvarDiarioV4() {
   const td = d[t];
   
   if (!td.apontador || !td.apontador.trim()) {
-    toast('Apontador obrigatório pra salvar', 'error'); return;
+    toast('Apontador obrigatório pra salvar', 'error', 0); return;
   }
   
   const btn = document.getElementById('btnSalvarDiarioV4');
@@ -3987,6 +4167,17 @@ async function salvarDiarioV4() {
     equipamentos_json: JSON.stringify(equipJSON),
   };
   
+  const descricaoFila = `RDO Diário · turno ${t} · ${d.data}`;
+
+  // Sem internet: guarda na fila na hora
+  if (!navigator.onLine) {
+    outboxAdicionar({ kind: 'diario', params: params, descricao: descricaoFila });
+    toast('Sem internet — turno guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
+    btn.disabled = false;
+    btn.innerHTML = original;
+    return;
+  }
+
   try {
     const result = await jsonp(CONFIG.appsScript, params, 2, 3000, onRetryDiario);
     if (!result.ok) throw new Error(result.error || 'Erro');
@@ -3997,7 +4188,12 @@ async function salvarDiarioV4() {
   } catch(e) {
     btn.disabled = false;
     btn.innerHTML = original;
-    toast('Falha: ' + e.message, 'error', 6000);
+    if (ehErroDeRede(e)) {
+      outboxAdicionar({ kind: 'diario', params: params, descricao: descricaoFila });
+      toast('Sem internet — turno guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
+    } else {
+      toast('Falha: ' + e.message, 'error', 0);
+    }
   }
 }
 
@@ -4952,9 +5148,15 @@ document.addEventListener('DOMContentLoaded', () => {
   renderShell();
   navigate('executivo');
   carregarTudo();
-  
+
   // Auto-refresh a cada 5min
   setInterval(carregarTudo, CONFIG.refreshMs);
+
+  // Fila offline: mostra o que está pendente e tenta reenviar
+  atualizarIndicadorOutbox();
+  outboxFlush();
+  window.addEventListener('online', () => outboxFlush());
+  setInterval(() => outboxFlush(), 30000);
 });
 
 // Expor pro escopo global pra usar em onclick="..."
