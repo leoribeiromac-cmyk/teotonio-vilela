@@ -643,39 +643,52 @@ async function fetchCSV(url) {
   return parseCSV(await res.text());
 }
 
-function jsonp(url, params) {
-  return new Promise((resolve, reject) => {
-    const cb = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
-    const timeout = setTimeout(() => {
-      cleanup();
-      reject(new Error('Timeout (15s)'));
-    }, 15000);
-    
-    function cleanup() {
-      delete window[cb];
-      const s = document.getElementById(cb);
-      if (s) s.remove();
-      clearTimeout(timeout);
-    }
-    
-    window[cb] = (data) => {
-      cleanup();
-      resolve(data);
-    };
-    
-    const qs = Object.entries({...params, callback: cb})
-      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-      .join('&');
-    
-    const script = document.createElement('script');
-    script.id = cb;
-    script.src = url + '?' + qs;
-    script.onerror = () => {
-      cleanup();
-      reject(new Error('Falha de rede ou Apps Script offline'));
-    };
-    document.body.appendChild(script);
-  });
+function jsonp(url, params, retries = 2, retryDelay = 3000) {
+  function attempt() {
+    return new Promise((resolve, reject) => {
+      const cb = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error('Timeout (15s)'));
+      }, 15000);
+
+      function cleanup() {
+        delete window[cb];
+        const s = document.getElementById(cb);
+        if (s) s.remove();
+        clearTimeout(timeout);
+      }
+
+      window[cb] = (data) => {
+        cleanup();
+        resolve(data);
+      };
+
+      const qs = Object.entries({...params, callback: cb})
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('&');
+
+      const script = document.createElement('script');
+      script.id = cb;
+      script.src = url + '?' + qs;
+      script.onerror = () => {
+        cleanup();
+        reject(new Error('Falha de rede ou Apps Script offline'));
+      };
+      document.body.appendChild(script);
+    });
+  }
+
+  function run(remaining) {
+    return attempt().catch(err => {
+      if (remaining > 0) {
+        return new Promise(r => setTimeout(r, retryDelay)).then(() => run(remaining - 1));
+      }
+      throw err;
+    });
+  }
+
+  return run(retries);
 }
 
 function num(s) {
