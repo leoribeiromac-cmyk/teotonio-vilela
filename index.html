@@ -643,7 +643,7 @@ async function fetchCSV(url) {
   return parseCSV(await res.text());
 }
 
-function jsonp(url, params, retries = 2, retryDelay = 3000) {
+function jsonp(url, params, retries = 2, retryDelay = 3000, onRetry = null) {
   function attempt() {
     return new Promise((resolve, reject) => {
       const cb = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
@@ -682,6 +682,7 @@ function jsonp(url, params, retries = 2, retryDelay = 3000) {
   function run(remaining) {
     return attempt().catch(err => {
       if (remaining > 0) {
+        if (onRetry) onRetry(retries - remaining + 1, retries);
         return new Promise(r => setTimeout(r, retryDelay)).then(() => run(remaining - 1));
       }
       throw err;
@@ -2963,7 +2964,7 @@ function loadDraft() {
 }
 
 function saveDraft(draft) {
-  try { localStorage.setItem(CONFIG.ls.rdoDraft, JSON.stringify(draft)); } catch(e) {}
+  try { localStorage.setItem(CONFIG.ls.rdoDraft, JSON.stringify({...draft, _savedAt: Date.now()})); } catch(e) {}
 }
 
 function clearDraft() {
@@ -2996,12 +2997,16 @@ function renderRDO() {
     .filter(p => getCSVField(p, 'Status') !== 'Histórico' && getCSVField(p, 'Frente'))
     .map(p => getCSVField(p, 'Frente')))].sort();
   
-  const temRascunho = !!loadDraft();
-  
+  const draftSalvo = loadDraft();
+  const temRascunho = !!draftSalvo;
+  const draftHora = draftSalvo && draftSalvo._savedAt
+    ? new Date(draftSalvo._savedAt).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})
+    : null;
+
   return `
     ${temRascunho ? `
       <div style="background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-        <div style="font-size:13px;color:var(--ylw-d)">📝 Rascunho restaurado da última sessão.</div>
+        <div style="font-size:13px;color:var(--ylw-d)">📝 Rascunho salvo${draftHora ? ` às ${draftHora}` : ' na última sessão'} restaurado.</div>
         <button class="btn btn-sm btn-outline" onclick="resetDraft()">Limpar e começar novo</button>
       </div>
     ` : ''}
@@ -3335,6 +3340,7 @@ async function salvarRDO() {
   const btnTxtOriginal = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '⏳ Salvando…';
+  const onRetryRDO = (n, total) => { btn.innerHTML = `⏳ Tentando novamente… (${n}/${total})`; };
 
   const batchPacotes = d.servicos
     .filter(s => s.pacoteId && num(s.quantidade) > 0)
@@ -3389,7 +3395,7 @@ async function salvarRDO() {
     const result = await jsonp(CONFIG.appsScript, {
       action: 'addBatchRDO',
       batch: JSON.stringify(batch)
-    });
+    }, 2, 3000, onRetryRDO);
 
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
 
@@ -3939,6 +3945,7 @@ async function salvarDiarioV4() {
   const original = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '⏳ Salvando…';
+  const onRetryDiario = (n, total) => { btn.innerHTML = `⏳ Tentando novamente… (${n}/${total})`; };
   
   td.preenchido = true;
   saveDiarioV4(d);
@@ -3981,7 +3988,7 @@ async function salvarDiarioV4() {
   };
   
   try {
-    const result = await jsonp(CONFIG.appsScript, params);
+    const result = await jsonp(CONFIG.appsScript, params, 2, 3000, onRetryDiario);
     if (!result.ok) throw new Error(result.error || 'Erro');
     toast(`✓ Turno ${t.toUpperCase()} salvo`, 'success', 4000);
     setTimeout(() => carregarTudo(), 800);
