@@ -739,6 +739,16 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   transition: opacity .25s;
 }
 .hero-ia.loading { opacity: 0.55; }
+.hero-ia.disabled {
+  background: rgba(255,255,255,0.04);
+  border-left-color: rgba(255,255,255,0.15);
+}
+.hero-ia.disabled .hero-ia-icon {
+  filter: grayscale(1) opacity(0.5);
+}
+.hero-ia.disabled .hero-ia-text {
+  color: rgba(255,255,255,0.65);
+}
 .hero-ia-icon { font-size: 16px; flex-shrink: 0; line-height: 1.2; filter: drop-shadow(0 0 4px oklch(0.62 0.18 38 / 0.7)); }
 .hero-ia-body { flex: 1; min-width: 0; }
 .hero-ia-label { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--acc); display: block; margin-bottom: 4px; }
@@ -1247,16 +1257,17 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .hm-row-label { font-size: 9px; padding: 0 6px 0 2px; }
 }
 
-/* ===== Ajustes para evitar overflow horizontal global ===== */
+/* ===== Ajustes para evitar overflow horizontal global (jeito correto)
+   IMPORTANTE: NÃO usar `overflow-x: hidden` em .page nem .main —
+   eles são flex column containers; overflow-x:hidden força overflow-y:auto
+   por spec CSS, e o hero colapsa pra 30px de altura. Use min-width:0 nos
+   flex children para que possam encolher dentro do pai. ===== */
 @media (max-width: 768px) {
-  body { overflow-x: hidden; }
-  .main { overflow-x: hidden; }
-  .page { max-width: 100vw; overflow-x: hidden; }
-  .card { max-width: 100%; }
-  /* Garantir que grids responsivas sem media query funcionem */
-  div[style*="grid-template-columns: repeat(auto-fit"] {
-    grid-template-columns: 1fr !important;
-  }
+  .main, .page { min-width: 0; }
+  .card, .exec-kpi, .exec-hero, .cal-card, .avenue-card { min-width: 0; max-width: 100%; }
+  .hero-main, .hero-side { min-width: 0; }
+  .card-body.flush { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .cal-grid-wrap { min-width: 0; max-width: 100%; }
 }
 
 /* ===== Tap feedback (substitui hover em touch) ===== */
@@ -1570,15 +1581,100 @@ function listarEstacas() {
 // ====================================================================
 // AI INTEGRATION (via Lovable Cloud Edge Function)
 // ====================================================================
+const GEMINI_KEY_LS = 'teotonio_gemini_key';
+
+function temChaveGemini() {
+  return !!(localStorage.getItem(GEMINI_KEY_LS) || '').trim();
+}
+
+window.abrirConfigIA = function() {
+  // Remove modal existente se houver
+  const old = document.getElementById('modalConfigIA');
+  if (old) old.remove();
+
+  const atual = (localStorage.getItem(GEMINI_KEY_LS) || '').trim();
+  const modal = document.createElement('div');
+  modal.id = 'modalConfigIA';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,12,8,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+  modal.innerHTML = `
+    <div style="background:var(--surface);border-radius:var(--r-lg);max-width:480px;width:100%;padding:28px 28px 22px;box-shadow:var(--sh-lg);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <span style="font-size:22px;">✨</span>
+        <h2 style="font-size:17px;font-weight:700;letter-spacing:-.01em;margin:0;">Configurar IA</h2>
+      </div>
+      <p style="font-size:13px;color:var(--muted);line-height:1.55;margin:8px 0 18px;">
+        A IA executiva usa o <strong>Google Gemini</strong> para gerar recomendações semanais
+        a partir dos seus indicadores. Configure uma vez e fica salvo no seu navegador.
+      </p>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;margin-bottom:16px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Como obter sua chave (grátis):</div>
+        <ol style="font-size:12px;color:var(--text-2);padding-left:18px;line-height:1.7;margin:0;">
+          <li>Acesse <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener" style="color:var(--acc);font-weight:600;">aistudio.google.com/app/apikey</a></li>
+          <li>Clique em <strong>"Create API key"</strong> (faça login com sua conta Google)</li>
+          <li>Copie a chave gerada e cole aqui</li>
+        </ol>
+      </div>
+      <div class="field" style="margin-bottom:16px;">
+        <label style="font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--muted);text-transform:uppercase;">Chave da API Gemini</label>
+        <input type="password" id="inputGeminiKey" placeholder="AIza..." value="${atual.replace(/"/g, '&quot;')}" autocomplete="off" spellcheck="false" style="font-family:'JetBrains Mono',monospace;font-size:14px;">
+        <div style="font-size:11px;color:var(--muted);margin-top:4px;">Salvo apenas no seu navegador (localStorage). Nunca enviado para nenhum servidor além do Google.</div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+        ${atual ? '<button class="btn btn-ghost btn-sm" onclick="removerChaveIA()" style="margin-right:auto;">Remover chave</button>' : ''}
+        <button class="btn btn-outline btn-sm" onclick="fecharConfigIA()">Cancelar</button>
+        <button class="btn btn-primary btn-sm" onclick="salvarChaveIA()">Salvar</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) fecharConfigIA(); });
+  setTimeout(() => document.getElementById('inputGeminiKey')?.focus(), 50);
+};
+
+window.fecharConfigIA = function() {
+  const m = document.getElementById('modalConfigIA');
+  if (m) m.remove();
+};
+
+window.salvarChaveIA = function() {
+  const v = (document.getElementById('inputGeminiKey')?.value || '').trim();
+  if (!v) { toast('Cole sua chave da API Gemini antes de salvar.', 'error'); return; }
+  if (!/^AIza[0-9A-Za-z_-]{20,}$/.test(v)) {
+    if (!confirm('Essa chave não parece estar no formato esperado (AIza...). Salvar mesmo assim?')) return;
+  }
+  localStorage.setItem(GEMINI_KEY_LS, v);
+  localStorage.removeItem('teotonio_ia_rec_v1'); // invalida cache para forçar nova chamada
+  toast('Chave salva. Gerando recomendação…', 'success');
+  fecharConfigIA();
+  if (typeof refreshIA === 'function') refreshIA();
+};
+
+window.removerChaveIA = function() {
+  localStorage.removeItem(GEMINI_KEY_LS);
+  localStorage.removeItem('teotonio_ia_rec_v1');
+  toast('Chave removida. IA desativada.', 'info');
+  fecharConfigIA();
+  // Atualiza o card no painel
+  if (typeof STATE !== 'undefined' && STATE.currentPage === 'executivo') {
+    const el = document.getElementById('heroIA');
+    if (el) {
+      el.classList.remove('loading');
+      el.classList.add('disabled');
+      const txt = el.querySelector('.hero-ia-text');
+      if (txt) txt.innerHTML = 'IA desativada — <a onclick="abrirConfigIA()" style="color:var(--acc);font-weight:700;cursor:pointer;text-decoration:underline">configure sua chave</a> para gerar recomendações executivas semanais.';
+    }
+  }
+};
+
 async function callGeminiAPI(promptText) {
-  let apiKey = localStorage.getItem('teotonio_gemini_key');
+  const apiKey = (localStorage.getItem(GEMINI_KEY_LS) || '').trim();
   if (!apiKey) {
-    apiKey = prompt('O servidor intermediário da IA está offline. Para usar o Analista IA, insira sua chave de API do Google Gemini (Gemini API Key):');
-    if (!apiKey) throw new Error('Chave de API não fornecida.');
-    localStorage.setItem('teotonio_gemini_key', apiKey);
+    // Sem prompt() — quem chama decide se mostra UI ou ignora
+    const err = new Error('SEM_CHAVE_IA');
+    err.code = 'SEM_CHAVE_IA';
+    throw err;
   }
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey.trim();
+  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey;
 
   try {
     const response = await fetch(url, {
@@ -1589,14 +1685,17 @@ async function callGeminiAPI(promptText) {
         generationConfig: { temperature: 0.2 }
       })
     });
-    
+
     if (response.status === 400 || response.status === 401 || response.status === 403) {
-      localStorage.removeItem('teotonio_gemini_key');
-      throw new Error('Chave de API inválida. Recarregue a página e tente novamente.');
+      // Não remove automaticamente para o usuário não perder a chave por um erro pontual.
+      // Só sinaliza para o caller mostrar a UI de reconfiguração.
+      const err = new Error('CHAVE_INVALIDA');
+      err.code = 'CHAVE_INVALIDA';
+      throw err;
     }
-    
+
     if (!response.ok) throw new Error('HTTP Error: ' + response.status);
-    
+
     const data = await response.json();
     if (data.candidates && data.candidates.length > 0 && data.candidates[0].content.parts.length > 0) {
       let text = data.candidates[0].content.parts[0].text;
@@ -1605,6 +1704,7 @@ async function callGeminiAPI(promptText) {
       throw new Error('Formato de resposta inesperado.');
     }
   } catch (err) {
+    if (err.code === 'SEM_CHAVE_IA' || err.code === 'CHAVE_INVALIDA') throw err;
     throw new Error('Falha ao comunicar com a IA: ' + err.message);
   }
 }
@@ -2318,16 +2418,29 @@ async function carregarRecomendacaoIA(metrics, fa, totalPac, iniciados, gap, for
   if (!el) return;
   const txtEl = el.querySelector('.hero-ia-text');
   if (!txtEl) return;
+
+  // 1) Se não tem chave: NÃO chama a API, mostra CTA discreto
+  if (!temChaveGemini()) {
+    el.classList.remove('loading');
+    el.classList.add('disabled');
+    txtEl.innerHTML = 'IA desativada — <a onclick="abrirConfigIA()" style="color:var(--acc);font-weight:700;cursor:pointer;text-decoration:underline">configure sua chave</a> para gerar recomendações executivas semanais.';
+    return;
+  }
+
+  // 2) Cache 6h
   if (!force) {
     const cached = getIACached();
     if (cached) {
-      el.classList.remove('loading');
+      el.classList.remove('loading', 'disabled');
       txtEl.textContent = cached.text;
       return;
     }
   }
+
+  el.classList.remove('disabled');
   el.classList.add('loading');
   txtEl.textContent = 'Analisando indicadores executivos…';
+
   const prompt = `Você é um engenheiro de planejamento sênior. Com base nos indicadores abaixo da obra de duplicação da Av. Senador Teotônio Vilela, escreva UMA recomendação executiva curta, acionável, no imperativo, em português, com NO MÁXIMO 28 palavras. Não use markdown, não use aspas, sem preâmbulo.
 
 DADOS:
@@ -2340,6 +2453,7 @@ DADOS:
 - Frente em maior atenção: ${fa.atencao[0]?.frente || '—'}${fa.atencao[0]?.dias ? ' (sem RDO há '+fa.atencao[0].dias+' dias)' : ''}
 
 Responda APENAS com a recomendação.`;
+
   try {
     const text = await callGeminiAPI(prompt);
     const cleaned = (text || '').replace(/^["'\s]+|["'\s]+$/g, '').replace(/\n+/g, ' ').trim();
@@ -2347,10 +2461,19 @@ Responda APENAS com a recomendação.`;
       localStorage.setItem(IA_CACHE_KEY, JSON.stringify({ ts: Date.now(), text: cleaned }));
       el.classList.remove('loading');
       txtEl.textContent = cleaned;
-    } else { throw new Error('Resposta vazia'); }
+    } else {
+      throw new Error('Resposta vazia');
+    }
   } catch(e) {
     el.classList.remove('loading');
-    txtEl.textContent = 'IA indisponível — verifique conexão para gerar a recomendação da semana.';
+    if (e && e.code === 'CHAVE_INVALIDA') {
+      txtEl.innerHTML = 'Chave da IA inválida — <a onclick="abrirConfigIA()" style="color:var(--acc);font-weight:700;cursor:pointer;text-decoration:underline">reconfigurar</a>.';
+    } else if (e && e.code === 'SEM_CHAVE_IA') {
+      el.classList.add('disabled');
+      txtEl.innerHTML = 'IA desativada — <a onclick="abrirConfigIA()" style="color:var(--acc);font-weight:700;cursor:pointer;text-decoration:underline">configure sua chave</a>.';
+    } else {
+      txtEl.innerHTML = 'IA indisponível agora — <a onclick="refreshIA()" style="color:var(--acc);font-weight:700;cursor:pointer;text-decoration:underline">tentar de novo</a>.';
+    }
   }
 }
 
@@ -2698,6 +2821,7 @@ function renderExecutivo() {
             <span class="hero-ia-label">Recomendação IA</span>
             <span class="hero-ia-text">Analisando indicadores executivos…</span>
           </div>
+          <button class="hero-ia-refresh" onclick="abrirConfigIA()" title="Configurar chave da IA" style="margin-right:4px;">⚙</button>
           <button class="hero-ia-refresh" onclick="refreshIA()" title="Gerar nova recomendação">↻</button>
         </div>
         <div class="hero-stats">
