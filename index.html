@@ -2,7 +2,10 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1a1612">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Sistema Teotônio Vilela — Controle Integrado</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -989,6 +992,278 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 @media (max-width: 900px) {
   .cal-wrap { flex-direction: column; align-items: stretch; }
   .cal-stats { flex-direction: row; min-width: 0; justify-content: space-around; }
+}
+
+/* ====================================================================
+   MOBILE PASS — otimizações universais para celular/tablet
+   Breakpoints: 768 = tablet, 560 = mobile, 380 = mobile pequeno
+   ==================================================================== */
+
+/* ===== Universal: anti-zoom iOS + hit-targets ===== */
+@media (max-width: 768px) {
+  html { -webkit-text-size-adjust: 100%; }
+  /* Previne zoom automático em inputs no iOS (font precisa ser >= 16px) */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  input[type="number"], input[type="text"], input[type="date"], input[type="time"],
+  select, textarea, .field input, .field select, .field textarea {
+    min-height: 44px;
+  }
+  /* Botões >= 40px de altura */
+  .btn, button {
+    min-height: 40px;
+  }
+  .btn-sm { min-height: 36px; }
+  /* Cancela hover transforms que ficam estranhos em touch */
+  .kpi-card:hover, .exec-kpi:hover, .tech-card-3d:hover, .card:hover {
+    transform: none !important;
+  }
+}
+
+/* ===== Topbar mobile ===== */
+@media (max-width: 768px) {
+  .topbar { height: 56px; padding: 0 12px; gap: 8px; }
+  .topbar-title { font-size: 14px; line-height: 1.15; }
+  .topbar-sub { font-size: 11px; }
+  .topbar > div:last-child { gap: 4px; }
+  .btn-presentation { padding: 6px 10px; font-size: 11px; }
+}
+@media (max-width: 560px) {
+  .topbar-sub { display: none; }
+  .topbar-title { font-size: 13px; font-weight: 700; }
+  /* No mobile pequeno: só ícones nos botões do topo */
+  #topbarActions .btn { padding: 7px 10px; font-size: 12px; }
+}
+
+/* ===== Page padding ===== */
+@media (max-width: 768px) {
+  .page { padding: 12px 14px; gap: 14px; }
+}
+@media (max-width: 560px) {
+  .page { padding: 10px 12px; gap: 12px; }
+}
+
+/* ===== Filter bar mobile ===== */
+@media (max-width: 768px) {
+  .filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 10px 12px;
+    gap: 8px;
+  }
+  .filter-bar > span { font-size: 11px; }
+  .filter-bar select { width: 100%; padding: 10px 12px; min-height: 44px; }
+  .filter-clear { width: 100%; text-align: center; padding: 8px; background: var(--bg); border-radius: 6px; }
+}
+
+/* ===== Hero V2 mobile — stack tudo, tipografia reduzida ===== */
+@media (max-width: 768px) {
+  .exec-hero { padding: 20px 18px 16px; gap: 16px; }
+  .hero-value-row { flex-direction: column; align-items: flex-start; gap: 14px; }
+  .hero-value { font-size: 56px; line-height: 0.95; }
+  .hero-gap, .hero-deltas {
+    width: 100%;
+    padding-left: 0;
+    border-left: none;
+    border-top: 1px solid rgba(255,255,255,0.10);
+    padding-top: 12px;
+    margin-left: 0;
+    min-width: 0;
+  }
+  .hero-gap-num { font-size: 24px; }
+  .hero-spark { height: 50px; padding-top: 8px; }
+  .hero-stats { gap: 12px; padding-top: 14px; margin-top: 12px; }
+  .hero-stat-num { font-size: 20px; }
+  .hero-stat-lbl { font-size: 9px; }
+  .hero-ia { padding: 10px 12px; font-size: 12px; }
+  .hero-ia-text { font-size: 12px; }
+  .narrative-text { font-size: 13px; }
+}
+@media (max-width: 380px) {
+  .hero-value { font-size: 44px; }
+  .hero-gap-num { font-size: 22px; }
+  .exec-hero { padding: 16px 14px 14px; }
+}
+
+/* ===== KPIs secundários ===== */
+@media (max-width: 768px) {
+  .exec-kpi { padding: 12px 14px; }
+  .exec-kpi-val { font-size: 24px; }
+  .exec-kpi-sub { font-size: 10px; }
+}
+
+/* ===== KPI clássico ===== */
+@media (max-width: 768px) {
+  .kpi-card { padding: 12px 14px; }
+  .kpi-value { font-size: 22px; }
+  .kpi-label { font-size: 9px; }
+  .kpi-sub { font-size: 10px; }
+}
+
+/* ===== Card body mobile ===== */
+@media (max-width: 768px) {
+  .card-header { padding: 12px 14px 10px; gap: 8px; }
+  .card-title-lg { font-size: 13px; }
+  .card-title-sub { font-size: 11px; }
+  .card-body { padding: 12px 14px; }
+  .card-body.compact { padding: 10px 12px; }
+}
+
+/* ===== Tables — scroll horizontal contido ===== */
+@media (max-width: 768px) {
+  .card-body.flush { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.t {
+    font-size: 12px;
+    min-width: 520px;
+  }
+  table.t th, table.t td {
+    padding: 9px 10px;
+    white-space: nowrap;
+  }
+  table.t th { font-size: 9px; }
+  /* Indicador sutil de scroll horizontal */
+  .card-body.flush::-webkit-scrollbar { height: 4px; }
+  .card-body.flush::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+}
+
+/* ===== Sidebar — drawer mobile ===== */
+@media (max-width: 768px) {
+  .sidebar { width: 260px; }
+  .sidebar-logo { padding: 16px 18px 14px; }
+  .sidebar-logo h1 { font-size: 14px; }
+  .nav-item { padding: 12px 14px; font-size: 14px; min-height: 44px; }
+  .nav-icon { font-size: 16px; }
+}
+
+/* ===== Tech cards (Infra & Avanço Físico) ===== */
+@media (max-width: 768px) {
+  .tech-card-image { height: 130px; }
+  .tech-card-title { font-size: 16px; }
+  .tech-card-content { padding: 12px; gap: 10px; }
+  .tech-card-val { font-size: 22px; }
+}
+
+/* ===== Calendário 90d ===== */
+@media (max-width: 768px) {
+  .cal-card .card-body { padding: 12px 14px; }
+  .cal-wrap { gap: 14px; }
+  .cal-stats { gap: 16px; }
+  .cal-stat-num { font-size: 22px; }
+  .cal-heatmap { gap: 10px; min-width: 0; }
+  .cal-grid { gap: 2px; height: 84px; }
+  .cal-cell { min-width: 7px; border-radius: 1.5px; }
+  .cal-cell.lv0 { border-width: 0.5px; }
+  .cal-axis, .cal-legend { font-size: 9px; }
+}
+
+/* ===== Avenida 3D mobile ===== */
+@media (max-width: 768px) {
+  .avenue-card .card-body > .scene-3d { height: 220px; }
+  .scene-lane-label { font-size: 9px; padding: 3px 8px; }
+  .road-3d { width: 92%; height: 90px; }
+  .bar3d { width: 3px; margin-left: -1.5px; }
+  .scene-legend { bottom: 8px; right: 10px; gap: 8px; font-size: 8px; }
+  .avenue-header-stats { gap: 10px; }
+  .avenue-meta-num { font-size: 18px; }
+}
+@media (max-width: 560px) {
+  .avenue-card .card-body > .scene-3d { height: 180px; }
+  .scene-lane-label.cb, .scene-lane-label.bc { font-size: 8px; padding: 2px 6px; }
+}
+
+/* ===== Curva S + legenda ===== */
+@media (max-width: 768px) {
+  .curvas-legend { font-size: 10px; gap: 10px; padding-bottom: 6px; }
+  .exec-row-21 > .card .card-body > div[style*="height:240px"] { height: 200px !important; }
+}
+
+/* ===== Destaques / Atenção ===== */
+@media (max-width: 768px) {
+  .exec-list-item { padding: 8px 2px; gap: 10px; }
+  .exec-list-name { font-size: 12px; }
+  .exec-list-meta { font-size: 10px; }
+  .exec-list-val { font-size: 12px; }
+  .exec-list-section { font-size: 9px; padding: 10px 2px 4px; }
+}
+
+/* ===== Forms mobile (RDO, RDO Diário etc) ===== */
+@media (max-width: 768px) {
+  .form-grid { grid-template-columns: 1fr; gap: 12px; }
+  .field label { font-size: 10px; }
+  .field input, .field select, .field textarea {
+    padding: 12px 14px;
+    border-radius: 8px;
+  }
+  .btn-toggle-group { width: 100%; }
+  .btn-toggle { flex: 1; text-align: center; padding: 12px 8px; font-size: 13px; }
+  /* Botões grandes turno */
+  .btn-turno-grande { padding: 18px 12px; min-height: 110px; }
+  .btn-turno-icon { font-size: 36px; }
+  .btn-turno-titulo { font-size: 15px; }
+  /* Linha de serviço RDO */
+  .servico-row { padding: 12px; }
+  .servico-row .btn-remove { width: 40px; height: 40px; }
+  /* Presets quantidade */
+  .qty-presets { gap: 5px; }
+  .qty-preset { padding: 9px 12px; font-size: 13px; min-height: 40px; flex: 1; min-width: calc(33% - 5px); }
+  /* Botão add serviço */
+  .btn-add-servico { padding: 14px; font-size: 13px; min-height: 50px; }
+}
+
+/* ===== Toast mobile ===== */
+@media (max-width: 768px) {
+  .toast-wrap { top: 10px; right: 10px; left: 10px; }
+  .toast { max-width: 100%; font-size: 13px; padding: 11px 14px; }
+}
+
+/* ===== Modal-like elements ===== */
+@media (max-width: 768px) {
+  .card[style*="max-width: 400px"] { max-width: 100% !important; margin: 16px auto !important; }
+}
+
+/* ===== Empty states ===== */
+@media (max-width: 768px) {
+  .empty { padding: 36px 16px; }
+  .empty-icon { font-size: 32px; }
+  .empty-title { font-size: 14px; }
+  .empty-sub { font-size: 11px; }
+}
+
+/* ===== Gantt mobile (scroll horizontal) ===== */
+@media (max-width: 768px) {
+  .gantt-wrap { padding: 0 4px 4px; }
+  .gantt-label-cell { padding: 4px 8px; }
+  .gantt-label-nome { font-size: 11px; }
+  .gantt-label-datas { font-size: 9px; }
+  .gantt-frente-header { font-size: 10px; padding: 4px 10px; }
+  .gantt-bar { height: 20px; }
+}
+
+/* ===== Heatmap por estaca ===== */
+@media (max-width: 768px) {
+  .heatmap-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .hm-cell { min-height: 20px; }
+  .hm-row-label { font-size: 9px; padding: 0 6px 0 2px; }
+}
+
+/* ===== Ajustes para evitar overflow horizontal global ===== */
+@media (max-width: 768px) {
+  body { overflow-x: hidden; }
+  .main { overflow-x: hidden; }
+  .page { max-width: 100vw; overflow-x: hidden; }
+  .card { max-width: 100%; }
+  /* Garantir que grids responsivas sem media query funcionem */
+  div[style*="grid-template-columns: repeat(auto-fit"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ===== Tap feedback (substitui hover em touch) ===== */
+@media (hover: none) and (pointer: coarse) {
+  .kpi-card:active, .exec-kpi:active, .tech-card-3d:active, .frente-row:active, .nav-item:active {
+    opacity: 0.7; transform: scale(0.98);
+  }
 }
 </style>
 </head>
@@ -6261,6 +6536,28 @@ document.addEventListener('DOMContentLoaded', () => {
   outboxFlush();
   window.addEventListener('online', () => outboxFlush());
   setInterval(() => outboxFlush(), 30000);
+
+  // ===== MOBILE: teclado numérico em inputs de número =====
+  // Adiciona inputmode="decimal" em inputs numéricos para teclado correto no celular.
+  // Roda no init e sempre que o DOM muda (re-render de páginas).
+  function aplicarInputmode(root = document) {
+    root.querySelectorAll('input[type="number"]:not([inputmode])').forEach(el => {
+      el.setAttribute('inputmode', 'decimal');
+    });
+    // Inputs de quantidade/percentual mesmo se forem type=text
+    root.querySelectorAll('input[type="text"][data-numeric]:not([inputmode])').forEach(el => {
+      el.setAttribute('inputmode', 'decimal');
+    });
+  }
+  aplicarInputmode();
+  const mobMO = new MutationObserver(muts => {
+    for (const m of muts) {
+      if (m.addedNodes && m.addedNodes.length) {
+        m.addedNodes.forEach(n => { if (n.nodeType === 1) aplicarInputmode(n); });
+      }
+    }
+  });
+  mobMO.observe(document.body, { childList: true, subtree: true });
 });
 
 // Expor pro escopo global pra usar em onclick="..."
