@@ -1366,8 +1366,8 @@ function jsonp(url, params, retries = 2, retryDelay = 3000, onRetry = null) {
       const cb = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
       const timeout = setTimeout(() => {
         cleanup();
-        reject(new Error('Timeout (15s)'));
-      }, 15000);
+        reject(new Error('Timeout (30s)'));
+      }, 30000);
 
       function cleanup() {
         delete window[cb];
@@ -4475,7 +4475,7 @@ window.histSalvarEdicao = async function(idx) {
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳'; }
 
   try {
-    const result = await jsonp(CONFIG.appsScript, { action: 'updateRDO', payload: JSON.stringify(payload) });
+    const result = await jsonp(CONFIG.appsScript, { action: 'updateRDO', payload: JSON.stringify(payload) }, 0);
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
     toast('✓ Lançamento atualizado', 'success');
     histCancelarEdicao(idx);
@@ -5000,7 +5000,6 @@ async function salvarRDO() {
   const btnTxtOriginal = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '⏳ Salvando…';
-  const onRetryRDO = (n, total) => { btn.innerHTML = `⏳ Tentando novamente… (${n}/${total})`; };
 
   const batchPacotes = d.servicos
     .filter(s => s.pacoteId && num(s.quantidade) > 0)
@@ -5074,7 +5073,7 @@ async function salvarRDO() {
   }
 
   try {
-    const result = await jsonp(CONFIG.appsScript, reqParams, 2, 3000, onRetryRDO);
+    const result = await jsonp(CONFIG.appsScript, reqParams, 0, 0, null);
 
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
 
@@ -5630,7 +5629,6 @@ async function salvarDiarioV4() {
   const original = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '⏳ Salvando…';
-  const onRetryDiario = (n, total) => { btn.innerHTML = `⏳ Tentando novamente… (${n}/${total})`; };
   
   td.preenchido = true;
   saveDiarioV4(d);
@@ -5684,7 +5682,7 @@ async function salvarDiarioV4() {
   }
 
   try {
-    const result = await jsonp(CONFIG.appsScript, params, 2, 3000, onRetryDiario);
+    const result = await jsonp(CONFIG.appsScript, params, 0, 0, null);
     if (!result.ok) throw new Error(result.error || 'Erro');
     toast(`✓ Turno ${t.toUpperCase()} salvo`, 'success', 4000);
     setTimeout(() => carregarTudo(), 800);
