@@ -1,68 +1,76 @@
 // ============================================================
-// LIMPAR DUPLICADOS — RDO_Avanco
-// Cole este código no Apps Script do projeto e execute
-// a função "limparDuplicadosRDO".
-//
-// O que faz:
-//   1. Lê todas as linhas da aba RDO_Avanco
-//   2. Identifica duplicatas pela chave:
-//      Data + Turno + Pacote_ID + Quantidade + Apontador + Local_Estaca
-//   3. Mantém APENAS a primeira ocorrência de cada chave
-//   4. Remove as linhas repetidas (de baixo para cima, para não
-//      deslocar os índices)
-//   5. Exibe um resumo no log
-//
-// SEGURANÇA: faz uma cópia da aba antes de apagar qualquer linha.
+// ADICIONAR AO Apps Script do projeto
+// Contém:
+//   1. deleteRDO   — apaga 1 linha por ID (chamado pelo botão 🗑 do sistema)
+//   2. limparDuplicadosRDO — limpeza manual em lote (roda direto no Apps Script)
 // ============================================================
 
+// ------------------------------------------------------------
+// 1. HANDLER deleteRDO — chamado via JSONP pelo sistema
+//    Adicione este bloco dentro do seu doGet(e) / switch de actions:
+//
+//   case 'deleteRDO':
+//     return responder(deleteRDO(params.id));
+// ------------------------------------------------------------
+function deleteRDO(id) {
+  if (!id) return { ok: false, error: 'ID não informado' };
+
+  const NOME_ABA = 'RDO_Avanco';
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
+  const aba = ss.getSheetByName(NOME_ABA);
+  if (!aba) return { ok: false, error: 'Aba não encontrada' };
+
+  const dados     = aba.getDataRange().getValues();
+  const cabecalho = dados[0].map(h => String(h).trim().toLowerCase());
+  const iId       = cabecalho.indexOf('id');
+  if (iId === -1) return { ok: false, error: 'Coluna ID não encontrada' };
+
+  for (let i = 1; i < dados.length; i++) {
+    if (String(dados[i][iId]).trim() === String(id).trim()) {
+      aba.deleteRow(i + 1); // +1 porque planilha é base-1
+      return { ok: true };
+    }
+  }
+
+  return { ok: false, error: 'ID não encontrado: ' + id };
+}
+
+// ------------------------------------------------------------
+// 2. LIMPEZA EM LOTE — execute manualmente no Apps Script
+//    Identifica e remove duplicatas pela chave:
+//    Data + Turno + Pacote_ID + Quantidade + Apontador + Local_Estaca
+//    Cria backup automático antes de apagar.
+// ------------------------------------------------------------
 function limparDuplicadosRDO() {
   const NOME_ABA = 'RDO_Avanco';
 
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ss  = SpreadsheetApp.getActiveSpreadsheet();
   const aba = ss.getSheetByName(NOME_ABA);
   if (!aba) {
     Browser.msgBox('Aba "' + NOME_ABA + '" não encontrada.');
     return;
   }
 
-  // ── 1. Backup preventivo ──────────────────────────────────────
-  const nomeBackup = NOME_ABA + '_backup_' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmm');
+  // Backup preventivo
+  const nomeBackup = NOME_ABA + '_backup_' +
+    Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmm');
   aba.copyTo(ss).setName(nomeBackup);
   Logger.log('Backup criado: ' + nomeBackup);
 
-  // ── 2. Ler dados ─────────────────────────────────────────────
   const dados = aba.getDataRange().getValues();
-  if (dados.length <= 1) {
-    Logger.log('Nenhum dado para processar.');
-    return;
-  }
+  if (dados.length <= 1) { Logger.log('Sem dados.'); return; }
 
-  const cabecalho = dados[0].map(h => String(h).trim().toLowerCase());
+  const cab = dados[0].map(h => String(h).trim().toLowerCase());
+  const c = nome => {
+    const i = cab.indexOf(nome.toLowerCase());
+    return i !== -1 ? i : cab.findIndex(h => h.includes(nome.toLowerCase()));
+  };
 
-  function col(nome) {
-    const idx = cabecalho.indexOf(nome.toLowerCase());
-    if (idx === -1) {
-      // Tenta correspondência parcial
-      const parcial = cabecalho.findIndex(h => h.includes(nome.toLowerCase()));
-      return parcial;
-    }
-    return idx;
-  }
+  const iData = c('data'), iTurno = c('turno'), iPacoteId = c('pacote_id');
+  const iQtd  = c('quantidade'), iApontador = c('apontador'), iEstaca = c('local_estaca');
 
-  const iData       = col('data');
-  const iTurno      = col('turno');
-  const iPacoteId   = col('pacote_id');
-  const iQuantidade = col('quantidade');
-  const iApontador  = col('apontador');
-  const iEstaca     = col('local_estaca');
-
-  Logger.log('Colunas encontradas — Data:' + iData + ' Turno:' + iTurno +
-    ' Pacote_ID:' + iPacoteId + ' Quantidade:' + iQuantidade +
-    ' Apontador:' + iApontador + ' Local_Estaca:' + iEstaca);
-
-  // ── 3. Identificar linhas duplicadas ─────────────────────────
   const vistas = new Set();
-  const linhasParaApagar = []; // índices base-1 (linha real na planilha)
+  const apagar = [];
 
   for (let i = 1; i < dados.length; i++) {
     const r = dados[i];
@@ -70,45 +78,35 @@ function limparDuplicadosRDO() {
       String(r[iData]       || '').trim(),
       String(r[iTurno]      || '').trim().toLowerCase(),
       String(r[iPacoteId]   || '').trim().toLowerCase(),
-      String(r[iQuantidade] || '').trim(),
+      String(r[iQtd]        || '').trim(),
       String(r[iApontador]  || '').trim().toLowerCase(),
       String(r[iEstaca]     || '').trim().toLowerCase(),
     ].join('|');
 
     if (vistas.has(chave)) {
-      linhasParaApagar.push(i + 1); // +1 porque planilha é base-1
+      apagar.push(i + 1);
     } else {
       vistas.add(chave);
     }
   }
 
-  Logger.log('Total de linhas: ' + (dados.length - 1));
-  Logger.log('Duplicatas encontradas: ' + linhasParaApagar.length);
+  Logger.log('Total: ' + (dados.length - 1) + ' · Duplicatas: ' + apagar.length);
 
-  if (linhasParaApagar.length === 0) {
-    Browser.msgBox('Nenhuma duplicata encontrada. A planilha já está limpa.');
+  if (apagar.length === 0) {
+    Browser.msgBox('Nenhuma duplicata encontrada. Planilha já está limpa.');
     return;
   }
 
-  // ── 4. Confirmar antes de apagar ─────────────────────────────
-  const confirmar = Browser.msgBox(
+  const ok = Browser.msgBox(
     'Limpeza de duplicatas',
-    'Foram encontradas ' + linhasParaApagar.length + ' linhas duplicadas.\n' +
-    'Um backup foi criado na aba "' + nomeBackup + '".\n\n' +
-    'Deseja apagar as duplicatas agora?',
+    apagar.length + ' linhas duplicadas encontradas.\nBackup: "' + nomeBackup + '".\n\nApagar agora?',
     Browser.Buttons.YES_NO
   );
-  if (confirmar !== Browser.Buttons.YES) {
-    Logger.log('Operação cancelada pelo usuário.');
-    return;
+  if (ok !== Browser.Buttons.YES) return;
+
+  for (let i = apagar.length - 1; i >= 0; i--) {
+    aba.deleteRow(apagar[i]);
   }
 
-  // ── 5. Apagar de baixo para cima (mantém índices corretos) ───
-  for (let i = linhasParaApagar.length - 1; i >= 0; i--) {
-    aba.deleteRow(linhasParaApagar[i]);
-  }
-
-  const msg = '✓ ' + linhasParaApagar.length + ' linhas duplicadas removidas.\nBackup salvo em: ' + nomeBackup;
-  Logger.log(msg);
-  Browser.msgBox(msg);
+  Browser.msgBox('✓ ' + apagar.length + ' linhas removidas.\nBackup: ' + nomeBackup);
 }

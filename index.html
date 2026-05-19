@@ -4300,6 +4300,7 @@ function renderHistoricoServicos() {
           <td style="font-size:12px">${apontador}</td>
           <td style="text-align:center;white-space:nowrap">
             <button class="gantt-edit-btn" id="hedit-toggle-${idx}" onclick="histEditarServico(${idx})" title="Editar este lançamento">✏</button>
+            ${STATE.usuarioLogado ? `<button class="gantt-edit-btn" onclick="histDeletarServico(${idx})" title="Apagar este lançamento" style="color:var(--err,#e53e3e);margin-left:2px">🗑</button>` : ''}
           </td>
         </tr>
         <tr id="hist-edit-row-${idx}" style="display:none">
@@ -4388,7 +4389,10 @@ function renderHistoricoServicos() {
           <div class="card-title">Serviços lançados</div>
           <div class="card-title-sub">Cada linha = 1 pacote executado · alimenta avanço físico e medição</div>
         </div>
-        ${rdos.length > 0 ? `<button class="btn btn-outline btn-sm" onclick="exportarHistoricoCSV()">⬇ CSV</button>` : ''}
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          ${rdos.length > 0 ? `<button class="btn btn-outline btn-sm" onclick="exportarHistoricoCSV()">⬇ CSV</button>` : ''}
+          ${STATE.usuarioLogado && rdos.length > 0 ? `<button class="btn btn-sm" style="background:var(--err,#e53e3e);color:#fff;border:none;padding:5px 12px;border-radius:var(--r);cursor:pointer;font-size:12px;font-weight:600" onclick="apagarDuplicatasRDO()">🗑 Apagar duplicatas</button>` : ''}
+        </div>
       </div>
       <div class="card-body flush">
         ${bodyContent}
@@ -4484,6 +4488,78 @@ window.histSalvarEdicao = async function(idx) {
     if (btn) { btn.disabled = false; btn.innerHTML = 'Salvar'; }
     toast('Falha ao atualizar: ' + e.message, 'error', 6000);
   }
+};
+
+window.histDeletarServico = async function(idx) {
+  const rdos = [...STATE.rdoavanco].reverse();
+  const r = rdos[idx];
+  const id = getCSVField(r, 'ID');
+  if (!id) { toast('ID do lançamento não encontrado', 'error'); return; }
+
+  const pacote = getCSVField(r, 'Pacote_Nome') || getCSVField(r, 'Pacote_ID') || '';
+  const data   = fmtData(getCSVField(r, 'Data'));
+  if (!confirm(`Apagar este lançamento?\n\n${data} · ${pacote}\n\nEsta ação não pode ser desfeita.`)) return;
+
+  try {
+    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id }, 0);
+    if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+    toast('✓ Lançamento apagado', 'success');
+    setTimeout(() => carregarTudo(), 600);
+  } catch(e) {
+    toast('Falha ao apagar: ' + e.message, 'error', 6000);
+  }
+};
+
+window.apagarDuplicatasRDO = async function() {
+  const rdos = [...STATE.rdoavanco].reverse();
+
+  // Identifica duplicatas pela mesma chave usada no script .gs
+  const vistas = new Map();
+  const duplicatas = [];
+  rdos.forEach((r, idx) => {
+    const chave = [
+      String(getCSVField(r,'Data')        || '').trim(),
+      String(getCSVField(r,'Turno')       || '').trim().toLowerCase(),
+      String(getCSVField(r,'Pacote_ID')   || getCSVField(r,'Pacote_id') || '').trim().toLowerCase(),
+      String(getCSVField(r,'Quantidade')  || '').trim(),
+      String(getCSVField(r,'Apontador')   || '').trim().toLowerCase(),
+      String(getCSVField(r,'Local_Estaca')|| '').trim().toLowerCase(),
+    ].join('|');
+    if (vistas.has(chave)) {
+      duplicatas.push({ id: getCSVField(r,'ID'), chave });
+    } else {
+      vistas.set(chave, idx);
+    }
+  });
+
+  if (duplicatas.length === 0) {
+    toast('Nenhuma duplicata encontrada no histórico atual.', 'info');
+    return;
+  }
+
+  if (!confirm(`Foram encontradas ${duplicatas.length} linha${duplicatas.length>1?'s':''} duplicada${duplicatas.length>1?'s':''}.\n\nApagar agora? Esta ação não pode ser desfeita.`)) return;
+
+  const btn = document.querySelector('[onclick="apagarDuplicatasRDO()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Apagando…'; }
+
+  let ok = 0, erros = 0;
+  for (const dup of duplicatas) {
+    if (!dup.id) { erros++; continue; }
+    try {
+      const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id: dup.id }, 0);
+      if (!result.ok) throw new Error(result.error || 'erro');
+      ok++;
+    } catch(e) {
+      erros++;
+    }
+  }
+
+  if (btn) { btn.disabled = false; btn.innerHTML = '🗑 Apagar duplicatas'; }
+
+  const msg = `✓ ${ok} duplicata${ok>1?'s':''} removida${ok>1?'s':''}` +
+    (erros > 0 ? ` · ${erros} falha${erros>1?'s':''}` : '');
+  toast(msg, erros > 0 ? 'error' : 'success', 5000);
+  setTimeout(() => carregarTudo(), 800);
 };
 
 function renderHistoricoDiarios() {
