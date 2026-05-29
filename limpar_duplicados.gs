@@ -1,45 +1,13 @@
 // ============================================================
-// ADICIONAR AO Apps Script do projeto
-// Contém:
-//   1. deleteRDO   — apaga 1 linha por ID (chamado pelo botão 🗑 do sistema)
-//   2. limparDuplicadosRDO — limpeza manual em lote (roda direto no Apps Script)
-// ============================================================
-
-// ------------------------------------------------------------
-// 1. HANDLER deleteRDO — chamado via JSONP pelo sistema
-//    Adicione este bloco dentro do seu doGet(e) / switch de actions:
+// FERRAMENTA MANUAL — execute direto no editor do Apps Script.
 //
-//   case 'deleteRDO':
-//     return responder(deleteRDO(params.id));
-// ------------------------------------------------------------
-function deleteRDO(id) {
-  if (!id) return { ok: false, error: 'ID não informado' };
-
-  const NOME_ABA = 'RDO_Avanco';
-  const ss  = SpreadsheetApp.getActiveSpreadsheet();
-  const aba = ss.getSheetByName(NOME_ABA);
-  if (!aba) return { ok: false, error: 'Aba não encontrada' };
-
-  const dados     = aba.getDataRange().getValues();
-  const cabecalho = dados[0].map(h => String(h).trim().toLowerCase());
-  const iId       = cabecalho.indexOf('id');
-  if (iId === -1) return { ok: false, error: 'Coluna ID não encontrada' };
-
-  for (let i = 1; i < dados.length; i++) {
-    if (String(dados[i][iId]).trim() === String(id).trim()) {
-      aba.deleteRow(i + 1); // +1 porque planilha é base-1
-      return { ok: true };
-    }
-  }
-
-  return { ok: false, error: 'ID não encontrado: ' + id };
-}
-
-// ------------------------------------------------------------
-// 2. LIMPEZA EM LOTE — execute manualmente no Apps Script
-//    Identifica e remove duplicatas pela chave:
-//    Data + Turno + Pacote_ID + Quantidade + Apontador + Local_Estaca
-//    Cria backup automático antes de apagar.
+// O roteamento (doGet/doPost), o deleteRDO e o addBatchRDO ficam no
+// arquivo Code.gs. Aqui fica só a limpeza em lote, que você roda à mão
+// quando quiser uma faxina geral com backup automático.
+//
+// LIMPEZA EM LOTE — identifica e remove duplicatas pela chave:
+//   Data + Turno + Pacote_ID + Quantidade + Apontador + Local_Estaca
+//   Cria backup automático antes de apagar.
 // ------------------------------------------------------------
 function limparDuplicadosRDO() {
   const NOME_ABA = 'RDO_Avanco';

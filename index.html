@@ -4500,15 +4500,42 @@ window.histDeletarServico = async function(idx) {
   const data   = fmtData(getCSVField(r, 'Data'));
   if (!confirm(`Apagar este lançamento?\n\n${data} · ${pacote}\n\nEsta ação não pode ser desfeita.`)) return;
 
+  const antes = STATE.rdoavanco.length;
   try {
     const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id }, 0);
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+
+    // Remoção otimista: tira da tela na hora, sem esperar o CSV publicado
+    // (que é cacheado pelo Google e demora minutos para atualizar).
+    STATE.rdoavanco = STATE.rdoavanco.filter(x => String(getCSVField(x,'ID')).trim() !== String(id).trim());
+    render();
     toast('✓ Lançamento apagado', 'success');
-    setTimeout(() => carregarTudo(), 600);
+
+    // Reconcilia com o servidor e detecta backend que insere em vez de apagar.
+    await verificarBackendNaoCriou(antes, 1, 'apagar');
   } catch(e) {
     toast('Falha ao apagar: ' + e.message, 'error', 6000);
   }
 };
+
+// Recarrega do servidor e confere se o nº de serviços DIMINUIU como esperado.
+// Se aumentou, o handler deleteRDO do Apps Script está inserindo linhas em vez
+// de apagar (case 'deleteRDO' ausente no doGet → cai no default que grava).
+async function verificarBackendNaoCriou(antes, esperadoRemovido, contexto) {
+  await new Promise(r => setTimeout(r, 4000)); // dá tempo do CSV publicado atualizar
+  await carregarTudo();
+  const depois = STATE.rdoavanco.length;
+  if (depois > antes) {
+    toast(
+      '⚠️ ATENÇÃO: o servidor CRIOU ' + (depois - antes) + ' linha(s) em vez de apagar.\n' +
+      'O Apps Script está sem o tratamento de "deleteRDO" no doGet. ' +
+      'Cole o arquivo Code.gs atualizado e republique o app.',
+      'error', 0
+    );
+    return false;
+  }
+  return true;
+}
 
 window.apagarDuplicatasRDO = async function() {
   const rdos = [...STATE.rdoavanco].reverse();
@@ -4537,29 +4564,56 @@ window.apagarDuplicatasRDO = async function() {
     return;
   }
 
-  if (!confirm(`Foram encontradas ${duplicatas.length} linha${duplicatas.length>1?'s':''} duplicada${duplicatas.length>1?'s':''}.\n\nApagar agora? Esta ação não pode ser desfeita.`)) return;
+  // Separa duplicatas que dá para apagar (com ID) das antigas sem ID.
+  const comId  = duplicatas.filter(d => d.id);
+  const semId  = duplicatas.length - comId.length;
+
+  if (comId.length === 0) {
+    toast(`Encontrei ${duplicatas.length} duplicata(s), mas nenhuma tem ID — são lançamentos antigos que precisam ser apagados manualmente na planilha.`, 'error', 8000);
+    return;
+  }
+
+  const avisoSemId = semId > 0
+    ? `\n\n(${semId} duplicata${semId>1?'s':''} antiga${semId>1?'s':''} sem ID não pode ser apagada por aqui.)`
+    : '';
+  if (!confirm(`Foram encontradas ${comId.length} duplicata${comId.length>1?'s':''} que posso apagar.${avisoSemId}\n\nApagar agora? Esta ação não pode ser desfeita.`)) return;
 
   const btn = document.querySelector('[onclick="apagarDuplicatasRDO()"]');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Apagando…'; }
 
+  const antes = STATE.rdoavanco.length;
   let ok = 0, erros = 0;
-  for (const dup of duplicatas) {
-    if (!dup.id) { erros++; continue; }
+  const idsApagados = [];
+  const ultimosErros = [];
+  for (const dup of comId) {
     try {
       const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id: dup.id }, 0);
       if (!result.ok) throw new Error(result.error || 'erro');
       ok++;
+      idsApagados.push(String(dup.id).trim());
     } catch(e) {
       erros++;
+      if (ultimosErros.length < 3) ultimosErros.push(e.message);
     }
+  }
+
+  // Remoção otimista na tela (o CSV publicado é cacheado e demora a refletir).
+  if (idsApagados.length) {
+    const set = new Set(idsApagados);
+    STATE.rdoavanco = STATE.rdoavanco.filter(x => !set.has(String(getCSVField(x,'ID')).trim()));
+    render();
   }
 
   if (btn) { btn.disabled = false; btn.innerHTML = '🗑 Apagar duplicatas'; }
 
-  const msg = `✓ ${ok} duplicata${ok>1?'s':''} removida${ok>1?'s':''}` +
-    (erros > 0 ? ` · ${erros} falha${erros>1?'s':''}` : '');
-  toast(msg, erros > 0 ? 'error' : 'success', 5000);
-  setTimeout(() => carregarTudo(), 800);
+  let msg = `✓ ${ok} duplicata${ok!==1?'s':''} removida${ok!==1?'s':''}`;
+  if (erros > 0) msg += ` · ${erros} falha${erros>1?'s':''}` + (ultimosErros.length ? ` (${ultimosErros[0]})` : '');
+  if (semId > 0) msg += ` · ${semId} sem ID ignorada${semId>1?'s':''}`;
+  toast(msg, erros > 0 ? 'error' : 'success', 6000);
+
+  // Reconcilia com o servidor e detecta backend que insere em vez de apagar.
+  if (ok > 0) await verificarBackendNaoCriou(antes, ok, 'duplicatas');
+  else setTimeout(() => carregarTudo(), 800);
 };
 
 function renderHistoricoDiarios() {
