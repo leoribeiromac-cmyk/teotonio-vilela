@@ -5254,14 +5254,9 @@ async function salvarRDO() {
   
   const servicosValidos = d.servicos.filter(s => s.pacoteId && num(s.quantidade) > 0);
   const outrosValidos = (d.outrosServicos || []).filter(o => o.descricao && o.descricao.trim());
-  const totalItens = servicosValidos.length + outrosValidos.length;
-  const outrosStr = outrosValidos.length ? `\n+ ${outrosValidos.length} outro${outrosValidos.length>1?'s':''} serviço${outrosValidos.length>1?'s':''}` : '';
-  if (!confirm(`Confirmar envio de ${servicosValidos.length} serviço${servicosValidos.length !== 1 ? 's' : ''}${outrosStr}?\nData: ${d.data}  ·  Turno: ${d.turno}`)) return;
 
   const btn = document.getElementById('btnSalvarRDO');
   const btnTxtOriginal = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Salvando…';
 
   const batchPacotes = d.servicos
     .filter(s => s.pacoteId && num(s.quantidade) > 0)
@@ -5310,7 +5305,50 @@ async function salvarRDO() {
     apontador: d.apontador
   }));
 
-  const batch = [...batchPacotes, ...batchOutros];
+  let batch = [...batchPacotes, ...batchOutros];
+
+  // ANTI-DUPLICAÇÃO: não reenviar serviços idênticos que já existem no mesmo dia/turno.
+  // Resolve o caso de re-salvar um rascunho "preso" num dia que já foi lançado.
+  const normData = (v) => { const dt = parseISODate(v); return dt ? getLocalISODate(dt) : String(v||'').trim(); };
+  const chaveServico = (o) => [
+    normData(o.data),
+    String(o.turno||'').trim().toLowerCase(),
+    String(o.pacote_id||'').trim().toLowerCase(),
+    String(o.pacote_nome||'').trim().toLowerCase(),
+    String(num(o.quantidade)),
+    String(o.local_estaca||'').trim().toLowerCase()
+  ].join('|');
+  const jaLancados = new Set((STATE.rdoavanco || []).map(r => [
+    normData(getCSVField(r,'Data')),
+    String(getCSVField(r,'Turno')||'').trim().toLowerCase(),
+    String(getCSVField(r,'Pacote_ID') || getCSVField(r,'Pacote_id') || '').trim().toLowerCase(),
+    String(getCSVField(r,'Pacote_Nome') || getCSVField(r,'Pacote') || '').trim().toLowerCase(),
+    String(num(getCSVField(r,'Quantidade'))),
+    String(getCSVField(r,'Local_Estaca')||'').trim().toLowerCase()
+  ].join('|')));
+
+  const batchNovos = batch.filter(o => !jaLancados.has(chaveServico(o)));
+  const repetidos = batch.length - batchNovos.length;
+
+  if (repetidos > 0 && batchNovos.length === 0) {
+    if (confirm(`Todos os ${repetidos} serviço${repetidos>1?'s':''} deste rascunho JÁ estão lançados em ${d.data} (${d.turno}).\n\nNão há nada novo para enviar — é por isso que eles ficam reaparecendo.\n\nLimpar este rascunho agora para parar de reaparecer?`)) {
+      limparFormularioRDO();
+      transitionTo(render);
+    }
+    return;
+  }
+
+  const enviar = repetidos > 0 ? batchNovos : batch;
+  let msgConfirm = `Confirmar envio de ${enviar.length} serviço${enviar.length!==1?'s':''}?\nData: ${d.data}  ·  Turno: ${d.turno}`;
+  if (repetidos > 0) msgConfirm += `\n\n⚠️ ${repetidos} já estava${repetidos>1?'m':''} lançado${repetidos>1?'s':''} neste dia e NÃO ${repetidos>1?'serão':'será'} reenviado${repetidos>1?'s':''} (para não duplicar).`;
+  if (!confirm(msgConfirm)) return;
+
+  batch = enviar;
+  const totalItens = batch.length;
+
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Salvando…';
+
   const clientId = 'b_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
   const reqParams = { action: 'addBatchRDO', batch: JSON.stringify(batch), clientId: clientId };
   const descricaoFila = `${totalItens} serviço${totalItens>1?'s':''} · ${d.turno} · ${d.data}`;
