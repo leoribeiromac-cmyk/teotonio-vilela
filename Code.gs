@@ -173,7 +173,7 @@ function gerarId(data, k) {
 // ------------------------------------------------------------
 function limparDuplicadosServidor() {
   var lock = LockService.getScriptLock();
-  lock.waitLock(60000);
+  lock.waitLock(120000);
   try {
     var ss  = SpreadsheetApp.getActiveSpreadsheet();
     var aba = ss.getSheetByName(NOME_ABA);
@@ -190,13 +190,16 @@ function limparDuplicadosServidor() {
     var iApont  = idxColuna(cab, 'apontador');
     var iEstaca = idxColuna(cab, 'local_estaca');
 
-    // Backup preventivo antes de apagar qualquer coisa.
+    // Backup preventivo antes de mexer em qualquer coisa.
     var nomeBackup = NOME_ABA + '_backup_' +
       Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
     aba.copyTo(ss).setName(nomeBackup);
 
+    // Monta a lista de linhas a MANTER (primeira ocorrência de cada chave).
+    // Em vez de apagar uma a uma (lento, estoura tempo com milhares de linhas),
+    // limpamos tudo e regravamos só o que fica — roda em segundos.
     var vistas = {};
-    var apagar = []; // índices de linha (base-1) a remover
+    var manter = [dados[0]]; // mantém o cabeçalho
     for (var i = 1; i < dados.length; i++) {
       var r = dados[i];
       var chave = [
@@ -207,16 +210,68 @@ function limparDuplicadosServidor() {
         String(iApont  !== -1 ? r[iApont]  : '').trim().toLowerCase(),
         String(iEstaca !== -1 ? r[iEstaca] : '').trim().toLowerCase()
       ].join('|');
-      if (vistas[chave]) apagar.push(i + 1);
-      else vistas[chave] = true;
+      if (!vistas[chave]) { vistas[chave] = true; manter.push(r); }
     }
 
-    // Apaga de baixo para cima para os índices não deslocarem.
-    for (var j = apagar.length - 1; j >= 0; j--) {
-      aba.deleteRow(apagar[j]);
+    var removidas = dados.length - manter.length;
+    if (removidas > 0) {
+      // Apaga todo o conteúdo (menos o cabeçalho) e regrava o que fica de uma vez.
+      var nLinhas = aba.getLastRow();
+      var nCols = aba.getLastColumn();
+      if (nLinhas > 1) aba.getRange(2, 1, nLinhas - 1, nCols).clearContent();
+      if (manter.length > 1) {
+        aba.getRange(2, 1, manter.length - 1, manter[0].length).setValues(manter.slice(1));
+      }
     }
 
-    return { ok: true, removidas: apagar.length, total: dados.length - 1, backup: nomeBackup };
+    return { ok: true, removidas: removidas, total: dados.length - 1, restantes: manter.length - 1, backup: nomeBackup };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message ? err.message : err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ------------------------------------------------------------
+// LIMPEZA POR FAIXA DE ID — apaga todas as linhas cujo ID COMEÇA com
+// um prefixo (ex: '20260530' = tudo gerado em 30/05). Útil quando os
+// reenrios criaram lixo num dia específico que você quer zerar.
+// Faz backup antes. Chamada: ?action=apagarPorPrefixoId&prefixo=20260530
+// ------------------------------------------------------------
+function apagarPorPrefixoId(prefixo) {
+  if (!prefixo) return { ok: false, error: 'prefixo não informado' };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(120000);
+  try {
+    var ss  = SpreadsheetApp.getActiveSpreadsheet();
+    var aba = ss.getSheetByName(NOME_ABA);
+    if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA + '" não encontrada' };
+
+    var dados = aba.getDataRange().getValues();
+    if (dados.length <= 1) return { ok: true, removidas: 0, total: 0 };
+
+    var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+    var iId = idxColuna(cab, 'id');
+    if (iId === -1) return { ok: false, error: 'Coluna ID não encontrada' };
+
+    var nomeBackup = NOME_ABA + '_backup_' +
+      Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+    aba.copyTo(ss).setName(nomeBackup);
+
+    var p = String(prefixo).trim();
+    var manter = [dados[0]];
+    for (var i = 1; i < dados.length; i++) {
+      if (String(dados[i][iId]).trim().indexOf(p) !== 0) manter.push(dados[i]);
+    }
+
+    var removidas = dados.length - manter.length;
+    if (removidas > 0) {
+      var nLinhas = aba.getLastRow(), nCols = aba.getLastColumn();
+      if (nLinhas > 1) aba.getRange(2, 1, nLinhas - 1, nCols).clearContent();
+      if (manter.length > 1) aba.getRange(2, 1, manter.length - 1, manter[0].length).setValues(manter.slice(1));
+    }
+
+    return { ok: true, removidas: removidas, total: dados.length - 1, restantes: manter.length - 1, backup: nomeBackup };
   } catch (err) {
     return { ok: false, error: String(err && err.message ? err.message : err) };
   } finally {
