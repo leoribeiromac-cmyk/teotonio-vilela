@@ -1355,7 +1355,11 @@ function parseCSV(text) {
 }
 
 async function fetchCSV(url) {
-  const res = await fetch(url + '&t=' + Date.now());
+  // cache: 'no-store' + querystring únicos furam tanto o cache do navegador
+  // quanto reduzem chance de pegar a cópia velha do CSV publicado do Google,
+  // que causava serviços recém-lançados "aparecerem e sumirem" no refresh.
+  const buster = '&t=' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+  const res = await fetch(url + buster, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
   return parseCSV(await res.text());
 }
@@ -1419,8 +1423,10 @@ const OUTBOX_KEY = 'teotonio_outbox_v1';
 let _flushEmAndamento = false;
 
 function ehErroDeRede(e) {
+  // Classifica pela MENSAGEM do erro, não por navigator.onLine — essa
+  // propriedade dá falso "offline" e fazia erros reais virarem "sem internet".
   const m = String((e && e.message) || e || '');
-  return !navigator.onLine || /rede|offline|Timeout|Failed to fetch|NetworkError/i.test(m);
+  return /rede|offline|Timeout|Falha de rede|Apps Script offline|Failed to fetch|NetworkError/i.test(m);
 }
 
 function outboxLer() {
@@ -1453,12 +1459,11 @@ async function outboxFlush(manual = false) {
   if (_flushEmAndamento) return;
   const itens = outboxLer();
   if (itens.length === 0) return;
-  if (!navigator.onLine) {
-    if (manual) toast('Ainda sem internet. Vou reenviar sozinho quando o sinal voltar.', 'info', 4000);
-    return;
-  }
+  // NÃO bloqueamos por navigator.onLine (dá falso "offline" e fazia o botão
+  // "tentar agora" não responder). Tentamos enviar de verdade sempre.
   _flushEmAndamento = true;
-  let enviados = 0;
+  if (manual) toast('Enviando ' + itens.length + ' RDO' + (itens.length>1?'s':'') + ' guardado' + (itens.length>1?'s':'') + '…', 'info', 2500);
+  let enviados = 0, falhouRede = false;
   try {
     for (const item of itens) {
       try {
@@ -1467,7 +1472,7 @@ async function outboxFlush(manual = false) {
         outboxRemover(item.id);
         enviados++;
       } catch(e) {
-        if (ehErroDeRede(e)) break; // segue offline — tenta tudo de novo depois
+        if (ehErroDeRede(e)) { falhouRede = true; break; } // segue offline — tenta tudo de novo depois
         // Erro do servidor: reenviar não vai resolver. Remove e avisa.
         outboxRemover(item.id);
         toast('Um RDO guardado não pôde ser enviado (' + (item.descricao || '') + '): ' + e.message, 'error', 0);
@@ -1478,7 +1483,9 @@ async function outboxFlush(manual = false) {
   }
   if (enviados > 0) {
     toast(`✓ ${enviados} RDO${enviados>1?'s':''} guardado${enviados>1?'s':''} enviado${enviados>1?'s':''} agora`, 'success', 4500);
-    carregarTudo();
+    setTimeout(() => carregarTudo(), 1500);
+  } else if (manual && falhouRede) {
+    toast('Ainda sem conexão com o servidor. Vou tentar sozinho de novo em instantes.', 'info', 4000);
   }
   atualizarIndicadorOutbox();
 }
@@ -5193,15 +5200,9 @@ async function salvarRDO() {
     };
   }
 
-  // Sem internet: guarda na fila na hora, sem fazer o usuário esperar
-  if (!navigator.onLine) {
-    outboxAdicionar({ kind: 'rdo', params: reqParams, descricao: descricaoFila });
-    toast('Sem internet — RDO guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
-    limparFormularioRDO();
-    transitionTo(render);
-    return;
-  }
-
+  // NÃO confiamos no navigator.onLine (dá "offline" falso mesmo com internet).
+  // Tentamos enviar de verdade: se estiver mesmo sem rede, o JSONP falha em
+  // milissegundos e caímos no catch, que guarda na fila. Sem falso "sem internet".
   try {
     const result = await jsonp(CONFIG.appsScript, reqParams, 0, 0, null);
 
@@ -5210,7 +5211,7 @@ async function salvarRDO() {
     toast(`✓ ${totalItens} item${totalItens>1?'s':''} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
 
     limparFormularioRDO();
-    setTimeout(() => carregarTudo(), 800);
+    setTimeout(() => carregarTudo(), 1500);
 
     HISTORICO_TAB = 'servicos';
     setTimeout(() => navigate('historico'), 600);
@@ -5802,20 +5803,13 @@ async function salvarDiarioV4() {
   
   const descricaoFila = `RDO Diário · turno ${t} · ${d.data}`;
 
-  // Sem internet: guarda na fila na hora
-  if (!navigator.onLine) {
-    outboxAdicionar({ kind: 'diario', params: params, descricao: descricaoFila });
-    toast('Sem internet — turno guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
-    btn.disabled = false;
-    btn.innerHTML = original;
-    return;
-  }
-
+  // NÃO confiamos no navigator.onLine: tentamos enviar de verdade e só caímos
+  // na fila se a rede realmente falhar (no catch). Evita falso "sem internet".
   try {
     const result = await jsonp(CONFIG.appsScript, params, 0, 0, null);
     if (!result.ok) throw new Error(result.error || 'Erro');
     toast(`✓ Turno ${t.toUpperCase()} salvo`, 'success', 4000);
-    setTimeout(() => carregarTudo(), 800);
+    setTimeout(() => carregarTudo(), 1500);
     btn.disabled = false;
     btn.innerHTML = original;
   } catch(e) {
