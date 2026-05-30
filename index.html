@@ -780,6 +780,15 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   text-transform: uppercase; color: rgba(255,255,255,0.5);
   margin-top: 6px; line-height: 1.4;
 }
+.hero-ritmo-ctrl { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 16px; }
+.hero-ritmo-lbl { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-right: 2px; }
+.hero-ritmo-btn { cursor: pointer; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: rgba(255,255,255,0.85); font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 6px; transition: all .15s; }
+.hero-ritmo-btn:hover { border-color: rgba(255,255,255,0.5); }
+.hero-ritmo-btn.on { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.85); color: #fff; }
+.hero-stat-prazo { font-size: 10px; font-weight: 700; letter-spacing: 0.04em; margin-top: 3px; }
+.hero-stat-prazo.over { color: #ff9b8a; }
+.hero-stat-prazo.under { color: #7fd99b; }
+.hero-stat-prazo.on { color: rgba(255,255,255,0.7); }
 
 /* ===== Exec secondary KPIs ===== */
 .exec-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
@@ -847,6 +856,10 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   color: var(--text); text-transform: none;
 }
 .card-title-lg + .card-title-sub { margin-top: 3px; }
+.curva-horizonte { display: flex; gap: 4px; flex-wrap: wrap; }
+.curva-hz-btn { cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 6px; transition: all .15s; }
+.curva-hz-btn:hover { border-color: var(--muted-2); }
+.curva-hz-btn.on { background: var(--acc); border-color: var(--acc); color: #fff; }
 
 .curvas-legend {
   display: flex; gap: 18px; flex-wrap: wrap; align-items: center;
@@ -1739,7 +1752,9 @@ const STATE = {
   loaded: false, lastSync: null,
   currentPage: 'executivo',
   filtros: { mes: '', frente: '' },
-  draft: null, 
+  execRitmo: { janela: 14, diasUteis: false },
+  curvaHorizonte: 'obra',
+  draft: null,
   usuarioLogado: localStorage.getItem('teotonio_user') || null
 };
 
@@ -1795,6 +1810,27 @@ window.limparFiltros = function() {
   transitionTo(() => {
     const page = document.getElementById('page');
     page.innerHTML = renderExecutivo();
+  });
+};
+
+window.setExecRitmoJanela = function(n) {
+  STATE.execRitmo.janela = n;
+  transitionTo(() => {
+    document.getElementById('page').innerHTML = renderExecutivo();
+  });
+};
+
+window.toggleExecDiasUteis = function() {
+  STATE.execRitmo.diasUteis = !STATE.execRitmo.diasUteis;
+  transitionTo(() => {
+    document.getElementById('page').innerHTML = renderExecutivo();
+  });
+};
+
+window.setCurvaHorizonte = function(h) {
+  STATE.curvaHorizonte = h;
+  transitionTo(() => {
+    document.getElementById('page').innerHTML = renderExecutivo();
   });
 };
 
@@ -2278,7 +2314,22 @@ function pctAteDia(cum, sortedDays, dStr) {
   return v;
 }
 
-function calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
+function contarDiasUteis(fromDate, toDate) {
+  // Conta dias de trabalho (exclui domingos) no intervalo (fromDate, toDate]
+  let c = 0;
+  const d = new Date(fromDate.getTime());
+  while (d < toDate) {
+    d.setDate(d.getDate() + 1);
+    if (d.getDay() !== 0) c++;
+  }
+  return c;
+}
+
+function calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados, opts) {
+  opts = opts || {};
+  const janela = (opts.janela != null ? opts.janela : (STATE.execRitmo ? STATE.execRitmo.janela : 14)) || 14;
+  const diasUteis = opts.diasUteis != null ? opts.diasUteis : (STATE.execRitmo ? !!STATE.execRitmo.diasUteis : false);
+
   const { cum, sortedDays, total } = calcCumulativoDia(rdosAtivos, pacotesAtivos, totalDiasEstimados);
   const today = new Date(); today.setHours(0,0,0,0);
   const todayStr = ymd(today);
@@ -2292,10 +2343,22 @@ function calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
   const currentToday = pctAteDia(cum, sortedDays, todayStr);
   const delta7d  = currentToday - pct7d;
   const delta30d = currentToday - pct30d;
-  const pct14d = pctAteDia(cum, sortedDays, ymd(new Date(today.getTime() - 14*86400000)));
-  const velocity = (currentToday - pct14d) / 14;
+
+  // Velocidade = avanço na janela escolhida / nº de dias-base (corridos ou úteis)
+  const dInicioJanela = new Date(today.getTime() - janela*86400000);
+  const pctJanela = pctAteDia(cum, sortedDays, ymd(dInicioJanela));
+  const diasBase = diasUteis ? Math.max(1, contarDiasUteis(dInicioJanela, today)) : janela;
+  const velocity = (currentToday - pctJanela) / diasBase;
   const remaining = Math.max(0, 1 - total);
   const daysToComplete = velocity > 0 ? Math.ceil(remaining / velocity) : null;
+
+  // Data prevista de término + comparação com o prazo contratual (PROJETO_FIM)
+  let dataPrevista = null, diasVsPrazo = null;
+  if (daysToComplete !== null) {
+    dataPrevista = diasUteis ? addWorkingDays(today, daysToComplete) : new Date(today.getTime() + daysToComplete*86400000);
+    diasVsPrazo = Math.round((dataPrevista - PROJETO_FIM) / 86400000);
+  }
+
   let rdos7d = 0, rdos30d = 0;
   rdosAtivos.forEach(r => {
     const d = parseISODate(getCSVField(r, 'Data'));
@@ -2304,7 +2367,7 @@ function calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
     if (diff <= 7 && diff >= 0) rdos7d++;
     if (diff <= 30 && diff >= 0) rdos30d++;
   });
-  return { sparkPts, cumulative: cum, sortedDays, current: total, delta7d, delta30d, velocity, daysToComplete, rdos7d, rdos30d };
+  return { sparkPts, cumulative: cum, sortedDays, current: total, delta7d, delta30d, velocity, daysToComplete, dataPrevista, diasVsPrazo, janela, diasUteis, rdos7d, rdos30d };
 }
 
 function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
@@ -2370,11 +2433,15 @@ function gerarNarrativaSemana(metrics, fa, totalPac, iniciados) {
     if (a.dias === null) parts.push(`<span class="nudge">Atenção:</span> <strong>${a.frente}</strong> ainda sem lançamentos.`);
     else parts.push(`<span class="nudge">Atenção:</span> <strong>${a.frente}</strong> sem RDO há <strong>${a.dias} dias</strong>.`);
   }
-  if (metrics.daysToComplete !== null && metrics.daysToComplete > 0 && metrics.velocity > 0) {
-    const dataPrev = new Date();
-    dataPrev.setDate(dataPrev.getDate() + metrics.daysToComplete);
-    const fmtDP = dataPrev.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' });
-    parts.push(`Ritmo atual projeta término por volta de <strong>${fmtDP}</strong>.`);
+  if (metrics.dataPrevista && metrics.velocity > 0) {
+    const fmtDP = fmtData(metrics.dataPrevista);
+    let frase = `Ritmo atual (${metrics.janela}d${metrics.diasUteis ? ', dias úteis' : ''}) projeta término em <strong>${fmtDP}</strong>`;
+    if (metrics.diasVsPrazo != null) {
+      if (metrics.diasVsPrazo > 0) frase += ` — <span class="nudge">${metrics.diasVsPrazo} dia${metrics.diasVsPrazo>1?'s':''} além do prazo</span>`;
+      else if (metrics.diasVsPrazo < 0) frase += ` — <strong class="pos">${Math.abs(metrics.diasVsPrazo)} dia${Math.abs(metrics.diasVsPrazo)>1?'s':''} de folga</strong>`;
+      else frase += ` — <strong>no limite do prazo</strong>`;
+    }
+    parts.push(frase + '.');
   }
   return parts.join(' ');
 }
@@ -2845,14 +2912,20 @@ function renderExecutivo() {
           <button class="hero-ia-refresh" onclick="abrirConfigIA()" title="Configurar chave da IA" style="margin-right:4px;">⚙</button>
           <button class="hero-ia-refresh" onclick="refreshIA()" title="Gerar nova recomendação">↻</button>
         </div>
+        <div class="hero-ritmo-ctrl">
+          <span class="hero-ritmo-lbl">Base do ritmo</span>
+          ${[7,14,30].map(n => `<button type="button" class="hero-ritmo-btn${STATE.execRitmo.janela===n?' on':''}" onclick="setExecRitmoJanela(${n})">${n}d</button>`).join('')}
+          <button type="button" class="hero-ritmo-btn${STATE.execRitmo.diasUteis?' on':''}" onclick="toggleExecDiasUteis()" title="Considerar apenas dias úteis (exclui domingos)">${STATE.execRitmo.diasUteis?'☑':'☐'} dias úteis</button>
+        </div>
         <div class="hero-stats">
           <div>
-            <div class="hero-stat-num">${(metrics.velocity*100).toFixed(2).replace('.', ',')}<span class="small"> p.p./dia</span></div>
-            <div class="hero-stat-lbl">Velocidade · média 14d</div>
+            <div class="hero-stat-num">${(metrics.velocity*100).toFixed(2).replace('.', ',')}<span class="small"> p.p./dia${metrics.diasUteis?' útil':''}</span></div>
+            <div class="hero-stat-lbl">${metrics.diasUteis ? `Velocidade · ${metrics.janela}d · por dia útil` : `Velocidade · média ${metrics.janela}d`}</div>
           </div>
           <div>
-            <div class="hero-stat-num">${metrics.daysToComplete !== null ? metrics.daysToComplete : '—'}<span class="small">${metrics.daysToComplete !== null ? ' dias' : ''}</span></div>
-            <div class="hero-stat-lbl">Prazo no ritmo atual</div>
+            <div class="hero-stat-num" style="font-size:18px">${metrics.dataPrevista ? fmtData(metrics.dataPrevista) : '—'}</div>
+            <div class="hero-stat-lbl">Término no ritmo atual${metrics.daysToComplete!==null?` · ${metrics.daysToComplete} dia${metrics.daysToComplete>1?'s':''}`:''}</div>
+            ${metrics.diasVsPrazo!=null ? `<div class="hero-stat-prazo ${metrics.diasVsPrazo>0?'over':metrics.diasVsPrazo<0?'under':'on'}">${metrics.diasVsPrazo>0?`+${metrics.diasVsPrazo}d além do prazo`:metrics.diasVsPrazo<0?`${Math.abs(metrics.diasVsPrazo)}d de folga`:'no limite do prazo'}</div>` : ''}
           </div>
         </div>
       </div>
@@ -2894,17 +2967,15 @@ function renderExecutivo() {
         <div class="card-header">
           <div>
             <div class="card-title-lg">Curva S — Realizado vs. Previsto</div>
-            <div class="card-title-sub">Acumulado ponderado · realizado vs. cronograma · marcador HOJE</div>
+            <div class="card-title-sub">Acumulado ponderado · realizado · cronograma · projeção · prazo</div>
+          </div>
+          <div class="curva-horizonte">
+            ${[['obra','Obra toda'],['12m','12 meses'],['3m','3 meses']].map(([h,lbl]) => `<button type="button" class="curva-hz-btn${STATE.curvaHorizonte===h?' on':''}" onclick="setCurvaHorizonte('${h}')">${lbl}</button>`).join('')}
           </div>
         </div>
         <div class="card-body">
           ${rdosOrdenados.length > 0 ? `
-            <div class="curvas-legend">
-              <span class="curvas-legend-item"><span class="curvas-legend-line" style="background:var(--acc)"></span>Realizado</span>
-              <span class="curvas-legend-item"><span class="curvas-legend-dash" style="border-color:var(--muted-2)"></span>Previsto (cronograma)</span>
-              <span class="curvas-legend-item"><span class="curvas-legend-tag">HOJE</span></span>
-            </div>
-            <div style="position:relative;height:240px"><canvas id="curvaS"></canvas></div>
+            <div style="position:relative;height:260px"><canvas id="curvaS"></canvas></div>
           ` : '<div class="empty"><div class="empty-icon">◷</div><div class="empty-title">Sem dados no filtro</div><div class="empty-sub">Altere o filtro de mês ou frente.</div></div>'}
         </div>
       </div>
@@ -3102,22 +3173,38 @@ function montarGraficos() {
   const ultimoRDO   = parseISODate(sortedDays[sortedDays.length - 1]);
   const today = new Date(); today.setHours(0,0,0,0);
 
+  // Data prevista de término (para a linha de projeção e para esticar o eixo)
+  const dataProj = (metrics.dataPrevista && metrics.dataPrevista > today) ? metrics.dataPrevista : null;
+  const atualPct = +(metrics.current * 100).toFixed(3);
+
   let inicio, fim;
   if (STATE.filtros.mes) {
     const [y, m] = STATE.filtros.mes.split('-');
     inicio = new Date(parseInt(y), parseInt(m) - 1, 1);
     fim    = new Date(parseInt(y), parseInt(m),     0);
   } else {
-    inicio = primeiroRDO < PROJETO_INICIO ? primeiroRDO : PROJETO_INICIO;
-    fim    = ultimoRDO > today ? ultimoRDO : today;
-    if (fim < PROJETO_FIM && (PROJETO_FIM - fim) < 365 * 86400000) fim = PROJETO_FIM;
+    const hz = STATE.curvaHorizonte || 'obra';
+    if (hz === '3m' || hz === '12m') {
+      // Foco no realizado recente — do passado escolhido até hoje
+      const diasJanela = hz === '3m' ? 92 : 365;
+      inicio = new Date(today.getTime() - diasJanela * 86400000);
+      fim    = ultimoRDO > today ? new Date(ultimoRDO.getTime()) : new Date(today.getTime());
+    } else {
+      // Obra toda — do início do projeto até o ponto mais distante (prazo do contrato / projeção)
+      inicio = primeiroRDO < PROJETO_INICIO ? primeiroRDO : PROJETO_INICIO;
+      fim    = ultimoRDO > today ? new Date(ultimoRDO.getTime()) : new Date(today.getTime());
+      if (PROJETO_FIM > fim) fim = new Date(PROJETO_FIM.getTime());
+      if (dataProj && dataProj > fim) fim = new Date(dataProj.getTime());
+    }
   }
 
   const realizado = [];
   const previsto = [];
+  const projecao = [];
   const labels = [];
   const diaMs = 86400000;
   const totalProjMs = PROJETO_FIM - PROJETO_INICIO;
+  const projTotalMs = dataProj ? (dataProj - today) : 0;
 
   for (let t = inicio.getTime(); t <= fim.getTime(); t += diaMs) {
     const d = new Date(t);
@@ -3132,6 +3219,13 @@ function montarGraficos() {
     } else {
       const frac = Math.max(0, Math.min(1, (d - PROJETO_INICIO) / totalProjMs));
       previsto.push(+(frac * 100).toFixed(3));
+    }
+    // Projeção: reta de (hoje, % atual) até (data prevista, 100%)
+    if (dataProj && projTotalMs > 0 && d >= today && d <= dataProj) {
+      const fp = (d - today) / projTotalMs;
+      projecao.push(+(atualPct + fp * (100 - atualPct)).toFixed(3));
+    } else {
+      projecao.push(null);
     }
   }
 
@@ -3159,6 +3253,33 @@ function montarGraficos() {
       ctx.textAlign = 'center';
       ctx.fillText('HOJE', x, yScale.top - 4);
       ctx.restore();
+    }
+  };
+
+  const prazoIdx = labels.findIndex(l => l === ymd(PROJETO_FIM));
+  const linhaPrazoPlugin = {
+    id: 'linhaPrazo',
+    afterDraw(chart) {
+      if (prazoIdx < 0) return;
+      const xScale = chart.scales.x;
+      const yScale = chart.scales.y;
+      if (!xScale || !yScale) return;
+      const x = xScale.getPixelForValue(prazoIdx);
+      const c = chart.ctx;
+      c.save();
+      c.setLineDash([2, 3]);
+      c.strokeStyle = 'oklch(0.55 0.18 280)';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(x, yScale.top);
+      c.lineTo(x, yScale.bottom);
+      c.stroke();
+      c.setLineDash([]);
+      c.fillStyle = 'oklch(0.55 0.18 280)';
+      c.font = '700 9px JetBrains Mono, monospace';
+      c.textAlign = 'center';
+      c.fillText('PRAZO', x, yScale.top - 4);
+      c.restore();
     }
   };
 
@@ -3195,6 +3316,18 @@ function montarGraficos() {
           pointHoverBackgroundColor: '#fff',
           pointHoverBorderColor: 'oklch(0.45 0.02 60)',
           order: 2,
+        },
+        {
+          label: 'Projeção (ritmo atual)',
+          data: projecao,
+          borderColor: 'oklch(0.62 0.18 38)',
+          backgroundColor: 'transparent',
+          borderWidth: 2, borderDash: [2, 3],
+          fill: false, tension: 0,
+          pointRadius: 0, pointHoverRadius: 4,
+          pointHoverBackgroundColor: '#fff',
+          pointHoverBorderColor: 'oklch(0.48 0.18 38)',
+          spanGaps: true, order: 0,
         }
       ]
     },
@@ -3225,7 +3358,10 @@ function montarGraficos() {
         }
       },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: true, position: 'top', align: 'center',
+          labels: { usePointStyle: true, pointStyle: 'line', boxWidth: 24, font: { size: 11, family: 'JetBrains Mono, monospace' }, color: 'oklch(0.45 0.02 60)', padding: 14 },
+        },
         tooltip: {
           backgroundColor: 'rgba(15,12,8,0.95)', titleColor: '#fff',
           bodyColor: 'rgba(255,255,255,0.85)', borderColor: 'rgba(255,255,255,0.15)',
@@ -3240,7 +3376,7 @@ function montarGraficos() {
         }
       }
     },
-    plugins: [linhaHojePlugin]
+    plugins: [linhaHojePlugin, linhaPrazoPlugin]
   });
 }
 
