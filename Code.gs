@@ -116,6 +116,15 @@ function addBatchRDO(batchJson, clientId) {
     var cab = cabecalhoNormalizado(aba);
     var iClient = idxColuna(cab, 'clientid');
 
+    // A proteção anti-duplicação precisa da coluna 'clientId'. Se a planilha
+    // não tiver, criamos automaticamente (no fim do cabeçalho) para que o
+    // dedup passe a funcionar — sem isso, reenvios da fila duplicam linhas.
+    if (iClient === -1) {
+      aba.getRange(1, aba.getLastColumn() + 1).setValue('clientId');
+      cab = cabecalhoNormalizado(aba);
+      iClient = idxColuna(cab, 'clientid');
+    }
+
     // Dedup por clientId: se já existe, considera salvo e sai.
     if (clientId && iClient !== -1) {
       var dados = aba.getDataRange().getValues();
