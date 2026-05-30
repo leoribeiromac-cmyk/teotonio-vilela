@@ -29,6 +29,7 @@ function rotear(e) {
       case 'deleteRDO':       resp = deleteRDO(p.id); break;
       case 'addBatchRDO':     resp = addBatchRDO(p.batch, p.clientId); break;
       case 'updateRDO':       resp = updateRDO(p.payload); break;
+      case 'limparDuplicados': resp = limparDuplicadosServidor(); break;
       case 'addRDODiario':    resp = upsertRDODiario(p, false); break;
       case 'updateRDODiario': resp = upsertRDODiario(p, true); break;
       default:
@@ -162,6 +163,65 @@ function addBatchRDO(batchJson, clientId) {
 function gerarId(data, k) {
   return Utilities.formatDate(data, Session.getScriptTimeZone(), 'yyyyMMddHHmmss') +
          '_' + k + '_' + Math.floor(Math.random() * 9000 + 1000);
+}
+
+// ------------------------------------------------------------
+// LIMPEZA EM LOTE NO SERVIDOR — apaga TODAS as duplicatas de uma vez.
+// Faz backup automático antes. Mantém a 1ª ocorrência de cada chave:
+//   Data + Turno + Pacote_ID + Quantidade + Apontador + Local_Estaca
+// Retorna quantas linhas removeu — uma única chamada resolve milhares.
+// ------------------------------------------------------------
+function limparDuplicadosServidor() {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(60000);
+  try {
+    var ss  = SpreadsheetApp.getActiveSpreadsheet();
+    var aba = ss.getSheetByName(NOME_ABA);
+    if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA + '" não encontrada' };
+
+    var dados = aba.getDataRange().getValues();
+    if (dados.length <= 1) return { ok: true, removidas: 0, total: 0 };
+
+    var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+    var iData   = idxColuna(cab, 'data');
+    var iTurno  = idxColuna(cab, 'turno');
+    var iPac    = idxColuna(cab, 'pacote_id');
+    var iQtd    = idxColuna(cab, 'quantidade');
+    var iApont  = idxColuna(cab, 'apontador');
+    var iEstaca = idxColuna(cab, 'local_estaca');
+
+    // Backup preventivo antes de apagar qualquer coisa.
+    var nomeBackup = NOME_ABA + '_backup_' +
+      Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyyMMdd_HHmmss');
+    aba.copyTo(ss).setName(nomeBackup);
+
+    var vistas = {};
+    var apagar = []; // índices de linha (base-1) a remover
+    for (var i = 1; i < dados.length; i++) {
+      var r = dados[i];
+      var chave = [
+        String(iData   !== -1 ? r[iData]   : '').trim(),
+        String(iTurno  !== -1 ? r[iTurno]  : '').trim().toLowerCase(),
+        String(iPac    !== -1 ? r[iPac]    : '').trim().toLowerCase(),
+        String(iQtd    !== -1 ? r[iQtd]    : '').trim(),
+        String(iApont  !== -1 ? r[iApont]  : '').trim().toLowerCase(),
+        String(iEstaca !== -1 ? r[iEstaca] : '').trim().toLowerCase()
+      ].join('|');
+      if (vistas[chave]) apagar.push(i + 1);
+      else vistas[chave] = true;
+    }
+
+    // Apaga de baixo para cima para os índices não deslocarem.
+    for (var j = apagar.length - 1; j >= 0; j--) {
+      aba.deleteRow(apagar[j]);
+    }
+
+    return { ok: true, removidas: apagar.length, total: dados.length - 1, backup: nomeBackup };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message ? err.message : err) };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ------------------------------------------------------------
