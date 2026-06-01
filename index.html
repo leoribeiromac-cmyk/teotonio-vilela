@@ -5523,8 +5523,12 @@ function carregarDiarioDaSheet(data) {
   d.clima_tarde = getCSVField(sheetRow, 'Clima_Tarde') || getCSVField(sheetRow, 'clima_tarde') || 'Bom';
   d.clima_noite = getCSVField(sheetRow, 'Clima_Noite') || getCSVField(sheetRow, 'clima_noite') || 'Bom';
   
+  // Mesclar com localStorage: preferir efetivo do localStorage quando tem mais dados
+  const localSaved = loadDiarioV4(data);
+
   d.diurno.apontador = getCSVField(sheetRow, 'Apontador_Diurno') || getCSVField(sheetRow, 'apontador_diurno') || '';
-  d.diurno.efetivo = efetivoJson.padrao_diurno || {};
+  const localEfDiu = (localSaved && localSaved.diurno && localSaved.diurno.efetivo) || {};
+  d.diurno.efetivo = { ...(efetivoJson.padrao_diurno || {}), ...localEfDiu };
   d.diurno.equipamentos = equipJson.padrao_diurno || {};
   d.diurno.customIndireto = efetivoJson.customIndireto_diurno || [];
   d.diurno.customDireto = efetivoJson.customDireto_diurno || [];
@@ -5533,9 +5537,10 @@ function carregarDiarioDaSheet(data) {
   d.diurno.ocorrencias = getCSVField(sheetRow, 'Ocorrencias_Diurno') || getCSVField(sheetRow, 'ocorrencias_diurno') || getCSVField(sheetRow, 'Ocorrencias') || getCSVField(sheetRow, 'ocorrencias') || '';
   d.diurno.observacoes = getCSVField(sheetRow, 'Obs_Diurno') || getCSVField(sheetRow, 'obs_diurno') || getCSVField(sheetRow, 'Observacoes_Gerais') || getCSVField(sheetRow, 'observacoes_gerais') || '';
   d.diurno.preenchido = !!d.diurno.apontador;
-  
+
   d.noturno.apontador = getCSVField(sheetRow, 'Apontador_Noturno') || getCSVField(sheetRow, 'apontador_noturno') || '';
-  d.noturno.efetivo = efetivoJson.padrao_noturno || {};
+  const localEfNot = (localSaved && localSaved.noturno && localSaved.noturno.efetivo) || {};
+  d.noturno.efetivo = { ...(efetivoJson.padrao_noturno || {}), ...localEfNot };
   d.noturno.equipamentos = equipJson.padrao_noturno || {};
   d.noturno.customIndireto = efetivoJson.customIndireto_noturno || [];
   d.noturno.customDireto = efetivoJson.customDireto_noturno || [];
@@ -6029,6 +6034,16 @@ function gerarPDFDiario(data) {
     const rawEquip = getCSVField(fromSheet, 'Equipamentos_JSON') || getCSVField(fromSheet, 'equipamentos_json') || '{}';
     try { efetJson = JSON.parse(rawEfetivo); } catch(e) {}
     try { equipJson = JSON.parse(rawEquip); } catch(e) {}
+
+    // Une planilha + localStorage: um valor presente em QUALQUER fonte aparece.
+    // localStorage (edições mais recentes do aparelho) sobrescreve a planilha
+    // chave-a-chave, mas nunca apaga chaves que só existem na planilha.
+    const localDiario = loadDiarioV4(data);
+    const localEfDiu = (localDiario && localDiario.diurno && localDiario.diurno.efetivo) || {};
+    const localEfNot = (localDiario && localDiario.noturno && localDiario.noturno.efetivo) || {};
+    const efetivoDiurno = { ...(efetJson.padrao_diurno || {}), ...localEfDiu };
+    const efetivoNoturno = { ...(efetJson.padrao_noturno || {}), ...localEfNot };
+
     d = {
       data: data,
       sheetId: getCSVField(fromSheet, 'ID'),
@@ -6040,8 +6055,8 @@ function gerarPDFDiario(data) {
       visitas: getCSVField(fromSheet, 'Visitas') || getCSVField(fromSheet, 'visitas') || '',
       ocorrencias: getCSVField(fromSheet, 'Ocorrencias') || getCSVField(fromSheet, 'ocorrencias') || '',
       observacoes_gerais: getCSVField(fromSheet, 'Observacoes_Gerais') || getCSVField(fromSheet, 'observacoes_gerais') || '',
-      efetivo_diurno: efetJson.padrao_diurno || {},
-      efetivo_noturno: efetJson.padrao_noturno || {},
+      efetivo_diurno: efetivoDiurno,
+      efetivo_noturno: efetivoNoturno,
       equipamentos_diurno: equipJson.padrao_diurno || {},
       equipamentos_noturno: equipJson.padrao_noturno || {},
       customIndireto_diurno: efetJson.customIndireto_diurno || [],
@@ -6242,11 +6257,17 @@ function gerarPDFDiario(data) {
     }
   });
   
-  if (categorias.length < 12) {
-    const placeholders = todasCats.filter(c => !categorias.some(ec => ec.key === c.key)).slice(0, 12 - categorias.length);
-    categorias = [...categorias, ...placeholders];
-  }
-  categorias = categorias.slice(0, 14);
+  // Garantir mínimo de 5 linhas para cada tipo (direto e indireto)
+  const MIN_POR_TIPO = 5;
+  [{ tipo: 'indireto', lista: CATEGORIAS_INDIRETO }, { tipo: 'direto', lista: CATEGORIAS_DIRETO }].forEach(({ tipo, lista }) => {
+    const atual = categorias.filter(c => c.tipo === tipo).length;
+    if (atual < MIN_POR_TIPO) {
+      const extras = lista.map(c => ({...c, tipo}))
+        .filter(c => !categorias.some(ec => ec.key === c.key))
+        .slice(0, MIN_POR_TIPO - atual);
+      categorias = [...categorias, ...extras];
+    }
+  });
   
   let tcd = 0, tci = 0, ttd = 0, tti = 0;
   categorias.forEach((cat, i) => {
@@ -6506,21 +6527,30 @@ function gerarPDFInterno(data, turnoFocus) {
     };
   } else if (fromSheet) {
     let efetJson = {}, equipJson = {};
-    try { efetJson = JSON.parse(fromSheet['Efetivo_JSON'] || '{}'); } catch(e) {}
-    try { equipJson = JSON.parse(fromSheet['Equipamentos_JSON'] || '{}'); } catch(e) {}
+    const rawEfInt = getCSVField(fromSheet, 'Efetivo_JSON') || getCSVField(fromSheet, 'efetivo_json') || '{}';
+    const rawEqInt = getCSVField(fromSheet, 'Equipamentos_JSON') || getCSVField(fromSheet, 'equipamentos_json') || '{}';
+    try { efetJson = JSON.parse(rawEfInt); } catch(e) {}
+    try { equipJson = JSON.parse(rawEqInt); } catch(e) {}
+
+    const localDiarioInt = loadDiarioV4(data);
+    const localEfDiuInt = (localDiarioInt && localDiarioInt.diurno && localDiarioInt.diurno.efetivo) || {};
+    const localEfNotInt = (localDiarioInt && localDiarioInt.noturno && localDiarioInt.noturno.efetivo) || {};
+    const efetivoDiurnoInt = { ...(efetJson.padrao_diurno || {}), ...localEfDiuInt };
+    const efetivoNoturnoInt = { ...(efetJson.padrao_noturno || {}), ...localEfNotInt };
+
     d = {
       data: data,
-      tem_turno_noturno: (fromSheet['Apontador_Diurno'] && fromSheet['Apontador_Noturno']) ? true : false,
-      apontador_diurno: fromSheet['Apontador_Diurno'] || '',
-      apontador_noturno: fromSheet['Apontador_Noturno'] || '',
-      clima_manha: fromSheet['Clima_Manha'] || '',
-      clima_tarde: fromSheet['Clima_Tarde'] || '',
-      clima_noite: fromSheet['Clima_Noite'] || '',
-      visitas: fromSheet['Visitas'] || '',
-      ocorrencias: fromSheet['Ocorrencias'] || '',
-      observacoes_gerais: fromSheet['Observacoes_Gerais'] || '',
-      efetivo_diurno: efetJson.padrao_diurno || {},
-      efetivo_noturno: efetJson.padrao_noturno || {},
+      tem_turno_noturno: (getCSVField(fromSheet, 'Apontador_Diurno') && getCSVField(fromSheet, 'Apontador_Noturno')) ? true : false,
+      apontador_diurno: getCSVField(fromSheet, 'Apontador_Diurno') || '',
+      apontador_noturno: getCSVField(fromSheet, 'Apontador_Noturno') || '',
+      clima_manha: getCSVField(fromSheet, 'Clima_Manha') || '',
+      clima_tarde: getCSVField(fromSheet, 'Clima_Tarde') || '',
+      clima_noite: getCSVField(fromSheet, 'Clima_Noite') || '',
+      visitas: getCSVField(fromSheet, 'Visitas') || '',
+      ocorrencias: getCSVField(fromSheet, 'Ocorrencias') || '',
+      observacoes_gerais: getCSVField(fromSheet, 'Observacoes_Gerais') || '',
+      efetivo_diurno: efetivoDiurnoInt,
+      efetivo_noturno: efetivoNoturnoInt,
       equipamentos_diurno: equipJson.padrao_diurno || {},
       equipamentos_noturno: equipJson.padrao_noturno || {},
       customIndireto_diurno: efetJson.customIndireto_diurno || [],
