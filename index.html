@@ -6201,36 +6201,43 @@ function gerarPDFDiario(data) {
   });
   y += JH + 2;
   
-  rf(ML, y, TW, 6, NAV); sf(7.5, 'bold', W); tx('EFETIVO — Apontador Diurno: ' + (d.apontador_diurno || '—') + '  |  Noturno: ' + (d.apontador_noturno || '—'), ML + 2, y + 4); y += 6;
+  // Layout em duas colunas: esq = efetivo + equip, dir = serviços
+  const yTop = y;
+  const LW = 112, GAP = 3, RW = TW - LW - GAP;  // 112 + 3 + 79 = 194mm
+  const xL = ML, xR = ML + LW + GAP;
 
-  // Sem coluna de Observações — tabela usa TW completo: CD largo + 4 colunas de valor + TOT
-  const CN = 16, CT = 20, CD = TW - 4 * CN - CT;  // CD = 194-64-20 = 110mm
+  // ════════════════════════════
+  // COLUNA ESQUERDA — EFETIVO
+  // ════════════════════════════
+  rf(xL, y, LW, 6, NAV); sf(7.5, 'bold', W); tx('EFETIVO — Apontador Diurno: ' + (d.apontador_diurno || '—') + '  |  Noturno: ' + (d.apontador_noturno || '—'), xL + 2, y + 4); y += 6;
+
+  const CN = 12, CT = 16, CD = LW - 4 * CN - CT;  // CD = 112-48-16 = 48mm
   const EH = 4.0;
-  rf(ML, y, CD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('FUNÇÃO', ML + 2, y + EH * 1.1);
-  rf(ML + CD, y, CN * 2, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', ML + CD + CN, y + EH * 1.1, { align: 'center' });
-  rf(ML + CD + CN * 2, y, CN * 2, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', ML + CD + CN * 3, y + EH * 1.1, { align: 'center' });
-  rf(ML + CD + CN * 4, y, CT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOTAL', ML + CD + CN * 4 + CT / 2, y + EH * 1.1, { align: 'center' });
+  rf(xL, y, CD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('FUNÇÃO', xL + 2, y + EH * 1.1);
+  rf(xL + CD, y, CN * 2, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', xL + CD + CN, y + EH * 1.1, { align: 'center' });
+  rf(xL + CD + CN * 2, y, CN * 2, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', xL + CD + CN * 3, y + EH * 1.1, { align: 'center' });
+  rf(xL + CD + CN * 4, y, CT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOT.', xL + CD + CN * 4 + CT / 2, y + EH * 1.1, { align: 'center' });
   y += EH * 1.5;
 
-  rf(ML, y, CD, EH, LB, BD);
-  ['Direto', 'Indireto', 'Direto', 'Indireto'].forEach((l, i) => {
-    rf(ML + CD + i * CN, y, CN, EH, LB, BD); sf(6, 'bold', NAV);
-    tx(l, ML + CD + (i + 0.5) * CN, y + EH * 0.75, { align: 'center' });
+  rf(xL, y, CD, EH, LB, BD);
+  ['Dir.', 'Ind.', 'Dir.', 'Ind.'].forEach((l, i) => {
+    rf(xL + CD + i * CN, y, CN, EH, LB, BD); sf(5.5, 'bold', NAV);
+    tx(l, xL + CD + (i + 0.5) * CN, y + EH * 0.75, { align: 'center' });
   });
-  rf(ML + CD + 4 * CN, y, CT, EH, LB, BD);
+  rf(xL + CD + 4 * CN, y, CT, EH, LB, BD);
   y += EH;
-  
+
   const todasCats = [
     ...CATEGORIAS_INDIRETO.map(c => ({...c, tipo: 'indireto'})),
     ...CATEGORIAS_DIRETO.map(c => ({...c, tipo: 'direto'})),
   ];
-  
+
   let categorias = todasCats.filter(c => {
     const diu = parseInt(d.efetivo_diurno[c.key]) || 0;
     const not = parseInt(d.efetivo_noturno[c.key]) || 0;
     return (diu + not) > 0;
   });
-  
+
   (d.customIndireto_diurno || []).forEach(f => {
     const diu = parseInt(f.qtd) || 0;
     if (f.label && diu > 0) categorias.push({ key: '__cid_' + f.label, label: f.label + ' ✱', tipo: 'indireto', _customDiu: diu, _customNot: 0 });
@@ -6255,8 +6262,7 @@ function gerarPDFDiario(data) {
       else categorias.push({ key: '__cdn_' + f.label, label: f.label + ' ✱', tipo: 'direto', _customDiu: 0, _customNot: not });
     }
   });
-  
-  // Garantir mínimo de 5 linhas para cada tipo (direto e indireto)
+
   const MIN_POR_TIPO = 5;
   [{ tipo: 'indireto', lista: CATEGORIAS_INDIRETO }, { tipo: 'direto', lista: CATEGORIAS_DIRETO }].forEach(({ tipo, lista }) => {
     const atual = categorias.filter(c => c.tipo === tipo).length;
@@ -6267,7 +6273,7 @@ function gerarPDFDiario(data) {
       categorias = [...categorias, ...extras];
     }
   });
-  
+
   let tcd = 0, tci = 0, ttd = 0, tti = 0;
   categorias.forEach((cat, i) => {
     let diu, not;
@@ -6278,54 +6284,52 @@ function gerarPDFDiario(data) {
       not = parseInt(d.efetivo_noturno[cat.key]) || 0;
     }
     const cd = cat.tipo === 'direto' ? diu : 0;
-const ci = cat.tipo === 'indireto' ? diu : 0;
+    const ci = cat.tipo === 'indireto' ? diu : 0;
     const td = cat.tipo === 'direto' ? not : 0;
     const ti = cat.tipo === 'indireto' ? not : 0;
     const tot = cd + ci + td + ti;
     tcd += cd; tci += ci; ttd += td; tti += ti;
-    
+
     const bg = i % 2 === 0 ? W : LG;
-    rf(ML, y, CD, EH, bg, BD); sf(6.5, 'normal', [0, 0, 0]); tx(cat.label, ML + 1.5, y + EH * 0.75);
+    rf(xL, y, CD, EH, bg, BD); sf(6, 'normal', [0, 0, 0]); tx(cat.label, xL + 1.5, y + EH * 0.75);
     [cd, ci, td, ti].forEach((v, j) => {
-      rf(ML + CD + j * CN, y, CN, EH, bg, BD);
-      if (v > 0) { sf(7, 'bold', NAV); tx(String(v), ML + CD + (j + 0.5) * CN, y + EH * 0.75, { align: 'center' }); }
+      rf(xL + CD + j * CN, y, CN, EH, bg, BD);
+      if (v > 0) { sf(6.5, 'bold', NAV); tx(String(v), xL + CD + (j + 0.5) * CN, y + EH * 0.75, { align: 'center' }); }
     });
-    rf(ML + CD + 4 * CN, y, CT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
-    if (tot > 0) { sf(7.5, 'bold', NAV); tx(String(tot), ML + CD + 4 * CN + CT / 2, y + EH * 0.75, { align: 'center' }); }
+    rf(xL + CD + 4 * CN, y, CT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
+    if (tot > 0) { sf(7, 'bold', NAV); tx(String(tot), xL + CD + 4 * CN + CT / 2, y + EH * 0.75, { align: 'center' }); }
     y += EH;
   });
-  
+
   const gtV = tcd + tci + ttd + tti;
   const TEH = 5;
-  rf(ML, y, CD, TEH, NAV); sf(7, 'bold', W); tx('TOTAL EFETIVO', ML + 2, y + TEH * 0.7);
+  rf(xL, y, CD, TEH, NAV); sf(6.5, 'bold', W); tx('TOTAL EFETIVO', xL + 2, y + TEH * 0.7);
   [tcd, tci, ttd, tti].forEach((v, j) => {
-    rf(ML + CD + j * CN, y, CN, TEH, NAV); sf(7.5, 'bold', W);
-    tx(String(v), ML + CD + (j + 0.5) * CN, y + TEH * 0.7, { align: 'center' });
+    rf(xL + CD + j * CN, y, CN, TEH, NAV); sf(7, 'bold', W);
+    tx(String(v), xL + CD + (j + 0.5) * CN, y + TEH * 0.7, { align: 'center' });
   });
-  rf(ML + CD + 4 * CN, y, CT, TEH, RED); sf(9, 'bold', W);
-  tx(String(gtV), ML + CD + 4 * CN + CT / 2, y + TEH * 0.7, { align: 'center' });
+  rf(xL + CD + 4 * CN, y, CT, TEH, RED); sf(8, 'bold', W);
+  tx(String(gtV), xL + CD + 4 * CN + CT / 2, y + TEH * 0.7, { align: 'center' });
   y += TEH + 2;
 
   // ════════════════════════════
-  // EQUIPAMENTOS (Diurno + Noturno)
+  // COLUNA ESQUERDA — EQUIPAMENTOS
   // ════════════════════════════
-  rf(ML, y, TW, 6, NAV); sf(7.5, 'bold', W); tx('EQUIPAMENTOS', ML + 2, y + 4); y += 6;
+  rf(xL, y, LW, 6, NAV); sf(7.5, 'bold', W); tx('EQUIPAMENTOS', xL + 2, y + 4); y += 6;
 
-  const EqCN = 24, EqCT = 24, EqCD = TW - EqCN * 2 - EqCT;  // EqCD = 194-48-24 = 122mm
-  rf(ML, y, EqCD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('EQUIPAMENTO', ML + 2, y + EH * 1.1);
-  rf(ML + EqCD, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', ML + EqCD + EqCN/2, y + EH * 1.1, { align: 'center' });
-  rf(ML + EqCD + EqCN, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', ML + EqCD + EqCN + EqCN/2, y + EH * 1.1, { align: 'center' });
-  rf(ML + EqCD + EqCN*2, y, EqCT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOT.', ML + EqCD + EqCN*2 + EqCT/2, y + EH * 1.1, { align: 'center' });
+  const EqCN = 20, EqCT = 20, EqCD = LW - EqCN * 2 - EqCT;  // EqCD = 112-40-20 = 52mm
+  rf(xL, y, EqCD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('EQUIPAMENTO', xL + 2, y + EH * 1.1);
+  rf(xL + EqCD, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', xL + EqCD + EqCN/2, y + EH * 1.1, { align: 'center' });
+  rf(xL + EqCD + EqCN, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', xL + EqCD + EqCN + EqCN/2, y + EH * 1.1, { align: 'center' });
+  rf(xL + EqCD + EqCN*2, y, EqCT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOT.', xL + EqCD + EqCN*2 + EqCT/2, y + EH * 1.1, { align: 'center' });
   y += EH * 1.5;
-  
-  // Filtrar equipamentos com valor
+
   let equipamentos = CATEGORIAS_EQUIP_PADRAO.filter(eq => {
     const diu = parseInt(d.equipamentos_diurno[eq.key]) || 0;
     const not = parseInt(d.equipamentos_noturno[eq.key]) || 0;
     return (diu + not) > 0;
   });
-  
-  // Customs
+
   (d.customEquip_diurno || []).forEach(eq => {
     const diu = parseInt(eq.qtd) || 0;
     if (eq.label && diu > 0) equipamentos.push({ key: '__eqd_' + eq.label, label: eq.label + ' ✱', _customDiu: diu, _customNot: 0 });
@@ -6338,14 +6342,13 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
       else equipamentos.push({ key: '__eqn_' + eq.label, label: eq.label + ' ✱', _customDiu: 0, _customNot: not });
     }
   });
-  
-  // Min 6 linhas pra ocupar
+
   if (equipamentos.length < 6) {
     const placeholders = CATEGORIAS_EQUIP_PADRAO.filter(eq => !equipamentos.some(e => e.key === eq.key)).slice(0, 6 - equipamentos.length);
     equipamentos = [...equipamentos, ...placeholders];
   }
   equipamentos = equipamentos.slice(0, 8);
-  
+
   let tEqDiu = 0, tEqNot = 0;
   equipamentos.forEach((eq, i) => {
     let diu, not;
@@ -6356,77 +6359,80 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
     }
     const tot = diu + not;
     tEqDiu += diu; tEqNot += not;
-    
+
     const bg = i % 2 === 0 ? W : LG;
-    rf(ML, y, EqCD, EH, bg, BD); sf(6.5, 'normal', [0, 0, 0]); tx(eq.label, ML + 1.5, y + EH * 0.75);
-    rf(ML + EqCD, y, EqCN, EH, bg, BD);
-    if (diu > 0) { sf(7, 'bold', NAV); tx(String(diu), ML + EqCD + EqCN/2, y + EH * 0.75, { align: 'center' }); }
-    rf(ML + EqCD + EqCN, y, EqCN, EH, bg, BD);
-    if (not > 0) { sf(7, 'bold', NAV); tx(String(not), ML + EqCD + EqCN + EqCN/2, y + EH * 0.75, { align: 'center' }); }
-    rf(ML + EqCD + EqCN*2, y, EqCT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
-    if (tot > 0) { sf(7.5, 'bold', NAV); tx(String(tot), ML + EqCD + EqCN*2 + EqCT/2, y + EH * 0.75, { align: 'center' }); }
+    rf(xL, y, EqCD, EH, bg, BD); sf(6, 'normal', [0, 0, 0]); tx(eq.label, xL + 1.5, y + EH * 0.75);
+    rf(xL + EqCD, y, EqCN, EH, bg, BD);
+    if (diu > 0) { sf(6.5, 'bold', NAV); tx(String(diu), xL + EqCD + EqCN/2, y + EH * 0.75, { align: 'center' }); }
+    rf(xL + EqCD + EqCN, y, EqCN, EH, bg, BD);
+    if (not > 0) { sf(6.5, 'bold', NAV); tx(String(not), xL + EqCD + EqCN + EqCN/2, y + EH * 0.75, { align: 'center' }); }
+    rf(xL + EqCD + EqCN*2, y, EqCT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
+    if (tot > 0) { sf(7, 'bold', NAV); tx(String(tot), xL + EqCD + EqCN*2 + EqCT/2, y + EH * 0.75, { align: 'center' }); }
     y += EH;
   });
-  
-  // Total equipamentos
+
   const tEqTotal = tEqDiu + tEqNot;
-  rf(ML, y, EqCD, TEH, NAV); sf(7, 'bold', W); tx('TOTAL EQUIPAMENTOS', ML + 2, y + TEH * 0.7);
-  rf(ML + EqCD, y, EqCN, TEH, NAV); sf(7.5, 'bold', W); tx(String(tEqDiu), ML + EqCD + EqCN/2, y + TEH * 0.7, { align: 'center' });
-  rf(ML + EqCD + EqCN, y, EqCN, TEH, NAV); sf(7.5, 'bold', W); tx(String(tEqNot), ML + EqCD + EqCN + EqCN/2, y + TEH * 0.7, { align: 'center' });
-  rf(ML + EqCD + EqCN*2, y, EqCT, TEH, RED); sf(9, 'bold', W); tx(String(tEqTotal), ML + EqCD + EqCN*2 + EqCT/2, y + TEH * 0.7, { align: 'center' });
+  rf(xL, y, EqCD, TEH, NAV); sf(6.5, 'bold', W); tx('TOTAL EQUIPAMENTOS', xL + 2, y + TEH * 0.7);
+  rf(xL + EqCD, y, EqCN, TEH, NAV); sf(7, 'bold', W); tx(String(tEqDiu), xL + EqCD + EqCN/2, y + TEH * 0.7, { align: 'center' });
+  rf(xL + EqCD + EqCN, y, EqCN, TEH, NAV); sf(7, 'bold', W); tx(String(tEqNot), xL + EqCD + EqCN + EqCN/2, y + TEH * 0.7, { align: 'center' });
+  rf(xL + EqCD + EqCN*2, y, EqCT, TEH, RED); sf(8, 'bold', W); tx(String(tEqTotal), xL + EqCD + EqCN*2 + EqCT/2, y + TEH * 0.7, { align: 'center' });
   y += TEH + 2;
-  
-  // ════════════════════════════
-  // SERVIÇOS (mesma página)
-  // ════════════════════════════
-  if (y + 18 > PH - 40) { doc.addPage(); y = MT; }
-  rf(ML, y, TW, 6, NAV); sf(7.5, 'bold', W); tx('SERVIÇOS EXECUTADOS', ML + 2, y + 4); y += 6;
+
+  const yLeft = y;  // fim da coluna esquerda
+
+  // ════════════════════════════════════
+  // COLUNA DIREITA — SERVIÇOS (desde yTop)
+  // ════════════════════════════════════
+  let yR = yTop;
 
   function renderServicosBlock(titulo, lista, corBlock) {
     const SH = 5;
-    const wPac = TW * 0.62, wLoc = TW * 0.17, wEq = TW * 0.21;
-    const xPac = ML, xLoc = xPac + wPac, xEq = xLoc + wLoc;
+    const wPac = RW * 0.60, wLoc = RW * 0.20, wEq = RW - wPac - wLoc;
+    const xPac = xR, xLoc = xPac + wPac, xEq = xLoc + wLoc;
 
-    if (y + 6 + SH * 3 > PH - 18) { doc.addPage(); y = MT; }
-    rf(ML, y, TW, 6, corBlock); sf(7.5, 'bold', W); tx(titulo, ML + 2, y + 4); y += 6;
+    if (yR + 6 + SH * 3 > PH - 18) { doc.addPage(); yR = MT; }
+    rf(xR, yR, RW, 6, corBlock); sf(7, 'bold', W); tx(titulo, xR + 2, yR + 4); yR += 6;
 
     function cabServicos() {
-      rf(xPac, y, wPac, SH, LB, BD); sf(6, 'bold', NAV); tx('FRENTE / PACOTE', xPac + 2, y + SH * 0.75);
-      rf(xLoc, y, wLoc, SH, LB, BD); sf(6, 'bold', NAV); tx('LOCAL / ESTACA', xLoc + 2, y + SH * 0.75);
-      rf(xEq, y, wEq, SH, LB, BD); sf(6, 'bold', NAV); tx('EQUIPE', xEq + 2, y + SH * 0.75);
-      y += SH;
+      rf(xPac, yR, wPac, SH, LB, BD); sf(5.5, 'bold', NAV); tx('FRENTE / PACOTE', xPac + 2, yR + SH * 0.75);
+      rf(xLoc, yR, wLoc, SH, LB, BD); sf(5.5, 'bold', NAV); tx('LOCAL', xLoc + 2, yR + SH * 0.75);
+      rf(xEq, yR, wEq, SH, LB, BD); sf(5.5, 'bold', NAV); tx('EQUIPE', xEq + 2, yR + SH * 0.75);
+      yR += SH;
     }
     cabServicos();
 
     if (lista.length === 0) {
-      rf(xPac, y, TW, SH, [253, 246, 230], BD);
-      sf(6.5, 'italic', [140, 90, 30]);
-      tx('— sem serviços neste turno —', xPac + TW / 2, y + SH * 0.75, { align: 'center' });
-      y += SH;
+      rf(xPac, yR, RW, SH, [253, 246, 230], BD);
+      sf(6, 'italic', [140, 90, 30]);
+      tx('— sem serviços —', xPac + RW / 2, yR + SH * 0.75, { align: 'center' });
+      yR += SH;
     } else {
       lista.forEach((s, i) => {
-        if (y + SH > PH - 18) { doc.addPage(); y = MT; cabServicos(); }
+        if (yR + SH > PH - 18) { doc.addPage(); yR = MT; cabServicos(); }
         const bg = i % 2 === 0 ? W : LG;
         const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
         const frente = pacote ? (pacote['Frente'] || '') : '';
-        rf(xPac, y, wPac, SH, bg, BD); sf(6.5, 'normal', [0, 0, 0]);
+        rf(xPac, yR, wPac, SH, bg, BD); sf(6, 'normal', [0, 0, 0]);
         const txtPacote = (frente ? frente + ' · ' : '') + (s['Pacote_Nome'] || '');
         const linhasPac = doc.splitTextToSize(txtPacote, wPac - 3);
-        if (linhasPac.length === 1) tx(linhasPac[0], xPac + 2, y + SH * 0.75);
-        else { sf(5.5, 'normal', [0, 0, 0]); tx(linhasPac[0], xPac + 2, y + SH * 0.45); tx(linhasPac[1] || '', xPac + 2, y + SH * 0.85); }
-        rf(xLoc, y, wLoc, SH, bg, BD); sf(6.5, 'normal', [40, 40, 40]); tx(String(s['Local_Estaca'] || ''), xLoc + 2, y + SH * 0.75);
-        rf(xEq, y, wEq, SH, bg, BD); sf(6, 'normal', [0, 0, 0]);
+        if (linhasPac.length === 1) tx(linhasPac[0], xPac + 2, yR + SH * 0.75);
+        else { sf(5, 'normal', [0, 0, 0]); tx(linhasPac[0], xPac + 2, yR + SH * 0.45); tx(linhasPac[1] || '', xPac + 2, yR + SH * 0.85); }
+        rf(xLoc, yR, wLoc, SH, bg, BD); sf(5.5, 'normal', [40, 40, 40]); tx(String(s['Local_Estaca'] || ''), xLoc + 2, yR + SH * 0.75);
+        rf(xEq, yR, wEq, SH, bg, BD); sf(5.5, 'normal', [0, 0, 0]);
         const txtEq = String(s['Equipe'] || s['Subcontratado'] || '');
         const linhasEq = doc.splitTextToSize(txtEq, wEq - 3);
-        tx(linhasEq[0] || '', xEq + 2, y + SH * 0.75);
-        y += SH;
+        tx(linhasEq[0] || '', xEq + 2, yR + SH * 0.75);
+        yR += SH;
       });
     }
-    y += 3;
+    yR += 3;
   }
 
   renderServicosBlock('SERVIÇOS DIURNOS', servicosDiurnos, ORANGE);
   renderServicosBlock('SERVIÇOS NOTURNOS', servicosNoturnos, BLUE);
+
+  // Unifica y das duas colunas
+  y = Math.max(yLeft, yR) + 2;
 
   // Observações compactas (1 linha se existirem)
   const obsCVTV = [d.observacoes_gerais, d.ocorrencias].filter(x => x && x.trim()).join(' · ');
