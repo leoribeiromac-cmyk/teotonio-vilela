@@ -6203,22 +6203,21 @@ function gerarPDFDiario(data) {
   
   rf(ML, y, TW, 6, NAV); sf(7.5, 'bold', W); tx('EFETIVO — Apontador Diurno: ' + (d.apontador_diurno || '—') + '  |  Noturno: ' + (d.apontador_noturno || '—'), ML + 2, y + 4); y += 6;
 
-  const CD = 60, CN = 12, CT = 12, CO = TW - CD - 4 * CN - CT;
+  // Sem coluna de Observações — tabela usa TW completo: CD largo + 4 colunas de valor + TOT
+  const CN = 16, CT = 20, CD = TW - 4 * CN - CT;  // CD = 194-64-20 = 110mm
   const EH = 4.0;
   rf(ML, y, CD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('FUNÇÃO', ML + 2, y + EH * 1.1);
   rf(ML + CD, y, CN * 2, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', ML + CD + CN, y + EH * 1.1, { align: 'center' });
   rf(ML + CD + CN * 2, y, CN * 2, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', ML + CD + CN * 3, y + EH * 1.1, { align: 'center' });
-  rf(ML + CD + CN * 4, y, CT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOT.', ML + CD + CN * 4 + CT / 2, y + EH * 1.1, { align: 'center' });
-  rf(ML + CD + CN * 4 + CT, y, CO, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('OBSERVAÇÕES', ML + CD + CN * 4 + CT + 2, y + EH * 1.1);
+  rf(ML + CD + CN * 4, y, CT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOTAL', ML + CD + CN * 4 + CT / 2, y + EH * 1.1, { align: 'center' });
   y += EH * 1.5;
 
   rf(ML, y, CD, EH, LB, BD);
   ['Direto', 'Indireto', 'Direto', 'Indireto'].forEach((l, i) => {
-    rf(ML + CD + i * CN, y, CN, EH, LB, BD); sf(5.5, 'bold', NAV);
+    rf(ML + CD + i * CN, y, CN, EH, LB, BD); sf(6, 'bold', NAV);
     tx(l, ML + CD + (i + 0.5) * CN, y + EH * 0.75, { align: 'center' });
   });
   rf(ML + CD + 4 * CN, y, CT, EH, LB, BD);
-  rf(ML + CD + 4 * CN + CT, y, CO, EH, LB, BD);
   y += EH;
   
   const todasCats = [
@@ -6293,7 +6292,6 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
     });
     rf(ML + CD + 4 * CN, y, CT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
     if (tot > 0) { sf(7.5, 'bold', NAV); tx(String(tot), ML + CD + 4 * CN + CT / 2, y + EH * 0.75, { align: 'center' }); }
-    rf(ML + CD + 4 * CN + CT, y, CO, EH, bg, BD);
     y += EH;
   });
   
@@ -6306,7 +6304,6 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
   });
   rf(ML + CD + 4 * CN, y, CT, TEH, RED); sf(9, 'bold', W);
   tx(String(gtV), ML + CD + 4 * CN + CT / 2, y + TEH * 0.7, { align: 'center' });
-  rf(ML + CD + 4 * CN + CT, y, CO, TEH, NAV);
   y += TEH + 2;
 
   // ════════════════════════════
@@ -6314,13 +6311,11 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
   // ════════════════════════════
   rf(ML, y, TW, 6, NAV); sf(7.5, 'bold', W); tx('EQUIPAMENTOS', ML + 2, y + 4); y += 6;
 
-  const EqCD = 80, EqCN = 18;
+  const EqCN = 24, EqCT = 24, EqCD = TW - EqCN * 2 - EqCT;  // EqCD = 194-48-24 = 122mm
   rf(ML, y, EqCD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('EQUIPAMENTO', ML + 2, y + EH * 1.1);
   rf(ML + EqCD, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', ML + EqCD + EqCN/2, y + EH * 1.1, { align: 'center' });
   rf(ML + EqCD + EqCN, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', ML + EqCD + EqCN + EqCN/2, y + EH * 1.1, { align: 'center' });
-  rf(ML + EqCD + EqCN*2, y, CT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOT.', ML + EqCD + EqCN*2 + CT/2, y + EH * 1.1, { align: 'center' });
-  const EqObs = TW - EqCD - EqCN*2 - CT;
-  rf(ML + EqCD + EqCN*2 + CT, y, EqObs, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('OBSERVAÇÕES', ML + EqCD + EqCN*2 + CT + 2, y + EH * 1.1);
+  rf(ML + EqCD + EqCN*2, y, EqCT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOT.', ML + EqCD + EqCN*2 + EqCT/2, y + EH * 1.1, { align: 'center' });
   y += EH * 1.5;
   
   // Filtrar equipamentos com valor
@@ -6368,9 +6363,8 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
     if (diu > 0) { sf(7, 'bold', NAV); tx(String(diu), ML + EqCD + EqCN/2, y + EH * 0.75, { align: 'center' }); }
     rf(ML + EqCD + EqCN, y, EqCN, EH, bg, BD);
     if (not > 0) { sf(7, 'bold', NAV); tx(String(not), ML + EqCD + EqCN + EqCN/2, y + EH * 0.75, { align: 'center' }); }
-    rf(ML + EqCD + EqCN*2, y, CT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
-    if (tot > 0) { sf(7.5, 'bold', NAV); tx(String(tot), ML + EqCD + EqCN*2 + CT/2, y + EH * 0.75, { align: 'center' }); }
-    rf(ML + EqCD + EqCN*2 + CT, y, EqObs, EH, bg, BD);
+    rf(ML + EqCD + EqCN*2, y, EqCT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
+    if (tot > 0) { sf(7.5, 'bold', NAV); tx(String(tot), ML + EqCD + EqCN*2 + EqCT/2, y + EH * 0.75, { align: 'center' }); }
     y += EH;
   });
   
@@ -6379,59 +6373,14 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
   rf(ML, y, EqCD, TEH, NAV); sf(7, 'bold', W); tx('TOTAL EQUIPAMENTOS', ML + 2, y + TEH * 0.7);
   rf(ML + EqCD, y, EqCN, TEH, NAV); sf(7.5, 'bold', W); tx(String(tEqDiu), ML + EqCD + EqCN/2, y + TEH * 0.7, { align: 'center' });
   rf(ML + EqCD + EqCN, y, EqCN, TEH, NAV); sf(7.5, 'bold', W); tx(String(tEqNot), ML + EqCD + EqCN + EqCN/2, y + TEH * 0.7, { align: 'center' });
-  rf(ML + EqCD + EqCN*2, y, CT, TEH, RED); sf(9, 'bold', W); tx(String(tEqTotal), ML + EqCD + EqCN*2 + CT/2, y + TEH * 0.7, { align: 'center' });
-  rf(ML + EqCD + EqCN*2 + CT, y, EqObs, TEH, NAV);
+  rf(ML + EqCD + EqCN*2, y, EqCT, TEH, RED); sf(9, 'bold', W); tx(String(tEqTotal), ML + EqCD + EqCN*2 + EqCT/2, y + TEH * 0.7, { align: 'center' });
   y += TEH + 2;
   
-  // ════════════════════════════════════════════════════
-  // OBSERVAÇÕES — sempre na pág 1 (com espaço sobrando)
-  // ════════════════════════════════════════════════════
-  const yMaxBeforeAssin = PH - 36;
-  rf(ML, y, TW, 6, NAV); sf(7.5, 'bold', W); tx('OBSERVAÇÕES GERAIS', ML + 2, y + 4); y += 6;
-  const hw = (TW - 3) / 2;
-  rf(ML, y, hw, 4, LB, BD); sf(5.5, 'bold', NAV); tx('OBSERVAÇÕES CVTV', ML + 2, y + 2.8);
-  rf(ML + hw + 3, y, hw, 4, LB, BD); sf(5.5, 'bold', NAV); tx('CLIENTE / FISCALIZAÇÃO', ML + hw + 5, y + 2.8);
-  y += 4;
-  const obsCVTV = [d.observacoes_gerais, d.ocorrencias].filter(x => x && x.trim()).join(' · ') || '—';
-  const obsCli = d.visitas || '—';
-  const cvL = doc.splitTextToSize(obsCVTV, hw - 4);
-  const clL = doc.splitTextToSize(obsCli, hw - 4);
-  const obsBlockH = Math.max(18, yMaxBeforeAssin - y - 2);
-  rf(ML, y, hw, obsBlockH, YB, [190, 170, 0]); sf(6.5, 'normal', [0, 0, 0]);
-  doc.text(cvL.slice(0, Math.floor(obsBlockH / 4)), ML + 2, y + 4);
-  rf(ML + hw + 3, y, hw, obsBlockH, [240, 255, 242], [0, 140, 70]); sf(6.5, 'normal', [0, 0, 0]);
-  doc.text(clL.slice(0, Math.floor(obsBlockH / 4)), ML + hw + 5, y + 4);
-  y += obsBlockH + 1;
-
-  // Assinaturas
-  rf(ML, y, TW, 5, NAV); sf(7, 'bold', W); tx('ASSINATURAS', ML + 2, y + 3.4); y += 5;
-  const sw = (TW - 4) / 2;
-  rf(ML, y, sw, 16, W, BD);
-  sf(6, 'bold', DG); tx('ENGENHEIRO GESTOR ENGENHARIA', ML + 2, y + 5);
-  ln(ML + 3, y + 12, ML + sw - 3, y + 12, [120, 120, 120], 0.3);
-  sf(6, 'normal', DG); tx(df, ML + sw / 2, y + 14.5, { align: 'center' });
-  rf(ML + sw + 4, y, sw, 16, W, BD);
-  sf(6, 'bold', DG); tx('CLIENTE / FISCALIZAÇÃO (SP OBRAS)', ML + sw + 6, y + 5);
-  ln(ML + sw + 7, y + 12, ML + 2 * sw + 1, y + 12, [120, 120, 120], 0.3);
-  sf(6, 'normal', DG); tx(df, ML + sw + 4 + sw / 2, y + 14.5, { align: 'center' });
-  y += 16;
-
-  // Rodapé pág 1
-  const fy = PH - 8;
-  ln(ML, fy - 1, ML + TW, fy - 1, NAV, 0.4);
-  sf(5.5, 'normal', DG);
-  tx('Gestor Engenharia  |  RDO Nº ' + nrRDO + '  |  Data: ' + df, PW / 2, fy + 2, { align: 'center' });
-  tx('Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária', PW / 2, fy + 5.5, { align: 'center' });
-
   // ════════════════════════════
-  // SERVIÇOS — sempre na pág 2
+  // SERVIÇOS (mesma página)
   // ════════════════════════════
-  doc.addPage();
-  y = MT;
-
-  // Cabeçalho compacto da pág 2
-  rf(ML, y, TW, 8, NAV); sf(8, 'bold', W);
-  tx('SERVIÇOS DE AVANÇO  ·  RDO Nº ' + nrRDO + '  ·  ' + df, ML + 2, y + 5.2); y += 8;
+  if (y + 18 > PH - 40) { doc.addPage(); y = MT; }
+  rf(ML, y, TW, 6, NAV); sf(7.5, 'bold', W); tx('SERVIÇOS EXECUTADOS', ML + 2, y + 4); y += 6;
 
   function renderServicosBlock(titulo, lista, corBlock) {
     const SH = 5;
@@ -6479,12 +6428,37 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
   renderServicosBlock('SERVIÇOS DIURNOS', servicosDiurnos, ORANGE);
   renderServicosBlock('SERVIÇOS NOTURNOS', servicosNoturnos, BLUE);
 
-  // Rodapé pág 2+
-  const fy2 = PH - 8;
-  ln(ML, fy2 - 1, ML + TW, fy2 - 1, NAV, 0.4);
+  // Observações compactas (1 linha se existirem)
+  const obsCVTV = [d.observacoes_gerais, d.ocorrencias].filter(x => x && x.trim()).join(' · ');
+  if (obsCVTV) {
+    if (y + 8 > PH - 40) { doc.addPage(); y = MT; }
+    rf(ML, y, TW, 6, [255, 255, 210], [180, 150, 0]);
+    sf(6, 'bold', NAV); tx('OBS: ', ML + 2, y + 4);
+    const obsL = doc.splitTextToSize(obsCVTV, TW - 14);
+    sf(6, 'normal', [0, 0, 0]); tx(obsL[0] + (obsL.length > 1 ? '…' : ''), ML + 12, y + 4);
+    y += 7;
+  }
+
+  // Assinaturas
+  if (y + 21 > PH - 14) { doc.addPage(); y = MT; }
+  rf(ML, y, TW, 5, NAV); sf(7, 'bold', W); tx('ASSINATURAS', ML + 2, y + 3.4); y += 5;
+  const sw = (TW - 4) / 2;
+  rf(ML, y, sw, 16, W, BD);
+  sf(6, 'bold', DG); tx('ENGENHEIRO GESTOR ENGENHARIA', ML + 2, y + 5);
+  ln(ML + 3, y + 12, ML + sw - 3, y + 12, [120, 120, 120], 0.3);
+  sf(6, 'normal', DG); tx(df, ML + sw / 2, y + 14.5, { align: 'center' });
+  rf(ML + sw + 4, y, sw, 16, W, BD);
+  sf(6, 'bold', DG); tx('CLIENTE / FISCALIZAÇÃO (SP OBRAS)', ML + sw + 6, y + 5);
+  ln(ML + sw + 7, y + 12, ML + 2 * sw + 1, y + 12, [120, 120, 120], 0.3);
+  sf(6, 'normal', DG); tx(df, ML + sw + 4 + sw / 2, y + 14.5, { align: 'center' });
+  y += 16;
+
+  // Rodapé
+  const fy = PH - 8;
+  ln(ML, fy - 1, ML + TW, fy - 1, NAV, 0.4);
   sf(5.5, 'normal', DG);
-  tx('Gestor Engenharia  |  RDO Nº ' + nrRDO + '  |  Data: ' + df, PW / 2, fy2 + 2, { align: 'center' });
-  tx('Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária', PW / 2, fy2 + 5.5, { align: 'center' });
+  tx('Gestor Engenharia  |  RDO Nº ' + nrRDO + '  |  Data: ' + df, PW / 2, fy + 2, { align: 'center' });
+  tx('Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária', PW / 2, fy + 5.5, { align: 'center' });
   
   const fname = 'RDO_' + data.replace(/-/g, '_') + '.pdf';
   doc.save(fname);
