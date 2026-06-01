@@ -6242,16 +6242,17 @@ function gerarPDFDiario(data) {
     }
   });
   
-  if (categorias.length < 12) {
-    const nFalta = 12 - categorias.length;
-    const placeInd = CATEGORIAS_INDIRETO.map(c => ({...c, tipo: 'indireto'}))
-      .filter(c => !categorias.some(ec => ec.key === c.key))
-      .slice(0, Math.ceil(nFalta / 2));
-    const placeDir = CATEGORIAS_DIRETO.map(c => ({...c, tipo: 'direto'}))
-      .filter(c => !categorias.some(ec => ec.key === c.key))
-      .slice(0, nFalta - placeInd.length);
-    categorias = [...categorias, ...placeInd, ...placeDir];
-  }
+  // Garantir mínimo de 5 linhas para cada tipo (direto e indireto)
+  const MIN_POR_TIPO = 5;
+  [{ tipo: 'indireto', lista: CATEGORIAS_INDIRETO }, { tipo: 'direto', lista: CATEGORIAS_DIRETO }].forEach(({ tipo, lista }) => {
+    const atual = categorias.filter(c => c.tipo === tipo).length;
+    if (atual < MIN_POR_TIPO) {
+      const extras = lista.map(c => ({...c, tipo}))
+        .filter(c => !categorias.some(ec => ec.key === c.key))
+        .slice(0, MIN_POR_TIPO - atual);
+      categorias = [...categorias, ...extras];
+    }
+  });
   
   let tcd = 0, tci = 0, ttd = 0, tti = 0;
   categorias.forEach((cat, i) => {
