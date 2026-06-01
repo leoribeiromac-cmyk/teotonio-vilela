@@ -5528,7 +5528,7 @@ function carregarDiarioDaSheet(data) {
 
   d.diurno.apontador = getCSVField(sheetRow, 'Apontador_Diurno') || getCSVField(sheetRow, 'apontador_diurno') || '';
   const localEfDiu = (localSaved && localSaved.diurno && localSaved.diurno.efetivo) || {};
-  d.diurno.efetivo = Object.keys(localEfDiu).length ? localEfDiu : (efetivoJson.padrao_diurno || {});
+  d.diurno.efetivo = { ...(efetivoJson.padrao_diurno || {}), ...localEfDiu };
   d.diurno.equipamentos = equipJson.padrao_diurno || {};
   d.diurno.customIndireto = efetivoJson.customIndireto_diurno || [];
   d.diurno.customDireto = efetivoJson.customDireto_diurno || [];
@@ -5540,7 +5540,7 @@ function carregarDiarioDaSheet(data) {
 
   d.noturno.apontador = getCSVField(sheetRow, 'Apontador_Noturno') || getCSVField(sheetRow, 'apontador_noturno') || '';
   const localEfNot = (localSaved && localSaved.noturno && localSaved.noturno.efetivo) || {};
-  d.noturno.efetivo = Object.keys(localEfNot).length ? localEfNot : (efetivoJson.padrao_noturno || {});
+  d.noturno.efetivo = { ...(efetivoJson.padrao_noturno || {}), ...localEfNot };
   d.noturno.equipamentos = equipJson.padrao_noturno || {};
   d.noturno.customIndireto = efetivoJson.customIndireto_noturno || [];
   d.noturno.customDireto = efetivoJson.customDireto_noturno || [];
@@ -6035,14 +6035,14 @@ function gerarPDFDiario(data) {
     try { efetJson = JSON.parse(rawEfetivo); } catch(e) {}
     try { equipJson = JSON.parse(rawEquip); } catch(e) {}
 
-    // Preferir localStorage se disponível (pode ter dados mais recentes não enviados ainda)
+    // Une planilha + localStorage: um valor presente em QUALQUER fonte aparece.
+    // localStorage (edições mais recentes do aparelho) sobrescreve a planilha
+    // chave-a-chave, mas nunca apaga chaves que só existem na planilha.
     const localDiario = loadDiarioV4(data);
-    const efetivoDiurno = (localDiario && localDiario.diurno && Object.keys(localDiario.diurno.efetivo || {}).length)
-      ? localDiario.diurno.efetivo
-      : (efetJson.padrao_diurno || {});
-    const efetivoNoturno = (localDiario && localDiario.noturno && Object.keys(localDiario.noturno.efetivo || {}).length)
-      ? localDiario.noturno.efetivo
-      : (efetJson.padrao_noturno || {});
+    const localEfDiu = (localDiario && localDiario.diurno && localDiario.diurno.efetivo) || {};
+    const localEfNot = (localDiario && localDiario.noturno && localDiario.noturno.efetivo) || {};
+    const efetivoDiurno = { ...(efetJson.padrao_diurno || {}), ...localEfDiu };
+    const efetivoNoturno = { ...(efetJson.padrao_noturno || {}), ...localEfNot };
 
     d = {
       data: data,
@@ -6533,12 +6533,10 @@ function gerarPDFInterno(data, turnoFocus) {
     try { equipJson = JSON.parse(rawEqInt); } catch(e) {}
 
     const localDiarioInt = loadDiarioV4(data);
-    const efetivoDiurnoInt = (localDiarioInt && localDiarioInt.diurno && Object.keys(localDiarioInt.diurno.efetivo || {}).length)
-      ? localDiarioInt.diurno.efetivo
-      : (efetJson.padrao_diurno || {});
-    const efetivoNoturnoInt = (localDiarioInt && localDiarioInt.noturno && Object.keys(localDiarioInt.noturno.efetivo || {}).length)
-      ? localDiarioInt.noturno.efetivo
-      : (efetJson.padrao_noturno || {});
+    const localEfDiuInt = (localDiarioInt && localDiarioInt.diurno && localDiarioInt.diurno.efetivo) || {};
+    const localEfNotInt = (localDiarioInt && localDiarioInt.noturno && localDiarioInt.noturno.efetivo) || {};
+    const efetivoDiurnoInt = { ...(efetJson.padrao_diurno || {}), ...localEfDiuInt };
+    const efetivoNoturnoInt = { ...(efetJson.padrao_noturno || {}), ...localEfNotInt };
 
     d = {
       data: data,
