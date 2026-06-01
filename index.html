@@ -6201,21 +6201,21 @@ function gerarPDFDiario(data) {
   });
   y += JH + 2;
   
-  rf(ML, y, TW, 5, NAV); sf(6.5, 'bold', W); tx('EFETIVO — Apontador Diurno: ' + (d.apontador_diurno || '—') + '  |  Noturno: ' + (d.apontador_noturno || '—'), ML + 2, y + 3.3); y += 5;
-  
+  rf(ML, y, TW, 6, NAV); sf(7.5, 'bold', W); tx('EFETIVO — Apontador Diurno: ' + (d.apontador_diurno || '—') + '  |  Noturno: ' + (d.apontador_noturno || '—'), ML + 2, y + 4); y += 6;
+
   const CD = 60, CN = 12, CT = 12, CO = TW - CD - 4 * CN - CT;
-  const EH = 3.4;
-  rf(ML, y, CD, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('FUNÇÃO', ML + 2, y + EH);
-  rf(ML + CD, y, CN * 2, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('DIURNO', ML + CD + CN, y + EH, { align: 'center' });
-  rf(ML + CD + CN * 2, y, CN * 2, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('NOTURNO', ML + CD + CN * 3, y + EH, { align: 'center' });
-  rf(ML + CD + CN * 4, y, CT, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('TOT.', ML + CD + CN * 4 + CT / 2, y + EH, { align: 'center' });
-  rf(ML + CD + CN * 4 + CT, y, CO, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('OBSERVAÇÕES', ML + CD + CN * 4 + CT + 2, y + EH);
+  const EH = 4.0;
+  rf(ML, y, CD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('FUNÇÃO', ML + 2, y + EH * 1.1);
+  rf(ML + CD, y, CN * 2, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', ML + CD + CN, y + EH * 1.1, { align: 'center' });
+  rf(ML + CD + CN * 2, y, CN * 2, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', ML + CD + CN * 3, y + EH * 1.1, { align: 'center' });
+  rf(ML + CD + CN * 4, y, CT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOT.', ML + CD + CN * 4 + CT / 2, y + EH * 1.1, { align: 'center' });
+  rf(ML + CD + CN * 4 + CT, y, CO, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('OBSERVAÇÕES', ML + CD + CN * 4 + CT + 2, y + EH * 1.1);
   y += EH * 1.5;
-  
+
   rf(ML, y, CD, EH, LB, BD);
   ['Direto', 'Indireto', 'Direto', 'Indireto'].forEach((l, i) => {
-    rf(ML + CD + i * CN, y, CN, EH, LB, BD); sf(4.5, 'bold', NAV);
-    tx(l, ML + CD + (i + 0.5) * CN, y + EH * 0.72, { align: 'center' });
+    rf(ML + CD + i * CN, y, CN, EH, LB, BD); sf(5.5, 'bold', NAV);
+    tx(l, ML + CD + (i + 0.5) * CN, y + EH * 0.75, { align: 'center' });
   });
   rf(ML + CD + 4 * CN, y, CT, EH, LB, BD);
   rf(ML + CD + 4 * CN + CT, y, CO, EH, LB, BD);
@@ -6286,41 +6286,41 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
     tcd += cd; tci += ci; ttd += td; tti += ti;
     
     const bg = i % 2 === 0 ? W : LG;
-    rf(ML, y, CD, EH, bg, BD); sf(5.5, 'normal', [0, 0, 0]); tx(cat.label, ML + 1.5, y + EH * 0.72);
+    rf(ML, y, CD, EH, bg, BD); sf(6.5, 'normal', [0, 0, 0]); tx(cat.label, ML + 1.5, y + EH * 0.75);
     [cd, ci, td, ti].forEach((v, j) => {
       rf(ML + CD + j * CN, y, CN, EH, bg, BD);
-      if (v > 0) { sf(6, 'bold', NAV); tx(String(v), ML + CD + (j + 0.5) * CN, y + EH * 0.72, { align: 'center' }); }
+      if (v > 0) { sf(7, 'bold', NAV); tx(String(v), ML + CD + (j + 0.5) * CN, y + EH * 0.75, { align: 'center' }); }
     });
     rf(ML + CD + 4 * CN, y, CT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
-    if (tot > 0) { sf(6.5, 'bold', NAV); tx(String(tot), ML + CD + 4 * CN + CT / 2, y + EH * 0.72, { align: 'center' }); }
+    if (tot > 0) { sf(7.5, 'bold', NAV); tx(String(tot), ML + CD + 4 * CN + CT / 2, y + EH * 0.75, { align: 'center' }); }
     rf(ML + CD + 4 * CN + CT, y, CO, EH, bg, BD);
     y += EH;
   });
   
   const gtV = tcd + tci + ttd + tti;
-  const TEH = 4;
-  rf(ML, y, CD, TEH, NAV); sf(6, 'bold', W); tx('TOTAL EFETIVO', ML + 2, y + TEH * 0.68);
+  const TEH = 5;
+  rf(ML, y, CD, TEH, NAV); sf(7, 'bold', W); tx('TOTAL EFETIVO', ML + 2, y + TEH * 0.7);
   [tcd, tci, ttd, tti].forEach((v, j) => {
-    rf(ML + CD + j * CN, y, CN, TEH, NAV); sf(6.5, 'bold', W);
-    tx(String(v), ML + CD + (j + 0.5) * CN, y + TEH * 0.68, { align: 'center' });
+    rf(ML + CD + j * CN, y, CN, TEH, NAV); sf(7.5, 'bold', W);
+    tx(String(v), ML + CD + (j + 0.5) * CN, y + TEH * 0.7, { align: 'center' });
   });
-  rf(ML + CD + 4 * CN, y, CT, TEH, RED); sf(7.5, 'bold', W);
-  tx(String(gtV), ML + CD + 4 * CN + CT / 2, y + TEH * 0.68, { align: 'center' });
+  rf(ML + CD + 4 * CN, y, CT, TEH, RED); sf(9, 'bold', W);
+  tx(String(gtV), ML + CD + 4 * CN + CT / 2, y + TEH * 0.7, { align: 'center' });
   rf(ML + CD + 4 * CN + CT, y, CO, TEH, NAV);
   y += TEH + 2;
-  
+
   // ════════════════════════════
   // EQUIPAMENTOS (Diurno + Noturno)
   // ════════════════════════════
-  rf(ML, y, TW, 5, NAV); sf(6.5, 'bold', W); tx('EQUIPAMENTOS', ML + 2, y + 3.3); y += 5;
-  
+  rf(ML, y, TW, 6, NAV); sf(7.5, 'bold', W); tx('EQUIPAMENTOS', ML + 2, y + 4); y += 6;
+
   const EqCD = 80, EqCN = 18;
-  rf(ML, y, EqCD, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('EQUIPAMENTO', ML + 2, y + EH);
-  rf(ML + EqCD, y, EqCN, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('DIURNO', ML + EqCD + EqCN/2, y + EH, { align: 'center' });
-  rf(ML + EqCD + EqCN, y, EqCN, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('NOTURNO', ML + EqCD + EqCN + EqCN/2, y + EH, { align: 'center' });
-  rf(ML + EqCD + EqCN*2, y, CT, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('TOT.', ML + EqCD + EqCN*2 + CT/2, y + EH, { align: 'center' });
+  rf(ML, y, EqCD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('EQUIPAMENTO', ML + 2, y + EH * 1.1);
+  rf(ML + EqCD, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', ML + EqCD + EqCN/2, y + EH * 1.1, { align: 'center' });
+  rf(ML + EqCD + EqCN, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', ML + EqCD + EqCN + EqCN/2, y + EH * 1.1, { align: 'center' });
+  rf(ML + EqCD + EqCN*2, y, CT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOT.', ML + EqCD + EqCN*2 + CT/2, y + EH * 1.1, { align: 'center' });
   const EqObs = TW - EqCD - EqCN*2 - CT;
-  rf(ML + EqCD + EqCN*2 + CT, y, EqObs, EH * 1.5, LB, BD); sf(5.5, 'bold', NAV); tx('OBSERVAÇÕES', ML + EqCD + EqCN*2 + CT + 2, y + EH);
+  rf(ML + EqCD + EqCN*2 + CT, y, EqObs, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('OBSERVAÇÕES', ML + EqCD + EqCN*2 + CT + 2, y + EH * 1.1);
   y += EH * 1.5;
   
   // Filtrar equipamentos com valor
@@ -6363,51 +6363,96 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
     tEqDiu += diu; tEqNot += not;
     
     const bg = i % 2 === 0 ? W : LG;
-    rf(ML, y, EqCD, EH, bg, BD); sf(5.5, 'normal', [0, 0, 0]); tx(eq.label, ML + 1.5, y + EH * 0.72);
+    rf(ML, y, EqCD, EH, bg, BD); sf(6.5, 'normal', [0, 0, 0]); tx(eq.label, ML + 1.5, y + EH * 0.75);
     rf(ML + EqCD, y, EqCN, EH, bg, BD);
-    if (diu > 0) { sf(6, 'bold', NAV); tx(String(diu), ML + EqCD + EqCN/2, y + EH * 0.72, { align: 'center' }); }
+    if (diu > 0) { sf(7, 'bold', NAV); tx(String(diu), ML + EqCD + EqCN/2, y + EH * 0.75, { align: 'center' }); }
     rf(ML + EqCD + EqCN, y, EqCN, EH, bg, BD);
-    if (not > 0) { sf(6, 'bold', NAV); tx(String(not), ML + EqCD + EqCN + EqCN/2, y + EH * 0.72, { align: 'center' }); }
+    if (not > 0) { sf(7, 'bold', NAV); tx(String(not), ML + EqCD + EqCN + EqCN/2, y + EH * 0.75, { align: 'center' }); }
     rf(ML + EqCD + EqCN*2, y, CT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
-    if (tot > 0) { sf(6.5, 'bold', NAV); tx(String(tot), ML + EqCD + EqCN*2 + CT/2, y + EH * 0.72, { align: 'center' }); }
+    if (tot > 0) { sf(7.5, 'bold', NAV); tx(String(tot), ML + EqCD + EqCN*2 + CT/2, y + EH * 0.75, { align: 'center' }); }
     rf(ML + EqCD + EqCN*2 + CT, y, EqObs, EH, bg, BD);
     y += EH;
   });
   
   // Total equipamentos
   const tEqTotal = tEqDiu + tEqNot;
-  rf(ML, y, EqCD, TEH, NAV); sf(6, 'bold', W); tx('TOTAL EQUIPAMENTOS', ML + 2, y + TEH * 0.68);
-  rf(ML + EqCD, y, EqCN, TEH, NAV); sf(6.5, 'bold', W); tx(String(tEqDiu), ML + EqCD + EqCN/2, y + TEH * 0.68, { align: 'center' });
-  rf(ML + EqCD + EqCN, y, EqCN, TEH, NAV); sf(6.5, 'bold', W); tx(String(tEqNot), ML + EqCD + EqCN + EqCN/2, y + TEH * 0.68, { align: 'center' });
-  rf(ML + EqCD + EqCN*2, y, CT, TEH, RED); sf(7.5, 'bold', W); tx(String(tEqTotal), ML + EqCD + EqCN*2 + CT/2, y + TEH * 0.68, { align: 'center' });
+  rf(ML, y, EqCD, TEH, NAV); sf(7, 'bold', W); tx('TOTAL EQUIPAMENTOS', ML + 2, y + TEH * 0.7);
+  rf(ML + EqCD, y, EqCN, TEH, NAV); sf(7.5, 'bold', W); tx(String(tEqDiu), ML + EqCD + EqCN/2, y + TEH * 0.7, { align: 'center' });
+  rf(ML + EqCD + EqCN, y, EqCN, TEH, NAV); sf(7.5, 'bold', W); tx(String(tEqNot), ML + EqCD + EqCN + EqCN/2, y + TEH * 0.7, { align: 'center' });
+  rf(ML + EqCD + EqCN*2, y, CT, TEH, RED); sf(9, 'bold', W); tx(String(tEqTotal), ML + EqCD + EqCN*2 + CT/2, y + TEH * 0.7, { align: 'center' });
   rf(ML + EqCD + EqCN*2 + CT, y, EqObs, TEH, NAV);
   y += TEH + 2;
   
+  // ════════════════════════════════════════════════════
+  // OBSERVAÇÕES — sempre na pág 1 (com espaço sobrando)
+  // ════════════════════════════════════════════════════
+  const yMaxBeforeAssin = PH - 36;
+  rf(ML, y, TW, 6, NAV); sf(7.5, 'bold', W); tx('OBSERVAÇÕES GERAIS', ML + 2, y + 4); y += 6;
+  const hw = (TW - 3) / 2;
+  rf(ML, y, hw, 4, LB, BD); sf(5.5, 'bold', NAV); tx('OBSERVAÇÕES CVTV', ML + 2, y + 2.8);
+  rf(ML + hw + 3, y, hw, 4, LB, BD); sf(5.5, 'bold', NAV); tx('CLIENTE / FISCALIZAÇÃO', ML + hw + 5, y + 2.8);
+  y += 4;
+  const obsCVTV = [d.observacoes_gerais, d.ocorrencias].filter(x => x && x.trim()).join(' · ') || '—';
+  const obsCli = d.visitas || '—';
+  const cvL = doc.splitTextToSize(obsCVTV, hw - 4);
+  const clL = doc.splitTextToSize(obsCli, hw - 4);
+  const obsBlockH = Math.max(18, yMaxBeforeAssin - y - 2);
+  rf(ML, y, hw, obsBlockH, YB, [190, 170, 0]); sf(6.5, 'normal', [0, 0, 0]);
+  doc.text(cvL.slice(0, Math.floor(obsBlockH / 4)), ML + 2, y + 4);
+  rf(ML + hw + 3, y, hw, obsBlockH, [240, 255, 242], [0, 140, 70]); sf(6.5, 'normal', [0, 0, 0]);
+  doc.text(clL.slice(0, Math.floor(obsBlockH / 4)), ML + hw + 5, y + 4);
+  y += obsBlockH + 1;
+
+  // Assinaturas
+  rf(ML, y, TW, 5, NAV); sf(7, 'bold', W); tx('ASSINATURAS', ML + 2, y + 3.4); y += 5;
+  const sw = (TW - 4) / 2;
+  rf(ML, y, sw, 16, W, BD);
+  sf(6, 'bold', DG); tx('ENGENHEIRO GESTOR ENGENHARIA', ML + 2, y + 5);
+  ln(ML + 3, y + 12, ML + sw - 3, y + 12, [120, 120, 120], 0.3);
+  sf(6, 'normal', DG); tx(df, ML + sw / 2, y + 14.5, { align: 'center' });
+  rf(ML + sw + 4, y, sw, 16, W, BD);
+  sf(6, 'bold', DG); tx('CLIENTE / FISCALIZAÇÃO (SP OBRAS)', ML + sw + 6, y + 5);
+  ln(ML + sw + 7, y + 12, ML + 2 * sw + 1, y + 12, [120, 120, 120], 0.3);
+  sf(6, 'normal', DG); tx(df, ML + sw + 4 + sw / 2, y + 14.5, { align: 'center' });
+  y += 16;
+
+  // Rodapé pág 1
+  const fy = PH - 8;
+  ln(ML, fy - 1, ML + TW, fy - 1, NAV, 0.4);
+  sf(5.5, 'normal', DG);
+  tx('Gestor Engenharia  |  RDO Nº ' + nrRDO + '  |  Data: ' + df, PW / 2, fy + 2, { align: 'center' });
+  tx('Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária', PW / 2, fy + 5.5, { align: 'center' });
+
   // ════════════════════════════
-  // SERVIÇOS DIURNOS + NOTURNOS
+  // SERVIÇOS — sempre na pág 2
   // ════════════════════════════
+  doc.addPage();
+  y = MT;
+
+  // Cabeçalho compacto da pág 2
+  rf(ML, y, TW, 8, NAV); sf(8, 'bold', W);
+  tx('SERVIÇOS DE AVANÇO  ·  RDO Nº ' + nrRDO + '  ·  ' + df, ML + 2, y + 5.2); y += 8;
+
   function renderServicosBlock(titulo, lista, corBlock) {
-    const SH = 4;
-    const wPac = TW * 0.64, wLoc = TW * 0.16, wEq = TW * 0.20;
+    const SH = 5;
+    const wPac = TW * 0.62, wLoc = TW * 0.17, wEq = TW * 0.21;
     const xPac = ML, xLoc = xPac + wPac, xEq = xLoc + wLoc;
 
-    // Quebra de página se não couber header + pelo menos 2 linhas
-    if (y + 4.5 + SH * 3 > PH - 18) { doc.addPage(); y = MT; }
-
-    rf(ML, y, TW, 4.5, corBlock); sf(6.5, 'bold', W); tx(titulo, ML + 2, y + 3); y += 4.5;
+    if (y + 6 + SH * 3 > PH - 18) { doc.addPage(); y = MT; }
+    rf(ML, y, TW, 6, corBlock); sf(7.5, 'bold', W); tx(titulo, ML + 2, y + 4); y += 6;
 
     function cabServicos() {
-      rf(xPac, y, wPac, SH, LB, BD); sf(5, 'bold', NAV); tx('FRENTE / PACOTE', xPac + 2, y + SH * 0.72);
-      rf(xLoc, y, wLoc, SH, LB, BD); sf(5, 'bold', NAV); tx('LOCAL', xLoc + 2, y + SH * 0.72);
-      rf(xEq, y, wEq, SH, LB, BD); sf(5, 'bold', NAV); tx('EQUIPE', xEq + 2, y + SH * 0.72);
+      rf(xPac, y, wPac, SH, LB, BD); sf(6, 'bold', NAV); tx('FRENTE / PACOTE', xPac + 2, y + SH * 0.75);
+      rf(xLoc, y, wLoc, SH, LB, BD); sf(6, 'bold', NAV); tx('LOCAL / ESTACA', xLoc + 2, y + SH * 0.75);
+      rf(xEq, y, wEq, SH, LB, BD); sf(6, 'bold', NAV); tx('EQUIPE', xEq + 2, y + SH * 0.75);
       y += SH;
     }
     cabServicos();
 
     if (lista.length === 0) {
       rf(xPac, y, TW, SH, [253, 246, 230], BD);
-      sf(5.5, 'italic', [140, 90, 30]);
-      tx('— sem serviços neste turno —', xPac + TW / 2, y + SH * 0.72, { align: 'center' });
+      sf(6.5, 'italic', [140, 90, 30]);
+      tx('— sem serviços neste turno —', xPac + TW / 2, y + SH * 0.75, { align: 'center' });
       y += SH;
     } else {
       lista.forEach((s, i) => {
@@ -6415,63 +6460,31 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
         const bg = i % 2 === 0 ? W : LG;
         const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
         const frente = pacote ? (pacote['Frente'] || '') : '';
-        rf(xPac, y, wPac, SH, bg, BD); sf(5.5, 'normal', [0, 0, 0]);
+        rf(xPac, y, wPac, SH, bg, BD); sf(6.5, 'normal', [0, 0, 0]);
         const txtPacote = (frente ? frente + ' · ' : '') + (s['Pacote_Nome'] || '');
         const linhasPac = doc.splitTextToSize(txtPacote, wPac - 3);
-        if (linhasPac.length === 1) tx(linhasPac[0], xPac + 1.5, y + SH * 0.72);
-        else { sf(4.8, 'normal', [0, 0, 0]); tx(linhasPac[0], xPac + 1.5, y + SH * 0.45); tx(linhasPac[1] || '', xPac + 1.5, y + SH * 0.85); }
-        rf(xLoc, y, wLoc, SH, bg, BD); sf(5.5, 'normal', [40, 40, 40]); tx(String(s['Local_Estaca'] || ''), xLoc + 1.5, y + SH * 0.72);
-        rf(xEq, y, wEq, SH, bg, BD); sf(5, 'normal', [0, 0, 0]);
+        if (linhasPac.length === 1) tx(linhasPac[0], xPac + 2, y + SH * 0.75);
+        else { sf(5.5, 'normal', [0, 0, 0]); tx(linhasPac[0], xPac + 2, y + SH * 0.45); tx(linhasPac[1] || '', xPac + 2, y + SH * 0.85); }
+        rf(xLoc, y, wLoc, SH, bg, BD); sf(6.5, 'normal', [40, 40, 40]); tx(String(s['Local_Estaca'] || ''), xLoc + 2, y + SH * 0.75);
+        rf(xEq, y, wEq, SH, bg, BD); sf(6, 'normal', [0, 0, 0]);
         const txtEq = String(s['Equipe'] || s['Subcontratado'] || '');
-        const linhasEq = doc.splitTextToSize(txtEq, wEq - 2);
-        tx(linhasEq[0] || '', xEq + 1.5, y + SH * 0.72);
+        const linhasEq = doc.splitTextToSize(txtEq, wEq - 3);
+        tx(linhasEq[0] || '', xEq + 2, y + SH * 0.75);
         y += SH;
       });
     }
-    y += 2;
+    y += 3;
   }
 
   renderServicosBlock('SERVIÇOS DIURNOS', servicosDiurnos, ORANGE);
   renderServicosBlock('SERVIÇOS NOTURNOS', servicosNoturnos, BLUE);
 
-  // Observações — nova página se não couber obs + assinaturas
-  if (y > PH - 55) { doc.addPage(); y = MT; }
-  const yMaxBeforeAssin = PH - 32;
-  rf(ML, y, TW, 4.5, NAV); sf(6.5, 'bold', W); tx('OBSERVAÇÕES GERAIS', ML + 2, y + 3); y += 4.5;
-  const hw = (TW - 3) / 2;
-  rf(ML, y, hw, 3.5, LB, BD); sf(4.5, 'bold', NAV); tx('OBSERVAÇÕES CVTV', ML + 2, y + 2.5);
-  rf(ML + hw + 3, y, hw, 3.5, LB, BD); sf(4.5, 'bold', NAV); tx('CLIENTE / FISCALIZAÇÃO', ML + hw + 5, y + 2.5);
-  y += 3.5;
-  const obsCVTV = [d.observacoes_gerais, d.ocorrencias].filter(x => x && x.trim()).join(' · ') || '—';
-  const obsCli = d.visitas || '—';
-  const cvL = doc.splitTextToSize(obsCVTV, hw - 3);
-  const clL = doc.splitTextToSize(obsCli, hw - 3);
-  const obsBlockH = Math.max(15, yMaxBeforeAssin - y - 2);
-  rf(ML, y, hw, obsBlockH, YB, [190, 170, 0]); sf(5.5, 'normal', [0, 0, 0]);
-  doc.text(cvL.slice(0, Math.floor(obsBlockH / 3.5)), ML + 2, y + 3);
-  rf(ML + hw + 3, y, hw, obsBlockH, [240, 255, 242], [0, 140, 70]); sf(5.5, 'normal', [0, 0, 0]);
-  doc.text(clL.slice(0, Math.floor(obsBlockH / 3.5)), ML + hw + 5, y + 3);
-  y += obsBlockH + 1;
-  
-  // Assinaturas
-  rf(ML, y, TW, 4, NAV); sf(6, 'bold', W); tx('ASSINATURAS', ML + 2, y + 2.8); y += 4;
-  const sw = (TW - 4) / 2;
-  rf(ML, y, sw, 14, W, BD);
-  sf(5, 'bold', DG); tx('ENGENHEIRO GESTOR ENGENHARIA', ML + 2, y + 4);
-  ln(ML + 3, y + 10.5, ML + sw - 3, y + 10.5, [120, 120, 120], 0.3);
-  sf(5, 'normal', DG); tx(df, ML + sw / 2, y + 13, { align: 'center' });
-  rf(ML + sw + 4, y, sw, 14, W, BD);
-  sf(5, 'bold', DG); tx('CLIENTE / FISCALIZAÇÃO (SP OBRAS)', ML + sw + 6, y + 4);
-  ln(ML + sw + 7, y + 10.5, ML + 2 * sw + 1, y + 10.5, [120, 120, 120], 0.3);
-  sf(5, 'normal', DG); tx(df, ML + sw + 4 + sw / 2, y + 13, { align: 'center' });
-  y += 14;
-  
-  // Rodapé
-  const fy = PH - 8;
-  ln(ML, fy - 1, ML + TW, fy - 1, NAV, 0.4);
-  sf(5, 'normal', DG);
-  tx('Gestor Engenharia  |  RDO Nº ' + nrRDO + '  |  Data: ' + df, PW / 2, fy + 2, { align: 'center' });
-  tx('Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária', PW / 2, fy + 5.5, { align: 'center' });
+  // Rodapé pág 2+
+  const fy2 = PH - 8;
+  ln(ML, fy2 - 1, ML + TW, fy2 - 1, NAV, 0.4);
+  sf(5.5, 'normal', DG);
+  tx('Gestor Engenharia  |  RDO Nº ' + nrRDO + '  |  Data: ' + df, PW / 2, fy2 + 2, { align: 'center' });
+  tx('Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária', PW / 2, fy2 + 5.5, { align: 'center' });
   
   const fname = 'RDO_' + data.replace(/-/g, '_') + '.pdf';
   doc.save(fname);
