@@ -6243,10 +6243,15 @@ function gerarPDFDiario(data) {
   });
   
   if (categorias.length < 12) {
-    const placeholders = todasCats.filter(c => !categorias.some(ec => ec.key === c.key)).slice(0, 12 - categorias.length);
-    categorias = [...categorias, ...placeholders];
+    const nFalta = 12 - categorias.length;
+    const placeInd = CATEGORIAS_INDIRETO.map(c => ({...c, tipo: 'indireto'}))
+      .filter(c => !categorias.some(ec => ec.key === c.key))
+      .slice(0, Math.ceil(nFalta / 2));
+    const placeDir = CATEGORIAS_DIRETO.map(c => ({...c, tipo: 'direto'}))
+      .filter(c => !categorias.some(ec => ec.key === c.key))
+      .slice(0, nFalta - placeInd.length);
+    categorias = [...categorias, ...placeInd, ...placeDir];
   }
-  categorias = categorias.slice(0, 14);
   
   let tcd = 0, tci = 0, ttd = 0, tti = 0;
   categorias.forEach((cat, i) => {
