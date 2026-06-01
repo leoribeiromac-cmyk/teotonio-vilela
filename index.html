@@ -4748,16 +4748,49 @@ window.apagarDuplicatasRDO = async function() {
   }
 };
 
+let SELECTED_RDO_DATAS = new Set();
+
+function toggleRDOSelect(data, cb) {
+  if (cb.checked) SELECTED_RDO_DATAS.add(data);
+  else SELECTED_RDO_DATAS.delete(data);
+  atualizarBotaoLote();
+}
+
+function toggleTodosRDOs(cb) {
+  document.querySelectorAll('.rdo-check').forEach(c => {
+    c.checked = cb.checked;
+    if (cb.checked) SELECTED_RDO_DATAS.add(c.dataset.data);
+    else SELECTED_RDO_DATAS.delete(c.dataset.data);
+  });
+  atualizarBotaoLote();
+}
+
+function atualizarBotaoLote() {
+  const btn = document.getElementById('btnLotePDF');
+  if (!btn) return;
+  const n = SELECTED_RDO_DATAS.size;
+  btn.disabled = n === 0;
+  btn.textContent = n > 0 ? `📄 Gerar ${n} PDF${n > 1 ? 's' : ''}` : '📄 Gerar PDFs em Lote';
+}
+
+function gerarPDFsEmLote() {
+  const datas = [...SELECTED_RDO_DATAS].sort();
+  if (datas.length === 0) { toast('Selecione ao menos um RDO', 'error'); return; }
+  toast(`Gerando ${datas.length} PDF${datas.length > 1 ? 's' : ''}… aguarde`, 'info', datas.length * 1000 + 1000);
+  datas.forEach((data, i) => setTimeout(() => gerarPDFDiario(data), i * 900));
+}
+
 function renderHistoricoDiarios() {
+  SELECTED_RDO_DATAS = new Set();
   const diarios = [...(STATE.rdodiario||[])].reverse();
-  
+
   let bodyContent = '';
   if (diarios.length === 0) {
     bodyContent = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum RDO Diário ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdodiario\')">+ Criar primeiro RDO Diário</button></div>';
   } else {
     const tableRows = diarios.map(r => {
       let total = 0;
-      try { 
+      try {
          const ef = JSON.parse(getCSVField(r, 'Efetivo_JSON') || '{}');
          const diu = ef.padrao_diurno || {};
          const not = ef.padrao_noturno || {};
@@ -4768,22 +4801,22 @@ function renderHistoricoDiarios() {
          (ef.customDireto_noturno || []).forEach(v => total += parseInt(v.qtd) || 0);
          (ef.customIndireto_noturno || []).forEach(v => total += parseInt(v.qtd) || 0);
       } catch(e) {
-         // Fallback para dados V3 antigos
          const cats = ['Servente','Pedreiro','Armador','Carpinteiro','OpMaquina','Sinaleiro','Encarregado'];
          cats.forEach(c => {
            total += parseInt(getCSVField(r, c+'_Diurno')) || 0;
            total += parseInt(getCSVField(r, c+'_Noturno')) || 0;
          });
       }
-      
+
       const climaResumo = [getCSVField(r, 'Clima_Manha'), getCSVField(r, 'Clima_Tarde'), getCSVField(r, 'Clima_Noite')].filter(Boolean).join(' · ');
       const hasNoturno = getCSVField(r, 'Apontador_Noturno') || String(getCSVField(r, 'Tem_Turno_Noturno')).toLowerCase() === 'true' || getCSVField(r, 'Tem_Turno_Noturno') === 'Sim';
-      
+
       const dObj = parseISODate(getCSVField(r, 'Data'));
       const dStr = dObj ? getLocalISODate(dObj) : getCSVField(r, 'Data');
-      
+
       return `
         <tr>
+          <td style="width:32px;text-align:center"><input type="checkbox" class="rdo-check" data-data="${dStr}" onchange="toggleRDOSelect('${dStr}', this)" style="width:16px;height:16px;cursor:pointer"></td>
           <td class="t-mono">${getCSVField(r, 'ID')||''}</td>
           <td>${fmtData(getCSVField(r, 'Data'))}</td>
           <td style="font-size:12px">${getCSVField(r, 'Encarregado')||''}</td>
@@ -4791,17 +4824,18 @@ function renderHistoricoDiarios() {
           <td style="font-size:11px;color:var(--muted)">${climaResumo}</td>
           <td class="t-num">${total}</td>
           <td>${hasNoturno ?'<span class="pill pill-blu">Sim</span>':'<span class="pill pill-ylw">Não</span>'}</td>
-          <td><button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')">📄 PDF</button></td>
+          <td><button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')">📄</button></td>
         </tr>
       `;
     }).join('');
-    
+
     bodyContent = `
       <table class="t">
         <thead><tr>
+          <th style="width:32px;text-align:center"><input type="checkbox" id="cbTodos" onchange="toggleTodosRDOs(this)" title="Selecionar todos" style="width:16px;height:16px;cursor:pointer"></th>
           <th>ID</th><th>Data</th><th>Encarregado</th><th>Apontador</th>
           <th>Clima</th>
-          <th class="t-num" style="text-align:right">Efetivo Total</th>
+          <th class="t-num" style="text-align:right">Efetivo</th>
           <th>Noturno?</th>
           <th></th>
         </tr></thead>
@@ -4811,14 +4845,15 @@ function renderHistoricoDiarios() {
       </table>
     `;
   }
-  
+
   return `
     <div class="card stagger-item" style="animation-delay: .1s">
       <div class="card-header">
         <div>
           <div class="card-title">RDOs Diários</div>
-          <div class="card-title-sub">Cabeçalhos do dia · efetivo, equipamentos, clima · clique pra gerar PDF</div>
+          <div class="card-title-sub">Selecione vários para gerar PDFs em lote</div>
         </div>
+        <button id="btnLotePDF" class="btn btn-primary" onclick="gerarPDFsEmLote()" disabled style="white-space:nowrap">📄 Gerar PDFs em Lote</button>
       </div>
       <div class="card-body flush">
         ${bodyContent}
@@ -7006,6 +7041,9 @@ window.toggleSidebar = toggleSidebar;
 window.setTurno = setTurno;
 // window.navegacaoRDODiario removed - function not defined
 window.gerarPDFDiario = gerarPDFDiario;
+window.gerarPDFsEmLote = gerarPDFsEmLote;
+window.toggleRDOSelect = toggleRDOSelect;
+window.toggleTodosRDOs = toggleTodosRDOs;
 window.setHistoricoTab = setHistoricoTab;
 window.selecionarTurnoV4 = selecionarTurnoV4;
 window.voltarSeletorTurnoV4 = voltarSeletorTurnoV4;
