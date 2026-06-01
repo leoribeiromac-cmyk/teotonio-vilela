@@ -6387,16 +6387,23 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
   // SERVIÇOS DIURNOS + NOTURNOS
   // ════════════════════════════
   function renderServicosBlock(titulo, lista, corBlock) {
-    rf(ML, y, TW, 4.5, corBlock); sf(6.5, 'bold', W); tx(titulo, ML + 2, y + 3); y += 4.5;
     const SH = 4;
     const wPac = TW * 0.64, wLoc = TW * 0.16, wEq = TW * 0.20;
     const xPac = ML, xLoc = xPac + wPac, xEq = xLoc + wLoc;
-    
-    rf(xPac, y, wPac, SH, LB, BD); sf(5, 'bold', NAV); tx('FRENTE / PACOTE', xPac + 2, y + SH * 0.72);
-    rf(xLoc, y, wLoc, SH, LB, BD); sf(5, 'bold', NAV); tx('LOCAL', xLoc + 2, y + SH * 0.72);
-    rf(xEq, y, wEq, SH, LB, BD); sf(5, 'bold', NAV); tx('EQUIPE', xEq + 2, y + SH * 0.72);
-    y += SH;
-    
+
+    // Quebra de página se não couber header + pelo menos 2 linhas
+    if (y + 4.5 + SH * 3 > PH - 18) { doc.addPage(); y = MT; }
+
+    rf(ML, y, TW, 4.5, corBlock); sf(6.5, 'bold', W); tx(titulo, ML + 2, y + 3); y += 4.5;
+
+    function cabServicos() {
+      rf(xPac, y, wPac, SH, LB, BD); sf(5, 'bold', NAV); tx('FRENTE / PACOTE', xPac + 2, y + SH * 0.72);
+      rf(xLoc, y, wLoc, SH, LB, BD); sf(5, 'bold', NAV); tx('LOCAL', xLoc + 2, y + SH * 0.72);
+      rf(xEq, y, wEq, SH, LB, BD); sf(5, 'bold', NAV); tx('EQUIPE', xEq + 2, y + SH * 0.72);
+      y += SH;
+    }
+    cabServicos();
+
     if (lista.length === 0) {
       rf(xPac, y, TW, SH, [253, 246, 230], BD);
       sf(5.5, 'italic', [140, 90, 30]);
@@ -6404,6 +6411,7 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
       y += SH;
     } else {
       lista.forEach((s, i) => {
+        if (y + SH > PH - 18) { doc.addPage(); y = MT; cabServicos(); }
         const bg = i % 2 === 0 ? W : LG;
         const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
         const frente = pacote ? (pacote['Frente'] || '') : '';
@@ -6422,13 +6430,12 @@ const ci = cat.tipo === 'indireto' ? diu : 0;
     }
     y += 2;
   }
-  
-  if (y < PH - 90) {
-    renderServicosBlock('SERVIÇOS DIURNOS', servicosDiurnos, ORANGE);
-    renderServicosBlock('SERVIÇOS NOTURNOS', servicosNoturnos, BLUE);
-  }
-  
-  // Observações
+
+  renderServicosBlock('SERVIÇOS DIURNOS', servicosDiurnos, ORANGE);
+  renderServicosBlock('SERVIÇOS NOTURNOS', servicosNoturnos, BLUE);
+
+  // Observações — nova página se não couber obs + assinaturas
+  if (y > PH - 55) { doc.addPage(); y = MT; }
   const yMaxBeforeAssin = PH - 32;
   rf(ML, y, TW, 4.5, NAV); sf(6.5, 'bold', W); tx('OBSERVAÇÕES GERAIS', ML + 2, y + 3); y += 4.5;
   const hw = (TW - 3) / 2;
