@@ -5073,14 +5073,36 @@ function definirOficial(data, id) {
 
 // (5) EXCLUIR um RDO Diário (altera a planilha de produção). Requer o backend
 // 'deleteRDODiario' no Code.gs republicado no Apps Script.
-async function excluirRDODiario(data, id) {
+// A confirmação é IN-PAGE (modal no DOM) em vez de window.confirm(), que
+// bloqueia automação de navegador e não combina com o estilo do app.
+function excluirRDODiario(data, id) {
   if (!id) { toast('ID não informado', 'error'); return; }
-  if (!confirm(`Excluir o RDO Diário ${id} de ${fmtData(data)}?\n\n⚠️ Esta ação ALTERA a planilha de produção (RDO_Diario) e NÃO pode ser desfeita.`)) return;
+  abrirModalRDO(`
+    <div style="max-width:480px">
+      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">🗑 Excluir RDO Diário</h2>
+      <p style="font-size:13px;line-height:1.6;margin:0 0 8px">
+        Confirma a exclusão do RDO <strong>${id}</strong> de <strong>${fmtData(data)}</strong>?
+      </p>
+      <p style="font-size:13px;color:var(--red);font-weight:600;margin:0 0 18px">
+        ⚠ Esta ação ALTERA a planilha de produção (RDO_Diario) e NÃO pode ser desfeita.
+      </p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="resolverDuplicata('${data}')">Cancelar</button>
+        <button class="btn btn-sm" id="btnConfirmaExclui" onclick="executarExclusaoRDODiario('${data}','${id}')" style="background:var(--red);color:#fff;border:none">Excluir definitivamente</button>
+      </div>
+    </div>
+  `);
+}
+
+async function executarExclusaoRDODiario(data, id) {
+  const btn = document.getElementById('btnConfirmaExclui');
+  if (btn) { btn.disabled = true; btn.textContent = 'Excluindo…'; }
   try {
     const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDODiario', id }, 0);
     if (!result.ok) {
       if (/Ação desconhecida/i.test(result.error || '')) {
         toast('O backend ainda não tem "deleteRDODiario". Cole o Code.gs atualizado no Apps Script e republique (Nova versão).', 'error', 0);
+        if (btn) { btn.disabled = false; btn.textContent = 'Excluir definitivamente'; }
         return;
       }
       throw new Error(result.error || 'Erro desconhecido');
@@ -5088,11 +5110,12 @@ async function excluirRDODiario(data, id) {
     // Remoção otimista (o CSV publicado demora a atualizar).
     STATE.rdodiario = (STATE.rdodiario || []).filter(x => String(getCSVField(x, 'ID')).trim() !== String(id).trim());
     if (String(getOficialRDO(data)).trim() === String(id).trim()) setOficialRDO(data, '');
-    toast('✓ RDO Diário excluído', 'success');
+    toast('✓ RDO Diário ' + id + ' excluído', 'success');
     render();
     if (rdosDaData(data).length > 1) resolverDuplicata(data); else fecharModalRDO();
   } catch (e) {
     toast('Falha ao excluir: ' + e.message, 'error', 6000);
+    if (btn) { btn.disabled = false; btn.textContent = 'Excluir definitivamente'; }
   }
 }
 
