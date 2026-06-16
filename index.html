@@ -1313,7 +1313,7 @@ const CONFIG = {
   estacasCB: { ini: 99, fim: 141, label: 'Centro→Bairro' },
   estacasBC: { ini: 201, fim: 244, label: 'Bairro→Centro' },
   refreshMs: 5 * 60 * 1000,
-  ls: { rdoDraft: 'teotonio_rdo_draft_v1', apontador: 'teotonio_apontador_v1' }
+  ls: { rdoDraft: 'teotonio_rdo_draft_v1', apontador: 'teotonio_apontador_v1', sabadoUtil: 'teotonio_sabado_util_v1', oficialRDO: 'teotonio_oficial_rdo_v1' }
 };
 
 // ====================================================================
@@ -1576,21 +1576,33 @@ function ehFeriadoNacional(d) {
   return (d && !isNaN(d)) ? FERIADOS_NACIONAIS.has(getLocalISODate(d)) : false;
 }
 
-// Dia útil = segunda a sexta E não-feriado nacional (sábado/domingo não contam).
+// Sábado conta como dia útil? (obra que trabalha aos sábados). Padrão: não.
+function sabadoEhUtil() {
+  return localStorage.getItem(CONFIG.ls.sabadoUtil) === '1';
+}
+
+// Dia útil = seg–sex (e sábado, se configurado) E não-feriado nacional.
+// Domingo nunca conta.
 function ehDiaUtil(d) {
   if (!d || isNaN(d)) return false;
   const dia = d.getDay();
-  if (dia === 0 || dia === 6) return false;
+  if (dia === 0) return false;                    // domingo nunca
+  if (dia === 6 && !sabadoEhUtil()) return false; // sábado só se configurado
   return !ehFeriadoNacional(d);
 }
 
-// Para cada mês presente em `datasSet` (Set de 'YYYY-MM-DD'), lista os dias
-// úteis (até hoje) que NÃO têm nenhum RDO. Não cobra dias futuros.
-// Retorna [{ mes:'2026-05', dias:['2026-05-04', ...] }].
-function diasUteisSemRDO(datasSet) {
+// Para cada mês a avaliar, lista os dias úteis (até hoje) sem nenhum RDO em
+// `datasComRDO`. `mesesParaAvaliar` (array 'YYYY-MM') permite cobrir TODOS os
+// meses com dados, não só os que já têm RDO; se omitido, deriva dos próprios
+// dados. Não cobra dias futuros. Retorna [{ mes:'2026-05', dias:[...] }].
+function diasUteisSemRDO(datasComRDO, mesesParaAvaliar) {
   const hoje = new Date(); hoje.setHours(0,0,0,0);
-  const meses = new Set();
-  datasSet.forEach(iso => { if (iso && iso.length >= 7) meses.add(iso.slice(0,7)); });
+  let meses = (mesesParaAvaliar && mesesParaAvaliar.length) ? mesesParaAvaliar.slice() : null;
+  if (!meses) {
+    const s = new Set();
+    datasComRDO.forEach(iso => { if (iso && iso.length >= 7) s.add(iso.slice(0,7)); });
+    meses = [...s];
+  }
   const resultado = [];
   [...meses].sort().forEach(mes => {
     const ano = parseInt(mes.slice(0,4), 10);
@@ -1602,7 +1614,7 @@ function diasUteisSemRDO(datasSet) {
       if (d > hoje) break;            // não aponta dia futuro
       if (!ehDiaUtil(d)) continue;     // pula fim de semana / feriado
       const iso = getLocalISODate(d);
-      if (!datasSet.has(iso)) faltando.push(iso);
+      if (!datasComRDO.has(iso)) faltando.push(iso);
     }
     if (faltando.length) resultado.push({ mes, dias: faltando });
   });
@@ -4830,8 +4842,258 @@ function atualizarBotaoLote() {
 function gerarPDFsEmLote() {
   const datas = [...SELECTED_RDO_DATAS].sort();
   if (datas.length === 0) { toast('Selecione ao menos um RDO', 'error'); return; }
+
+  // Bloqueia a exportação se alguma data selecionada tem duplicata SEM oficial
+  // definido — assim duplicatas não resolvidas não passam despercebidas.
+  const naoResolvidas = datas.filter(d => rdosDaData(d).length > 1 && !getOficialRDO(d));
+  if (naoResolvidas.length) {
+    const lista = naoResolvidas.map(d =>
+      `• ${fmtData(d)} — IDs em conflito: ${rdosDaData(d).map(r => getCSVField(r,'ID')).join(', ')}`
+    ).join('<br>');
+    toast(`⛔ Exportação bloqueada: ${naoResolvidas.length} data(s) com duplicata não resolvida. Defina o RDO oficial (ou exclua o errado) antes de exportar:<br>${lista}`, 'error', 0);
+    if (naoResolvidas.length === 1) resolverDuplicata(naoResolvidas[0]);
+    return;
+  }
+
   toast(`Gerando ${datas.length} PDF${datas.length > 1 ? 's' : ''}… aguarde`, 'info', datas.length * 1000 + 1000);
   datas.forEach((data, i) => setTimeout(() => gerarPDFDiario(data), i * 900));
+}
+
+// ====================================================================
+// RDO DIÁRIO — visualizar, resolver duplicatas e escolher o oficial
+// ====================================================================
+
+// Todos os registros de RDO Diário de uma data (ISO 'YYYY-MM-DD').
+function rdosDaData(data) {
+  return (STATE.rdodiario || []).filter(r => {
+    const rd = parseISODate(getCSVField(r, 'Data'));
+    return rd && getLocalISODate(rd) === data;
+  });
+}
+
+// Serviços (RDO_Avanco) lançados numa data.
+function servicosDaData(data) {
+  return (STATE.rdoavanco || []).filter(r => {
+    const rd = parseISODate(getCSVField(r, 'Data'));
+    return rd && getLocalISODate(rd) === data;
+  });
+}
+
+// Meses ('YYYY-MM') com qualquer dado (diário OU serviço lançado).
+function mesesComDados() {
+  const s = new Set();
+  const add = arr => (arr || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d && !isNaN(d)) s.add(getLocalISODate(d).slice(0, 7));
+  });
+  add(STATE.rdodiario);
+  add(STATE.rdoavanco);
+  return [...s];
+}
+
+// "RDO oficial" da data: escolha do usuário (só no navegador, não mexe na
+// planilha). Usado para decidir qual relatório exportar quando há duplicata.
+function getOficiaisRDO() {
+  try { return JSON.parse(localStorage.getItem(CONFIG.ls.oficialRDO) || '{}'); } catch (e) { return {}; }
+}
+function getOficialRDO(data) { return getOficiaisRDO()[data] || ''; }
+function setOficialRDO(data, id) {
+  const o = getOficiaisRDO();
+  if (id) o[data] = String(id); else delete o[data];
+  try { localStorage.setItem(CONFIG.ls.oficialRDO, JSON.stringify(o)); } catch (e) {}
+}
+
+function toggleSabadoUtil() {
+  try { localStorage.setItem(CONFIG.ls.sabadoUtil, sabadoEhUtil() ? '0' : '1'); } catch (e) {}
+  toast(sabadoEhUtil() ? 'Sábado passou a contar como dia útil' : 'Sábado não conta mais como dia útil', 'info');
+  render();
+}
+
+// Resumo legível de um registro de RDO Diário.
+function resumoRDO(r) {
+  return {
+    id: getCSVField(r, 'ID') || '',
+    encarregado: getCSVField(r, 'Encarregado') || '—',
+    apontadorD: getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || '—',
+    apontadorN: getCSVField(r, 'Apontador_Noturno') || '—',
+    climaM: getCSVField(r, 'Clima_Manha') || '—',
+    climaT: getCSVField(r, 'Clima_Tarde') || '—',
+    climaN: getCSVField(r, 'Clima_Noite') || '—',
+    hasNot: !!(getCSVField(r, 'Apontador_Noturno') || String(getCSVField(r, 'Tem_Turno_Noturno')).toLowerCase() === 'true' || getCSVField(r, 'Tem_Turno_Noturno') === 'Sim'),
+    visitas: getCSVField(r, 'Visitas') || '',
+    ocorrencias: getCSVField(r, 'Ocorrencias') || '',
+    obs: getCSVField(r, 'Observacoes_Gerais') || ''
+  };
+}
+
+// Efetivo detalhado (categoria → qtd) por turno, a partir do Efetivo_JSON.
+function efetivoDetalhe(r) {
+  let ef = {};
+  try { ef = JSON.parse(getCSVField(r, 'Efetivo_JSON') || getCSVField(r, 'efetivo_json') || '{}'); } catch (e) {}
+  const linhas = (padrao, direto, indireto) => {
+    const out = [];
+    Object.entries(padrao || {}).forEach(([k, v]) => { if (parseInt(v) > 0) out.push([k, parseInt(v)]); });
+    (direto || []).concat(indireto || []).forEach(c => {
+      const q = parseInt(c && c.qtd) || 0;
+      if (q > 0) out.push([(c && (c.nome || c.label || c.cat)) || 'Outro', q]);
+    });
+    return out;
+  };
+  return {
+    diurno: linhas(ef.padrao_diurno, ef.customDireto_diurno, ef.customIndireto_diurno),
+    noturno: linhas(ef.padrao_noturno, ef.customDireto_noturno, ef.customIndireto_noturno)
+  };
+}
+
+// Modal genérico (mesma estética do modalConfigIA).
+function abrirModalRDO(innerHtml) {
+  fecharModalRDO();
+  const m = document.createElement('div');
+  m.id = 'modalRDO';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(15,12,8,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+  m.innerHTML = `<div style="background:var(--surface);border-radius:var(--r-lg);max-width:900px;width:100%;max-height:90vh;overflow:auto;padding:24px;box-shadow:var(--sh-lg)">${innerHtml}</div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', e => { if (e.target === m) fecharModalRDO(); });
+}
+function fecharModalRDO() {
+  const m = document.getElementById('modalRDO');
+  if (m) m.remove();
+}
+
+// (1b) VISUALIZAR — abre o RDO completo em modal, SEM gerar/baixar arquivo.
+function visualizarRDO(id) {
+  const r = (STATE.rdodiario || []).find(x => String(getCSVField(x, 'ID')).trim() === String(id).trim());
+  if (!r) { toast('RDO não encontrado para visualizar', 'error'); return; }
+  const dObj = parseISODate(getCSVField(r, 'Data'));
+  const data = dObj ? getLocalISODate(dObj) : getCSVField(r, 'Data');
+  const s = resumoRDO(r);
+  const det = efetivoDetalhe(r);
+  const soma = arr => arr.reduce((a, [, v]) => a + v, 0);
+  const efTxt = arr => arr.length ? arr.map(([k, v]) => `${k}: <strong>${v}</strong>`).join(' · ') : '—';
+  const servs = servicosDaData(data);
+  const servHtml = servs.length ? `
+    <table class="t" style="width:100%;font-size:12px;margin-top:6px">
+      <thead><tr><th style="text-align:left">Pacote</th><th style="text-align:left">Local</th><th style="text-align:right">Qtd</th><th>Turno</th></tr></thead>
+      <tbody>${servs.map(sv => `<tr>
+        <td>${getCSVField(sv, 'Pacote_Nome') || getCSVField(sv, 'Pacote_ID') || '—'}</td>
+        <td class="t-mono" style="font-size:11px">${getCSVField(sv, 'Local_Estaca') || '—'}</td>
+        <td style="text-align:right">${fmtNum(num(getCSVField(sv, 'Quantidade') || 0))} ${getCSVField(sv, 'Unidade') || ''}</td>
+        <td style="text-align:center">${getCSVField(sv, 'Turno') || 'Diurno'}</td>
+      </tr>`).join('')}</tbody>
+    </table>` : '<div style="color:var(--muted);font-size:12px;margin-top:6px">Nenhum serviço lançado nesta data.</div>';
+  const linha = (lbl, val) => `<div style="display:flex;gap:8px;font-size:13px;padding:3px 0"><span style="color:var(--muted);min-width:130px">${lbl}</span><span style="font-weight:600">${val || '—'}</span></div>`;
+  abrirModalRDO(`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h2 style="font-size:17px;font-weight:700;margin:0">👁 RDO Diário — ${fmtData(data)}</h2>
+      <button class="btn btn-sm btn-outline" onclick="fecharModalRDO()">Fechar</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
+      ${linha('ID', s.id)}
+      ${linha('Encarregado', s.encarregado)}
+      ${linha('Apontador diurno', s.apontadorD)}
+      ${linha('Apontador noturno', s.apontadorN)}
+      ${linha('Clima manhã', s.climaM)}
+      ${linha('Clima tarde', s.climaT)}
+      ${linha('Clima noite', s.climaN)}
+      ${linha('Turno noturno', s.hasNot ? 'Sim' : 'Não')}
+    </div>
+    <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
+      <div style="font-size:13px"><strong>Efetivo diurno</strong> (${soma(det.diurno)}): ${efTxt(det.diurno)}</div>
+      <div style="font-size:13px;margin-top:4px"><strong>Efetivo noturno</strong> (${soma(det.noturno)}): ${efTxt(det.noturno)}</div>
+    </div>
+    ${(s.visitas || s.ocorrencias || s.obs) ? `<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px;font-size:13px;line-height:1.6">
+      ${s.visitas ? `<div><span style="color:var(--muted)">Visitas:</span> ${s.visitas}</div>` : ''}
+      ${s.ocorrencias ? `<div><span style="color:var(--muted)">Ocorrências:</span> ${s.ocorrencias}</div>` : ''}
+      ${s.obs ? `<div><span style="color:var(--muted)">Observações:</span> ${s.obs}</div>` : ''}
+    </div>` : ''}
+    <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px">
+      <div style="font-weight:700;font-size:13px">Serviços lançados (${servs.length})</div>
+      ${servHtml}
+    </div>
+    <div style="margin-top:16px;text-align:right">
+      <button class="btn btn-primary btn-sm" onclick="gerarPDFDiario('${data}')">📄 Gerar PDF</button>
+    </div>
+  `);
+}
+
+// (5) RESOLVER DUPLICATA — mostra os RDOs da data lado a lado para escolher o
+// oficial ou excluir o errado.
+function resolverDuplicata(data) {
+  const lista = rdosDaData(data);
+  if (lista.length < 2) { toast('Não há duplicata nesta data.', 'info'); fecharModalRDO(); return; }
+  const oficialId = getOficialRDO(data);
+  const soma = arr => arr.reduce((a, [, v]) => a + v, 0);
+  const efTxt = arr => arr.length ? arr.map(([k, v]) => `${k}: <strong>${v}</strong>`).join(' · ') : '—';
+  const cards = lista.map(r => {
+    const s = resumoRDO(r);
+    const det = efetivoDetalhe(r);
+    const ehOf = oficialId && String(s.id).trim() === String(oficialId).trim();
+    return `
+      <div style="flex:1;min-width:250px;border:2px solid ${ehOf ? 'var(--grn)' : 'var(--border)'};border-radius:var(--r);padding:14px;background:${ehOf ? 'var(--grn-l)' : 'var(--bg)'}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:8px">
+          <span class="t-mono" style="font-size:12px;font-weight:700">${s.id || '(sem ID)'}</span>
+          ${ehOf ? '<span class="pill pill-grn">★ oficial</span>' : ''}
+        </div>
+        <div style="font-size:12px;line-height:1.7">
+          <div><span style="color:var(--muted)">Encarregado:</span> ${s.encarregado}</div>
+          <div><span style="color:var(--muted)">Apontador (D):</span> ${s.apontadorD}</div>
+          <div><span style="color:var(--muted)">Apontador (N):</span> ${s.apontadorN}</div>
+          <div><span style="color:var(--muted)">Clima:</span> ${s.climaM} · ${s.climaT} · ${s.climaN}</div>
+          <div><span style="color:var(--muted)">Noturno:</span> ${s.hasNot ? 'Sim' : 'Não'}</div>
+          <div style="margin-top:4px"><span style="color:var(--muted)">Efetivo diurno (${soma(det.diurno)}):</span> ${efTxt(det.diurno)}</div>
+          <div><span style="color:var(--muted)">Efetivo noturno (${soma(det.noturno)}):</span> ${efTxt(det.noturno)}</div>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${s.id}')">👁 Ver completo</button>
+          ${ehOf ? '' : `<button class="btn btn-sm btn-primary" onclick="definirOficial('${data}','${s.id}')">✓ Definir como oficial</button>`}
+          <button class="btn btn-sm" onclick="excluirRDODiario('${data}','${s.id}')" style="background:var(--red);color:#fff;border:none">🗑 Excluir</button>
+        </div>
+      </div>`;
+  }).join('');
+  abrirModalRDO(`
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <h2 style="font-size:17px;font-weight:700;margin:0">⚖ Resolver duplicata — ${fmtData(data)}</h2>
+      <button class="btn btn-sm btn-outline" onclick="fecharModalRDO()">Fechar</button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin:4px 0 14px;line-height:1.6">
+      Há <strong>${lista.length}</strong> RDOs nesta data. Escolha o <strong>oficial</strong> (usado na exportação) ou exclua o errado.
+      <span style="color:var(--red);font-weight:600">⚠ Excluir altera a planilha de produção (RDO_Diario) e não pode ser desfeito.</span>
+    </p>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch">${cards}</div>
+  `);
+}
+
+// (4) Define qual RDO é o oficial da data (só no navegador).
+function definirOficial(data, id) {
+  setOficialRDO(data, id);
+  toast('✓ RDO oficial definido para ' + fmtData(data), 'success');
+  render();
+  resolverDuplicata(data);
+}
+
+// (5) EXCLUIR um RDO Diário (altera a planilha de produção). Requer o backend
+// 'deleteRDODiario' no Code.gs republicado no Apps Script.
+async function excluirRDODiario(data, id) {
+  if (!id) { toast('ID não informado', 'error'); return; }
+  if (!confirm(`Excluir o RDO Diário ${id} de ${fmtData(data)}?\n\n⚠️ Esta ação ALTERA a planilha de produção (RDO_Diario) e NÃO pode ser desfeita.`)) return;
+  try {
+    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDODiario', id }, 0);
+    if (!result.ok) {
+      if (/Ação desconhecida/i.test(result.error || '')) {
+        toast('O backend ainda não tem "deleteRDODiario". Cole o Code.gs atualizado no Apps Script e republique (Nova versão).', 'error', 0);
+        return;
+      }
+      throw new Error(result.error || 'Erro desconhecido');
+    }
+    // Remoção otimista (o CSV publicado demora a atualizar).
+    STATE.rdodiario = (STATE.rdodiario || []).filter(x => String(getCSVField(x, 'ID')).trim() !== String(id).trim());
+    if (String(getOficialRDO(data)).trim() === String(id).trim()) setOficialRDO(data, '');
+    toast('✓ RDO Diário excluído', 'success');
+    render();
+    if (rdosDaData(data).length > 1) resolverDuplicata(data); else fecharModalRDO();
+  } catch (e) {
+    toast('Falha ao excluir: ' + e.message, 'error', 6000);
+  }
 }
 
 function renderHistoricoDiarios() {
@@ -4849,26 +5111,35 @@ function renderHistoricoDiarios() {
     datasSet.add(ds);
   });
   const datasDuplicadas = Object.keys(contagemPorData).filter(d => contagemPorData[d] > 1).sort();
-  const faltantes = diasUteisSemRDO(datasSet);
+  // Avalia TODOS os meses com dados (diário OU serviços) — ou o mês filtrado —
+  // em vez de só os meses que já têm RDO Diário.
+  const mesesAvaliar = STATE.filtros.mes ? [STATE.filtros.mes] : mesesComDados();
+  const faltantes = diasUteisSemRDO(datasSet, mesesAvaliar);
 
   // Banners de aviso (tarefas: verificar duplicatas / dia útil sem lançamento).
   let avisosHtml = '';
   if (datasDuplicadas.length) {
+    const naoResolvidas = datasDuplicadas.filter(d => !getOficialRDO(d)).length;
+    const chips = datasDuplicadas.map(d => {
+      const ok = !!getOficialRDO(d);
+      return `<button class="btn btn-sm btn-outline" onclick="resolverDuplicata('${d}')" style="margin:4px 4px 0 0;white-space:nowrap">${ok ? '✓' : '⚖'} ${fmtData(d)} (${contagemPorData[d]}×)${ok ? ' — resolvido' : ' — resolver'}</button>`;
+    }).join('');
     avisosHtml += `
       <div style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--red-l);border:1px solid var(--red);font-size:13px">
-        <strong style="color:var(--red)">⚠ ${datasDuplicadas.length} data(s) com mais de um RDO.</strong>
-        Confira qual relatório é o correto e apague o errado <em>antes</em> de exportar — o PDF usa o primeiro encontrado da data.
-        <div style="margin-top:6px;font-size:12px;color:var(--muted)">${datasDuplicadas.map(d => fmtData(d) + ' (' + contagemPorData[d] + '×)').join(' · ')}</div>
+        <strong style="color:var(--red)">⚠ ${datasDuplicadas.length} data(s) com mais de um RDO${naoResolvidas ? ` (${naoResolvidas} sem oficial definido)` : ''}.</strong>
+        Defina o RDO <em>oficial</em> de cada data (ou exclua o errado) antes de exportar — a exportação em lote fica <strong>bloqueada</strong> enquanto houver duplicata não resolvida.
+        <div style="margin-top:4px">${chips}</div>
       </div>`;
   }
   if (faltantes.length) {
+    const regra = sabadoEhUtil() ? 'seg–sáb' : 'seg–sex';
     const linhas = faltantes.map(f =>
       `<div style="margin-top:4px"><strong>${nomeMesAno(f.mes)}:</strong> ${f.dias.map(fmtData).join(' · ')}</div>`
     ).join('');
     avisosHtml += `
       <div style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--ylw-l);border:1px solid var(--ylw-d);font-size:13px">
         <strong style="color:var(--ylw-d)">📌 Dias úteis sem RDO</strong>
-        <span style="font-size:12px;color:var(--muted)">(seg–sex, exceto feriados nacionais; só até hoje)</span>
+        <span style="font-size:12px;color:var(--muted)">(${regra}, exceto feriados nacionais; mês corrente só até hoje)</span>
         ${linhas}
       </div>`;
   }
@@ -4903,18 +5174,24 @@ function renderHistoricoDiarios() {
       const dObj = parseISODate(getCSVField(r, 'Data'));
       const dStr = dObj ? getLocalISODate(dObj) : getCSVField(r, 'Data');
       const dup = contagemPorData[dStr] > 1;
+      const rid = getCSVField(r, 'ID') || '';
+      const ehOficial = dup && getOficialRDO(dStr) && String(getOficialRDO(dStr)).trim() === String(rid).trim();
 
       return `
         <tr${dup ? ' style="background:var(--red-l)"' : ''}>
           <td style="width:32px;text-align:center"><input type="checkbox" class="rdo-check" data-data="${dStr}" onchange="toggleRDOSelect('${dStr}', this)" style="width:16px;height:16px;cursor:pointer"></td>
-          <td class="t-mono">${getCSVField(r, 'ID')||''}</td>
-          <td>${fmtData(getCSVField(r, 'Data'))}${dup ? ` <span class="pill pill-red" title="Há ${contagemPorData[dStr]} RDOs nesta data — confira qual é o correto e apague o errado">⚠ ${contagemPorData[dStr]}×</span>` : ''}</td>
+          <td class="t-mono">${rid}</td>
+          <td>${fmtData(getCSVField(r, 'Data'))}${dup ? ` <span class="pill pill-red" title="Há ${contagemPorData[dStr]} RDOs nesta data — resolva qual é o oficial">⚠ ${contagemPorData[dStr]}×</span>` : ''}${ehOficial ? ' <span class="pill pill-grn" title="RDO oficial desta data">★ oficial</span>' : ''}</td>
           <td style="font-size:12px">${getCSVField(r, 'Encarregado')||''}</td>
           <td style="font-size:12px">${getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || ''}</td>
           <td style="font-size:11px;color:var(--muted)">${climaResumo}</td>
           <td class="t-num">${total}</td>
           <td>${hasNoturno ?'<span class="pill pill-blu">Sim</span>':'<span class="pill pill-ylw">Não</span>'}</td>
-          <td><button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')">📄</button></td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${rid}')" title="Visualizar (não baixa arquivo)">👁</button>
+            ${dup ? `<button class="btn btn-sm" onclick="resolverDuplicata('${dStr}')" title="Resolver duplicata" style="margin-left:2px;background:var(--red);color:#fff;border:none">⚖</button>` : ''}
+            <button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')" title="Gerar PDF (baixa arquivo)" style="margin-left:2px">📄</button>
+          </td>
         </tr>
       `;
     }).join('');
@@ -4941,9 +5218,12 @@ function renderHistoricoDiarios() {
       <div class="card-header">
         <div>
           <div class="card-title">RDOs Diários</div>
-          <div class="card-title-sub">Selecione vários para gerar PDFs em lote</div>
+          <div class="card-title-sub">👁 visualiza sem baixar · 📄 gera o PDF · selecione vários para lote</div>
         </div>
-        <button id="btnLotePDF" class="btn btn-primary" onclick="gerarPDFsEmLote()" disabled style="white-space:nowrap">📄 Gerar PDFs em Lote</button>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-sm btn-outline" onclick="toggleSabadoUtil()" title="Conta sábado como dia útil no alerta de dias sem RDO" style="white-space:nowrap">${sabadoEhUtil()?'☑':'☐'} Sábado útil</button>
+          <button id="btnLotePDF" class="btn btn-primary" onclick="gerarPDFsEmLote()" disabled style="white-space:nowrap">📄 Gerar PDFs em Lote</button>
+        </div>
       </div>
       ${avisosHtml ? `<div style="padding:14px 16px 0">${avisosHtml}</div>` : ''}
       <div class="card-body flush">
@@ -6126,15 +6406,19 @@ const RDO_LOGO_L2 = 'iVBORw0KGgoAAAANSUhEUgAABBkAAAJuCAYAAAD1iNqxAAAAAXNSR0IArs4
 const RDO_LOGO_L3 = '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';
 
 function gerarPDFDiario(data) {
-  const daData = (STATE.rdodiario || []).filter(r => {
-    const rd = parseISODate(getCSVField(r, 'Data'));
-    return rd && getLocalISODate(rd) === data;
-  });
-  const fromSheet = daData[0];
-  // Mais de um RDO na mesma data: avisa que está usando o primeiro, pra você
-  // verificar/apagar a duplicata em vez de exportar o relatório errado.
+  const daData = rdosDaData(data);
+  const oficialId = getOficialRDO(data);
+  let fromSheet = daData[0];
+  if (oficialId) {
+    const of = daData.find(r => String(getCSVField(r, 'ID')).trim() === String(oficialId).trim());
+    if (of) fromSheet = of;
+  }
+  // Mais de um RDO na mesma data: deixa explícito quais IDs conflitam e qual
+  // está sendo usado (o oficial, se definido; senão o primeiro).
   if (daData.length > 1) {
-    toast(`Atenção: ${daData.length} RDOs em ${fmtData(data)} — gerando o primeiro. Verifique/apague a duplicata.`, 'info', 6000);
+    const ids = daData.map(r => getCSVField(r, 'ID')).join(', ');
+    const usando = getCSVField(fromSheet, 'ID') || '(primeiro)';
+    toast(`Atenção: ${daData.length} RDOs em ${fmtData(data)} (IDs: ${ids}). Gerando o ${oficialId ? 'oficial' : 'primeiro'}: ${usando}.`, oficialId ? 'info' : 'error', oficialId ? 6000 : 8000);
   }
 
   let d;
