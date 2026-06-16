@@ -1560,6 +1560,60 @@ function fmtData(iso) {
   return String(d.getDate()).padStart(2,'0') + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getFullYear()).slice(2);
 }
 
+// ---- Calendário: dias úteis / feriados ------------------------------------
+// Feriados NACIONAIS (fixos + móveis). Feriados MUNICIPAIS não entram aqui —
+// variam por município da obra; confira o calendário local se precisar.
+const FERIADOS_NACIONAIS = new Set([
+  // 2025
+  '2025-01-01','2025-03-03','2025-03-04','2025-04-18','2025-04-21','2025-05-01',
+  '2025-06-19','2025-09-07','2025-10-12','2025-11-02','2025-11-15','2025-11-20','2025-12-25',
+  // 2026
+  '2026-01-01','2026-02-16','2026-02-17','2026-04-03','2026-04-21','2026-05-01',
+  '2026-06-04','2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25'
+]);
+
+function ehFeriadoNacional(d) {
+  return (d && !isNaN(d)) ? FERIADOS_NACIONAIS.has(getLocalISODate(d)) : false;
+}
+
+// Dia útil = segunda a sexta E não-feriado nacional (sábado/domingo não contam).
+function ehDiaUtil(d) {
+  if (!d || isNaN(d)) return false;
+  const dia = d.getDay();
+  if (dia === 0 || dia === 6) return false;
+  return !ehFeriadoNacional(d);
+}
+
+// Para cada mês presente em `datasSet` (Set de 'YYYY-MM-DD'), lista os dias
+// úteis (até hoje) que NÃO têm nenhum RDO. Não cobra dias futuros.
+// Retorna [{ mes:'2026-05', dias:['2026-05-04', ...] }].
+function diasUteisSemRDO(datasSet) {
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const meses = new Set();
+  datasSet.forEach(iso => { if (iso && iso.length >= 7) meses.add(iso.slice(0,7)); });
+  const resultado = [];
+  [...meses].sort().forEach(mes => {
+    const ano = parseInt(mes.slice(0,4), 10);
+    const m   = parseInt(mes.slice(5,7), 10);
+    const ultimoDia = new Date(ano, m, 0).getDate();
+    const faltando = [];
+    for (let dia = 1; dia <= ultimoDia; dia++) {
+      const d = new Date(ano, m - 1, dia);
+      if (d > hoje) break;            // não aponta dia futuro
+      if (!ehDiaUtil(d)) continue;     // pula fim de semana / feriado
+      const iso = getLocalISODate(d);
+      if (!datasSet.has(iso)) faltando.push(iso);
+    }
+    if (faltando.length) resultado.push({ mes, dias: faltando });
+  });
+  return resultado;
+}
+
+function nomeMesAno(mes) {
+  const MESES_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+  return MESES_PT[parseInt(mes.slice(5,7),10)-1] + '/' + mes.slice(0,4);
+}
+
 function fmtNum(n, decimals = 2) {
   if (n === null || n === undefined || isNaN(n)) return '0';
   return n.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
@@ -4784,6 +4838,41 @@ function renderHistoricoDiarios() {
   SELECTED_RDO_DATAS = new Set();
   const diarios = [...(STATE.rdodiario||[])].reverse();
 
+  // Conta RDOs por data: data com >1 relatório = duplicata a verificar.
+  const contagemPorData = {};
+  const datasSet = new Set();
+  diarios.forEach(r => {
+    const dO = parseISODate(getCSVField(r, 'Data'));
+    const ds = dO ? getLocalISODate(dO) : String(getCSVField(r, 'Data') || '');
+    if (!ds) return;
+    contagemPorData[ds] = (contagemPorData[ds] || 0) + 1;
+    datasSet.add(ds);
+  });
+  const datasDuplicadas = Object.keys(contagemPorData).filter(d => contagemPorData[d] > 1).sort();
+  const faltantes = diasUteisSemRDO(datasSet);
+
+  // Banners de aviso (tarefas: verificar duplicatas / dia útil sem lançamento).
+  let avisosHtml = '';
+  if (datasDuplicadas.length) {
+    avisosHtml += `
+      <div style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--red-l);border:1px solid var(--red);font-size:13px">
+        <strong style="color:var(--red)">⚠ ${datasDuplicadas.length} data(s) com mais de um RDO.</strong>
+        Confira qual relatório é o correto e apague o errado <em>antes</em> de exportar — o PDF usa o primeiro encontrado da data.
+        <div style="margin-top:6px;font-size:12px;color:var(--muted)">${datasDuplicadas.map(d => fmtData(d) + ' (' + contagemPorData[d] + '×)').join(' · ')}</div>
+      </div>`;
+  }
+  if (faltantes.length) {
+    const linhas = faltantes.map(f =>
+      `<div style="margin-top:4px"><strong>${nomeMesAno(f.mes)}:</strong> ${f.dias.map(fmtData).join(' · ')}</div>`
+    ).join('');
+    avisosHtml += `
+      <div style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--ylw-l);border:1px solid var(--ylw-d);font-size:13px">
+        <strong style="color:var(--ylw-d)">📌 Dias úteis sem RDO</strong>
+        <span style="font-size:12px;color:var(--muted)">(seg–sex, exceto feriados nacionais; só até hoje)</span>
+        ${linhas}
+      </div>`;
+  }
+
   let bodyContent = '';
   if (diarios.length === 0) {
     bodyContent = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum RDO Diário ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdodiario\')">+ Criar primeiro RDO Diário</button></div>';
@@ -4813,12 +4902,13 @@ function renderHistoricoDiarios() {
 
       const dObj = parseISODate(getCSVField(r, 'Data'));
       const dStr = dObj ? getLocalISODate(dObj) : getCSVField(r, 'Data');
+      const dup = contagemPorData[dStr] > 1;
 
       return `
-        <tr>
+        <tr${dup ? ' style="background:var(--red-l)"' : ''}>
           <td style="width:32px;text-align:center"><input type="checkbox" class="rdo-check" data-data="${dStr}" onchange="toggleRDOSelect('${dStr}', this)" style="width:16px;height:16px;cursor:pointer"></td>
           <td class="t-mono">${getCSVField(r, 'ID')||''}</td>
-          <td>${fmtData(getCSVField(r, 'Data'))}</td>
+          <td>${fmtData(getCSVField(r, 'Data'))}${dup ? ` <span class="pill pill-red" title="Há ${contagemPorData[dStr]} RDOs nesta data — confira qual é o correto e apague o errado">⚠ ${contagemPorData[dStr]}×</span>` : ''}</td>
           <td style="font-size:12px">${getCSVField(r, 'Encarregado')||''}</td>
           <td style="font-size:12px">${getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || ''}</td>
           <td style="font-size:11px;color:var(--muted)">${climaResumo}</td>
@@ -4855,6 +4945,7 @@ function renderHistoricoDiarios() {
         </div>
         <button id="btnLotePDF" class="btn btn-primary" onclick="gerarPDFsEmLote()" disabled style="white-space:nowrap">📄 Gerar PDFs em Lote</button>
       </div>
+      ${avisosHtml ? `<div style="padding:14px 16px 0">${avisosHtml}</div>` : ''}
       <div class="card-body flush">
         ${bodyContent}
       </div>
@@ -6035,11 +6126,17 @@ const RDO_LOGO_L2 = 'iVBORw0KGgoAAAANSUhEUgAABBkAAAJuCAYAAAD1iNqxAAAAAXNSR0IArs4
 const RDO_LOGO_L3 = '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';
 
 function gerarPDFDiario(data) {
-  const fromSheet = (STATE.rdodiario || []).find(r => {
+  const daData = (STATE.rdodiario || []).filter(r => {
     const rd = parseISODate(getCSVField(r, 'Data'));
     return rd && getLocalISODate(rd) === data;
   });
-  
+  const fromSheet = daData[0];
+  // Mais de um RDO na mesma data: avisa que está usando o primeiro, pra você
+  // verificar/apagar a duplicata em vez de exportar o relatório errado.
+  if (daData.length > 1) {
+    toast(`Atenção: ${daData.length} RDOs em ${fmtData(data)} — gerando o primeiro. Verifique/apague a duplicata.`, 'info', 6000);
+  }
+
   let d;
   if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
     const v4 = DIARIO_V4;
