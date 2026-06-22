@@ -34,7 +34,7 @@ function rotear(e) {
       case 'producaoPorPacote': resp = producaoPorPacote(p.mes); break;
       case 'addRDODiario':    resp = upsertRDODiario(p, false); break;
       case 'updateRDODiario': resp = upsertRDODiario(p, true); break;
-      case 'deleteRDODiario': resp = deleteRDODiario(p.id); break;
+      case 'deleteRDODiario': resp = deleteRDODiario(p.id, p.data); break;
       default:
         // NUNCA inserir nada aqui. Ação desconhecida = erro, e ponto.
         resp = { ok: false, error: 'Ação desconhecida: "' + action + '"' };
