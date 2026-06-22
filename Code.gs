@@ -396,6 +396,12 @@ function updateRDO(payloadJson) {
 
 // ------------------------------------------------------------
 // 4. RDO Diário — grava por data (1 registro por data/turno)
+//    Corrige 2 bugs:
+//    • DUPLICAÇÃO: a célula Data costuma vir como objeto Date; a comparação
+//      antiga String(Date) === "2026-06-01" nunca casava → inseria sempre.
+//      Agora normaliza ambos para 'yyyy-MM-dd' antes de comparar.
+//    • SEM ID: inserts não geravam ID. Agora gera 'D####' sequencial (e faz
+//      backfill se uma linha existente estiver sem ID).
 // ------------------------------------------------------------
 function upsertRDODiario(p, deveExistir) {
   var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
@@ -407,14 +413,15 @@ function upsertRDODiario(p, deveExistir) {
     var cab = cabecalhoNormalizado(aba);
     var iData = idxColuna(cab, 'data');
     var iTurno = idxColuna(cab, 'turno');
+    var iId = idxColuna(cab, 'id');
     var dados = aba.getDataRange().getValues();
 
-    var data = String(p.data || '').trim();
+    var dataAlvo = normData(p.data);
     var turno = String(p.turno || '').trim().toLowerCase();
 
     var linhaExistente = -1;
     for (var i = 1; i < dados.length; i++) {
-      var mesmaData = String(dados[i][iData]).trim() === data;
+      var mesmaData = dataAlvo !== '' && (iData !== -1) && normData(dados[i][iData]) === dataAlvo;
       var mesmoTurno = (iTurno === -1) || String(dados[i][iTurno]).trim().toLowerCase() === turno;
       if (mesmaData && mesmoTurno) { linhaExistente = i + 1; break; }
     }
@@ -426,23 +433,58 @@ function upsertRDODiario(p, deveExistir) {
     });
 
     if (linhaExistente !== -1) {
-      // atualiza
+      // ATUALIZA a linha existente (sem duplicar). Faz backfill de ID se faltar.
+      if (iId !== -1 && !registro['id']) {
+        var idAtual = String(dados[linhaExistente - 1][iId] == null ? '' : dados[linhaExistente - 1][iId]).trim();
+        if (!idAtual) registro['id'] = gerarIdDiario(dados, iId);
+      }
       cab.forEach(function (nomeCol, idx) {
         if (registro.hasOwnProperty(nomeCol)) {
           aba.getRange(linhaExistente, idx + 1).setValue(registro[nomeCol]);
         }
       });
-      return { ok: true, updated: true };
+      return { ok: true, updated: true, id: registro['id'] || undefined };
     } else {
+      // INSERE nova linha, sempre com ID gerado (se a aba tem coluna ID).
+      if (iId !== -1 && !registro['id']) {
+        registro['id'] = gerarIdDiario(dados, iId);
+      }
       var linha = cab.map(function (nomeCol) {
         return registro.hasOwnProperty(nomeCol) ? registro[nomeCol] : '';
       });
       aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
-      return { ok: true, inserted: true };
+      return { ok: true, inserted: true, id: registro['id'] || '' };
     }
   } finally {
     lock.releaseLock();
   }
+}
+
+// Normaliza um valor de data (Date, 'yyyy-MM-dd...' ou 'dd/MM/yyyy') para
+// 'yyyy-MM-dd', para comparação confiável entre planilha e front-end.
+function normData(v) {
+  if (v == null || v === '') return '';
+  if (v instanceof Date) {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  }
+  var s = String(v).trim();
+  if (s.indexOf('/') !== -1) {
+    var p = s.split('/');
+    if (p.length === 3) return p[2].slice(0, 4) + '-' + ('0' + p[1]).slice(-2) + '-' + ('0' + p[0]).slice(-2);
+  }
+  return s.slice(0, 10);
+}
+
+// Gera o próximo ID 'D####' a partir do maior número já presente na coluna ID
+// (mantém o padrão D0001, D0002, ... e continua de onde parou).
+function gerarIdDiario(dados, iId) {
+  var max = 0;
+  for (var i = 1; i < dados.length; i++) {
+    var v = String(dados[i][iId] == null ? '' : dados[i][iId]).trim();
+    var m = v.match(/(\d+)/);
+    if (m) { var n = parseInt(m[1], 10); if (!isNaN(n) && n > max) max = n; }
+  }
+  return 'D' + ('0000' + (max + 1)).slice(-4);
 }
 
 // ------------------------------------------------------------
