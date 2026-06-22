@@ -34,6 +34,7 @@ function rotear(e) {
       case 'producaoPorPacote': resp = producaoPorPacote(p.mes); break;
       case 'addRDODiario':    resp = upsertRDODiario(p, false); break;
       case 'updateRDODiario': resp = upsertRDODiario(p, true); break;
+      case 'deleteRDODiario': resp = deleteRDODiario(p.id); break;
       default:
         // NUNCA inserir nada aqui. Ação desconhecida = erro, e ponto.
         resp = { ok: false, error: 'Ação desconhecida: "' + action + '"' };
@@ -439,6 +440,35 @@ function upsertRDODiario(p, deveExistir) {
       aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
       return { ok: true, inserted: true };
     }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ------------------------------------------------------------
+// 5. deleteRDODiario — apaga 1 linha da aba RDO_Diario pelo ID.
+//    Necessário para resolver duplicatas de RDO Diário pela interface.
+// ------------------------------------------------------------
+function deleteRDODiario(id) {
+  if (!id) return { ok: false, error: 'ID não informado' };
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var dados = aba.getDataRange().getValues();
+    var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+    var iId = idxColuna(cab, 'id');
+    if (iId === -1) return { ok: false, error: 'Coluna ID não encontrada' };
+
+    for (var i = 1; i < dados.length; i++) {
+      if (String(dados[i][iId]).trim() === String(id).trim()) {
+        aba.deleteRow(i + 1); // base-1 + cabeçalho
+        return { ok: true, deleted: id };
+      }
+    }
+    return { ok: false, error: 'ID não encontrado: ' + id };
   } finally {
     lock.releaseLock();
   }
