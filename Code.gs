@@ -488,6 +488,69 @@ function gerarIdDiario(dados, iId) {
 }
 
 // ------------------------------------------------------------
+// UTILITÁRIO (rodar manualmente no editor): cria RDOs Diários VAZIOS para as
+// datas de maio/2026 que ainda não têm RDO. Idempotente (não duplica datas que
+// já existem) e seguro para rodar de novo.
+//   • criarRDOsVaziosMaio2026()      -> só dias NÃO úteis (fim de semana + feriado)
+//   • criarRDOsVaziosMaio2026(true)  -> também os dias ÚTEIS faltantes (vazios)
+// Veja o resultado no menu "Execuções" / log. Dias úteis sem RDO são listados
+// (não preenchidos) quando incluirDiasUteis = false.
+// ------------------------------------------------------------
+function criarRDOsVaziosMaio2026(incluirDiasUteis) {
+  var ano = 2026, mes = 5;
+  // Feriados NACIONAIS em maio/2026. Acrescente feriados municipais da obra aqui.
+  var FERIADOS = ['2026-05-01'];
+
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(60000);
+  try {
+    var cab = cabecalhoNormalizado(aba);
+    var iData = idxColuna(cab, 'data');
+    var iId = idxColuna(cab, 'id');
+    var dados = aba.getDataRange().getValues();
+
+    var existentes = {};
+    for (var i = 1; i < dados.length; i++) {
+      var nd = normData(dados[i][iData]);
+      if (nd) existentes[nd] = true;
+    }
+
+    var ultimoDia = new Date(ano, mes, 0).getDate();
+    var criados = [], uteisSemRDO = [], jaTinham = 0;
+    for (var dia = 1; dia <= ultimoDia; dia++) {
+      var d = new Date(ano, mes - 1, dia);
+      var iso = Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      var dow = d.getDay();
+      var util = (dow !== 0 && dow !== 6) && FERIADOS.indexOf(iso) === -1;
+
+      if (existentes[iso]) { jaTinham++; continue; }
+      if (util && !incluirDiasUteis) { uteisSemRDO.push(iso); continue; }
+
+      var registro = {};
+      registro['data'] = iso;
+      if (iId !== -1) registro['id'] = gerarIdDiario(dados, iId);
+      registro['tem_turno_noturno'] = 'false';
+      if (!util) registro['observacoes_gerais'] = 'Dia não útil — sem serviços';
+
+      var linha = cab.map(function (nc) { return registro.hasOwnProperty(nc) ? registro[nc] : ''; });
+      aba.appendRow(linha);
+      dados.push(linha);            // p/ o próximo gerarIdDiario enxergar o novo ID
+      existentes[iso] = true;
+      criados.push(registro['id'] + ' ' + iso + (util ? ' (útil, vazio)' : ' (não útil)'));
+    }
+
+    var resultado = { ok: true, totalCriados: criados.length, criados: criados, jaTinham: jaTinham, diasUteisSemRDO: uteisSemRDO };
+    Logger.log(JSON.stringify(resultado, null, 2));
+    return resultado;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ------------------------------------------------------------
 // 5. deleteRDODiario — apaga 1 linha da aba RDO_Diario.
 //    Casa por ID (texto exato OU só dígitos — cobre IDs numéricos exibidos
 //    formatados, ex.: célula = 2 mostrada como "D0002"). Se o ID não casar e
