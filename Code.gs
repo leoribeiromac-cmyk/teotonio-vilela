@@ -30,6 +30,8 @@ function rotear(e) {
       case 'addBatchRDO':     resp = addBatchRDO(p.batch, p.clientId); break;
       case 'updateRDO':       resp = updateRDO(p.payload); break;
       case 'limparDuplicados': resp = limparDuplicadosServidor(); break;
+      case 'apagarPorPrefixoId': resp = apagarPorPrefixoId(p.prefixo); break;
+      case 'producaoPorPacote': resp = producaoPorPacote(p.mes); break;
       case 'addRDODiario':    resp = upsertRDODiario(p, false); break;
       case 'updateRDODiario': resp = upsertRDODiario(p, true); break;
       default:
@@ -163,6 +165,88 @@ function addBatchRDO(batchJson, clientId) {
 function gerarId(data, k) {
   return Utilities.formatDate(data, Session.getScriptTimeZone(), 'yyyyMMddHHmmss') +
          '_' + k + '_' + Math.floor(Math.random() * 9000 + 1000);
+}
+
+// ------------------------------------------------------------
+// RELATÓRIO — produção total por pacote num mês (ex: mes='2026-05').
+// DEDUPLICA na leitura (Data+Turno+Pacote+Qtd+Apontador+Estaca), então
+// o resultado é correto mesmo que a planilha ainda tenha duplicatas.
+// Chamada: ?action=producaoPorPacote&mes=2026-05&callback=cb
+// Se 'mes' for omitido, soma o histórico inteiro.
+// ------------------------------------------------------------
+function producaoPorPacote(mes) {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA + '" não encontrada' };
+
+  var dados = aba.getDataRange().getValues();
+  if (dados.length <= 1) return { ok: true, mes: mes || 'tudo', pacotes: {} };
+
+  var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iData   = idxColuna(cab, 'data');
+  var iTurno  = idxColuna(cab, 'turno');
+  var iPacId  = idxColuna(cab, 'pacote_id');
+  var iPacNm  = idxColuna(cab, 'pacote_nome');
+  var iQtd    = idxColuna(cab, 'quantidade');
+  var iApont  = idxColuna(cab, 'apontador');
+  var iEstaca = idxColuna(cab, 'local_estaca');
+
+  function mesDe(v) {
+    // Aceita Date ou string; devolve 'yyyy-MM'.
+    if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM');
+    var s = String(v).trim();
+    var m = s.match(/(\d{4})-(\d{2})/);            // 2026-05-15
+    if (m) return m[1] + '-' + m[2];
+    var b = s.match(/(\d{2})\/(\d{2})\/(\d{4})/);  // 15/05/2026
+    if (b) return b[3] + '-' + b[2];
+    var c = s.match(/(\d{2})\/(\d{2})\/(\d{2})$/); // 15/05/26
+    if (c) return '20' + c[3] + '-' + c[2];
+    return '';
+  }
+
+  function num(s) {
+    if (s === '' || s === null || s === undefined) return 0;
+    if (typeof s === 'number') return s;
+    var t = String(s).replace(/\./g, '').replace(',', '.');
+    var v = parseFloat(t);
+    return isNaN(v) ? 0 : v;
+  }
+
+  var vistas = {};
+  var pacotes = {};       // pacote_id -> { nome, qtd, lancamentos }
+  var totalLinhas = 0, consideradas = 0, duplicadasIgnoradas = 0;
+
+  for (var i = 1; i < dados.length; i++) {
+    var r = dados[i];
+    if (mes && mesDe(r[iData]) !== mes) continue;
+    totalLinhas++;
+
+    // dedup por conteúdo
+    var chave = [
+      String(iData!==-1?r[iData]:'').trim(),
+      String(iTurno!==-1?r[iTurno]:'').trim().toLowerCase(),
+      String(iPacId!==-1?r[iPacId]:'').trim().toLowerCase(),
+      String(iQtd!==-1?r[iQtd]:'').trim(),
+      String(iApont!==-1?r[iApont]:'').trim().toLowerCase(),
+      String(iEstaca!==-1?r[iEstaca]:'').trim().toLowerCase()
+    ].join('|');
+    if (vistas[chave]) { duplicadasIgnoradas++; continue; }
+    vistas[chave] = true;
+    consideradas++;
+
+    var pid = String(iPacId!==-1?r[iPacId]:'').trim() || '(sem pacote)';
+    if (!pacotes[pid]) pacotes[pid] = { nome: String(iPacNm!==-1?r[iPacNm]:'').trim(), qtd: 0, lancamentos: 0 };
+    pacotes[pid].qtd += num(iQtd!==-1?r[iQtd]:0);
+    pacotes[pid].lancamentos++;
+  }
+
+  return {
+    ok: true,
+    mes: mes || 'tudo',
+    totalLinhasNoMes: totalLinhas,
+    consideradas: consideradas,
+    duplicadasIgnoradas: duplicadasIgnoradas,
+    pacotes: pacotes
+  };
 }
 
 // ------------------------------------------------------------
