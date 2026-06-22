@@ -550,6 +550,12 @@ function criarRDOsVaziosMaio2026(incluirDiasUteis) {
   }
 }
 
+// Atalho para o botão ▶ Run (que não passa argumentos): cria TODAS as datas
+// de maio/2026 sem RDO — inclusive os dias úteis (vazios). Veja o log em "Execuções".
+function criarTodosRDOsVaziosMaio2026() {
+  return criarRDOsVaziosMaio2026(true);
+}
+
 // ------------------------------------------------------------
 // 5. deleteRDODiario — apaga 1 linha da aba RDO_Diario.
 //    Casa por ID (texto exato OU só dígitos — cobre IDs numéricos exibidos
