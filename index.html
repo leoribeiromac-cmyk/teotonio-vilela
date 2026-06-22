@@ -5098,13 +5098,15 @@ async function executarExclusaoRDODiario(data, id) {
   const btn = document.getElementById('btnConfirmaExclui');
   if (btn) { btn.disabled = true; btn.textContent = 'Excluindo…'; }
   try {
-    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDODiario', id }, 0);
+    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDODiario', id, data }, 0);
     if (!result.ok) {
       if (/Ação desconhecida/i.test(result.error || '')) {
         toast('O backend ainda não tem "deleteRDODiario". Cole o Code.gs atualizado no Apps Script e republique (Nova versão).', 'error', 0);
         if (btn) { btn.disabled = false; btn.textContent = 'Excluir definitivamente'; }
         return;
       }
+      console.log('deleteRDODiario falhou:', result);
+      if (result.idsVistos) console.log('IDs reais na aba RDO_Diario:', result.idsVistos);
       throw new Error(result.error || 'Erro desconhecido');
     }
     // Remoção otimista (o CSV publicado demora a atualizar).

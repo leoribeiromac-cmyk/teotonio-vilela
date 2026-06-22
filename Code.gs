@@ -446,11 +446,13 @@ function upsertRDODiario(p, deveExistir) {
 }
 
 // ------------------------------------------------------------
-// 5. deleteRDODiario — apaga 1 linha da aba RDO_Diario pelo ID.
-//    Necessário para resolver duplicatas de RDO Diário pela interface.
+// 5. deleteRDODiario — apaga 1 linha da aba RDO_Diario.
+//    Casa por ID (texto exato OU só dígitos — cobre IDs numéricos exibidos
+//    formatados, ex.: célula = 2 mostrada como "D0002"). Se o ID não casar e
+//    a data tiver UM único RDO, apaga por data. Em falha, devolve uma amostra
+//    dos IDs realmente presentes na aba, para diagnóstico.
 // ------------------------------------------------------------
-function deleteRDODiario(id) {
-  if (!id) return { ok: false, error: 'ID não informado' };
+function deleteRDODiario(id, data) {
   var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
   if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
 
@@ -460,16 +462,67 @@ function deleteRDODiario(id) {
     var dados = aba.getDataRange().getValues();
     var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
     var iId = idxColuna(cab, 'id');
-    if (iId === -1) return { ok: false, error: 'Coluna ID não encontrada' };
+    var iData = idxColuna(cab, 'data');
 
-    for (var i = 1; i < dados.length; i++) {
-      if (String(dados[i][iId]).trim() === String(id).trim()) {
-        aba.deleteRow(i + 1); // base-1 + cabeçalho
-        return { ok: true, deleted: id };
+    var alvo = String(id == null ? '' : id).trim();
+    var alvoDig = alvo.replace(/\D/g, '');
+    var alvoNum = alvoDig ? parseInt(alvoDig, 10) : null;
+
+    // 1) por ID — exato; senão por dígitos (IDs numéricos formatados).
+    if (iId !== -1 && (alvo || alvoNum !== null)) {
+      for (var i = 1; i < dados.length; i++) {
+        var cell = String(dados[i][iId]).trim();
+        if (cell === '') continue;
+        var cellDig = cell.replace(/\D/g, '');
+        var cellNum = cellDig ? parseInt(cellDig, 10) : null;
+        if (cell === alvo || (alvoNum !== null && cellNum !== null && cellNum === alvoNum)) {
+          aba.deleteRow(i + 1);
+          return { ok: true, deleted: id, by: 'id' };
+        }
       }
     }
-    return { ok: false, error: 'ID não encontrado: ' + id };
+
+    // 2) por data — só se houver exatamente UM RDO naquela data.
+    if (data && iData !== -1) {
+      var tz = Session.getScriptTimeZone();
+      var alvoData = String(data).slice(0, 10);
+      var matches = [];
+      for (var j = 1; j < dados.length; j++) {
+        var v = dados[j][iData];
+        var iso;
+        if (v instanceof Date) {
+          iso = Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+        } else {
+          var sv = String(v).trim();
+          if (sv.indexOf('/') !== -1) {
+            var p = sv.split('/');
+            iso = (p.length === 3) ? (p[2].slice(0, 4) + '-' + ('0' + p[1]).slice(-2) + '-' + ('0' + p[0]).slice(-2)) : sv;
+          } else {
+            iso = sv.slice(0, 10);
+          }
+        }
+        if (iso === alvoData) matches.push(j);
+      }
+      if (matches.length === 1) {
+        aba.deleteRow(matches[0] + 1);
+        return { ok: true, deleted: id, by: 'data' };
+      }
+      if (matches.length > 1) {
+        return { ok: false, error: 'Há ' + matches.length + ' RDOs em ' + alvoData + ', mas o ID "' + id + '" não casou com a coluna ID. Veja idsVistos.', idsVistos: amostraIdsDiario(dados, iId) };
+      }
+    }
+
+    return { ok: false, error: 'ID não encontrado: ' + id, idsVistos: amostraIdsDiario(dados, iId) };
   } finally {
     lock.releaseLock();
   }
+}
+
+// Amostra dos valores da coluna ID (até 25) para diagnóstico de não-casamento.
+function amostraIdsDiario(dados, iId) {
+  var out = [];
+  for (var i = 1; i < dados.length && out.length < 25; i++) {
+    out.push(iId !== -1 ? dados[i][iId] : '(sem coluna ID)');
+  }
+  return out;
 }
