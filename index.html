@@ -5158,15 +5158,19 @@ function renderHistoricoDiarios() {
   }
   if (faltantes.length) {
     const regra = sabadoEhUtil() ? 'seg–sáb' : 'seg–sex';
+    const totalDias = faltantes.reduce((s, f) => s + f.dias.length, 0);
     const linhas = faltantes.map(f =>
       `<div style="margin-top:4px"><strong>${nomeMesAno(f.mes)}:</strong> ${f.dias.map(fmtData).join(' · ')}</div>`
     ).join('');
     avisosHtml += `
-      <div style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--ylw-l);border:1px solid var(--ylw-d);font-size:13px">
-        <strong style="color:var(--ylw-d)">📌 Dias úteis sem RDO</strong>
-        <span style="font-size:12px;color:var(--muted)">(${regra}, exceto feriados nacionais; mês corrente só até hoje)</span>
-        ${linhas}
-      </div>`;
+      <details style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--ylw-l);border:1px solid var(--ylw-d);font-size:13px">
+        <summary style="cursor:pointer;user-select:none">
+          <strong style="color:var(--ylw-d)">📌 Dias úteis sem RDO</strong>
+          <span style="display:inline-flex;align-items:center;padding:2px 8px;margin:0 4px;border-radius:20px;font-size:11px;font-weight:700;background:var(--ylw-d);color:#fff">${totalDias}</span>
+          <span style="font-size:12px;color:var(--muted)">(${regra}, exceto feriados nacionais; mês corrente só até hoje)</span>
+        </summary>
+        <div style="margin-top:6px">${linhas}</div>
+      </details>`;
   }
 
   let bodyContent = '';
