@@ -5151,58 +5151,240 @@ function efetivoTotaisRDO(r) {
   return { diurno, noturno, total: diurno + noturno };
 }
 
-// Exporta os RDOs Diários para uma planilha .xlsx (usa SheetJS, já carregado).
-// Se houver datas selecionadas, exporta só elas; senão, exporta todos.
-window.exportarRDOsXLS = function() {
-  let diarios = [...(STATE.rdodiario || [])];
-  const sel = (typeof SELECTED_RDO_DATAS !== 'undefined' && SELECTED_RDO_DATAS.size) ? SELECTED_RDO_DATAS : null;
-  if (sel) {
-    diarios = diarios.filter(r => {
-      const dO = parseISODate(getCSVField(r, 'Data'));
-      return sel.has(dO ? getLocalISODate(dO) : String(getCSVField(r, 'Data') || ''));
+// ── Exportação Excel no MESMO MODELO do PDF (uma aba por RDO) ──────────────
+// Textos fixos do cabeçalho do RDO (espelham o PDF oficial).
+const RDO_OBJETO_TXT = 'CONTRATAÇÃO DE EMPRESA OU CONSÓRCIO DE EMPRESAS ESPECIALIZADAS EM ENGENHARIA PARA A EXECUÇÃO DE OBRAS E SERVIÇOS DE DUPLICAÇÃO VIÁRIA DA AVENIDA SENADOR TEOTÔNIO VILELA, NO TRECHO COM INÍCIO PRÓXIMO A RUA JOSÉ NICOLAU DE LIMA ATÉ AS PROXIMIDADES DA RUA SATÉLITE ARIEL, NA REGIÃO SUL DA CIDADE DE SÃO PAULO';
+const RDO_LOCAL_TXT = 'Av. Sen. Teotônio Vilela (Rua José Nicolau — Rua Satélite Ariel)';
+
+// Lê um registro de RDO da planilha para o objeto usado na exportação (mesmos
+// campos do PDF, caminho "fromSheet").
+function dadosRDOExport(fromSheet, data) {
+  let efetJson = {}, equipJson = {};
+  try { efetJson = JSON.parse(getCSVField(fromSheet, 'Efetivo_JSON') || getCSVField(fromSheet, 'efetivo_json') || '{}'); } catch(e) {}
+  try { equipJson = JSON.parse(getCSVField(fromSheet, 'Equipamentos_JSON') || getCSVField(fromSheet, 'equipamentos_json') || '{}'); } catch(e) {}
+  return {
+    data,
+    sheetId: getCSVField(fromSheet, 'ID'),
+    apontador_diurno: getCSVField(fromSheet, 'Apontador_Diurno') || getCSVField(fromSheet, 'apontador_diurno') || '',
+    apontador_noturno: getCSVField(fromSheet, 'Apontador_Noturno') || getCSVField(fromSheet, 'apontador_noturno') || '',
+    clima_manha: getCSVField(fromSheet, 'Clima_Manha') || '',
+    clima_tarde: getCSVField(fromSheet, 'Clima_Tarde') || '',
+    clima_noite: getCSVField(fromSheet, 'Clima_Noite') || '',
+    visitas: getCSVField(fromSheet, 'Visitas') || '',
+    ocorrencias: getCSVField(fromSheet, 'Ocorrencias') || '',
+    observacoes_gerais: getCSVField(fromSheet, 'Observacoes_Gerais') || '',
+    efetivo_diurno: efetJson.padrao_diurno || {},
+    efetivo_noturno: efetJson.padrao_noturno || {},
+    equipamentos_diurno: equipJson.padrao_diurno || {},
+    equipamentos_noturno: equipJson.padrao_noturno || {},
+    customIndireto_diurno: efetJson.customIndireto_diurno || [],
+    customIndireto_noturno: efetJson.customIndireto_noturno || [],
+    customDireto_diurno: efetJson.customDireto_diurno || [],
+    customDireto_noturno: efetJson.customDireto_noturno || [],
+    customEquip_diurno: equipJson.custom_diurno || [],
+    customEquip_noturno: equipJson.custom_noturno || [],
+  };
+}
+
+// Monta as linhas de EFETIVO no mesmo critério do PDF (categorias com valor +
+// custom), sem as linhas-placeholder usadas só por estética no PDF.
+function linhasEfetivoExport(d) {
+  let categorias = [
+    ...CATEGORIAS_INDIRETO.map(c => ({...c, tipo: 'indireto'})),
+    ...CATEGORIAS_DIRETO.map(c => ({...c, tipo: 'direto'})),
+  ].filter(c => (parseInt(d.efetivo_diurno[c.key]) || 0) + (parseInt(d.efetivo_noturno[c.key]) || 0) > 0);
+
+  (d.customIndireto_diurno || []).forEach(f => {
+    const diu = parseInt(f.qtd) || 0;
+    if (f.label && diu > 0) categorias.push({ key: '__cid_' + f.label, label: f.label + ' ✱', tipo: 'indireto', _customDiu: diu, _customNot: 0 });
+  });
+  (d.customIndireto_noturno || []).forEach(f => {
+    const not = parseInt(f.qtd) || 0;
+    if (f.label && not > 0) {
+      const ex = categorias.find(c => c.label === f.label + ' ✱' && c.tipo === 'indireto');
+      if (ex) ex._customNot = not; else categorias.push({ key: '__cin_' + f.label, label: f.label + ' ✱', tipo: 'indireto', _customDiu: 0, _customNot: not });
+    }
+  });
+  (d.customDireto_diurno || []).forEach(f => {
+    const diu = parseInt(f.qtd) || 0;
+    if (f.label && diu > 0) categorias.push({ key: '__cdd_' + f.label, label: f.label + ' ✱', tipo: 'direto', _customDiu: diu, _customNot: 0 });
+  });
+  (d.customDireto_noturno || []).forEach(f => {
+    const not = parseInt(f.qtd) || 0;
+    if (f.label && not > 0) {
+      const ex = categorias.find(c => c.label === f.label + ' ✱' && c.tipo === 'direto');
+      if (ex) ex._customNot = not; else categorias.push({ key: '__cdn_' + f.label, label: f.label + ' ✱', tipo: 'direto', _customDiu: 0, _customNot: not });
+    }
+  });
+
+  let tcd = 0, tci = 0, ttd = 0, tti = 0;
+  const rows = categorias.map(cat => {
+    const diu = cat._customDiu !== undefined ? cat._customDiu : (parseInt(d.efetivo_diurno[cat.key]) || 0);
+    const not = cat._customNot !== undefined ? cat._customNot : (parseInt(d.efetivo_noturno[cat.key]) || 0);
+    const cd = cat.tipo === 'direto' ? diu : 0, ci = cat.tipo === 'indireto' ? diu : 0;
+    const td = cat.tipo === 'direto' ? not : 0, ti = cat.tipo === 'indireto' ? not : 0;
+    tcd += cd; tci += ci; ttd += td; tti += ti;
+    return [cat.label, cd || '', ci || '', td || '', ti || '', (cd + ci + td + ti) || ''];
+  });
+  return { rows, totais: [tcd, tci, ttd, tti, tcd + tci + ttd + tti] };
+}
+
+// Monta as linhas de EQUIPAMENTOS no mesmo critério do PDF.
+function linhasEquipExport(d) {
+  let equipamentos = CATEGORIAS_EQUIP_PADRAO
+    .filter(eq => (parseInt(d.equipamentos_diurno[eq.key]) || 0) + (parseInt(d.equipamentos_noturno[eq.key]) || 0) > 0);
+  (d.customEquip_diurno || []).forEach(eq => {
+    const diu = parseInt(eq.qtd) || 0;
+    if (eq.label && diu > 0) equipamentos.push({ key: '__eqd_' + eq.label, label: eq.label + ' ✱', _customDiu: diu, _customNot: 0 });
+  });
+  (d.customEquip_noturno || []).forEach(eq => {
+    const not = parseInt(eq.qtd) || 0;
+    if (eq.label && not > 0) {
+      const ex = equipamentos.find(e => e.label === eq.label + ' ✱');
+      if (ex) ex._customNot = not; else equipamentos.push({ key: '__eqn_' + eq.label, label: eq.label + ' ✱', _customDiu: 0, _customNot: not });
+    }
+  });
+  let tDiu = 0, tNot = 0;
+  const rows = equipamentos.map(eq => {
+    const diu = eq._customDiu !== undefined ? eq._customDiu : (parseInt(d.equipamentos_diurno[eq.key]) || 0);
+    const not = eq._customNot !== undefined ? eq._customNot : (parseInt(d.equipamentos_noturno[eq.key]) || 0);
+    tDiu += diu; tNot += not;
+    return [eq.label, diu || '', not || '', (diu + not) || ''];
+  });
+  return { rows, totais: [tDiu, tNot, tDiu + tNot] };
+}
+
+// Serviços (rdoavanco) do dia, separados por turno — mesmo filtro do PDF.
+function servicosDataExport(data) {
+  const filtra = noturno => STATE.rdoavanco.filter(r => {
+    const rd = parseISODate(getCSVField(r, 'Data'));
+    if (!rd || getLocalISODate(rd) !== data) return false;
+    const t = String(getCSVField(r, 'Turno') || (noturno ? '' : 'Diurno')).trim().toLowerCase();
+    return noturno ? t === 'noturno' : t !== 'noturno';
+  });
+  return { diurnos: filtra(false), noturnos: filtra(true) };
+}
+
+// Constrói a planilha (worksheet) de UM RDO no layout do PDF.
+function wsRDOModeloPDF(d, data) {
+  const aoa = [], merges = [];
+  const push = arr => { aoa.push(arr || []); return aoa.length - 1; };
+  const mrg = (r, c1, c2) => merges.push({ s: { r, c: c1 }, e: { r, c: c2 } });
+  const full = txt => { mrg(push([txt]), 0, 5); };
+
+  const df = fmtData(data);
+  const dd = parseISODate(data);
+  const diaSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][dd ? dd.getDay() : 0];
+  const nrRDO = d.sheetId ? (String(d.sheetId).replace(/^D0*/, '') || '1') : '—';
+
+  // Cabeçalho
+  mrg(push(['RELATÓRIO DIÁRIO DE OBRA']), 0, 5);
+  mrg(push(['Gestor Engenharia  |  Duplicação Viária — Av. Sen. Teotônio Vilela, SP']), 0, 5);
+  mrg(push(['Início: 09/05/2024  |  Prazo: 669 dias  |  Resp: Roberto V. França / Paulo E. Façanha / Adriano L. Pedroso']), 0, 5);
+  push([]);
+
+  // Objeto
+  full('OBJETO');
+  mrg(push([RDO_OBJETO_TXT]), 0, 5);
+  push([]);
+
+  // Local / Data / Número / Prazo / Dia da semana / Clima
+  mrg(push(['LOCAL', RDO_LOCAL_TXT]), 1, 5);
+  push(['DATA', df, 'NÚMERO', nrRDO, 'PRAZO (dias)', '669']);
+  push(['DIA DA SEMANA', diaSemana, 'CLIMA Manhã', d.clima_manha || '', 'CLIMA Tarde', d.clima_tarde || '']);
+  push(['', '', 'CLIMA Noite', d.clima_noite || '', '', '']);
+  push([]);
+
+  // Efetivo
+  full('EFETIVO   —   Apontador Diurno: ' + (d.apontador_diurno || '—') + '   |   Noturno: ' + (d.apontador_noturno || '—'));
+  push(['FUNÇÃO', 'DIURNO Direto', 'DIURNO Indireto', 'NOTURNO Direto', 'NOTURNO Indireto', 'TOTAL']);
+  const ef = linhasEfetivoExport(d);
+  if (ef.rows.length) ef.rows.forEach(r => push(r)); else mrg(push(['— sem efetivo lançado —']), 0, 5);
+  push(['TOTAL EFETIVO', ef.totais[0], ef.totais[1], ef.totais[2], ef.totais[3], ef.totais[4]]);
+  push([]);
+
+  // Equipamentos
+  full('EQUIPAMENTOS');
+  push(['EQUIPAMENTO', 'DIURNO', 'NOTURNO', 'TOTAL', '', '']);
+  const eq = linhasEquipExport(d);
+  if (eq.rows.length) eq.rows.forEach(r => push([r[0], r[1], r[2], r[3], '', ''])); else mrg(push(['— sem equipamentos lançados —']), 0, 5);
+  push(['TOTAL EQUIPAMENTOS', eq.totais[0], eq.totais[1], eq.totais[2], '', '']);
+  push([]);
+
+  // Serviços
+  const { diurnos, noturnos } = servicosDataExport(data);
+  const blocoServicos = (titulo, lista) => {
+    full(titulo);
+    push(['FRENTE / PACOTE', 'LOCAL', 'EQUIPE', '', '', '']);
+    if (!lista.length) { mrg(push(['— sem serviços —']), 0, 5); return; }
+    lista.forEach(s => {
+      const pacote = STATE.pacotes.find(pp => String(getCSVField(pp, 'ID')) === String(getCSVField(s, 'Pacote_ID')));
+      const frente = pacote ? (getCSVField(pacote, 'Frente') || '') : '';
+      const txtPacote = (frente ? frente + ' · ' : '') + (getCSVField(s, 'Pacote_Nome') || '');
+      push([txtPacote, String(getCSVField(s, 'Local_Estaca') || ''), String(getCSVField(s, 'Equipe') || getCSVField(s, 'Subcontratado') || ''), '', '', '']);
     });
-  }
-  if (!diarios.length) { toast('Nenhum RDO Diário para exportar.', 'error'); return; }
+  };
+  blocoServicos('SERVIÇOS DIURNOS', diurnos);
+  blocoServicos('SERVIÇOS NOTURNOS', noturnos);
+  push([]);
 
-  diarios.sort((a, b) => {
-    const da = parseISODate(getCSVField(a, 'Data')), db = parseISODate(getCSVField(b, 'Data'));
-    return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
-  });
+  // Visitas / Ocorrências / Observações
+  mrg(push(['VISITAS', d.visitas || '']), 1, 5);
+  mrg(push(['OCORRÊNCIAS', d.ocorrencias || '']), 1, 5);
+  mrg(push(['OBSERVAÇÕES', d.observacoes_gerais || '']), 1, 5);
+  push([]);
 
-  const header = ['ID','Data','Encarregado','Apontador Diurno','Apontador Noturno',
-    'Clima Manhã','Clima Tarde','Clima Noite','Tem Noturno',
-    'Efetivo Diurno','Efetivo Noturno','Efetivo Total',
-    'Visitas','Ocorrências','Observações'];
-  const aoa = [header];
-  diarios.forEach(r => {
-    const t = efetivoTotaisRDO(r);
-    const hasNoturno = getCSVField(r, 'Apontador_Noturno')
-      || String(getCSVField(r, 'Tem_Turno_Noturno')).toLowerCase() === 'true'
-      || getCSVField(r, 'Tem_Turno_Noturno') === 'Sim';
-    aoa.push([
-      getCSVField(r, 'ID') || '',
-      fmtData(getCSVField(r, 'Data')),
-      getCSVField(r, 'Encarregado') || '',
-      getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || '',
-      getCSVField(r, 'Apontador_Noturno') || '',
-      getCSVField(r, 'Clima_Manha') || '',
-      getCSVField(r, 'Clima_Tarde') || '',
-      getCSVField(r, 'Clima_Noite') || '',
-      hasNoturno ? 'Sim' : 'Não',
-      t.diurno, t.noturno, t.total,
-      getCSVField(r, 'Visitas') || '',
-      getCSVField(r, 'Ocorrencias') || '',
-      getCSVField(r, 'Observacoes_Gerais') || ''
-    ]);
-  });
+  // Assinaturas
+  full('ASSINATURAS');
+  push(['ENGENHEIRO GESTOR ENGENHARIA', '', '', 'CLIENTE / FISCALIZAÇÃO (SP OBRAS)', '', '']);
+  push(['__________________________', '', '', '__________________________', '', '']);
+  push([df, '', '', df, '', '']);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
-  ws['!cols'] = [{wch:8},{wch:11},{wch:16},{wch:16},{wch:16},{wch:11},{wch:11},{wch:11},{wch:10},
-    {wch:13},{wch:13},{wch:12},{wch:24},{wch:24},{wch:30}];
+  ws['!merges'] = merges;
+  ws['!cols'] = [{wch:34},{wch:16},{wch:18},{wch:16},{wch:18},{wch:12}];
+  return ws;
+}
+
+// Exporta os RDOs Diários para .xlsx no MODELO DO PDF (uma aba por RDO).
+// Se houver datas selecionadas, exporta só elas; senão, exporta todos.
+window.exportarRDOsXLS = function() {
+  const sel = (typeof SELECTED_RDO_DATAS !== 'undefined' && SELECTED_RDO_DATAS.size) ? SELECTED_RDO_DATAS : null;
+
+  // Uma aba por DATA, usando o RDO oficial (ou o primeiro) — mesmo critério do PDF.
+  const datas = [...new Set((STATE.rdodiario || []).map(r => {
+    const dO = parseISODate(getCSVField(r, 'Data'));
+    return dO ? getLocalISODate(dO) : String(getCSVField(r, 'Data') || '');
+  }).filter(Boolean))]
+    .filter(data => !sel || sel.has(data))
+    .sort();
+
+  if (!datas.length) { toast('Nenhum RDO Diário para exportar.', 'error'); return; }
+
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'RDOs Diários');
+  const usados = {};
+  let n = 0;
+  datas.forEach(data => {
+    const daData = rdosDaData(data);
+    const oficialId = getOficialRDO(data);
+    let fromSheet = daData[0];
+    if (oficialId) {
+      const of = daData.find(r => String(getCSVField(r, 'ID')).trim() === String(oficialId).trim());
+      if (of) fromSheet = of;
+    }
+    if (!fromSheet) return;
+    const d = dadosRDOExport(fromSheet, data);
+
+    // Nome da aba: "D0047 22-06-26" (<=31 chars, sem caracteres proibidos, único).
+    let nome = ((getCSVField(fromSheet, 'ID') || 'RDO') + ' ' + fmtData(data)).replace(/[\\/?*:\[\]]/g, '-').slice(0, 28);
+    if (usados[nome]) nome = nome.slice(0, 25) + '-' + (++usados[nome]); else usados[nome] = 1;
+
+    XLSX.utils.book_append_sheet(wb, wsRDOModeloPDF(d, data), nome);
+    n++;
+  });
+
   XLSX.writeFile(wb, `RDOs_Diarios_${getLocalISODate(new Date())}.xlsx`);
-  toast(`Excel exportado (${diarios.length} RDO${diarios.length>1?'s':''})${sel?' — apenas selecionados':''}!`, 'success');
+  toast(`Excel exportado (${n} RDO${n > 1 ? 's' : ''}, modelo do PDF)${sel ? ' — apenas selecionados' : ''}!`, 'success');
 };
 
 function renderHistoricoDiarios() {
