@@ -5129,6 +5129,82 @@ async function executarExclusaoRDODiario(data, id) {
   }
 }
 
+// Soma o efetivo (diurno/noturno/total) de um registro de RDO Diário.
+// Aceita o formato novo (Efetivo_JSON) e o legado (colunas Categoria_Diurno/Noturno).
+function efetivoTotaisRDO(r) {
+  let diurno = 0, noturno = 0;
+  try {
+    const ef = JSON.parse(getCSVField(r, 'Efetivo_JSON') || '{}');
+    Object.values(ef.padrao_diurno || {}).forEach(v => diurno += parseInt(v) || 0);
+    Object.values(ef.padrao_noturno || {}).forEach(v => noturno += parseInt(v) || 0);
+    (ef.customDireto_diurno   || []).forEach(v => diurno  += parseInt(v.qtd) || 0);
+    (ef.customIndireto_diurno || []).forEach(v => diurno  += parseInt(v.qtd) || 0);
+    (ef.customDireto_noturno   || []).forEach(v => noturno += parseInt(v.qtd) || 0);
+    (ef.customIndireto_noturno || []).forEach(v => noturno += parseInt(v.qtd) || 0);
+  } catch(e) {
+    const cats = ['Servente','Pedreiro','Armador','Carpinteiro','OpMaquina','Sinaleiro','Encarregado'];
+    cats.forEach(c => {
+      diurno  += parseInt(getCSVField(r, c+'_Diurno'))  || 0;
+      noturno += parseInt(getCSVField(r, c+'_Noturno')) || 0;
+    });
+  }
+  return { diurno, noturno, total: diurno + noturno };
+}
+
+// Exporta os RDOs Diários para uma planilha .xlsx (usa SheetJS, já carregado).
+// Se houver datas selecionadas, exporta só elas; senão, exporta todos.
+window.exportarRDOsXLS = function() {
+  let diarios = [...(STATE.rdodiario || [])];
+  const sel = (typeof SELECTED_RDO_DATAS !== 'undefined' && SELECTED_RDO_DATAS.size) ? SELECTED_RDO_DATAS : null;
+  if (sel) {
+    diarios = diarios.filter(r => {
+      const dO = parseISODate(getCSVField(r, 'Data'));
+      return sel.has(dO ? getLocalISODate(dO) : String(getCSVField(r, 'Data') || ''));
+    });
+  }
+  if (!diarios.length) { toast('Nenhum RDO Diário para exportar.', 'error'); return; }
+
+  diarios.sort((a, b) => {
+    const da = parseISODate(getCSVField(a, 'Data')), db = parseISODate(getCSVField(b, 'Data'));
+    return (da ? da.getTime() : 0) - (db ? db.getTime() : 0);
+  });
+
+  const header = ['ID','Data','Encarregado','Apontador Diurno','Apontador Noturno',
+    'Clima Manhã','Clima Tarde','Clima Noite','Tem Noturno',
+    'Efetivo Diurno','Efetivo Noturno','Efetivo Total',
+    'Visitas','Ocorrências','Observações'];
+  const aoa = [header];
+  diarios.forEach(r => {
+    const t = efetivoTotaisRDO(r);
+    const hasNoturno = getCSVField(r, 'Apontador_Noturno')
+      || String(getCSVField(r, 'Tem_Turno_Noturno')).toLowerCase() === 'true'
+      || getCSVField(r, 'Tem_Turno_Noturno') === 'Sim';
+    aoa.push([
+      getCSVField(r, 'ID') || '',
+      fmtData(getCSVField(r, 'Data')),
+      getCSVField(r, 'Encarregado') || '',
+      getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || '',
+      getCSVField(r, 'Apontador_Noturno') || '',
+      getCSVField(r, 'Clima_Manha') || '',
+      getCSVField(r, 'Clima_Tarde') || '',
+      getCSVField(r, 'Clima_Noite') || '',
+      hasNoturno ? 'Sim' : 'Não',
+      t.diurno, t.noturno, t.total,
+      getCSVField(r, 'Visitas') || '',
+      getCSVField(r, 'Ocorrencias') || '',
+      getCSVField(r, 'Observacoes_Gerais') || ''
+    ]);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{wch:8},{wch:11},{wch:16},{wch:16},{wch:16},{wch:11},{wch:11},{wch:11},{wch:10},
+    {wch:13},{wch:13},{wch:12},{wch:24},{wch:24},{wch:30}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'RDOs Diários');
+  XLSX.writeFile(wb, `RDOs_Diarios_${getLocalISODate(new Date())}.xlsx`);
+  toast(`Excel exportado (${diarios.length} RDO${diarios.length>1?'s':''})${sel?' — apenas selecionados':''}!`, 'success');
+};
+
 function renderHistoricoDiarios() {
   SELECTED_RDO_DATAS = new Set();
   const diarios = [...(STATE.rdodiario||[])].reverse();
@@ -5186,24 +5262,7 @@ function renderHistoricoDiarios() {
     bodyContent = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum RDO Diário ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdodiario\')">+ Criar primeiro RDO Diário</button></div>';
   } else {
     const tableRows = diarios.map(r => {
-      let total = 0;
-      try {
-         const ef = JSON.parse(getCSVField(r, 'Efetivo_JSON') || '{}');
-         const diu = ef.padrao_diurno || {};
-         const not = ef.padrao_noturno || {};
-         Object.values(diu).forEach(v => total += parseInt(v) || 0);
-         Object.values(not).forEach(v => total += parseInt(v) || 0);
-         (ef.customDireto_diurno || []).forEach(v => total += parseInt(v.qtd) || 0);
-         (ef.customIndireto_diurno || []).forEach(v => total += parseInt(v.qtd) || 0);
-         (ef.customDireto_noturno || []).forEach(v => total += parseInt(v.qtd) || 0);
-         (ef.customIndireto_noturno || []).forEach(v => total += parseInt(v.qtd) || 0);
-      } catch(e) {
-         const cats = ['Servente','Pedreiro','Armador','Carpinteiro','OpMaquina','Sinaleiro','Encarregado'];
-         cats.forEach(c => {
-           total += parseInt(getCSVField(r, c+'_Diurno')) || 0;
-           total += parseInt(getCSVField(r, c+'_Noturno')) || 0;
-         });
-      }
+      const total = efetivoTotaisRDO(r).total;
 
       const climaResumo = [getCSVField(r, 'Clima_Manha'), getCSVField(r, 'Clima_Tarde'), getCSVField(r, 'Clima_Noite')].filter(Boolean).join(' · ');
       const hasNoturno = getCSVField(r, 'Apontador_Noturno') || String(getCSVField(r, 'Tem_Turno_Noturno')).toLowerCase() === 'true' || getCSVField(r, 'Tem_Turno_Noturno') === 'Sim';
@@ -5255,10 +5314,11 @@ function renderHistoricoDiarios() {
       <div class="card-header">
         <div>
           <div class="card-title">RDOs Diários</div>
-          <div class="card-title-sub">👁 visualiza sem baixar · 📄 gera o PDF · selecione vários para lote</div>
+          <div class="card-title-sub">👁 visualiza sem baixar · 📄 gera o PDF · selecione vários para lote · ⬇ exporta Excel</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <button class="btn btn-sm btn-outline" onclick="toggleSabadoUtil()" title="Conta sábado como dia útil no alerta de dias sem RDO" style="white-space:nowrap">${sabadoEhUtil()?'☑':'☐'} Sábado útil</button>
+          <button class="btn btn-outline" onclick="exportarRDOsXLS()" title="Exporta os RDOs para Excel (.xlsx). Se houver itens selecionados, exporta só eles." style="white-space:nowrap">⬇ Exportar Excel</button>
           <button id="btnLotePDF" class="btn btn-primary" onclick="gerarPDFsEmLote()" disabled style="white-space:nowrap">📄 Gerar PDFs em Lote</button>
         </div>
       </div>
