@@ -1591,12 +1591,18 @@ function ehDiaUtil(d) {
   return !ehFeriadoNacional(d);
 }
 
+// Primeiro dia com lançamento de RDO. Meses/dias anteriores a esta data NÃO são
+// cobrados na lista de "dias úteis sem RDO" (a obra começou a lançar em maio/26).
+const RDO_INICIO = '2026-05-01';
+
 // Para cada mês a avaliar, lista os dias úteis (até hoje) sem nenhum RDO em
 // `datasComRDO`. `mesesParaAvaliar` (array 'YYYY-MM') permite cobrir TODOS os
 // meses com dados, não só os que já têm RDO; se omitido, deriva dos próprios
-// dados. Não cobra dias futuros. Retorna [{ mes:'2026-05', dias:[...] }].
+// dados. Não cobra dias futuros nem anteriores a RDO_INICIO. Retorna
+// [{ mes:'2026-05', dias:[...] }].
 function diasUteisSemRDO(datasComRDO, mesesParaAvaliar) {
   const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const inicioMes = RDO_INICIO.slice(0, 7);
   let meses = (mesesParaAvaliar && mesesParaAvaliar.length) ? mesesParaAvaliar.slice() : null;
   if (!meses) {
     const s = new Set();
@@ -1605,6 +1611,7 @@ function diasUteisSemRDO(datasComRDO, mesesParaAvaliar) {
   }
   const resultado = [];
   [...meses].sort().forEach(mes => {
+    if (mes < inicioMes) return;       // ignora meses anteriores ao início dos lançamentos
     const ano = parseInt(mes.slice(0,4), 10);
     const m   = parseInt(mes.slice(5,7), 10);
     const ultimoDia = new Date(ano, m, 0).getDate();
@@ -1614,6 +1621,7 @@ function diasUteisSemRDO(datasComRDO, mesesParaAvaliar) {
       if (d > hoje) break;            // não aponta dia futuro
       if (!ehDiaUtil(d)) continue;     // pula fim de semana / feriado
       const iso = getLocalISODate(d);
+      if (iso < RDO_INICIO) continue;  // ignora dias anteriores ao início dos lançamentos
       if (!datasComRDO.has(iso)) faltando.push(iso);
     }
     if (faltando.length) resultado.push({ mes, dias: faltando });
