@@ -15,7 +15,8 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- xlsx-js-style: fork do SheetJS 0.18.5 (mesma API de leitura) que TAMBÉM grava estilos (bordas/cores/fontes) usados na exportação de RDOs em Excel. -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -5265,63 +5266,103 @@ function servicosDataExport(data) {
   return { diurnos: filtra(false), noturnos: filtra(true) };
 }
 
-// Constrói a planilha (worksheet) de UM RDO no layout do PDF.
+// Estilos da planilha (xlsx-js-style): bordas, preenchimentos e fontes que
+// reproduzem o visual do PDF. Cores internas isoladas num IIFE p/ não vazar.
+const RDO_XLS_ST = (() => {
+  const B = { style: 'thin', color: { rgb: 'B0B0B0' } };
+  const BORDER = { top: B, bottom: B, left: B, right: B };
+  const NAVY = '1E3A5F', LBLUE = 'D2E1F2', RED = 'C0322D';
+  return {
+    title:    { font: { bold: true, sz: 15, color: { rgb: NAVY } }, alignment: { horizontal: 'center', vertical: 'center' } },
+    sub:      { font: { italic: true, sz: 9, color: { rgb: '555555' } }, alignment: { horizontal: 'center', vertical: 'center' } },
+    section:  { fill: { patternType: 'solid', fgColor: { rgb: NAVY } }, font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'left', vertical: 'center' } },
+    objeto:   { font: { sz: 8, color: { rgb: '222222' } }, alignment: { horizontal: 'left', vertical: 'top', wrapText: true }, border: BORDER },
+    kLabel:   { fill: { patternType: 'solid', fgColor: { rgb: LBLUE } }, font: { bold: true, sz: 9, color: { rgb: NAVY } }, alignment: { horizontal: 'left', vertical: 'center' }, border: BORDER },
+    kVal:     { font: { sz: 9, color: { rgb: '000000' } }, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: BORDER },
+    kValC:    { font: { bold: true, sz: 9, color: { rgb: NAVY } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER },
+    thead:    { fill: { patternType: 'solid', fgColor: { rgb: LBLUE } }, font: { bold: true, sz: 8.5, color: { rgb: NAVY } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: BORDER },
+    cellL:    { font: { sz: 8.5, color: { rgb: '000000' } }, alignment: { horizontal: 'left', vertical: 'center', wrapText: true }, border: BORDER },
+    cellC:    { font: { bold: true, sz: 9, color: { rgb: NAVY } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER },
+    total:    { fill: { patternType: 'solid', fgColor: { rgb: NAVY } }, font: { bold: true, sz: 9, color: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER },
+    totalL:   { fill: { patternType: 'solid', fgColor: { rgb: NAVY } }, font: { bold: true, sz: 9, color: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'left', vertical: 'center' }, border: BORDER },
+    totalRed: { fill: { patternType: 'solid', fgColor: { rgb: RED } }, font: { bold: true, sz: 10, color: { rgb: 'FFFFFF' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: BORDER },
+    emptyMsg: { font: { italic: true, sz: 9, color: { rgb: '8A5A1E' } }, alignment: { horizontal: 'center', vertical: 'center' }, fill: { patternType: 'solid', fgColor: { rgb: 'FDF6E6' } }, border: BORDER },
+    sign:     { font: { bold: true, sz: 9, color: { rgb: '555555' } }, alignment: { horizontal: 'left', vertical: 'center' } },
+    signC:    { font: { sz: 9, color: { rgb: '555555' } }, alignment: { horizontal: 'center', vertical: 'center' } },
+  };
+})();
+function rdoXlsZebra(st, odd) { return odd ? { ...st, fill: { patternType: 'solid', fgColor: { rgb: 'F5F7FA' } } } : st; }
+
+// Constrói a planilha (worksheet) de UM RDO no layout do PDF, com bordas/cores.
 function wsRDOModeloPDF(d, data) {
-  const aoa = [], merges = [];
+  const aoa = [], merges = [], sm = {}, hrows = [];
+  const ST = RDO_XLS_ST;
   const push = arr => { aoa.push(arr || []); return aoa.length - 1; };
   const mrg = (r, c1, c2) => merges.push({ s: { r, c: c1 }, e: { r, c: c2 } });
-  const full = txt => { mrg(push([txt]), 0, 5); };
+  const sty = (r, c, s) => { sm[r + ',' + c] = s; };
+  const styRange = (r, c1, c2, s) => { for (let c = c1; c <= c2; c++) sty(r, c, s); };
+  const setH = (r, h) => { hrows[r] = { hpt: h }; };
+  const rSection = txt => { const r = push([txt]); mrg(r, 0, 5); styRange(r, 0, 5, ST.section); setH(r, 17); return r; };
 
   const df = fmtData(data);
   const dd = parseISODate(data);
   const diaSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][dd ? dd.getDay() : 0];
   const nrRDO = d.sheetId ? (String(d.sheetId).replace(/^D0*/, '') || '1') : '—';
+  let r;
 
   // Cabeçalho
-  mrg(push(['RELATÓRIO DIÁRIO DE OBRA']), 0, 5);
-  mrg(push(['Gestor Engenharia  |  Duplicação Viária — Av. Sen. Teotônio Vilela, SP']), 0, 5);
-  mrg(push(['Início: 09/05/2024  |  Prazo: 669 dias  |  Resp: Roberto V. França / Paulo E. Façanha / Adriano L. Pedroso']), 0, 5);
+  r = push(['RELATÓRIO DIÁRIO DE OBRA']); mrg(r, 0, 5); styRange(r, 0, 5, ST.title); setH(r, 22);
+  r = push(['Gestor Engenharia  |  Duplicação Viária — Av. Sen. Teotônio Vilela, SP']); mrg(r, 0, 5); styRange(r, 0, 5, ST.sub);
+  r = push(['Início: 09/05/2024  |  Prazo: 669 dias  |  Resp: Roberto V. França / Paulo E. Façanha / Adriano L. Pedroso']); mrg(r, 0, 5); styRange(r, 0, 5, ST.sub);
   push([]);
 
   // Objeto
-  full('OBJETO');
-  mrg(push([RDO_OBJETO_TXT]), 0, 5);
+  rSection('OBJETO');
+  r = push([RDO_OBJETO_TXT]); mrg(r, 0, 5); styRange(r, 0, 5, ST.objeto); setH(r, 30);
   push([]);
 
   // Local / Data / Número / Prazo / Dia da semana / Clima
-  mrg(push(['LOCAL', RDO_LOCAL_TXT]), 1, 5);
-  push(['DATA', df, 'NÚMERO', nrRDO, 'PRAZO (dias)', '669']);
-  push(['DIA DA SEMANA', diaSemana, 'CLIMA Manhã', d.clima_manha || '', 'CLIMA Tarde', d.clima_tarde || '']);
-  push(['', '', 'CLIMA Noite', d.clima_noite || '', '', '']);
+  r = push(['LOCAL', RDO_LOCAL_TXT]); mrg(r, 1, 5); sty(r, 0, ST.kLabel); styRange(r, 1, 5, ST.kVal);
+  r = push(['DATA', df, 'NÚMERO', nrRDO, 'PRAZO (dias)', '669']);
+  sty(r, 0, ST.kLabel); sty(r, 1, ST.kValC); sty(r, 2, ST.kLabel); sty(r, 3, ST.kValC); sty(r, 4, ST.kLabel); sty(r, 5, ST.kValC);
+  r = push(['DIA DA SEMANA', diaSemana, 'CLIMA Manhã', d.clima_manha || '', 'CLIMA Tarde', d.clima_tarde || '']);
+  sty(r, 0, ST.kLabel); sty(r, 1, ST.kValC); sty(r, 2, ST.kLabel); sty(r, 3, ST.kValC); sty(r, 4, ST.kLabel); sty(r, 5, ST.kValC);
+  r = push(['', '', 'CLIMA Noite', d.clima_noite || '', '', '']);
+  sty(r, 2, ST.kLabel); sty(r, 3, ST.kValC);
   push([]);
 
   // Efetivo
-  full('EFETIVO   —   Apontador Diurno: ' + (d.apontador_diurno || '—') + '   |   Noturno: ' + (d.apontador_noturno || '—'));
-  push(['FUNÇÃO', 'DIURNO Direto', 'DIURNO Indireto', 'NOTURNO Direto', 'NOTURNO Indireto', 'TOTAL']);
+  rSection('EFETIVO   —   Apontador Diurno: ' + (d.apontador_diurno || '—') + '   |   Noturno: ' + (d.apontador_noturno || '—'));
+  r = push(['FUNÇÃO', 'DIURNO Direto', 'DIURNO Indireto', 'NOTURNO Direto', 'NOTURNO Indireto', 'TOTAL']); styRange(r, 0, 5, ST.thead); setH(r, 20);
   const ef = linhasEfetivoExport(d);
-  if (ef.rows.length) ef.rows.forEach(r => push(r)); else mrg(push(['— sem efetivo lançado —']), 0, 5);
-  push(['TOTAL EFETIVO', ef.totais[0], ef.totais[1], ef.totais[2], ef.totais[3], ef.totais[4]]);
+  if (ef.rows.length) ef.rows.forEach((row, i) => { const rr = push(row); sty(rr, 0, rdoXlsZebra(ST.cellL, i % 2)); styRange(rr, 1, 5, rdoXlsZebra(ST.cellC, i % 2)); });
+  else { r = push(['— sem efetivo lançado —']); mrg(r, 0, 5); styRange(r, 0, 5, ST.emptyMsg); }
+  r = push(['TOTAL EFETIVO', ef.totais[0], ef.totais[1], ef.totais[2], ef.totais[3], ef.totais[4]]);
+  sty(r, 0, ST.totalL); styRange(r, 1, 4, ST.total); sty(r, 5, ST.totalRed);
   push([]);
 
   // Equipamentos
-  full('EQUIPAMENTOS');
-  push(['EQUIPAMENTO', 'DIURNO', 'NOTURNO', 'TOTAL', '', '']);
+  rSection('EQUIPAMENTOS');
+  r = push(['EQUIPAMENTO', 'DIURNO', 'NOTURNO', 'TOTAL', '', '']); styRange(r, 0, 3, ST.thead); setH(r, 16);
   const eq = linhasEquipExport(d);
-  if (eq.rows.length) eq.rows.forEach(r => push([r[0], r[1], r[2], r[3], '', ''])); else mrg(push(['— sem equipamentos lançados —']), 0, 5);
-  push(['TOTAL EQUIPAMENTOS', eq.totais[0], eq.totais[1], eq.totais[2], '', '']);
+  if (eq.rows.length) eq.rows.forEach((row, i) => { const rr = push([row[0], row[1], row[2], row[3], '', '']); sty(rr, 0, rdoXlsZebra(ST.cellL, i % 2)); styRange(rr, 1, 3, rdoXlsZebra(ST.cellC, i % 2)); });
+  else { r = push(['— sem equipamentos lançados —']); mrg(r, 0, 5); styRange(r, 0, 5, ST.emptyMsg); }
+  r = push(['TOTAL EQUIPAMENTOS', eq.totais[0], eq.totais[1], eq.totais[2], '', '']);
+  sty(r, 0, ST.totalL); sty(r, 1, ST.total); sty(r, 2, ST.total); sty(r, 3, ST.totalRed);
   push([]);
 
   // Serviços
   const { diurnos, noturnos } = servicosDataExport(data);
   const blocoServicos = (titulo, lista) => {
-    full(titulo);
-    push(['FRENTE / PACOTE', 'LOCAL', 'EQUIPE', '', '', '']);
-    if (!lista.length) { mrg(push(['— sem serviços —']), 0, 5); return; }
-    lista.forEach(s => {
+    rSection(titulo);
+    const rh = push(['FRENTE / PACOTE', 'LOCAL', 'EQUIPE', '', '', '']); styRange(rh, 0, 2, ST.thead); setH(rh, 16);
+    if (!lista.length) { const re = push(['— sem serviços —']); mrg(re, 0, 5); styRange(re, 0, 5, ST.emptyMsg); return; }
+    lista.forEach((s, i) => {
       const pacote = STATE.pacotes.find(pp => String(getCSVField(pp, 'ID')) === String(getCSVField(s, 'Pacote_ID')));
       const frente = pacote ? (getCSVField(pacote, 'Frente') || '') : '';
       const txtPacote = (frente ? frente + ' · ' : '') + (getCSVField(s, 'Pacote_Nome') || '');
-      push([txtPacote, String(getCSVField(s, 'Local_Estaca') || ''), String(getCSVField(s, 'Equipe') || getCSVField(s, 'Subcontratado') || ''), '', '', '']);
+      const rr = push([txtPacote, String(getCSVField(s, 'Local_Estaca') || ''), String(getCSVField(s, 'Equipe') || getCSVField(s, 'Subcontratado') || ''), '', '', '']);
+      styRange(rr, 0, 2, rdoXlsZebra(ST.cellL, i % 2));
     });
   };
   blocoServicos('SERVIÇOS DIURNOS', diurnos);
@@ -5329,20 +5370,29 @@ function wsRDOModeloPDF(d, data) {
   push([]);
 
   // Visitas / Ocorrências / Observações
-  mrg(push(['VISITAS', d.visitas || '']), 1, 5);
-  mrg(push(['OCORRÊNCIAS', d.ocorrencias || '']), 1, 5);
-  mrg(push(['OBSERVAÇÕES', d.observacoes_gerais || '']), 1, 5);
+  [['VISITAS', d.visitas || ''], ['OCORRÊNCIAS', d.ocorrencias || ''], ['OBSERVAÇÕES', d.observacoes_gerais || '']].forEach(([lab, val]) => {
+    const rr = push([lab, val]); mrg(rr, 1, 5); sty(rr, 0, ST.kLabel); styRange(rr, 1, 5, ST.kVal);
+  });
   push([]);
 
   // Assinaturas
-  full('ASSINATURAS');
-  push(['ENGENHEIRO GESTOR ENGENHARIA', '', '', 'CLIENTE / FISCALIZAÇÃO (SP OBRAS)', '', '']);
-  push(['__________________________', '', '', '__________________________', '', '']);
-  push([df, '', '', df, '', '']);
+  rSection('ASSINATURAS');
+  r = push(['ENGENHEIRO GESTOR ENGENHARIA', '', '', 'CLIENTE / FISCALIZAÇÃO (SP OBRAS)', '', '']); sty(r, 0, ST.sign); sty(r, 3, ST.sign);
+  r = push(['__________________________', '', '', '__________________________', '', '']); sty(r, 0, ST.signC); sty(r, 3, ST.signC);
+  r = push([df, '', '', df, '', '']); sty(r, 0, ST.signC); sty(r, 3, ST.signC);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges'] = merges;
-  ws['!cols'] = [{wch:34},{wch:16},{wch:18},{wch:16},{wch:18},{wch:12}];
+  ws['!cols'] = [{wch:34},{wch:15},{wch:16},{wch:15},{wch:16},{wch:10}];
+  if (hrows.length) ws['!rows'] = hrows;
+
+  // Aplica estilos; cria a célula vazia quando preciso p/ desenhar borda/fundo.
+  Object.keys(sm).forEach(k => {
+    const [rr, cc] = k.split(',').map(Number);
+    const ref = XLSX.utils.encode_cell({ r: rr, c: cc });
+    if (!ws[ref]) ws[ref] = { t: 's', v: '' };
+    ws[ref].s = sm[k];
+  });
   return ws;
 }
 
