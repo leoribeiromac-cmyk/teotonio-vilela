@@ -538,32 +538,9 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .ai-content strong { color: var(--text-2); font-weight: 700; }
 .loader-spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--pri); border-radius: 50%; animation: spin 0.8s linear infinite; }
 
-/* ===== GANTT ===== */
-.gantt-wrap { overflow-x: auto; min-height: 160px; }
-.gantt-grid { display: grid; grid-template-columns: 230px 1fr; border-bottom: 1px solid var(--border); background: var(--bg-2); }
-.gantt-labels-header { padding: 8px 12px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; border-right: 1px solid var(--border); }
-.gantt-timeline-header { position: relative; height: 32px; min-width: 600px; overflow: hidden; }
-.gantt-mes { position: absolute; top: 0; height: 100%; display: flex; align-items: center; padding: 0 6px; font-size: 10px; font-weight: 700; color: var(--muted); border-right: 1px solid var(--border); box-sizing: border-box; overflow: hidden; }
-.gantt-hoje-header { position: absolute; bottom: 2px; transform: translateX(-50%); font-size: 9px; font-weight: 700; color: #f44336; background: #fff0f0; padding: 1px 4px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
-.gantt-body { min-width: 830px; }
-.gantt-frente-header { display: grid; grid-template-columns: 230px 1fr; background: var(--frente-cor, var(--pri)); color: #fff; font-size: 11px; font-weight: 700; padding: 5px 12px; text-transform: uppercase; letter-spacing: 0.05em; }
-.gantt-row { display: grid; grid-template-columns: 230px 1fr; border-bottom: 1px solid var(--border); min-height: 56px; }
-.gantt-row:hover { background: var(--bg-2); }
-.gantt-label-cell { border-right: 1px solid var(--border); padding: 6px 10px; display: flex; flex-direction: column; justify-content: center; gap: 2px; overflow: hidden; }
-.gantt-label-nome { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gantt-label-meta { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-.gantt-label-datas { font-size: 10px; color: var(--muted); }
-.gantt-label-pred { display: flex; align-items: center; gap: 4px; }
-.gantt-pill { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 10px; white-space: nowrap; }
+/* Botão de edição em tabela (reutilizado também no Histórico). */
 .gantt-edit-btn { background: none; border: 1px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; padding: 1px 5px; color: var(--muted); line-height: 1.4; }
 .gantt-edit-btn:hover { background: var(--acc); color: #fff; border-color: var(--acc); }
-.gantt-bar-area { position: relative; min-width: 600px; }
-.gantt-bar { position: absolute; top: 50%; transform: translateY(-50%); height: 24px; border-radius: 4px; overflow: hidden; min-width: 4px; }
-.gantt-bar-atrasado { border-width: 2px !important; box-shadow: 0 0 0 1px #f4433640; }
-.gantt-bar-progress { position: absolute; left: 0; top: 0; height: 100%; }
-.gantt-bar-label { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); font-size: 9px; font-weight: 700; color: rgba(0,0,0,0.6); white-space: nowrap; mix-blend-mode: multiply; }
-.gantt-hoje { position: absolute; top: 0; bottom: 0; width: 2px; background: #f44336; opacity: 0.75; pointer-events: none; z-index: 2; }
-.gantt-grid-line { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); opacity: 0.5; pointer-events: none; }
 
 /* ===================== GRUPOS TÉCNICOS (3D PREMIUM) ===================== */
 .tech-card-3d { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); cursor: pointer; box-shadow: var(--sh); }
@@ -1256,15 +1233,6 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .empty-sub { font-size: 11px; }
 }
 
-/* ===== Gantt mobile (scroll horizontal) ===== */
-@media (max-width: 768px) {
-  .gantt-wrap { padding: 0 4px 4px; }
-  .gantt-label-cell { padding: 4px 8px; }
-  .gantt-label-nome { font-size: 11px; }
-  .gantt-label-datas { font-size: 9px; }
-  .gantt-frente-header { font-size: 10px; padding: 4px 10px; }
-  .gantt-bar { height: 20px; }
-}
 
 /* ===== Heatmap por estaca ===== */
 @media (max-width: 768px) {
@@ -2189,7 +2157,7 @@ function render() {
   const titles = {
     executivo: ['Painel Executivo', 'Visão consolidada da obra · KPIs interativos'],
     avancofisico: ['Avanço Físico', 'Pacotes, mapa de estacas e produtividade'],
-    cronograma: ['Cronograma', 'Tarefas do Project · 11 fases'],
+    cronograma: ['Cronograma', 'Planejamento reverso · quando iniciar cada saldo'],
     medicao: ['Apoio à Medição', 'Consumo derivado por item contratual'],
     analista: ['✨ Analista IA', 'Resumo inteligente da obra'],
     rdo: ['Lançar Serviço', 'Registra serviços executados · grava em RDO_Avanco'],
@@ -3583,10 +3551,12 @@ function renderHeatmap(av) {
 }
 
 // ====================================================================
-// VIEW: GANTT COM PREDECESSORAS
+// MOTOR DE CRONOGRAMA (predecessoras + produtividade)
+// Sem UI própria — alimenta a curva "Previsto (cronograma)" da Curva S.
+// As datas do MS Project, quando importadas, ficam em localStorage e são
+// respeitadas aqui.
 // ====================================================================
 let GANTT_DADOS = null;
-let CRONOGRAMA_ABA = 'gantt';
 
 function loadGanttDados() {
   if (GANTT_DADOS) return GANTT_DADOS;
@@ -3703,605 +3673,6 @@ function calcularGantt() {
   return { nodes, dataInicioProj, sorted };
 }
 
-function renderGanttHTML() {
-  loadGanttDados();
-  const { nodes, dataInicioProj, sorted } = calcularGantt();
-  const hoje = new Date(); hoje.setHours(0,0,0,0);
-
-  // Timeline: start = dataInicioProj (user-defined), end = at least Dec 2026
-  const tlStart = new Date(dataInicioProj.getFullYear(), dataInicioProj.getMonth(), 1);
-
-  const minEnd = new Date(2026, 11, 31); // Dec 31 2026 minimum
-  let maxData = minEnd;
-  Object.values(nodes).forEach(n => { if (n.dataFim && n.dataFim > maxData) maxData = n.dataFim; });
-  maxData = new Date(maxData.getFullYear(), maxData.getMonth() + 1, 1); // snap to next month start
-
-  const totalMs = Math.max(maxData - tlStart, 1);
-  const pctPos  = d => Math.max(0, Math.min(100, (d - tlStart) / totalMs * 100));
-  const pctWid  = (d1, d2) => Math.max(0.4, (d2 - d1) / totalMs * 100);
-
-  // Month grid headers
-  const meses = [];
-  let cur = new Date(tlStart.getFullYear(), tlStart.getMonth(), 1);
-  while (cur <= maxData) {
-    const left = pctPos(cur);
-    const nxt = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
-    const w = Math.min(100 - left, (nxt - cur) / totalMs * 100);
-    meses.push({ label: cur.toLocaleString('pt-BR', {month:'short', year:'2-digit'}).toUpperCase(), left, width: w });
-    cur = nxt;
-  }
-  const hojeLeft = pctPos(hoje);
-  const hojeOk = hojeLeft >= 0 && hojeLeft <= 100;
-
-  const frenteCores = { 'Dren':'#1565C0','Demo':'#c62828','Pavi':'#546E7A','Vala':'#F9A825','Sina':'#2E7D32','Via ':'#E65100' };
-  function corFrente(f) {
-    const slug = (f||'').substring(0,4);
-    return frenteCores[slug] || '#616161';
-  }
-
-  // Group by frente preserving sort order
-  const porFrente = {};
-  sorted.forEach(pid => {
-    const n = nodes[pid];
-    const f = getCSVField(n.pacote, 'Frente') || 'Outros';
-    if (!porFrente[f]) porFrente[f] = [];
-    porFrente[f].push(n);
-  });
-
-  const dataInicioStr = GANTT_DADOS.dataInicio || getLocalISODate(new Date());
-  let rows = '';
-
-  const gridLines = meses.map(m => `<div class="gantt-grid-line" style="left:${m.left.toFixed(2)}%"></div>`).join('');
-
-  Object.entries(porFrente).forEach(([frente, items]) => {
-    const cor = corFrente(frente);
-    rows += `<div class="gantt-frente-header" style="--frente-cor:${cor}"><div>${frente}</div><div></div></div>`;
-    items.forEach(n => {
-      const nome = getCSVField(n.pacote, 'Pacote') || n.pid;
-      const unid = getCSVField(n.pacote, 'Unidade Física') || '';
-      const g = (GANTT_DADOS.pacotes || {})[n.pid] || {};
-      const predStr = (g.predecessores || []).join(', ') || '—';
-      let barHtml = gridLines;
-      let pill = '';
-
-      if (n.pct >= 1) {
-        pill = '<span class="gantt-pill" style="background:#2E7D32;color:#fff">✓ Concluído</span>';
-      } else if (n.duracao === 0) {
-        pill = '<span class="gantt-pill" style="background:#9E9E9E;color:#fff">Sem dados</span>';
-      } else if (n.segmentos && n.segmentos.length) {
-        // Each trecho gets its own gantt-bar-area stacked in a flex column — no manual top calculations
-        const segs = n.segmentos.filter(s => s.dataInicio).slice().sort((a, b) => a.dataInicio - b.dataInicio);
-        let segAreasHtml = '';
-        segs.forEach((seg, i) => {
-          const dFim = seg.dataFim || seg.dataInicio;
-          const localStr = seg.estacaIni && seg.estacaFim
-            ? `${seg.estacaIni}→${seg.estacaFim} (${seg.sentido||'CB'})`
-            : seg.estacaIni ? `${seg.estacaIni} (${seg.sentido||'CB'})` : '';
-          const titleAttr = [localStr, fmtData(seg.dataInicio) + ' → ' + fmtData(dFim)].filter(Boolean).join(' · ');
-          let areaHtml = gridLines;
-          if (seg.dataInicio && !(dFim <= tlStart || seg.dataInicio >= maxData)) {
-            const visStart = seg.dataInicio < tlStart ? tlStart : seg.dataInicio;
-            const visEnd   = dFim > maxData ? maxData : dFim;
-            const sLeft = (visStart - tlStart) / totalMs * 100;
-            const sW    = Math.max(0.6, (visEnd - visStart) / totalMs * 100);
-            const atrasadoSeg = dFim < hoje && n.pct < 0.99;
-            areaHtml += `<div class="gantt-bar${atrasadoSeg?' gantt-bar-atrasado':''}"
-              title="${titleAttr}"
-              style="height:24px;left:${sLeft.toFixed(2)}%;width:${sW.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
-              <div class="gantt-bar-progress" style="width:${(n.pct*100).toFixed(1)}%;background:${cor}bb"></div>
-              <span class="gantt-bar-label" style="font-size:9px;overflow:hidden;white-space:nowrap">${localStr}</span>
-            </div>`;
-          }
-          if (hojeOk) areaHtml += `<div class="gantt-hoje" style="left:${hojeLeft.toFixed(2)}%"></div>`;
-          const bdr = i < segs.length - 1 ? 'border-bottom:1px solid rgba(0,0,0,0.07)' : '';
-          segAreasHtml += `<div class="gantt-bar-area" style="min-height:36px;${bdr}">${areaHtml}</div>`;
-        });
-        n._multiAreaHtml = segAreasHtml;
-        const nSeg = n.segmentos.length;
-        pill = `<span class="gantt-pill" style="background:#5C4033;color:#fff;font-size:9px">📍 ${nSeg} trecho${nSeg>1?'s':''}</span>`;
-        if (n.pct > 0 && n.pct < 0.99) pill += '<span class="gantt-pill" style="background:#1565C0;color:#fff">Em curso</span>';
-      } else {
-        const left = pctPos(n.dataInicio);
-        const w = pctWid(n.dataInicio, n.dataFim);
-        const progW = n.pct * 100;
-        const atrasado = n.dataFim < hoje && n.pct < 0.99;
-        const emCurso = n.pct > 0 && n.pct < 0.99;
-        barHtml += `<div class="gantt-bar ${atrasado ? 'gantt-bar-atrasado' : ''}"
-          style="left:${left.toFixed(2)}%;width:${w.toFixed(2)}%;background:${cor}25;border:1.5px solid ${cor}">
-          <div class="gantt-bar-progress" style="width:${progW.toFixed(1)}%;background:${cor}bb"></div>
-          <span class="gantt-bar-label">${n.pct > 0.04 ? fmtPct(n.pct) : ''}</span>
-        </div>`;
-        if (atrasado) pill = '<span class="gantt-pill" style="background:#c62828;color:#fff">⚠ Atrasado</span>';
-        else if (emCurso) pill = '<span class="gantt-pill" style="background:#1565C0;color:#fff">Em curso</span>';
-      }
-      if (hojeOk) barHtml += `<div class="gantt-hoje" style="left:${hojeLeft.toFixed(2)}%"></div>`;
-
-      const ini = n.dataInicio ? fmtData(n.dataInicio) : '—';
-      const fim = n.dataFim ? fmtData(n.dataFim) : '—';
-      const projectBadge = n.fromProject
-        ? '<span class="gantt-pill" style="background:#5C4033;color:#fff;font-size:9px">📐 Project</span>'
-        : '';
-
-      const barCell = n._multiAreaHtml
-        ? `<div style="display:flex;flex-direction:column">${n._multiAreaHtml}</div>`
-        : `<div class="gantt-bar-area">${barHtml}</div>`;
-      rows += `<div class="gantt-row" data-pid="${n.pid}">
-        <div class="gantt-label-cell">
-          <div class="gantt-label-nome" title="${nome}">${nome}</div>
-          <div class="gantt-label-meta">
-            ${pill}${projectBadge}
-            <span class="gantt-label-datas">${ini} → ${fim} · ${n.duracao}d</span>
-          </div>
-          <div class="gantt-label-pred">
-            <span style="color:var(--muted);font-size:10px">Pred: ${predStr}</span>
-            <button class="gantt-edit-btn" onclick="ganttEditarPacote('${n.pid}')" title="Editar predecessoras, produtividade e trechos">✏</button>
-            ${n.fromProject ? `<button class="gantt-edit-btn" onclick="ganttLimparDatasProject('${n.pid}')" title="Remover datas do Project" style="color:#c62828">✕</button>` : ''}
-            ${n.fromSegmentos ? `<button class="gantt-edit-btn" onclick="ganttLimparSegmentos('${n.pid}')" title="Remover trechos" style="color:#c62828">✕ trechos</button>` : ''}
-          </div>
-        </div>
-        ${barCell}
-      </div>`;
-    });
-  });
-
-  const headerMeses = meses.map(m =>
-    `<div class="gantt-mes" style="left:${m.left.toFixed(2)}%;width:${m.width.toFixed(2)}%">${m.label}</div>`
-  ).join('');
-
-  return `
-    <div class="card stagger-item">
-      <div class="card-header">
-        <div>
-          <div class="card-title">📊 Gantt com Predecessoras</div>
-          <div class="card-title-sub">Clique em ✏ para definir predecessoras e produtividade de cada pacote</div>
-        </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:6px;font-size:12px">
-            <label style="color:var(--muted);font-weight:600;white-space:nowrap">Início do projeto:</label>
-            <input type="date" value="${dataInicioStr}"
-              style="padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px"
-              onchange="ganttSetDataInicio(this.value)">
-          </div>
-          <button class="btn btn-outline btn-sm" onclick="ganttAbrirImportProject()" title="Importar datas e serviços do Excel exportado pelo MS Project">📥 Importar Project</button>
-          <button class="btn btn-outline btn-sm" onclick="ganttExportarPDF()">⬇ PDF</button>
-        </div>
-      </div>
-      <div id="gantt-edit-panel" style="display:none;padding:12px 16px;background:var(--bg-2);border-bottom:1px solid var(--border)"></div>
-      <div class="card-body" style="padding:0;overflow:hidden">
-        <div class="gantt-wrap">
-          <div class="gantt-grid">
-            <div class="gantt-labels-header">Pacote</div>
-            <div class="gantt-timeline-header">
-              ${headerMeses}
-              ${hojeOk ? `<div class="gantt-hoje-header" style="left:${hojeLeft.toFixed(2)}%">Hoje</div>` : ''}
-            </div>
-          </div>
-          <div class="gantt-body">${rows}</div>
-        </div>
-      </div>
-    </div>`;
-}
-
-window.ganttSetDataInicio = function(val) {
-  loadGanttDados();
-  GANTT_DADOS.dataInicio = val;
-  salvarGanttDados();
-  transitionTo(render);
-};
-
-window.ganttEditarPacote = function(pid) {
-  const panel = document.getElementById('gantt-edit-panel');
-  if (!panel) return;
-  loadGanttDados();
-  const g = (GANTT_DADOS.pacotes || {})[pid] || {};
-  const predStr = (g.predecessores || []).join(', ');
-  const prod = g.prod || '';
-  const prodPadrao = PRODUTIVIDADE_PADRAO[pid] || '';
-  const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid);
-  const nome = p ? getCSVField(p, 'Pacote') : pid;
-  const unid = p ? (getCSVField(p, 'Unidade Física') || '') : '';
-  const segmentos = g.segmentos || [];
-
-  if (panel.dataset.pid === pid && panel.style.display !== 'none') {
-    panel.style.display = 'none'; panel.dataset.pid = ''; return;
-  }
-  panel.dataset.pid = pid;
-  panel.style.display = 'block';
-
-  function buildEstOpts(list, sel) {
-    return list.map(e => `<option${sel===e?' selected':''}>${e}</option>`).join('');
-  }
-  function buildSegRow(seg) {
-    const sentido = seg.sentido || 'CB';
-    const estList = sentido === 'CB'
-      ? (()=>{ const a=[]; for(let i=CONFIG.estacasCB.ini;i<=CONFIG.estacasCB.fim;i++) a.push('E'+i); return a; })()
-      : (()=>{ const a=[]; for(let i=CONFIG.estacasBC.ini;i<=CONFIG.estacasBC.fim;i++) a.push('E'+i); return a; })();
-    return `<tr>
-      <td><input type="date" class="seg-ini" value="${seg.dataInicio||''}" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:3px"></td>
-      <td><input type="date" class="seg-fim" value="${seg.dataFim||''}" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:3px"></td>
-      <td><select class="seg-sentido" onchange="ganttSegSentidoChange(this)" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">
-        <option value="CB"${sentido==='CB'?' selected':''}>CB</option>
-        <option value="BC"${sentido==='BC'?' selected':''}>BC</option>
-      </select></td>
-      <td><select class="seg-estaca-ini" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">${buildEstOpts(estList,seg.estacaIni)}</select></td>
-      <td><select class="seg-estaca-fim" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">${buildEstOpts(estList,seg.estacaFim)}</select></td>
-      <td><button onclick="ganttRemoveSegmento(this)" title="Remover trecho" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:14px;padding:2px 6px">✕</button></td>
-    </tr>`;
-  }
-  const segRows = segmentos.map(s => buildSegRow(s)).join('');
-
-  panel.innerHTML = `
-    <div>
-      <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:12px">
-        <div style="flex:1;min-width:220px">
-          <div style="font-weight:700;font-size:13px;margin-bottom:8px">${nome}</div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">PREDECESSORAS (IDs separados por vírgula — ex: P01, P03)</label>
-          <input id="gantt-pred-input" type="text" value="${predStr}" placeholder="ex: P01, P03"
-            style="width:100%;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box">
-        </div>
-        <div style="min-width:160px">
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">PRODUTIVIDADE/DIA (${unid}/dia)</label>
-          <input id="gantt-prod-input" type="number" min="0" value="${prod}" placeholder="${prodPadrao ? 'Padrão: '+prodPadrao : 'Livre'}"
-            style="width:100%;padding:6px 8px;font-size:13px;border:1px solid var(--border);border-radius:4px;box-sizing:border-box">
-        </div>
-        <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:2px;margin-top:auto">
-          <button class="btn btn-primary btn-sm" onclick="ganttSalvarEdicao('${pid}')">Salvar</button>
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('gantt-edit-panel').style.display='none'">Cancelar</button>
-        </div>
-      </div>
-      <div style="border-top:1px solid var(--border);padding-top:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <label style="font-size:11px;font-weight:600;color:var(--muted)">TRECHOS DE EXECUÇÃO — local onde cada etapa acontece (datas independentes por trecho)</label>
-          <button class="btn btn-outline btn-sm" onclick="ganttAddSegmento()">+ Adicionar trecho</button>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="t" style="min-width:580px">
-            <thead><tr><th>Início</th><th>Término</th><th>Sentido</th><th>Estaca Ini</th><th>Estaca Fim</th><th style="width:32px"></th></tr></thead>
-            <tbody id="gantt-seg-tbody">${segRows}</tbody>
-          </table>
-          ${!segmentos.length ? '<div style="text-align:center;padding:8px 0;font-size:12px;color:var(--muted)">Nenhum trecho cadastrado — clique em "+ Adicionar trecho" para definir onde o serviço executa</div>' : ''}
-        </div>
-      </div>
-    </div>`;
-  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-};
-
-window.ganttAddSegmento = function() {
-  const tbody = document.getElementById('gantt-seg-tbody');
-  if (!tbody) return;
-  const estOpts = (()=>{ const a=[]; for(let i=CONFIG.estacasCB.ini;i<=CONFIG.estacasCB.fim;i++) a.push('E'+i); return a; })()
-    .map(e=>`<option>${e}</option>`).join('');
-  const tr = document.createElement('tr');
-  tr.innerHTML = `
-    <td><input type="date" class="seg-ini" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:3px"></td>
-    <td><input type="date" class="seg-fim" style="font-size:12px;padding:3px 5px;border:1px solid var(--border);border-radius:3px"></td>
-    <td><select class="seg-sentido" onchange="ganttSegSentidoChange(this)" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">
-      <option value="CB">CB</option><option value="BC">BC</option>
-    </select></td>
-    <td><select class="seg-estaca-ini" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">${estOpts}</select></td>
-    <td><select class="seg-estaca-fim" style="font-size:12px;padding:3px 4px;border:1px solid var(--border);border-radius:3px">${estOpts}</select></td>
-    <td><button onclick="ganttRemoveSegmento(this)" title="Remover trecho" style="background:none;border:none;color:#c62828;cursor:pointer;font-size:14px;padding:2px 6px">✕</button></td>`;
-  tbody.appendChild(tr);
-};
-
-window.ganttSegSentidoChange = function(sel) {
-  const tr = sel.closest('tr');
-  if (!tr) return;
-  const sentido = sel.value;
-  const list = sentido === 'BC'
-    ? (()=>{ const a=[]; for(let i=CONFIG.estacasBC.ini;i<=CONFIG.estacasBC.fim;i++) a.push('E'+i); return a; })()
-    : (()=>{ const a=[]; for(let i=CONFIG.estacasCB.ini;i<=CONFIG.estacasCB.fim;i++) a.push('E'+i); return a; })();
-  const opts = list.map(e=>`<option>${e}</option>`).join('');
-  tr.querySelector('.seg-estaca-ini').innerHTML = opts;
-  tr.querySelector('.seg-estaca-fim').innerHTML = opts;
-};
-
-window.ganttRemoveSegmento = function(btn) {
-  const tr = btn.closest('tr');
-  if (tr) tr.remove();
-};
-
-window.ganttSalvarEdicao = function(pid) {
-  loadGanttDados();
-  if (!GANTT_DADOS.pacotes) GANTT_DADOS.pacotes = {};
-  const predInput = document.getElementById('gantt-pred-input');
-  const prodInput = document.getElementById('gantt-prod-input');
-  if (!predInput || !prodInput) return;
-  const predecessores = predInput.value.trim()
-    ? predInput.value.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
-    : [];
-
-  const segmentos = [];
-  const tbody = document.getElementById('gantt-seg-tbody');
-  if (tbody) {
-    tbody.querySelectorAll('tr').forEach(tr => {
-      const ini       = tr.querySelector('.seg-ini')?.value || '';
-      const fim       = tr.querySelector('.seg-fim')?.value || '';
-      const sentido   = tr.querySelector('.seg-sentido')?.value || 'CB';
-      const estacaIni = tr.querySelector('.seg-estaca-ini')?.value || '';
-      const estacaFim = tr.querySelector('.seg-estaca-fim')?.value || '';
-      if (ini || fim || estacaIni) segmentos.push({ dataInicio: ini, dataFim: fim, sentido, estacaIni, estacaFim });
-    });
-  }
-
-  const existing = GANTT_DADOS.pacotes[pid] || {};
-  GANTT_DADOS.pacotes[pid] = Object.assign({}, existing, {
-    predecessores,
-    prod: prodInput.value.trim(),
-  });
-  if (segmentos.length) GANTT_DADOS.pacotes[pid].segmentos = segmentos;
-  else delete GANTT_DADOS.pacotes[pid].segmentos;
-
-  salvarGanttDados();
-  const panel = document.getElementById('gantt-edit-panel');
-  if (panel) { panel.style.display = 'none'; panel.dataset.pid = ''; }
-  transitionTo(render);
-  toast('Cronograma atualizado', 'success');
-};
-
-window.ganttExportarPDF = function() {
-  try {
-    loadGanttDados();
-    const { nodes, sorted } = calcularGantt();
-    const hoje = new Date();
-    const doc = new jspdf.jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(13);
-    doc.text('Cronograma Gantt — Av. Senador Teotônio Vilela', 14, 16);
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(8);
-    doc.text('Gerado em ' + fmtData(hoje), 14, 22);
-    const cols = ['Pacote', 'Frente', 'Predecessoras', 'Início', 'Término', 'Dur. (dias)', '% Concl.'];
-    const rows = sorted.map(pid => {
-      const n = nodes[pid];
-      const g = (GANTT_DADOS.pacotes || {})[pid] || {};
-      return [
-        getCSVField(n.pacote, 'Pacote') || pid,
-        getCSVField(n.pacote, 'Frente') || '',
-        (g.predecessores || []).join(', ') || '—',
-        n.dataInicio ? fmtData(n.dataInicio) : '—',
-        n.dataFim ? fmtData(n.dataFim) : '—',
-        String(n.duracao || '—'),
-        fmtPct(n.pct)
-      ];
-    });
-    doc.autoTable({
-      head: [cols], body: rows, startY: 26,
-      styles: { fontSize: 8, cellPadding: 2 },
-      headStyles: { fillColor: [26, 22, 18], textColor: 255, fontStyle: 'bold' },
-      alternateRowStyles: { fillColor: [245, 243, 239] },
-      margin: { left: 14, right: 14 }
-    });
-    doc.save('Gantt_TeotônioVilela_' + getLocalISODate(hoje) + '.pdf');
-    toast('PDF do Gantt gerado!', 'success');
-  } catch(e) { toast('Erro ao gerar PDF: ' + e.message, 'error'); }
-};
-
-window.setCronogramaAba = function(aba) {
-  CRONOGRAMA_ABA = aba;
-  transitionTo(render);
-};
-
-// ====================================================================
-// IMPORTAÇÃO DO MS PROJECT (EXCEL)
-// ====================================================================
-window.ganttAbrirImportProject = function() {
-  if (typeof XLSX === 'undefined') {
-    toast('Biblioteca de Excel não carregada. Verifique a internet.', 'error', 5000);
-    return;
-  }
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.xlsx,.xls';
-  input.onchange = function(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    toast('Lendo arquivo…', 'info', 2000);
-    const reader = new FileReader();
-    reader.onload = function(ev) {
-      try { ganttProcessarExcel(ev.target.result); }
-      catch(err) { toast('Erro ao ler arquivo: ' + err.message, 'error', 6000); }
-    };
-    reader.readAsArrayBuffer(file);
-  };
-  input.click();
-};
-
-function ganttProcessarExcel(buffer) {
-  const wb = XLSX.read(buffer, { type: 'array' });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
-
-  if (!rows.length) { toast('Arquivo vazio ou sem dados reconhecidos.', 'error'); return; }
-
-  // Detect column names (case-insensitive)
-  const firstRow = rows[0];
-  function findKey(obj, candidates) {
-    const keys = Object.keys(obj).map(k => k.trim());
-    for (const c of candidates) {
-      const found = keys.find(k => k.toLowerCase() === c.toLowerCase());
-      if (found) return found;
-    }
-    return null;
-  }
-  const kNivel   = findKey(firstRow, ['Nivel','Nível','Level']);
-  const kNome    = findKey(firstRow, ['Nome','Name','Task Name']);
-  const kInicio  = findKey(firstRow, ['Inicio','Início','Start']);
-  const kTermino = findKey(firstRow, ['Termino','Término','Finish']);
-  const kEdt     = findKey(firstRow, ['EDT','WBS']);
-  const kId      = findKey(firstRow, ['ID','Id']);
-
-  if (!kNivel || !kNome || !kInicio) {
-    toast('Colunas não encontradas. Certifique-se de usar o arquivo exportado do Project.', 'error', 6000);
-    return;
-  }
-
-  // Collect nivel=2 names (quadra/section labels)
-  const quadraNames = {};
-  rows.forEach(r => {
-    const nivel = parseFloat(r[kNivel]);
-    const edt   = String(r[kEdt] || '').trim();
-    const nome  = String(r[kNome] || '').trim();
-    if (nivel === 2 && edt && nome) quadraNames[edt] = nome;
-  });
-
-  // Collect nivel=3 tasks (service group summaries)
-  const nivel3 = rows
-    .filter(r => {
-      const n = parseFloat(r[kNivel]);
-      return n >= 3 && n < 4 && String(r[kNome] || '').trim() && String(r[kInicio] || '').trim();
-    })
-    .map(r => {
-      const edt = String(r[kEdt] || '').trim();
-      const parentEdt = edt.split('.').slice(0, 2).join('.');
-      return {
-        id:      String(r[kId] || '').trim(),
-        edt,
-        nome:    String(r[kNome] || '').trim(),
-        inicio:  String(r[kInicio] || '').trim(),
-        termino: String(r[kTermino] || '').trim(),
-        quadra:  quadraNames[parentEdt] || ('Seção ' + parentEdt),
-      };
-    })
-    .filter(t => t.inicio);
-
-  if (!nivel3.length) {
-    toast('Nenhuma tarefa de nível 3 encontrada no arquivo.', 'error'); return;
-  }
-
-  window._IMPORT_DATA = nivel3;
-  ganttMostrarMapeamento(nivel3);
-}
-
-function ganttMostrarMapeamento(nivel3) {
-  const pacotes = STATE.pacotes
-    .filter(p => getCSVField(p, 'ID'))
-    .sort((a, b) => String(getCSVField(a,'ID')).localeCompare(String(getCSVField(b,'ID'))));
-
-  const pacoteOpts = '<option value="">— não mapear —</option>' +
-    pacotes.map(p => {
-      const pid  = getCSVField(p, 'ID');
-      const nome = getCSVField(p, 'Pacote') || '';
-      return `<option value="${pid}">${pid} — ${nome}</option>`;
-    }).join('');
-
-  // Pre-select based on keyword match between task name and package name/frente
-  function autoMatch(taskNome) {
-    const tn = taskNome.toLowerCase();
-    for (const p of pacotes) {
-      const pn = (getCSVField(p,'Pacote') + ' ' + getCSVField(p,'Frente')).toLowerCase();
-      // Simple keyword overlap
-      const words = tn.split(/\s+/).filter(w => w.length > 3);
-      if (words.some(w => pn.includes(w))) return getCSVField(p, 'ID');
-    }
-    return '';
-  }
-
-  const tRows = nivel3.map((t, i) => {
-    const auto = autoMatch(t.nome);
-    const opts = pacoteOpts.replace(`value="${auto}"`, `value="${auto}" selected`);
-    return `<tr>
-      <td style="font-size:11px;color:var(--muted);white-space:nowrap">${t.quadra.substring(0,30)}</td>
-      <td style="font-weight:600;font-size:12px">${t.nome}</td>
-      <td class="t-mono" style="font-size:11px;white-space:nowrap">${t.inicio}</td>
-      <td class="t-mono" style="font-size:11px;white-space:nowrap">${t.termino || '—'}</td>
-      <td><select data-idx="${i}" style="font-size:11px;padding:3px 5px;border:1px solid var(--border);border-radius:3px;width:100%;min-width:180px">${opts}</select></td>
-    </tr>`;
-  }).join('');
-
-  const panel = document.getElementById('gantt-edit-panel');
-  if (!panel) { toast('Abra o Cronograma → aba Gantt primeiro.', 'info'); return; }
-  panel.style.display = 'block';
-  panel.dataset.pid = '';
-  panel.innerHTML = `
-    <div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-        <div>
-          <div style="font-weight:700;font-size:13px">Mapeamento: Tarefas do Project → Pacotes</div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">Selecione qual pacote do sistema corresponde a cada tarefa do Project. Datas serão importadas automaticamente.</div>
-        </div>
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-primary btn-sm" onclick="ganttAplicarMapeamento()">✓ Aplicar datas ao Gantt</button>
-          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('gantt-edit-panel').style.display='none'">Cancelar</button>
-        </div>
-      </div>
-      <div style="max-height:380px;overflow-y:auto;border:1px solid var(--border);border-radius:6px">
-        <table class="t">
-          <thead style="position:sticky;top:0;z-index:1">
-            <tr><th>Seção (Project)</th><th>Tipo de Serviço</th><th>Início</th><th>Término</th><th style="min-width:200px">Pacote do Sistema</th></tr>
-          </thead>
-          <tbody>${tRows}</tbody>
-        </table>
-      </div>
-    </div>`;
-  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-
-window.ganttLimparDatasProject = function(pid) {
-  loadGanttDados();
-  if (!GANTT_DADOS.pacotes || !GANTT_DADOS.pacotes[pid]) return;
-  delete GANTT_DADOS.pacotes[pid].dataProjetada;
-  delete GANTT_DADOS.pacotes[pid].dataInicioProject;
-  delete GANTT_DADOS.pacotes[pid].dataFimProject;
-  salvarGanttDados();
-  transitionTo(render);
-  toast('Datas do Project removidas — voltando ao cálculo por produtividade.', 'info');
-};
-
-window.ganttLimparSegmentos = function(pid) {
-  loadGanttDados();
-  if (!GANTT_DADOS.pacotes || !GANTT_DADOS.pacotes[pid]) return;
-  delete GANTT_DADOS.pacotes[pid].segmentos;
-  salvarGanttDados();
-  transitionTo(render);
-  toast('Trechos removidos — voltando ao cálculo por produtividade.', 'info');
-};
-
-window.ganttAplicarMapeamento = function() {
-  const nivel3 = window._IMPORT_DATA;
-  if (!nivel3) { toast('Nenhum dado importado.', 'error'); return; }
-  loadGanttDados();
-  if (!GANTT_DADOS.pacotes) GANTT_DADOS.pacotes = {};
-
-  const selects = document.querySelectorAll('#gantt-edit-panel select[data-idx]');
-  // Aggregate dates per package (min start, max end)
-  const mapa = {};
-  selects.forEach(sel => {
-    const pid = sel.value; if (!pid) return;
-    const t = nivel3[parseInt(sel.dataset.idx)];
-    if (!t || !t.inicio) return;
-    const ini = parseISODate(t.inicio);
-    const fim = t.termino ? parseISODate(t.termino) : null;
-    if (!ini || isNaN(ini.getTime())) return;
-    if (!mapa[pid]) mapa[pid] = { inicio: ini, termino: fim };
-    else {
-      if (ini < mapa[pid].inicio) mapa[pid].inicio = ini;
-      if (fim && (!mapa[pid].termino || fim > mapa[pid].termino)) mapa[pid].termino = fim;
-    }
-  });
-
-  let count = 0;
-  Object.entries(mapa).forEach(([pid, datas]) => {
-    if (!GANTT_DADOS.pacotes[pid]) GANTT_DADOS.pacotes[pid] = { predecessores: [] };
-    GANTT_DADOS.pacotes[pid].dataProjetada    = true;
-    GANTT_DADOS.pacotes[pid].dataInicioProject = getLocalISODate(datas.inicio);
-    GANTT_DADOS.pacotes[pid].dataFimProject    = datas.termino ? getLocalISODate(datas.termino) : null;
-    count++;
-  });
-
-  // Set project start to earliest imported date
-  const inicios = Object.values(mapa).map(d => d.inicio).filter(Boolean);
-  if (inicios.length) {
-    const min = new Date(Math.min(...inicios.map(d => d.getTime())));
-    GANTT_DADOS.dataInicio = getLocalISODate(min);
-  }
-
-  salvarGanttDados();
-  const panel = document.getElementById('gantt-edit-panel');
-  if (panel) panel.style.display = 'none';
-  window._IMPORT_DATA = null;
-  toast(`${count} pacote${count !== 1 ? 's' : ''} atualizado${count !== 1 ? 's' : ''} com datas do Project!`, 'success', 4000);
-  transitionTo(render);
-};
-
 // ====================================================================
 // VIEW: CRONOGRAMA FÍSICO (Planejamento Reverso)
 // ====================================================================
@@ -4329,119 +3700,318 @@ window.atualizarPlan = function(pacoteId, campo, valor) {
   transitionTo(render);
 };
 
+// Config global do Planejamento Reverso, guardada junto de PLAN_DADOS sob a
+// chave reservada __cfg (nunca colide com um ID de pacote, pois a renderização
+// itera sobre STATE.pacotes e não sobre as chaves de PLAN_DADOS).
+function getPlanCfg() {
+  loadPlanDados();
+  if (!PLAN_DADOS.__cfg) PLAN_DADOS.__cfg = {};
+  return PLAN_DADOS.__cfg;
+}
+
+// Define o término alvo padrão (aplicado a todo pacote que ainda não tem alvo
+// próprio). Default geral = prazo contratual da obra (PROJETO_FIM).
+window.planSetAlvoGlobal = function(valor) {
+  getPlanCfg().alvoGlobal = valor || '';
+  salvarPlanDados();
+  transitionTo(render);
+};
+
+// Carimba o término alvo padrão em TODOS os pacotes em aberto de uma vez.
+window.planAplicarAlvoTodos = function() {
+  const cfg  = getPlanCfg();
+  const alvo = cfg.alvoGlobal || getLocalISODate(PROJETO_FIM);
+  let n = 0;
+  STATE.pacotes.forEach(p => {
+    const pid = getCSVField(p, 'ID');
+    if (!pid || getCSVField(p, 'Status') === 'Histórico') return;
+    if (!PLAN_DADOS[pid]) PLAN_DADOS[pid] = { prod: '', dataFim: '' };
+    PLAN_DADOS[pid].dataFim = alvo;
+    n++;
+  });
+  salvarPlanDados();
+  transitionTo(render);
+  toast(`Término alvo (${fmtData(alvo)}) aplicado a ${n} pacote${n !== 1 ? 's' : ''}.`, 'success');
+};
+
+window.planToggleOcultarConcluidos = function() {
+  const cfg = getPlanCfg();
+  cfg.ocultarConcluidos = !cfg.ocultarConcluidos;
+  salvarPlanDados();
+  transitionTo(render);
+};
+
+// Conta dias ÚTEIS entre duas datas (inclusive nas duas pontas), usando o mesmo
+// calendário do resto do app via ehDiaUtil: pula domingos, sábados (salvo se
+// configurados como úteis) e feriados nacionais.
+function diasUteisEntre(dInicio, dFim) {
+  if (!dInicio || !dFim) return 0;
+  const a = new Date(dInicio.getTime()); a.setHours(0,0,0,0);
+  const b = new Date(dFim.getTime());    b.setHours(0,0,0,0);
+  if (b < a) return 0;
+  let n = 0;
+  for (let d = new Date(a.getTime()); d <= b; d.setDate(d.getDate() + 1)) {
+    if (ehDiaUtil(d)) n++;
+  }
+  return n;
+}
+
+// Recua `diasDuracao` dias ÚTEIS a partir do término alvo para achar a data de
+// início necessária. Usa ehDiaUtil (domingos, sábados conforme config e
+// feriados nacionais) — consistente com a Curva S e o resto do sistema, ao
+// invés de apenas pular domingos.
 function calcularDataInicioReversa(dataFimStr, diasDuracao) {
   if (!dataFimStr || diasDuracao <= 0) return null;
   const dataFim = parseISODate(dataFimStr);
   if (!dataFim || isNaN(dataFim)) return null;
 
-  let d = new Date(dataFim.getTime());
-  let diasRestantes = Math.ceil(diasDuracao) - 1; 
-  if (diasRestantes < 0) diasRestantes = 0;
+  let d = new Date(dataFim.getTime()); d.setHours(0,0,0,0);
+  // Se o término cair em dia não-útil, recua até o último dia útil anterior.
+  let guard = 0;
+  while (!ehDiaUtil(d) && guard++ < 60) d.setDate(d.getDate() - 1);
 
-  while (diasRestantes > 0) {
+  let restantes = Math.ceil(diasDuracao) - 1;
+  if (restantes < 0) restantes = 0;
+  while (restantes > 0) {
     d.setDate(d.getDate() - 1);
-    if (d.getDay() !== 0) {
-      diasRestantes--;
-    }
+    if (ehDiaUtil(d)) restantes--;
   }
   return d;
 }
 
 function renderCronograma() {
-  return `
-    <div class="btn-toggle-group stagger-item" style="margin-bottom:0">
-      <button class="btn-toggle ${CRONOGRAMA_ABA==='gantt'?'active':''}" onclick="setCronogramaAba('gantt')">
-        📊 Gantt / Predecessoras
-      </button>
-      <button class="btn-toggle ${CRONOGRAMA_ABA==='reverso'?'active':''}" onclick="setCronogramaAba('reverso')">
-        ↩ Planejamento Reverso
-      </button>
-    </div>
-    ${CRONOGRAMA_ABA === 'gantt' ? renderGanttHTML() : renderCronogramaReverso()}
-  `;
+  return renderCronogramaReverso();
 }
+
+// Limiar (em dias úteis de folga) abaixo do qual um pacote é considerado CRÍTICO.
+const PLAN_CRITICO_DIAS = 10;
 
 function renderCronogramaReverso() {
   loadPlanDados();
+  const cfg = PLAN_DADOS.__cfg || {};
   const av = calcularAvancoPorPacote();
   const pacotesAtivos = STATE.pacotes.filter(p => getCSVField(p, 'Status') !== 'Histórico' && getCSVField(p, 'ID'));
-  
-  const porFrente = {};
-  pacotesAtivos.forEach(p => {
-    const f = getCSVField(p, 'Frente') || 'Outros';
-    if (!porFrente[f]) porFrente[f] = [];
-    porFrente[f].push(p);
+
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const alvoGlobal = cfg.alvoGlobal || getLocalISODate(PROJETO_FIM);
+
+  // ─── 1ª passada: calcula tudo por pacote ─────────────────────────────────
+  const linhas = pacotesAtivos.map(p => {
+    const pid  = getCSVField(p, 'ID');
+    const plan = PLAN_DADOS[pid] || {};
+    const unid = getCSVField(p, 'Unidade Física') || '';
+
+    const avP      = av[pid];
+    const qtdTotal = num(getCSVField(p, 'Qtd Estimada'));
+    const qtdExec  = avP ? avP.qtdExecutada : 0;
+    const saldo    = Math.max(0, qtdTotal - qtdExec);
+    const pct      = qtdTotal > 0 ? Math.min(qtdExec / qtdTotal, 1) : 0;
+
+    const prodPadrao = PRODUTIVIDADE_PADRAO[pid] || '';
+    const prodAtual  = (plan.prod !== undefined && plan.prod !== '') ? num(plan.prod) : num(prodPadrao);
+    const alvoStr    = plan.dataFim || alvoGlobal;   // cascata: alvo próprio → alvo global → prazo da obra
+    const alvoData   = parseISODate(alvoStr);
+
+    const concluido = qtdTotal > 0 && saldo <= 0;
+    let duracao = 0, inicioNec = null, folga = null, ritmoNec = null, diasAteAlvo = 0;
+
+    if (!concluido && prodAtual > 0 && alvoData) {
+      duracao   = saldo / prodAtual;
+      inicioNec = calcularDataInicioReversa(alvoStr, duracao);
+      if (inicioNec) {
+        // folga = dias úteis de buffer antes do início obrigatório (negativo = atrasado)
+        folga = inicioNec >= hoje
+          ? diasUteisEntre(hoje, inicioNec) - 1
+          : -(diasUteisEntre(inicioNec, hoje) - 1);
+      }
+      // ritmo necessário para cumprir o alvo SE começar (ou continuar) a partir de hoje
+      diasAteAlvo = diasUteisEntre(hoje, alvoData);
+      ritmoNec    = diasAteAlvo > 0 ? saldo / diasAteAlvo : Infinity;
+    }
+
+    let status; // concluido | atrasado | critico | noprazo | semdados
+    if (concluido)                          status = 'concluido';
+    else if (!(prodAtual > 0) || !alvoData) status = 'semdados';
+    else if (inicioNec && inicioNec < hoje) status = 'atrasado';
+    else if (folga !== null && folga <= PLAN_CRITICO_DIAS) status = 'critico';
+    else                                    status = 'noprazo';
+
+    return { p, pid, unid, qtdTotal, qtdExec, saldo, pct, prodPadrao, prodAtual, plan,
+             alvoStr, alvoData, duracao, inicioNec, folga, ritmoNec, diasAteAlvo, concluido, status };
   });
 
-  const hoje = new Date();
-  hoje.setHours(0,0,0,0);
+  // ─── KPIs do topo ────────────────────────────────────────────────────────
+  const nAtrasado  = linhas.filter(l => l.status === 'atrasado').length;
+  const nCritico   = linhas.filter(l => l.status === 'critico').length;
+  const nNoPrazo   = linhas.filter(l => l.status === 'noprazo').length;
+  const nConcluido = linhas.filter(l => l.status === 'concluido').length;
+  const proximos   = linhas.filter(l => l.inicioNec && !l.concluido).sort((a,b) => a.inicioNec - b.inicioNec);
+  const urgente    = proximos.find(l => l.status !== 'atrasado'); // próximo início que ainda dá tempo
 
-  let html = '<div class="card stagger-item"><div class="card-header"><div><div class="card-title">Motor de Planejamento Reverso</div><div class="card-title-sub">Defina o término alvo. O sistema calcula quando iniciar o SALDO RESTANTE usando a produtividade padrão (ou a que você digitar).</div></div></div><div class="card-body flush" style="overflow-x:auto"><table class="t" style="min-width: 900px;"><thead><tr><th style="width: 25%">Pacote / Serviço</th><th class="t-num" style="text-align: right; width: 10%">Saldo a Executar</th><th style="width: 15%">Término Alvo</th><th style="width: 15%">Produtividade/dia</th><th class="t-num" style="text-align: center; width: 10%">Duração (Saldo)</th><th style="width: 25%">Data Início Necessária</th></tr></thead><tbody>';
+  const kpiCard = (label, valor, sub, accent) =>
+    `<div class="kpi-card" style="--kpi-size:30px;padding:14px 16px">
+       <div class="kpi-label">${label}</div>
+       <div class="kpi-value" style="color:${accent||'var(--text)'}">${valor}</div>
+       <div class="kpi-sub">${sub}</div>
+     </div>`;
 
-  Object.entries(porFrente).forEach(([frente, pacotes]) => {
-    html += '<tr class="summary"><td colspan="6">' + frente + '</td></tr>';
-    
-    pacotes.forEach(p => {
-      const pid = getCSVField(p, 'ID');
-      const plan = PLAN_DADOS[pid] || {};
-      
-      const prodPadrao = PRODUTIVIDADE_PADRAO[pid] || '';
-      const prodAtual = (plan.prod !== undefined && plan.prod !== '') ? plan.prod : prodPadrao;
-      const dataFimAtual = plan.dataFim || '';
-      
-      const avancoPacote = av[pid];
-      const qtdTotal = num(getCSVField(p, 'Qtd Estimada'));
-      const qtdExecutada = avancoPacote ? avancoPacote.qtdExecutada : 0;
-      const saldo = Math.max(0, qtdTotal - qtdExecutada); 
-      const unid = getCSVField(p, 'Unidade Física') || '';
-      
-      let duracaoDias = 0;
-      let dataInicioStr = '<span style="color:var(--muted)">Aguardando dados...</span>';
-      let alertClass = '';
+  const kpis = `<div class="kpi-grid stagger-item" style="margin-bottom:14px">
+    ${kpiCard('Atrasados', nAtrasado, 'já deveriam ter começado', nAtrasado ? 'var(--red)' : 'var(--grn)')}
+    ${kpiCard('Críticos', nCritico, `folga ≤ ${PLAN_CRITICO_DIAS} dias úteis`, nCritico ? 'var(--ylw-d)' : 'var(--muted)')}
+    ${kpiCard('No prazo', nNoPrazo, 'com folga confortável', 'var(--blu)')}
+    ${kpiCard('Concluídos', nConcluido, `de ${linhas.length} pacotes`, 'var(--grn)')}
+    ${kpiCard('Próximo início', urgente ? fmtData(urgente.inicioNec) : '—',
+              urgente ? getCSVField(urgente.p, 'Pacote') : 'tudo iniciado/concluído', 'var(--acc-d)')}
+  </div>`;
 
-      if (saldo === 0) {
-           dataInicioStr = '<span style="color:var(--grn); font-weight:bold;">100% Concluído</span>';
-      } else if (prodAtual > 0 && dataFimAtual) {
-        duracaoDias = saldo / prodAtual;
-        const dataInicio = calcularDataInicioReversa(dataFimAtual, duracaoDias);
-        
-        if (dataInicio) {
-          const strFormatada = fmtData(dataInicio);
-          if (dataInicio < hoje) {
-            alertClass = 'color: var(--red); font-weight: bold;';
-            dataInicioStr = '⚠️ ' + strFormatada + ' (Atrasado!)';
-          } else {
-            alertClass = 'color: var(--blu); font-weight: bold;';
-            dataInicioStr = '📅 ' + strFormatada;
-          }
-        }
+  // ─── Barra de controles ──────────────────────────────────────────────────
+  const sabAtivo = sabadoEhUtil();
+  const controles = `<div class="card stagger-item">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Motor de Planejamento Reverso</div>
+        <div class="card-title-sub">A partir do <strong>término alvo</strong>, o sistema recua o <strong>saldo restante</strong> pela produtividade (em dias úteis: domingos, feriados e sábados conforme config) e indica <strong>quando iniciar</strong> e o <strong>ritmo necessário a partir de hoje</strong>.</div>
+      </div>
+    </div>
+    <div class="card-body" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Término alvo padrão</div>
+        <input type="date" value="${alvoGlobal}" onchange="planSetAlvoGlobal(this.value)"
+               style="padding:6px 9px;font-size:13px;border:1px solid var(--border-strong);border-radius:6px">
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="planAplicarAlvoTodos()" title="Carimba este alvo em todos os pacotes em aberto">↳ Aplicar a todos</button>
+      <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;user-select:none">
+        <input type="checkbox" ${sabAtivo ? 'checked' : ''} onchange="toggleSabadoUtil()"> Sábado é dia útil
+      </label>
+      <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;user-select:none">
+        <input type="checkbox" ${cfg.ocultarConcluidos ? 'checked' : ''} onchange="planToggleOcultarConcluidos()"> Ocultar concluídos
+      </label>
+    </div>
+  </div>`;
+
+  if (!linhas.length) {
+    return controles + '<div class="card stagger-item"><div class="empty"><div class="empty-icon">↩</div><div class="empty-title">Nenhum pacote ativo</div><div class="empty-sub">Cadastre pacotes para planejar de trás para frente.</div></div></div>';
+  }
+
+  // ─── Filtro + agrupamento por frente, ordenado por urgência ──────────────
+  let visiveis = cfg.ocultarConcluidos ? linhas.filter(l => !l.concluido) : linhas;
+  const ordemStatus = { atrasado: 0, critico: 1, noprazo: 2, semdados: 3, concluido: 4 };
+  const porFrente = {};
+  visiveis.forEach(l => {
+    const f = getCSVField(l.p, 'Frente') || 'Outros';
+    (porFrente[f] = porFrente[f] || []).push(l);
+  });
+  Object.values(porFrente).forEach(arr => arr.sort((a,b) =>
+    (ordemStatus[a.status] - ordemStatus[b.status]) || ((a.folga ?? 1e9) - (b.folga ?? 1e9))
+  ));
+
+  const pill = (cls, txt) => `<span class="pill ${cls}">${txt}</span>`;
+  const statusPill = l => ({
+    concluido: pill('pill-grn', '✓ Concluído'),
+    atrasado:  pill('pill-red', '⚠ Atrasado'),
+    critico:   pill('pill-ylw', '● Crítico'),
+    noprazo:   pill('pill-blu', 'No prazo'),
+    semdados:  pill('pill-acc', 'Definir alvo'),
+  }[l.status]);
+
+  // ─── Tabela ──────────────────────────────────────────────────────────────
+  let body = '';
+  Object.entries(porFrente).forEach(([frente, arr]) => {
+    body += `<tr class="summary"><td colspan="7">${frente}</td></tr>`;
+
+    arr.forEach(l => {
+      const { pid, unid, qtdTotal, qtdExec, saldo, pct, prodPadrao, plan, concluido } = l;
+      const barCor = concluido ? 'var(--grn)' : 'var(--pri)';
+
+      // Coluna 1 — pacote + status + progresso
+      let row = `<tr><td>
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
+          <strong>${getCSVField(l.p, 'Pacote')}</strong>${statusPill(l)}
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Exec.: ${fmtNum(qtdExec)} / ${fmtNum(qtdTotal)} ${unid} · ${fmtPct(pct)}</div>
+        <div style="height:4px;background:var(--border);border-radius:2px;margin-top:4px;max-width:170px;overflow:hidden">
+          <div style="height:100%;width:${(pct*100).toFixed(0)}%;background:${barCor};border-radius:2px"></div>
+        </div>
+      </td>`;
+
+      // Coluna 2 — saldo
+      row += `<td class="t-num" style="text-align:right;font-weight:600;color:${saldo>0?'var(--text)':'var(--grn)'}">${fmtNum(saldo)} ${unid}</td>`;
+
+      if (concluido) {
+        row += '<td colspan="5" style="color:var(--grn);font-weight:600">100% concluído — nada a planejar</td></tr>';
+        body += row;
+        return;
       }
 
-      html += '<tr><td><strong>' + getCSVField(p, 'Pacote') + '</strong>';
-      html += '<div style="font-size: 10px; color: var(--muted); margin-top: 2px;">Total: ' + fmtNum(qtdTotal) + ' | Executado: ' + fmtNum(qtdExecutada) + '</div></td>';
-      
-      const corSaldo = saldo > 0 ? 'var(--text)' : 'var(--grn)';
-      html += '<td class="t-num" style="color: ' + corSaldo + '; font-weight: 600; text-align: right;">' + fmtNum(saldo) + ' ' + unid + '</td>';
-      
-      if (saldo > 0) {
-        html += '<td><input type="date" style="padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" value="' + dataFimAtual + '" onchange="atualizarPlan(\'' + pid + '\', \'dataFim\', this.value)"></td>';
-        
-        const placeHolderTxt = prodPadrao ? 'Padrão: ' + prodPadrao : 'Livre';
-        const valProd = plan.prod !== undefined ? plan.prod : '';
-        html += '<td><div style="display:flex; align-items:center; gap: 4px;">';
-        html += '<input type="number" style="width: 70px; padding: 4px 8px; font-size: 12px; border: 1px solid var(--border); border-radius: 4px;" placeholder="' + placeHolderTxt + '" value="' + valProd + '" onkeyup="if(event.key===\'Enter\') atualizarPlan(\'' + pid + '\', \'prod\', this.value)" onblur="atualizarPlan(\'' + pid + '\', \'prod\', this.value)">';
-        html += '<span style="font-size: 11px; color: var(--muted);">' + unid + '/dia</span></div></td>';
+      // Coluna 3 — término alvo
+      row += `<td><input type="date" value="${l.alvoStr}" onchange="atualizarPlan('${pid}', 'dataFim', this.value)"
+                style="padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px"></td>`;
+
+      // Coluna 4 — produtividade
+      const phProd  = prodPadrao ? 'Padrão: ' + prodPadrao : 'Livre';
+      const valProd = plan.prod !== undefined ? plan.prod : '';
+      row += `<td><div style="display:flex;align-items:center;gap:4px">
+        <input type="number" min="0" step="any" placeholder="${phProd}" value="${valProd}"
+               style="width:72px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px"
+               onkeyup="if(event.key==='Enter') atualizarPlan('${pid}','prod',this.value)" onblur="atualizarPlan('${pid}','prod',this.value)">
+        <span style="font-size:11px;color:var(--muted)">${unid}/dia</span></div></td>`;
+
+      // Coluna 5 — duração em dias úteis
+      row += `<td class="t-num" style="text-align:center">${l.duracao > 0 ? Math.ceil(l.duracao) + ' du' : '—'}</td>`;
+
+      // Coluna 6 — início necessário + folga
+      if (l.inicioNec) {
+        const atrasado = l.status === 'atrasado';
+        const cor = atrasado ? 'var(--red)' : (l.status === 'critico' ? 'var(--ylw-d)' : 'var(--blu)');
+        let folgaTxt;
+        if (l.folga > 0)      folgaTxt = `${l.folga} dia${l.folga!==1?'s':''} úteis de folga`;
+        else if (l.folga === 0) folgaTxt = 'comece hoje';
+        else                  folgaTxt = `${Math.abs(l.folga)} dia${Math.abs(l.folga)!==1?'s':''} úteis em atraso`;
+        row += `<td style="font-size:13px">
+          <div style="font-weight:700;color:${cor}">${atrasado ? '⚠ ' : '📅 '}${fmtData(l.inicioNec)}</div>
+          <div style="font-size:10px;color:${cor}">${folgaTxt}</div></td>`;
       } else {
-        html += '<td>—</td><td>—</td>';
+        row += '<td style="color:var(--muted)">defina alvo e produtividade</td>';
       }
-      
-      html += '<td class="t-num" style="text-align: center;">' + (duracaoDias > 0 ? Math.ceil(duracaoDias) + ' dias' : '—') + '</td>';
-      html += '<td style="font-size: 13px; ' + alertClass + '">' + dataInicioStr + '</td></tr>';
+
+      // Coluna 7 — ritmo necessário a partir de hoje + viabilidade
+      if (l.diasAteAlvo <= 0) {
+        row += '<td>' + pill('pill-red', 'prazo vencido') + '</td>';
+      } else if (l.ritmoNec !== null && isFinite(l.ritmoNec)) {
+        const ratio = l.prodAtual > 0 ? l.ritmoNec / l.prodAtual : Infinity;
+        const via = ratio <= 1.0 ? ['pill-grn','viável'] : ratio <= 1.3 ? ['pill-ylw','apertado'] : ['pill-red','inviável'];
+        row += `<td style="font-size:13px">
+          <div style="font-weight:600">${fmtNum(l.ritmoNec)} ${unid}/dia</div>
+          <div style="font-size:10px;color:var(--muted)">${l.diasAteAlvo} dias úteis até o alvo · ${pill(via[0], via[1])}</div></td>`;
+      } else {
+        row += '<td style="color:var(--muted)">—</td>';
+      }
+
+      row += '</tr>';
+      body += row;
     });
   });
 
-  html += '</tbody></table></div></div>';
-  return html;
+  const tabela = `<div class="card stagger-item">
+    <div class="card-header"><div><div class="card-title">Saldo restante por pacote</div>
+      <div class="card-title-sub">Ordenado por urgência dentro de cada frente · "du" = dias úteis</div></div></div>
+    <div class="card-body flush" style="overflow-x:auto">
+      <table class="t" style="min-width:1080px">
+        <thead><tr>
+          <th style="width:23%">Pacote / Serviço</th>
+          <th class="t-num" style="text-align:right;width:11%">Saldo</th>
+          <th style="width:13%">Término alvo</th>
+          <th style="width:14%">Produtividade</th>
+          <th class="t-num" style="text-align:center;width:8%">Duração</th>
+          <th style="width:16%">Início necessário</th>
+          <th style="width:15%">Ritmo p/ alvo (hoje→)</th>
+        </tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+  </div>`;
+
+  return kpis + controles + tabela;
 }
 
 // ====================================================================
