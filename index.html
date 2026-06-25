@@ -1742,48 +1742,70 @@ window.removerChaveIA = function() {
   }
 };
 
+// Modelos tentados em ordem: se um não existir/estiver indisponível para a
+// chave (404), tenta o próximo automaticamente.
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-1.5-flash'];
+
 async function callGeminiAPI(promptText) {
   const apiKey = (localStorage.getItem(GEMINI_KEY_LS) || '').trim();
   if (!apiKey) {
-    // Sem prompt() — quem chama decide se mostra UI ou ignora
     const err = new Error('SEM_CHAVE_IA');
     err.code = 'SEM_CHAVE_IA';
     throw err;
   }
 
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' + apiKey;
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: promptText }] }],
+    generationConfig: { temperature: 0.2 }
+  });
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: promptText }] }],
-        generationConfig: { temperature: 0.2 }
-      })
-    });
+  let modeloIndisponivel = '';
+  for (const model of GEMINI_MODELS) {
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey;
 
+    let response;
+    try {
+      response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+    } catch (netErr) {
+      // fetch só rejeita por rede/CORS. Causa comum: chave com restrição de
+      // "Application/HTTP referrer" no Google Cloud bloqueia chamadas do navegador.
+      throw new Error('Falha de rede ao contactar o Gemini. Verifique a conexão e se a sua chave NÃO tem restrição de aplicativo/referrer no Google Cloud (chaves restritas bloqueiam o navegador).');
+    }
+
+    if (response.ok) {
+      const data = await response.json();
+      const cand = data.candidates && data.candidates[0];
+      const parts = cand && cand.content && cand.content.parts;
+      const texto = parts ? parts.map(p => p.text || '').join('') : '';
+      if (texto.trim()) {
+        return texto.replace(/```html/g, '').replace(/```/g, '').trim();
+      }
+      // 200 sem texto: bloqueio de segurança ou corte por tokens.
+      const motivo = (cand && cand.finishReason) || (data.promptFeedback && data.promptFeedback.blockReason) || 'desconhecido';
+      throw new Error('A IA respondeu sem texto (motivo: ' + motivo + '). Tente reformular ou reduzir o contexto histórico.');
+    }
+
+    // Erro HTTP: lê a mensagem real do Google para o usuário.
+    let apiMsg = '';
+    try { const e = await response.json(); apiMsg = (e && e.error && e.error.message) || ''; } catch (_) {}
+
+    if (response.status === 404 || /not found|not supported|is not found|does not exist/i.test(apiMsg)) {
+      modeloIndisponivel = model + (apiMsg ? ' — ' + apiMsg : '');
+      continue; // tenta o próximo modelo
+    }
+    if (response.status === 429) {
+      throw new Error('Cota da API Gemini excedida (429). Aguarde alguns minutos ou confira os limites do seu plano no Google AI Studio.' + (apiMsg ? ' ' + apiMsg : ''));
+    }
     if (response.status === 400 || response.status === 401 || response.status === 403) {
-      // Não remove automaticamente para o usuário não perder a chave por um erro pontual.
-      // Só sinaliza para o caller mostrar a UI de reconfiguração.
-      const err = new Error('CHAVE_INVALIDA');
+      const err = new Error('Chave rejeitada (' + response.status + '): ' + (apiMsg || 'verifique a chave em aistudio.google.com/app/apikey e se a API "Generative Language" está ativada no projeto.'));
       err.code = 'CHAVE_INVALIDA';
       throw err;
     }
-
-    if (!response.ok) throw new Error('HTTP Error: ' + response.status);
-
-    const data = await response.json();
-    if (data.candidates && data.candidates.length > 0 && data.candidates[0].content.parts.length > 0) {
-      let text = data.candidates[0].content.parts[0].text;
-      return text.replace(/```html/g, '').replace(/```/g, '');
-    } else {
-      throw new Error('Formato de resposta inesperado.');
-    }
-  } catch (err) {
-    if (err.code === 'SEM_CHAVE_IA' || err.code === 'CHAVE_INVALIDA') throw err;
-    throw new Error('Falha ao comunicar com a IA: ' + err.message);
+    throw new Error('Erro HTTP ' + response.status + (apiMsg ? ': ' + apiMsg : '') + '.');
   }
+
+  // Todos os modelos retornaram 404 para esta chave.
+  throw new Error('Nenhum modelo Gemini está disponível para esta chave (' + modeloIndisponivel + '). Gere uma nova chave em aistudio.google.com/app/apikey com a API Generative Language ativa.');
 }
 
 
@@ -2306,7 +2328,15 @@ window.runAIAnalysis = async function() {
     output.innerHTML = analysisHTML;
     toast('Relatório IA gerado com sucesso!', 'success');
   } catch (err) {
-    output.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Erro na Análise</div><div class="empty-sub">${err.message}</div></div>`;
+    let msg = err.message;
+    let acao = '';
+    if (err.code === 'SEM_CHAVE_IA') {
+      msg = 'Nenhuma chave do Google Gemini configurada neste navegador.';
+      acao = '<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="abrirConfigIA()">Configurar chave de IA</button>';
+    } else if (err.code === 'CHAVE_INVALIDA') {
+      acao = '<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="abrirConfigIA()">Revisar chave de IA</button>';
+    }
+    output.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Erro na Análise</div><div class="empty-sub">${msg}</div>${acao}</div>`;
     toast('Erro ao gerar relatório', 'error');
   } finally {
     btn.disabled = false;
