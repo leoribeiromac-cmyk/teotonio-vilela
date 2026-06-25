@@ -432,6 +432,7 @@ function upsertRDODiario(p, deveExistir) {
       registro[chave.toLowerCase()] = p[chave];
     });
 
+    var resultado;
     if (linhaExistente !== -1) {
       // ATUALIZA a linha existente (sem duplicar). Faz backfill de ID se faltar.
       if (iId !== -1 && !registro['id']) {
@@ -443,7 +444,7 @@ function upsertRDODiario(p, deveExistir) {
           aba.getRange(linhaExistente, idx + 1).setValue(registro[nomeCol]);
         }
       });
-      return { ok: true, updated: true, id: registro['id'] || undefined };
+      resultado = { ok: true, updated: true, id: registro['id'] || undefined };
     } else {
       // INSERE nova linha, sempre com ID gerado (se a aba tem coluna ID).
       if (iId !== -1 && !registro['id']) {
@@ -453,8 +454,19 @@ function upsertRDODiario(p, deveExistir) {
         return registro.hasOwnProperty(nomeCol) ? registro[nomeCol] : '';
       });
       aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
-      return { ok: true, inserted: true, id: registro['id'] || '' };
+      resultado = { ok: true, inserted: true, id: registro['id'] || '' };
     }
+
+    // COMMIT antes de liberar o lock — sem isto a duplicação volta.
+    // O setValue/setValues fica BUFFERADO até o fim da execução; se a gravação
+    // não for forçada agora, uma 2ª chamada concorrente (duplo-toque no Salvar
+    // ou reenvio automático do outbox quando a 1ª resposta demora/timeout) pega
+    // o lock logo após o release, LÊ a planilha SEM enxergar o insert ainda
+    // pendente e insere outra linha → RDO duplicado na mesma data.
+    // flush() persiste a escrita enquanto o lock ainda está nosso, garantindo
+    // que a próxima chamada serializada veja a linha e faça UPDATE, não INSERT.
+    SpreadsheetApp.flush();
+    return resultado;
   } finally {
     lock.releaseLock();
   }
