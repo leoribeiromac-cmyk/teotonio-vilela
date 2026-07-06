@@ -25,7 +25,17 @@ function rotear(e) {
   var action = p.action || '';
   var resp;
   try {
+    // SEGURANÇA: com a Propriedade do script EXIGIR_TOKEN = 'true', toda ação
+    // que altera dados passa a exigir um token de sessão obtido via 'login'.
+    // Enquanto a propriedade não existir, nada muda (migração sem quebrar o campo).
+    var PROTEGIDAS = ['deleteRDO', 'updateRDO', 'limparDuplicados', 'apagarPorPrefixoId',
+                      'addBatchRDO', 'addRDODiario', 'updateRDODiario', 'deleteRDODiario'];
+    if (PROTEGIDAS.indexOf(action) !== -1) {
+      var falhaAuth = exigirTokenSeAtivo(p.token);
+      if (falhaAuth) return responder(falhaAuth, p.callback);
+    }
     switch (action) {
+      case 'login':           resp = loginUsuario(p.usuario, p.senha); break;
       case 'deleteRDO':       resp = deleteRDO(p.id); break;
       case 'addBatchRDO':     resp = addBatchRDO(p.batch, p.clientId); break;
       case 'updateRDO':       resp = updateRDO(p.payload); break;
@@ -43,6 +53,52 @@ function rotear(e) {
     resp = { ok: false, error: String(err && err.message ? err.message : err) };
   }
   return responder(resp, p.callback);
+}
+
+// ------------------------------------------------------------
+// SEGURANÇA — login no servidor + token de sessão.
+//
+// Configuração (Apps Script > ⚙ Configurações do projeto > Propriedades do script):
+//   USUARIOS     = {"Leonardo":"senha-nova","Wallace":"senha-nova","Guilherme":"senha-nova"}
+//   EXIGIR_TOKEN = true
+//
+// Com USUARIOS definido, o app valida a senha AQUI (senha some do HTML).
+// Com EXIGIR_TOKEN=true, escrever/apagar sem token válido é recusado — quem
+// tiver só a URL do /exec não consegue mais injetar nem apagar dados.
+// O token vale 6 h e renova a cada uso.
+// IMPORTANTE: troque as senhas ao configurar — as antigas ficaram públicas
+// no histórico do repositório.
+// ------------------------------------------------------------
+function loginUsuario(usuario, senha) {
+  var raw = PropertiesService.getScriptProperties().getProperty('USUARIOS');
+  if (!raw) return { ok: false, error: 'LOGIN_NAO_CONFIGURADO' };
+  var usuarios;
+  try { usuarios = JSON.parse(raw); }
+  catch (e) { return { ok: false, error: 'Propriedade USUARIOS não é um JSON válido' }; }
+
+  var u = String(usuario || '').trim();
+  if (!u || !senha || String(usuarios[u]) !== String(senha)) {
+    Utilities.sleep(500); // desincentiva tentativa e erro em massa
+    return { ok: false, error: 'CREDENCIAIS_INVALIDAS' };
+  }
+  var token = Utilities.getUuid();
+  CacheService.getScriptCache().put('tok_' + token, u, 21600); // 6 h
+  return { ok: true, usuario: u, token: token, expiraEmSegundos: 21600 };
+}
+
+function usuarioDoToken(token) {
+  if (!token) return null;
+  var cache = CacheService.getScriptCache();
+  var u = cache.get('tok_' + String(token));
+  if (u) cache.put('tok_' + String(token), u, 21600); // renova a validade a cada uso
+  return u;
+}
+
+function exigirTokenSeAtivo(token) {
+  var exigir = PropertiesService.getScriptProperties().getProperty('EXIGIR_TOKEN');
+  if (String(exigir).toLowerCase() !== 'true') return null; // proteção ainda desligada
+  if (usuarioDoToken(token)) return null;
+  return { ok: false, error: 'TOKEN_INVALIDO' };
 }
 
 // Responde em JSONP (se veio ?callback=) ou JSON puro.
@@ -636,4 +692,194 @@ function amostraIdsDiario(dados, iId) {
     out.push(iId !== -1 ? dados[i][iId] : '(sem coluna ID)');
   }
   return out;
+}
+
+// ============================================================
+// AUTOMAÇÕES (gatilhos de tempo)
+// Rode configurarGatilhos() UMA vez no editor (botão ▶ Run) para
+// agendar o backup diário e o registro automático de chuva.
+// ============================================================
+function configurarGatilhos() {
+  // Remove gatilhos antigos destas funções para não duplicar.
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    var fn = t.getHandlerFunction();
+    if (fn === 'backupDiario' || fn === 'registrarClimaAuto') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('backupDiario').timeBased().everyDays(1).atHour(2).create();
+  ScriptApp.newTrigger('registrarClimaAuto').timeBased().everyDays(1).atHour(5).create();
+  Logger.log('Gatilhos criados: backupDiario (02h) e registrarClimaAuto (05h).');
+  return { ok: true };
+}
+
+// ------------------------------------------------------------
+// BACKUP DIÁRIO — copia a planilha inteira para o Drive (pasta
+// "Backups Teotonio") e mantém as últimas 14 cópias.
+// ------------------------------------------------------------
+function backupDiario() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var arquivo = DriveApp.getFileById(ss.getId());
+
+  var pastas = DriveApp.getFoldersByName('Backups Teotonio');
+  var pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder('Backups Teotonio');
+
+  var nome = 'BACKUP ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm') +
+             ' — ' + ss.getName();
+  arquivo.makeCopy(nome, pasta);
+
+  // Retenção: mantém só as 14 cópias mais recentes.
+  var copias = [];
+  var it = pasta.getFiles();
+  while (it.hasNext()) {
+    var f = it.next();
+    if (f.getName().indexOf('BACKUP ') === 0) copias.push(f);
+  }
+  copias.sort(function (a, b) { return b.getDateCreated() - a.getDateCreated(); });
+  for (var i = 14; i < copias.length; i++) copias[i].setTrashed(true);
+
+  Logger.log('Backup criado: ' + nome + ' (' + copias.length + ' cópias na pasta).');
+  return { ok: true, backup: nome };
+}
+
+// ------------------------------------------------------------
+// CLIMA AUTOMÁTICO — busca a chuva de ONTEM na Open-Meteo (grátis,
+// sem chave) e grava na aba RDO_Diario, colunas Chuva_mm_Auto e
+// Clima_Fonte (criadas automaticamente se não existirem).
+// Serve de contraprova objetiva do clima apontado — base para
+// pleitos de prorrogação por dias improdutivos.
+// ------------------------------------------------------------
+var OBRA_LAT = -23.72;  // Av. Sen. Teotônio Vilela (ajuste fino se necessário)
+var OBRA_LON = -46.66;
+
+function registrarClimaAuto() {
+  var ontem = new Date(Date.now() - 24 * 3600 * 1000);
+  var iso = Utilities.formatDate(ontem, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+
+  var url = 'https://archive-api.open-meteo.com/v1/archive?latitude=' + OBRA_LAT +
+            '&longitude=' + OBRA_LON +
+            '&start_date=' + iso + '&end_date=' + iso +
+            '&daily=precipitation_sum&timezone=America%2FSao_Paulo';
+  var chuva = null;
+  try {
+    var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+    var dados = JSON.parse(resp.getContentText());
+    if (dados.daily && dados.daily.precipitation_sum) chuva = dados.daily.precipitation_sum[0];
+  } catch (e) {
+    Logger.log('Open-Meteo indisponível: ' + e);
+    return { ok: false, error: 'API de clima indisponível' };
+  }
+  if (chuva === null || chuva === undefined) return { ok: false, error: 'Sem dado de chuva para ' + iso };
+
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var cab = cabecalhoNormalizado(aba);
+    // Cria as colunas de clima automático se ainda não existirem.
+    if (idxColuna(cab, 'chuva_mm_auto') === -1) {
+      aba.getRange(1, aba.getLastColumn() + 1).setValue('Chuva_mm_Auto');
+      cab = cabecalhoNormalizado(aba);
+    }
+    if (idxColuna(cab, 'clima_fonte') === -1) {
+      aba.getRange(1, aba.getLastColumn() + 1).setValue('Clima_Fonte');
+      cab = cabecalhoNormalizado(aba);
+    }
+    var iData = idxColuna(cab, 'data');
+    var iChuva = idxColuna(cab, 'chuva_mm_auto');
+    var iFonte = idxColuna(cab, 'clima_fonte');
+    var iId = idxColuna(cab, 'id');
+    var dados2 = aba.getDataRange().getValues();
+
+    for (var i = 1; i < dados2.length; i++) {
+      if (normData(dados2[i][iData]) === iso) {
+        aba.getRange(i + 1, iChuva + 1).setValue(chuva);
+        aba.getRange(i + 1, iFonte + 1).setValue('Open-Meteo');
+        return { ok: true, data: iso, chuva_mm: chuva, atualizado: true };
+      }
+    }
+
+    // Não havia RDO na data: cria linha mínima só com data + chuva,
+    // para o dia ficar documentado mesmo sem apontamento.
+    var registro = {};
+    registro['data'] = iso;
+    registro['chuva_mm_auto'] = chuva;
+    registro['clima_fonte'] = 'Open-Meteo';
+    registro['tem_turno_noturno'] = 'false';
+    if (iId !== -1) registro['id'] = gerarIdDiario(dados2, iId);
+    var linha = cab.map(function (nc) { return registro.hasOwnProperty(nc) ? registro[nc] : ''; });
+    aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
+    return { ok: true, data: iso, chuva_mm: chuva, inserido: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// ------------------------------------------------------------
+// RDOs VAZIOS — versão GENÉRICA (qualquer mês/ano) do utilitário
+// de maio/26. Edite ANO_MES_ALVO e rode criarRDOsVaziosDoMes().
+// Feriados: nacionais + municipais de São Paulo.
+// ------------------------------------------------------------
+var ANO_MES_ALVO = '2026-06'; // <-- ajuste aqui antes de rodar
+
+var FERIADOS_OBRA = [
+  '2026-01-01', '2026-01-25', '2026-02-16', '2026-02-17', '2026-04-03', '2026-04-21',
+  '2026-05-01', '2026-06-04', '2026-07-09', '2026-09-07', '2026-10-12', '2026-11-02',
+  '2026-11-15', '2026-11-20', '2026-12-25',
+  '2027-01-01', '2027-01-25'
+];
+
+function criarRDOsVaziosDoMes() {
+  var partes = String(ANO_MES_ALVO).split('-');
+  return criarRDOsVazios(parseInt(partes[0], 10), parseInt(partes[1], 10), true);
+}
+
+function criarRDOsVazios(ano, mes, incluirDiasUteis) {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(60000);
+  try {
+    var cab = cabecalhoNormalizado(aba);
+    var iData = idxColuna(cab, 'data');
+    var iId = idxColuna(cab, 'id');
+    var dados = aba.getDataRange().getValues();
+
+    var existentes = {};
+    for (var i = 1; i < dados.length; i++) {
+      var nd = normData(dados[i][iData]);
+      if (nd) existentes[nd] = true;
+    }
+
+    var ultimoDia = new Date(ano, mes, 0).getDate();
+    var criados = [], uteisSemRDO = [], jaTinham = 0;
+    for (var dia = 1; dia <= ultimoDia; dia++) {
+      var d = new Date(ano, mes - 1, dia);
+      var iso = Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      var dow = d.getDay();
+      var util = (dow !== 0 && dow !== 6) && FERIADOS_OBRA.indexOf(iso) === -1;
+
+      if (existentes[iso]) { jaTinham++; continue; }
+      if (util && !incluirDiasUteis) { uteisSemRDO.push(iso); continue; }
+
+      var registro = {};
+      registro['data'] = iso;
+      if (iId !== -1) registro['id'] = gerarIdDiario(dados, iId);
+      registro['tem_turno_noturno'] = 'false';
+      if (!util) registro['observacoes_gerais'] = 'Dia não útil — sem serviços';
+
+      var linha = cab.map(function (nc) { return registro.hasOwnProperty(nc) ? registro[nc] : ''; });
+      aba.appendRow(linha);
+      dados.push(linha);
+      existentes[iso] = true;
+      criados.push(registro['id'] + ' ' + iso + (util ? ' (útil, vazio)' : ' (não útil)'));
+    }
+
+    var resultado = { ok: true, mes: ano + '-' + ('0' + mes).slice(-2), totalCriados: criados.length, criados: criados, jaTinham: jaTinham, diasUteisSemRDO: uteisSemRDO };
+    Logger.log(JSON.stringify(resultado, null, 2));
+    return resultado;
+  } finally {
+    lock.releaseLock();
+  }
 }

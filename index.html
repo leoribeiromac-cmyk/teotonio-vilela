@@ -9,6 +9,7 @@
 <title>Sistema Teotônio Vilela — Controle Integrado</title>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%231a1612'/%3E%3Cpath d='M32 15 Q53 17 53 39 L11 39 Q11 17 32 15Z' fill='%23cc6633'/%3E%3Crect x='8' y='37' width='48' height='9' rx='4.5' fill='%23cc6633'/%3E%3Crect x='11' y='37' width='42' height='3' rx='1.5' fill='%23a84f22' opacity='.55'/%3E%3C/svg%3E">
 <meta name="theme-color" content="#1a1612">
+<link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -1282,7 +1283,7 @@ const CONFIG = {
   estacasCB: { ini: 99, fim: 141, label: 'Centro→Bairro' },
   estacasBC: { ini: 201, fim: 244, label: 'Bairro→Centro' },
   refreshMs: 5 * 60 * 1000,
-  ls: { rdoDraft: 'teotonio_rdo_draft_v1', apontador: 'teotonio_apontador_v1', sabadoUtil: 'teotonio_sabado_util_v1', oficialRDO: 'teotonio_oficial_rdo_v1' }
+  ls: { rdoDraft: 'teotonio_rdo_draft_v1', apontador: 'teotonio_apontador_v1', sabadoUtil: 'teotonio_sabado_util_v1', oficialRDO: 'teotonio_oficial_rdo_v1', token: 'teotonio_token_v1' }
 };
 
 // ====================================================================
@@ -1449,15 +1450,21 @@ async function outboxFlush(manual = false) {
   try {
     for (const item of itens) {
       try {
-        const result = await jsonp(CONFIG.appsScript, item.params, 1, 2000);
+        // Token injetado no MOMENTO do envio (o da hora do enfileiramento pode ter expirado).
+        const result = await jsonp(CONFIG.appsScript, {...item.params, ...authParams()}, 1, 2000);
         if (!result.ok) throw new Error('servidor: ' + (result.error || 'erro'));
         outboxRemover(item.id);
         enviados++;
       } catch(e) {
         if (ehErroDeRede(e)) { falhouRede = true; break; } // segue offline — tenta tudo de novo depois
+        // Sessão expirada NÃO é erro definitivo: mantém na fila e pede novo login.
+        if (String(e && e.message || '').includes('TOKEN_INVALIDO')) {
+          toast('Sessão expirada — saia e faça login de novo. Os RDOs guardados serão reenviados em seguida.', 'error', 0);
+          break;
+        }
         // Erro do servidor: reenviar não vai resolver. Remove e avisa.
         outboxRemover(item.id);
-        toast('Um RDO guardado não pôde ser enviado (' + (item.descricao || '') + '): ' + e.message, 'error', 0);
+        toast('Um RDO guardado não pôde ser enviado (' + (item.descricao || '') + '): ' + erroLegivel(e.message), 'error', 0);
       }
     }
   } finally {
@@ -1532,13 +1539,17 @@ function fmtData(iso) {
 // ---- Calendário: dias úteis / feriados ------------------------------------
 // Feriados NACIONAIS (fixos + móveis). Feriados MUNICIPAIS não entram aqui —
 // variam por município da obra; confira o calendário local se precisar.
+// Feriados nacionais + municipais/estaduais de São Paulo (obra é na capital):
+// 25/01 aniversário da cidade · 09/07 Revolução Constitucionalista.
 const FERIADOS_NACIONAIS = new Set([
   // 2025
-  '2025-01-01','2025-03-03','2025-03-04','2025-04-18','2025-04-21','2025-05-01',
-  '2025-06-19','2025-09-07','2025-10-12','2025-11-02','2025-11-15','2025-11-20','2025-12-25',
+  '2025-01-01','2025-01-25','2025-03-03','2025-03-04','2025-04-18','2025-04-21','2025-05-01',
+  '2025-06-19','2025-07-09','2025-09-07','2025-10-12','2025-11-02','2025-11-15','2025-11-20','2025-12-25',
   // 2026
-  '2026-01-01','2026-02-16','2026-02-17','2026-04-03','2026-04-21','2026-05-01',
-  '2026-06-04','2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25'
+  '2026-01-01','2026-01-25','2026-02-16','2026-02-17','2026-04-03','2026-04-21','2026-05-01',
+  '2026-06-04','2026-07-09','2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25',
+  // 2027 (até o horizonte do cronograma)
+  '2027-01-01','2027-01-25','2027-02-08','2027-02-09','2027-03-26','2027-04-21'
 ]);
 
 function ehFeriadoNacional(d) {
@@ -1831,6 +1842,18 @@ const PRODUTIVIDADE_PADRAO = {
   'P34': 0.1, 'P35': 50, 'P36': 15
 };
 
+// Produtividade de um pacote (unid/dia): se a aba Pacotes tiver a coluna
+// opcional "Produtividade" preenchida, ela MANDA — dá pra ajustar o plano
+// direto na planilha, sem mexer no código. Senão vale o padrão acima.
+function produtividadeDe(pid) {
+  const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid);
+  if (p) {
+    const v = num(getCSVField(p, 'Produtividade'));
+    if (v > 0) return v;
+  }
+  return PRODUTIVIDADE_PADRAO[pid] || 0;
+}
+
 function transitionTo(actionFn) {
   const pageEl = document.getElementById('page');
   if (!pageEl) { actionFn(); return; }
@@ -1900,13 +1923,34 @@ window.setCurvaHorizonte = function(h) {
 };
 
 // ====================================================================
-// CONTROLE DE ACESSO (Login Simples)
+// CONTROLE DE ACESSO
+// A senha é validada NO SERVIDOR (Apps Script, action=login) e a sessão
+// recebe um token exigido nas ações de escrita quando EXIGIR_TOKEN=true.
+// USUARIOS_UI é só a lista de nomes do dropdown (nomes não são segredo).
+// SENHAS_LEGADO existe apenas como fallback enquanto o backend antigo
+// (sem action=login) estiver no ar — essas senhas já são públicas no
+// histórico do git; as novas vivem nas Propriedades do Apps Script.
 // ====================================================================
-const ACESSO = {
-  'Leonardo': 'leo2026',
-  'Wallace': 'wal123',
-  'Guilherme': 'gui123'
-};
+const USUARIOS_UI = ['Leonardo', 'Wallace', 'Guilherme'];
+const SENHAS_LEGADO = { 'Leonardo': 'leo2026', 'Wallace': 'wal123', 'Guilherme': 'gui123' };
+
+function tokenSessao() {
+  return localStorage.getItem(CONFIG.ls.token) || '';
+}
+
+// Parâmetros de autenticação anexados a toda chamada de escrita.
+function authParams() {
+  const t = tokenSessao();
+  return t ? { token: t } : {};
+}
+
+// Traduz códigos de erro do servidor para mensagens legíveis.
+function erroLegivel(msg) {
+  const m = String(msg || '');
+  if (m.includes('TOKEN_INVALIDO')) return 'Sessão expirada — saia e faça login de novo para continuar.';
+  if (m.includes('CREDENCIAIS_INVALIDAS')) return 'Usuário ou senha incorretos.';
+  return m;
+}
 
 function renderLogin() {
   return `
@@ -1922,7 +1966,7 @@ function renderLogin() {
           <label>Usuário / Apontador</label>
           <select id="loginUser">
             <option value="">— selecione —</option>
-            ${Object.keys(ACESSO).map(u => `<option value="${u}">${u}</option>`).join('')}
+            ${USUARIOS_UI.map(u => `<option value="${u}">${u}</option>`).join('')}
           </select>
         </div>
         <div class="field" style="margin-bottom: 18px;">
@@ -1934,22 +1978,42 @@ function renderLogin() {
     </div>
   `;
 }
-window.fazerLogin = function() {
+window.fazerLogin = async function() {
   const u = document.getElementById('loginUser').value;
   const p = document.getElementById('loginPass').value;
   if (!u) { toast('Selecione um usuário', 'error'); return; }
-  if (ACESSO[u] !== p) { toast('Senha incorreta', 'error'); return; }
-  
+
+  // 1) Valida no servidor — a senha correta vive nas Propriedades do Apps Script.
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'login', usuario: u, senha: p }, 0);
+    if (r.ok && r.token) {
+      localStorage.setItem(CONFIG.ls.token, r.token);
+      concluirLogin(u);
+      return;
+    }
+    if (r.error === 'CREDENCIAIS_INVALIDAS') { toast(erroLegivel(r.error), 'error'); return; }
+    // LOGIN_NAO_CONFIGURADO ou backend antigo (ação desconhecida): usa o fallback abaixo.
+  } catch (e) {
+    // Sem rede: o fallback local permite entrar para trabalhar offline (fila outbox).
+  }
+
+  // 2) Fallback legado (até o backend com action=login ser publicado).
+  if (SENHAS_LEGADO[u] !== p) { toast('Senha incorreta', 'error'); return; }
+  concluirLogin(u);
+};
+
+function concluirLogin(u) {
   STATE.usuarioLogado = u;
   localStorage.setItem('teotonio_user', u);
   toast('Acesso liberado!', 'success');
   atualizarBotoesTopo();
   transitionTo(render);
-};
+}
 
 window.fazerLogout = function() {
   STATE.usuarioLogado = null;
   localStorage.removeItem('teotonio_user');
+  localStorage.removeItem(CONFIG.ls.token);
   toast('Você saiu do sistema.', 'info');
   atualizarBotoesTopo();
   transitionTo(render);
@@ -1982,6 +2046,7 @@ async function carregarTudo() {
     STATE.coeficientes = k;
     STATE.rdoavanco = r;
     STATE.rdodiario = d || [];
+    atualizarPrazoDoCronograma(); // baseline acompanha o Project publicado na aba
     STATE.loaded = true;
     STATE.lastSync = new Date();
     const hm = STATE.lastSync.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
@@ -2029,7 +2094,9 @@ function calcularAvancoPorPacote(rdos = STATE.rdoavanco, pacotes = STATE.pacotes
     const d = parseISODate(getCSVField(r, 'Data'));
     if (d && (!m[pid].ultimaData || d > m[pid].ultimaData)) m[pid].ultimaData = d;
     
-    const est = String(getCSVField(r, 'Local_Estaca') || '').toUpperCase().match(/E?\d{2,3}/g);
+    // Remove deslocamentos "+10" ANTES de extrair números — sem isso, a
+    // notação de campo "E106+10" gerava uma estaca fantasma "E10".
+    const est = String(getCSVField(r, 'Local_Estaca') || '').toUpperCase().replace(/\+\s*\d+/g, '').match(/E?\d{2,3}/g);
     if (est) {
       const qPorEstaca = q / est.length;
       est.forEach(e => {
@@ -2348,8 +2415,41 @@ window.runAIAnalysis = async function() {
 // HELPERS EXECUTIVOS — Painel Executivo V2
 // ====================================================================
 
-const PROJETO_INICIO = new Date(2025, 6, 1);  // 01/07/2025
-const PROJETO_FIM    = new Date(2026, 11, 31); // 31/12/2026
+// Valores de FALLBACK — quando a aba Cronograma (export do MS Project) está
+// disponível, o término real do plano vem da linha-raiz dela (Nivel 0) via
+// atualizarPrazoDoCronograma(). Assim o baseline acompanha a última revisão
+// do Project publicada na planilha, sem precisar de commit.
+let PROJETO_INICIO = new Date(2025, 6, 1);  // 01/07/2025
+let PROJETO_FIM    = new Date(2026, 11, 31); // 31/12/2026 (fallback)
+
+function atualizarPrazoDoCronograma() {
+  try {
+    const raiz = (STATE.cronograma || []).find(r => String(getCSVField(r, 'Nivel')).trim() === '0');
+    if (!raiz) return;
+    const fim = parseISODate(getCSVField(raiz, 'Termino'));
+    if (fim && !isNaN(fim) && fim > PROJETO_INICIO) PROJETO_FIM = fim;
+  } catch (e) { /* mantém o fallback */ }
+}
+
+// Datas planejadas por pacote, vindas da aba Cronograma: linhas com a coluna
+// Pacote_ID preenchida entram no baseline com min(Inicio)–max(Termino).
+// Preencher o mapeamento na planilha refina a curva prevista sem tocar no código.
+function datasPlanejadasPorPacote() {
+  const mapa = {};
+  (STATE.cronograma || []).forEach(r => {
+    const pid = String(getCSVField(r, 'Pacote_ID') || '').trim().toUpperCase();
+    if (!pid) return;
+    const ini = parseISODate(getCSVField(r, 'Inicio'));
+    const fim = parseISODate(getCSVField(r, 'Termino'));
+    if (!ini || isNaN(ini)) return;
+    if (!mapa[pid]) mapa[pid] = { ini, fim: fim && !isNaN(fim) ? fim : ini };
+    else {
+      if (ini < mapa[pid].ini) mapa[pid].ini = ini;
+      if (fim && !isNaN(fim) && fim > mapa[pid].fim) mapa[pid].fim = fim;
+    }
+  });
+  return mapa;
+}
 
 function fmtPctDelta(v, decimals = 2) {
   const pct = v * 100;
@@ -2366,7 +2466,7 @@ function calcCumulativoDia(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
     if (!d) return;
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
     if (!validPids.has(pid)) return;
-    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
+    const prod = produtividadeDe(pid) || 1;
     const dias = num(getCSVField(r, 'Quantidade')) / (prod || 1);
     const contribPct = totalDiasEstimados > 0 ? dias / totalDiasEstimados : 0;
     const k = ymd(d);
@@ -2462,7 +2562,7 @@ function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
     if (!pac) return;
     const f = getCSVField(pac, 'Frente') || 'Outros';
     if (!por[f]) por[f] = { ult7d: 0, ultData: null, pacotes: 0, executou: false };
-    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
+    const prod = produtividadeDe(pid) || 1;
     const dias = num(getCSVField(r, 'Quantidade')) / (prod || 1);
     const contrib = totalDiasEstimados > 0 ? dias / totalDiasEstimados : 0;
     if (d.getTime() >= d7) por[f].ult7d += contrib;
@@ -2527,20 +2627,27 @@ function calcCurvaPrevista(pacotesAtivos, totalDiasEstimados) {
     const r = calcularGantt();
     gNodes = r && r.nodes ? r.nodes : {};
   } catch(e) { gNodes = {}; }
+  const planejadas = datasPlanejadasPorPacote(); // datas reais do Project (aba Cronograma)
   const result = {};
   pacotesAtivos.forEach(p => {
     const pid = getCSVField(p, 'ID');
     if (!pid) return;
     const qtd = num(getCSVField(p, 'Qtd Estimada'));
-    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
+    const prod = produtividadeDe(pid) || 1;
     const totalDiasEquiv = qtd / (prod || 1);
     const contribPct = totalDiasEquiv / totalDiasEstimados;
     let dIni, dFim;
+    const plan = planejadas[String(pid).toUpperCase()];
     const n = gNodes[pid];
-    if (n && (n.fromProject || n.fromSegmentos) && n.dataInicio && n.dataFim) {
+    if (plan) {
+      // 1ª prioridade: datas do MS Project mapeadas na aba Cronograma (Pacote_ID)
+      dIni = new Date(plan.ini.getTime());
+      dFim = new Date(plan.fim.getTime());
+    } else if (n && (n.fromProject || n.fromSegmentos) && n.dataInicio && n.dataFim) {
       dIni = new Date(n.dataInicio.getTime());
       dFim = new Date(n.dataFim.getTime());
     } else {
+      // Fallback: distribui linearmente ao longo do projeto inteiro
       dIni = new Date(PROJETO_INICIO.getTime());
       dFim = new Date(PROJETO_FIM.getTime());
     }
@@ -2740,7 +2847,9 @@ function calcAvancoPorEstaca(rdosAtivos, pacotesAtivos) {
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
     if (!validPids.has(pid)) return;
     const q = num(getCSVField(r, 'Quantidade'));
-    const est = String(getCSVField(r, 'Local_Estaca') || '').toUpperCase().match(/E?\d{2,3}/g);
+    // Remove deslocamentos "+10" ANTES de extrair números — sem isso, a
+    // notação de campo "E106+10" gerava uma estaca fantasma "E10".
+    const est = String(getCSVField(r, 'Local_Estaca') || '').toUpperCase().replace(/\+\s*\d+/g, '').match(/E?\d{2,3}/g);
     if (!est) return;
     est.forEach(estStr => {
       const ek = estStr.startsWith('E') ? estStr : 'E' + estStr;
@@ -2852,7 +2961,7 @@ function renderExecutivo() {
   
   pacotesFiltrados.forEach(a => {
     const pid = getCSVField(a.pacote, 'ID');
-    const prod = PRODUTIVIDADE_PADRAO[pid] || 1;
+    const prod = produtividadeDe(pid) || 1;
     a.diasEstimados = prod > 0 ? a.qtdEstimada / prod : 0;
     a.diasExecutados = a.pct * a.diasEstimados;
   });
@@ -3630,7 +3739,7 @@ function calcularGantt() {
     const saldo = Math.max(0, qtdTotal - qtdExec);
     const pct = avP ? avP.pct : 0;
     const prodOverride = g.prod ? parseFloat(g.prod) : null;
-    const prodPadrao = PRODUTIVIDADE_PADRAO[pid] || 1;
+    const prodPadrao = produtividadeDe(pid) || 1;
     const prod = (prodOverride && prodOverride > 0) ? prodOverride : prodPadrao;
     const predecessores = (g.predecessores || []).filter(id => pacotesAtivos.some(p2 => getCSVField(p2, 'ID') === id));
     nodes[pid] = { pacote: p, pid, pct, saldo, duracao: prod > 0 ? Math.ceil(saldo / prod) : 0, predecessores, dataInicio: null, dataFim: null };
@@ -3837,7 +3946,7 @@ function renderCronogramaReverso() {
     const saldo    = Math.max(0, qtdTotal - qtdExec);
     const pct      = qtdTotal > 0 ? Math.min(qtdExec / qtdTotal, 1) : 0;
 
-    const prodPadrao = PRODUTIVIDADE_PADRAO[pid] || '';
+    const prodPadrao = produtividadeDe(pid) || '';
     const prodAtual  = (plan.prod !== undefined && plan.prod !== '') ? num(plan.prod) : num(prodPadrao);
     const alvoStr    = plan.dataFim || alvoGlobal;   // cascata: alvo próprio → alvo global → prazo da obra
     const alvoData   = parseISODate(alvoStr);
@@ -4047,14 +4156,87 @@ function renderCronogramaReverso() {
 // ====================================================================
 // VIEW: APOIO MEDIÇÃO
 // ====================================================================
+// ====================================================================
+// PRÉVIA DE MEDIÇÃO — o consumo por item contratual pode ser filtrado
+// por mês (período da medição) e exportado em CSV para conferência
+// contra a coluna do mês da Planilha Geral do .xlsm.
+// ====================================================================
+let MEDICAO_MES = ''; // '' = obra inteira; 'YYYY-MM' = prévia daquele mês
+
+window.setMedicaoMes = function(v) {
+  MEDICAO_MES = v;
+  transitionTo(render);
+};
+
+function rdosDoMes(mes) {
+  if (!mes) return STATE.rdoavanco;
+  return STATE.rdoavanco.filter(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (!d) return false;
+    return getLocalISODate(d).slice(0, 7) === mes;
+  });
+}
+
+function consumoMedicao() {
+  const rdos = rdosDoMes(MEDICAO_MES);
+  const av = calcularAvancoPorPacote(rdos, STATE.pacotes);
+  return calcularConsumoItens(av);
+}
+
+window.exportarMedicaoCSV = function() {
+  const consumo = consumoMedicao();
+  const lista = Object.values(consumo).filter(x => x.consumido > 0)
+    .sort((a, b) => String(a.item).localeCompare(String(b.item), 'pt-BR', { numeric: true }));
+  if (lista.length === 0) { toast('Nada a exportar neste período.', 'info'); return; }
+  const header = ['Item', 'Descricao', 'Unid', 'Qtd_Consumida', 'Periodo', 'Pacotes_Origem'];
+  const rows = lista.map(x => [
+    x.item, x.descricao, x.unidadeItem,
+    // decimal com vírgula, sem separador de milhar — cola direto no Excel pt-BR
+    String((Math.round(x.consumido * 100) / 100).toFixed(2)).replace('.', ','),
+    MEDICAO_MES || 'obra inteira',
+    x.pacotes.join(' + ')
+  ].map(v => `"${String(v).replace(/"/g, '""')}"`));
+  const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'Previa_Medicao_' + (MEDICAO_MES || 'total') + '.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  toast('Prévia de medição exportada!', 'success');
+};
+
 function renderMedicao(){
-  const av=calcularAvancoPorPacote();
-  const consumo=calcularConsumoItens(av);
+  const consumo=consumoMedicao();
   const lista=Object.values(consumo).filter(x=>x.consumido>0).sort((a,b)=>b.consumido-a.consumido);
+
+  const mesesSet = new Set();
+  STATE.rdoavanco.forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d) mesesSet.add(getLocalISODate(d).slice(0, 7));
+  });
+  const meses = [...mesesSet].sort().reverse();
+  const labelMes = m => {
+    const d = new Date(m + '-01T12:00:00');
+    const l = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  };
+
   return`<div class="card stagger-item">
-    <div class="card-header"><div><div class="card-title">Consumo por item contratual</div><div class="card-title-sub">Calculado a partir dos RDOs × matriz de coeficientes</div></div><div style="font-size:11px;color:var(--muted)">${lista.length} itens com consumo</div></div>
+    <div class="card-header">
+      <div><div class="card-title">Prévia de medição — consumo por item contratual</div><div class="card-title-sub">RDOs × matriz de coeficientes · filtre o mês da medição e exporte o CSV para conferir contra a Planilha Geral</div></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select onchange="setMedicaoMes(this.value)" style="padding:6px 10px;border:1px solid var(--border-strong);border-radius:var(--r-sm);background:var(--bg);font-family:inherit;font-size:12px;font-weight:500">
+          <option value="">Obra inteira</option>
+          ${meses.map(m => `<option value="${m}" ${MEDICAO_MES===m?'selected':''}>${labelMes(m)}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="exportarMedicaoCSV()">⬇ CSV p/ conferência</button>
+        <span style="font-size:11px;color:var(--muted)">${lista.length} itens</span>
+      </div>
+    </div>
     <div class="card-body flush">
-      ${lista.length===0?'<div class="empty"><div class="empty-icon">⌗</div><div class="empty-title">Nada consumido ainda</div><div class="empty-sub">Lance RDOs com pacote e quantidade para ver os itens contratuais derivados aparecerem aqui.</div></div>':`
+      ${lista.length===0?'<div class="empty"><div class="empty-icon">⌗</div><div class="empty-title">Nada consumido neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade (ou mude o mês do filtro) para ver os itens contratuais derivados.</div></div>':`
       <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">Consumido</th><th>Pacotes</th></tr></thead>
       <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${x.item}</strong></td><td>${x.descricao}</td><td class="t-mono">${x.unidadeItem}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td></tr>`).join('')}</tbody>
       </table>`}
@@ -4086,14 +4268,85 @@ function renderHistorico() {
   `;
 }
 
+// Filtros do histórico de serviços (não afetam edição/exclusão: o índice
+// canônico do registro no array revertido é preservado em cada linha).
+let HIST_FILTRO = { mes: '', frente: '', apontador: '' };
+
+window.setHistFiltro = function(campo, valor) {
+  HIST_FILTRO[campo] = valor;
+  transitionTo(render);
+};
+window.limparHistFiltro = function() {
+  HIST_FILTRO = { mes: '', frente: '', apontador: '' };
+  transitionTo(render);
+};
+
 function renderHistoricoServicos() {
   const rdos = [...STATE.rdoavanco].reverse();
-  
+
+  // Opções dos filtros derivadas dos próprios dados.
+  const mesesSet = new Set(), apontSet = new Set();
+  rdos.forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d) mesesSet.add(getLocalISODate(d).slice(0, 7));
+    const ap = getCSVField(r, 'Apontador'); if (ap) apontSet.add(ap);
+  });
+  const meses = [...mesesSet].sort().reverse();
+  const apontadores = [...apontSet].sort();
+  const frentes = [...new Set(STATE.pacotes.map(p => getCSVField(p, 'Frente')).filter(Boolean))].sort();
+  const frenteDoPacote = pid => {
+    const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid);
+    return p ? getCSVField(p, 'Frente') : '';
+  };
+  const labelMes = m => {
+    const d = new Date(m + '-01T12:00:00');
+    const l = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  };
+  const filtroAtivo = HIST_FILTRO.mes || HIST_FILTRO.frente || HIST_FILTRO.apontador;
+
+  // Mantém o índice canônico (posição no array revertido) e filtra depois,
+  // para que os botões editar/apagar continuem apontando o registro certo.
+  const visiveis = rdos
+    .map((r, i) => ({ r, i }))
+    .filter(({ r }) => {
+      if (HIST_FILTRO.mes) {
+        const d = parseISODate(getCSVField(r, 'Data'));
+        if (!d || getLocalISODate(d).slice(0, 7) !== HIST_FILTRO.mes) return false;
+      }
+      if (HIST_FILTRO.apontador && getCSVField(r, 'Apontador') !== HIST_FILTRO.apontador) return false;
+      if (HIST_FILTRO.frente) {
+        const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+        if (frenteDoPacote(pid) !== HIST_FILTRO.frente) return false;
+      }
+      return true;
+    });
+
+  const filtroBar = rdos.length === 0 ? '' : `
+    <div class="filter-bar" style="margin:0 0 12px">
+      <span style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Filtros:</span>
+      <select onchange="setHistFiltro('mes', this.value)">
+        <option value="">Todos os meses</option>
+        ${meses.map(m => `<option value="${m}" ${HIST_FILTRO.mes===m?'selected':''}>${labelMes(m)}</option>`).join('')}
+      </select>
+      <select onchange="setHistFiltro('frente', this.value)">
+        <option value="">Todas as frentes</option>
+        ${frentes.map(f => `<option value="${f}" ${HIST_FILTRO.frente===f?'selected':''}>${f}</option>`).join('')}
+      </select>
+      <select onchange="setHistFiltro('apontador', this.value)">
+        <option value="">Todos os apontadores</option>
+        ${apontadores.map(a => `<option value="${a}" ${HIST_FILTRO.apontador===a?'selected':''}>${a}</option>`).join('')}
+      </select>
+      ${filtroAtivo ? `<div class="filter-clear" onclick="limparHistFiltro()">Limpar ✕</div><span style="font-size:11px;color:var(--muted)">${visiveis.length} de ${rdos.length}</span>` : ''}
+    </div>`;
+
   let bodyContent = '';
   if (rdos.length === 0) {
     bodyContent = '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum serviço ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro serviço</button></div>';
+  } else if (visiveis.length === 0) {
+    bodyContent = '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum serviço com esses filtros</div><div class="empty-sub">Ajuste ou limpe os filtros acima.</div></div>';
   } else {
-    const tableRows = rdos.slice(0, 100).map((r, idx) => {
+    const tableRows = visiveis.slice(0, 100).map(({ r, i: idx }) => {
       const id         = getCSVField(r, 'ID') || '';
       const dataVal    = getCSVField(r, 'Data') || '';
       const turno      = getCSVField(r, 'Turno') || 'Diurno';
@@ -4195,7 +4448,7 @@ function renderHistoricoServicos() {
         </tr>`;
     }).join('');
 
-    const moreText = rdos.length > 100 ? `<tr><td colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${rdos.length}</td></tr>` : '';
+    const moreText = visiveis.length > 100 ? `<tr><td colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${visiveis.length}${filtroAtivo?' (filtrados)':''}</td></tr>` : '';
 
     bodyContent = `
       <table class="t">
@@ -4225,6 +4478,7 @@ function renderHistoricoServicos() {
         </div>
       </div>
       <div class="card-body flush">
+        ${filtroBar}
         ${bodyContent}
       </div>
     </div>
@@ -4309,7 +4563,7 @@ window.histSalvarEdicao = async function(idx) {
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳'; }
 
   try {
-    const result = await jsonp(CONFIG.appsScript, { action: 'updateRDO', payload: JSON.stringify(payload) }, 0);
+    const result = await jsonp(CONFIG.appsScript, { action: 'updateRDO', payload: JSON.stringify(payload), ...authParams() }, 0);
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
     toast('✓ Lançamento atualizado', 'success');
     histCancelarEdicao(idx);
@@ -4332,7 +4586,7 @@ window.histDeletarServico = async function(idx) {
 
   const antes = STATE.rdoavanco.length;
   try {
-    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id }, 0);
+    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id, ...authParams() }, 0);
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
 
     // Remoção otimista: tira da tela na hora, sem esperar o CSV publicado
@@ -4408,7 +4662,7 @@ window.apagarDuplicatasRDO = async function() {
 
   try {
     // Uma única chamada limpa milhares de linhas no servidor (com backup).
-    const result = await jsonp(CONFIG.appsScript, { action: 'limparDuplicados' }, 0, 0, null);
+    const result = await jsonp(CONFIG.appsScript, { action: 'limparDuplicados', ...authParams() }, 0, 0, null);
     if (!result.ok) throw new Error(result.error || 'erro');
     toast(`✓ ${result.removidas} duplicata(s) removida(s) de ${result.total}. Backup: ${result.backup||'criado'}.`, 'success', 7000);
     // Espera o CSV publicado atualizar e recarrega.
@@ -4707,7 +4961,7 @@ async function executarExclusaoRDODiario(data, id) {
   const btn = document.getElementById('btnConfirmaExclui');
   if (btn) { btn.disabled = true; btn.textContent = 'Excluindo…'; }
   try {
-    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDODiario', id, data }, 0);
+    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDODiario', id, data, ...authParams() }, 0);
     if (!result.ok) {
       if (/Ação desconhecida/i.test(result.error || '')) {
         toast('O backend ainda não tem "deleteRDODiario". Cole o Code.gs atualizado no Apps Script e republique (Nova versão).', 'error', 0);
@@ -5288,7 +5542,10 @@ function renderRDO() {
           <div class="card-title">Serviços executados</div>
           <div class="card-title-sub">Adicione 1 linha por pacote · cada linha vira 1 lançamento em RDO_Avanco</div>
         </div>
-        <span style="font-size:11px;color:var(--muted)">${d.servicos.length} serviço${d.servicos.length>1?'s':''}</span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-outline btn-sm" onclick="copiarServicosDeOntem()" title="Preenche frente, pacote, estacas e equipe do último dia lançado — só a quantidade fica em branco">⧉ Copiar do último dia</button>
+          <span style="font-size:11px;color:var(--muted)">${d.servicos.length} serviço${d.servicos.length>1?'s':''}</span>
+        </div>
       </div>
       <div class="card-body">
         <div id="servicosList">
@@ -5381,6 +5638,16 @@ function renderServicoRow(s, idx, frentes) {
         <div class="field">
           <label>Quantidade ${unidade ? `(${unidade})` : ''}</label>
           <input type="number" data-svc="${idx}" data-field="quantidade" value="${s.quantidade}" placeholder="0" step="0.01" min="0">
+          ${(() => {
+            // Dica de saldo: mostra quanto resta do pacote e avisa se a
+            // quantidade digitada passa disso (não bloqueia o envio).
+            if (!s.pacoteId) return '';
+            const a = calcularAvancoPorPacote()[s.pacoteId];
+            if (!a || a.qtdEstimada <= 0) return '';
+            const saldo = Math.max(0, a.qtdEstimada - a.qtdExecutada);
+            const estoura = num(s.quantidade) > saldo + 0.001;
+            return `<div style="font-size:11px;margin-top:3px;color:${estoura ? 'var(--red)' : 'var(--muted)'}">${estoura ? '⚠️ acima do ' : ''}saldo do pacote: ${fmtNum(saldo)} ${unidade}</div>`;
+          })()}
         </div>
         <div class="field">
           <label>Equipe / Subcontratado</label>
@@ -5492,6 +5759,52 @@ function adicionarServico() {
   saveDraft(STATE.draft);
   transitionTo(render);
 }
+
+// Copia os serviços do último dia lançado (frente, pacote, estacas, equipe) —
+// só a QUANTIDADE fica em branco, de propósito: obriga a digitar a produção
+// real do dia em vez de repetir a de ontem sem querer.
+window.copiarServicosDeOntem = function() {
+  const hoje = STATE.draft && STATE.draft.data ? STATE.draft.data : getLocalISODate(new Date());
+  let ultimaData = '';
+  STATE.rdoavanco.forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (!d) return;
+    const iso = getLocalISODate(d);
+    if (iso < hoje && iso > ultimaData) ultimaData = iso;
+  });
+  if (!ultimaData) { toast('Nenhum dia anterior com lançamentos.', 'info'); return; }
+
+  const doDia = STATE.rdoavanco.filter(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    return d && getLocalISODate(d) === ultimaData && pid && pid !== 'OUTRO';
+  });
+  if (doDia.length === 0) { toast('O último dia (' + fmtData(ultimaData) + ') só teve serviços avulsos.', 'info'); return; }
+
+  const jaTemDados = STATE.draft.servicos.some(s => s.pacoteId || num(s.quantidade) > 0);
+  if (jaTemDados && !confirm('Substituir os serviços já preenchidos neste rascunho pelos ' + doDia.length + ' serviços de ' + fmtData(ultimaData) + '?')) return;
+
+  STATE.draft.servicos = doDia.map(r => {
+    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    const pac = STATE.pacotes.find(p => getCSVField(p, 'ID') === pid);
+    const loc = String(getCSVField(r, 'Local_Estaca') || '');
+    const mSent = loc.match(/\((CB|BC)\)/i);
+    const mEst = loc.toUpperCase().replace(/\+\s*\d+/g, '').match(/E\d{2,3}/g) || [];
+    return {
+      frente: pac ? getCSVField(pac, 'Frente') : '',
+      pacoteId: pid,
+      sentido: mSent ? mSent[1].toUpperCase() : 'CB',
+      estacaIni: mEst[0] || '',
+      estacaFim: mEst[1] || mEst[0] || '',
+      quantidade: '',
+      equipe: getCSVField(r, 'Equipe') || getCSVField(r, 'Subcontratado') || '',
+      observacao: ''
+    };
+  });
+  saveDraft(STATE.draft);
+  transitionTo(render);
+  toast(doDia.length + ' serviço' + (doDia.length > 1 ? 's' : '') + ' copiado' + (doDia.length > 1 ? 's' : '') + ' de ' + fmtData(ultimaData) + ' — preencha as quantidades.', 'success', 5000);
+};
 
 function removerServico(idx) {
   STATE.draft.servicos.splice(idx, 1);
@@ -5674,8 +5987,25 @@ async function salvarRDO() {
   }
 
   const enviar = repetidos > 0 ? batchNovos : batch;
+
+  // AVISO DE SALDO: quantidade acima do que resta no pacote costuma ser erro
+  // de digitação — e, quando é real, sinaliza quantitativo para aditivo.
+  // Só avisa; não bloqueia.
+  const avSaldo = calcularAvancoPorPacote();
+  const estouros = [];
+  enviar.forEach(o => {
+    if (!o.pacote_id || o.pacote_id === 'OUTRO') return;
+    const a = avSaldo[o.pacote_id];
+    if (!a || a.qtdEstimada <= 0) return;
+    const saldo = Math.max(0, a.qtdEstimada - a.qtdExecutada);
+    if (num(o.quantidade) > saldo + 0.001) {
+      estouros.push(`${o.pacote_nome || o.pacote_id}: lançando ${fmtNum(num(o.quantidade))} ${o.unidade||''} com saldo de ${fmtNum(saldo)}`);
+    }
+  });
+
   let msgConfirm = `Confirmar envio de ${enviar.length} serviço${enviar.length!==1?'s':''}?\nData: ${d.data}  ·  Turno: ${d.turno}`;
   if (repetidos > 0) msgConfirm += `\n\n⚠️ ${repetidos} já estava${repetidos>1?'m':''} lançado${repetidos>1?'s':''} neste dia e NÃO ${repetidos>1?'serão':'será'} reenviado${repetidos>1?'s':''} (para não duplicar).`;
+  if (estouros.length > 0) msgConfirm += `\n\n⚠️ QUANTIDADE ACIMA DO SALDO:\n• ` + estouros.join('\n• ') + `\nConfira se não é erro de digitação.`;
   if (!confirm(msgConfirm)) return;
 
   batch = enviar;
@@ -5685,7 +6015,7 @@ async function salvarRDO() {
   btn.innerHTML = '⏳ Salvando…';
 
   const clientId = 'b_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  const reqParams = { action: 'addBatchRDO', batch: JSON.stringify(batch), clientId: clientId };
+  const reqParams = { action: 'addBatchRDO', batch: JSON.stringify(batch), clientId: clientId, ...authParams() };
   const descricaoFila = `${totalItens} serviço${totalItens>1?'s':''} · ${d.turno} · ${d.data}`;
 
   function limparFormularioRDO() {
@@ -6309,7 +6639,7 @@ async function salvarDiarioV4() {
   // NÃO confiamos no navigator.onLine: tentamos enviar de verdade e só caímos
   // na fila se a rede realmente falhar (no catch). Evita falso "sem internet".
   try {
-    const result = await jsonp(CONFIG.appsScript, params, 0, 0, null);
+    const result = await jsonp(CONFIG.appsScript, {...params, ...authParams()}, 0, 0, null);
     if (!result.ok) throw new Error(result.error || 'Erro');
     toast(`✓ Turno ${t.toUpperCase()} salvo`, 'success', 4000);
     setTimeout(() => carregarTudo(), 1500);
@@ -7371,6 +7701,14 @@ window.adicionarServico = adicionarServico;
 window.removerServico = removerServico;
 window.resetDraft = resetDraft;
 window.salvarRDO = salvarRDO;
+
+// PWA: instala o service worker (abre rápido no 4G e funciona como app
+// no celular do apontador; os DADOS continuam vindo sempre da rede).
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 
 </script>
 </body>
