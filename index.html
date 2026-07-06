@@ -4984,6 +4984,70 @@ async function executarExclusaoRDODiario(data, id) {
   }
 }
 
+// (6) CRIAR EM LOTE os RDOs Diários faltantes (dias úteis sem RDO listados no
+// banner). Cria um RDO VAZIO por dia, pronto para preencher depois. Reusa
+// addRDODiario, que é idempotente por data no backend — datas que já tenham
+// RDO são atualizadas, não duplicadas. Requer o Code.gs republicado.
+window.criarRDOsFaltantes = function() {
+  const dias = (window.FALTANTES_DIAS || []).slice();
+  if (!dias.length) { toast('Nenhum dia faltante para criar.', 'info'); return; }
+  abrirModalRDO(`
+    <div style="max-width:480px">
+      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">➕ Criar RDOs faltantes</h2>
+      <p style="font-size:13px;line-height:1.6;margin:0 0 8px">
+        Serão criados <strong>${dias.length}</strong> RDO(s) Diário(s) <strong>em branco</strong>, um para cada dia útil sem RDO:
+      </p>
+      <p style="font-size:12px;color:var(--muted);max-height:120px;overflow:auto;margin:0 0 12px">${dias.map(fmtData).join(' · ')}</p>
+      <p style="font-size:13px;color:var(--ylw-d);font-weight:600;margin:0 0 18px">
+        Cada RDO fica pronto para você preencher (efetivo, clima, etc.) depois. Datas que já tenham RDO são ignoradas.
+      </p>
+      <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
+        <button class="btn btn-sm btn-outline" onclick="fecharModalRDO()">Cancelar</button>
+        <button class="btn btn-sm" id="btnCriaFaltantes" onclick="executarCriarRDOsFaltantes()" style="background:var(--ylw-d);color:#fff;border:none">Criar ${dias.length} RDO(s)</button>
+      </div>
+    </div>
+  `);
+};
+
+window.executarCriarRDOsFaltantes = async function() {
+  const dias = (window.FALTANTES_DIAS || []).slice();
+  const btn = document.getElementById('btnCriaFaltantes');
+  if (btn) btn.disabled = true;
+  let criados = 0, jaExistiam = 0, falhou = 0;
+  for (let i = 0; i < dias.length; i++) {
+    const data = dias[i];
+    if (btn) btn.textContent = `Criando… ${i + 1}/${dias.length}`;
+    try {
+      const result = await jsonp(CONFIG.appsScript, {
+        action: 'addRDODiario', data, tem_turno_noturno: 'false',
+        observacoes_gerais: '', ...authParams()
+      }, 0);
+      if (result && result.ok) {
+        if (result.updated) jaExistiam++; else criados++;
+      } else {
+        const err = (result && result.error) || '';
+        if (/Ação desconhecida/i.test(err)) {
+          toast('O backend não reconhece "addRDODiario". Cole o Code.gs atualizado no Apps Script e republique (Nova versão).', 'error', 0);
+          if (btn) { btn.disabled = false; btn.textContent = 'Tentar de novo'; }
+          return;
+        }
+        if (/TOKEN_INVALIDO/i.test(err)) {
+          toast(erroLegivel(err), 'error', 0);
+          if (btn) { btn.disabled = false; btn.textContent = 'Tentar de novo'; }
+          return;
+        }
+        falhou++;
+      }
+    } catch (e) { falhou++; }
+  }
+  fecharModalRDO();
+  const partes = [`✓ ${criados} RDO(s) criado(s)`];
+  if (jaExistiam) partes.push(`${jaExistiam} já existiam`);
+  if (falhou) partes.push(`${falhou} falharam`);
+  toast(partes.join(' · '), falhou ? 'error' : 'success', 6000);
+  setTimeout(() => carregarTudo(), 1200);
+};
+
 // Soma o efetivo (diurno/noturno/total) de um registro de RDO Diário.
 // Aceita o formato novo (Efetivo_JSON) e o legado (colunas Categoria_Diurno/Noturno).
 function efetivoTotaisRDO(r) {
@@ -5329,6 +5393,7 @@ function renderHistoricoDiarios() {
   if (faltantes.length) {
     const regra = sabadoEhUtil() ? 'seg–sáb' : 'seg–sex';
     const totalDias = faltantes.reduce((s, f) => s + f.dias.length, 0);
+    window.FALTANTES_DIAS = faltantes.flatMap(f => f.dias);
     const linhas = faltantes.map(f =>
       `<div style="margin-top:4px"><strong>${nomeMesAno(f.mes)}:</strong> ${f.dias.map(fmtData).join(' · ')}</div>`
     ).join('');
@@ -5340,6 +5405,10 @@ function renderHistoricoDiarios() {
           <span style="font-size:12px;color:var(--muted)">(${regra}, exceto feriados nacionais; mês corrente só até hoje)</span>
         </summary>
         <div style="margin-top:6px">${linhas}</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="criarRDOsFaltantes()" style="background:var(--ylw-d);color:#fff;border:none;white-space:nowrap">➕ Criar RDOs vazios destes ${totalDias} dia(s)</button>
+          <span style="font-size:11px;color:var(--muted)">cria 1 RDO em branco por dia, pronto pra preencher depois</span>
+        </div>
       </details>`;
   }
 
