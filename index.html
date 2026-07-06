@@ -1927,12 +1927,11 @@ window.setCurvaHorizonte = function(h) {
 // A senha é validada NO SERVIDOR (Apps Script, action=login) e a sessão
 // recebe um token exigido nas ações de escrita quando EXIGIR_TOKEN=true.
 // USUARIOS_UI é só a lista de nomes do dropdown (nomes não são segredo).
-// SENHAS_LEGADO existe apenas como fallback enquanto o backend antigo
-// (sem action=login) estiver no ar — essas senhas já são públicas no
-// histórico do git; as novas vivem nas Propriedades do Apps Script.
+// As senhas vivem SOMENTE nas Propriedades do Apps Script (USUARIOS) e são
+// validadas no servidor — não há nenhuma senha embutida neste HTML. Offline,
+// só reentra quem já autenticou online neste aparelho (token guardado).
 // ====================================================================
 const USUARIOS_UI = ['Leonardo', 'Wallace', 'Guilherme'];
-const SENHAS_LEGADO = { 'Leonardo': 'leo2026', 'Wallace': 'wal123', 'Guilherme': 'gui123' };
 
 function tokenSessao() {
   return localStorage.getItem(CONFIG.ls.token) || '';
@@ -1992,14 +1991,20 @@ window.fazerLogin = async function() {
       return;
     }
     if (r.error === 'CREDENCIAIS_INVALIDAS') { toast(erroLegivel(r.error), 'error'); return; }
-    // LOGIN_NAO_CONFIGURADO ou backend antigo (ação desconhecida): usa o fallback abaixo.
+    if (r.error === 'LOGIN_NAO_CONFIGURADO') { toast('Login não configurado no servidor: defina a propriedade USUARIOS no Apps Script.', 'error', 0); return; }
+    // Backend antigo (sem action=login): sem senha local — oriente a republicar.
+    toast('Backend desatualizado — republique o Code.gs (com action=login) no Apps Script.', 'error', 0);
+    return;
   } catch (e) {
-    // Sem rede: o fallback local permite entrar para trabalhar offline (fila outbox).
+    // Sem rede: reentra offline SOMENTE quem já autenticou online neste
+    // aparelho (token guardado no login anterior). Nenhuma senha embutida.
+    if (localStorage.getItem(CONFIG.ls.token) && localStorage.getItem('teotonio_user') === u) {
+      concluirLogin(u);
+      return;
+    }
+    toast('Sem conexão. Só é possível entrar offline em um aparelho que já fez login online antes.', 'error', 6000);
+    return;
   }
-
-  // 2) Fallback legado (até o backend com action=login ser publicado).
-  if (SENHAS_LEGADO[u] !== p) { toast('Senha incorreta', 'error'); return; }
-  concluirLogin(u);
 };
 
 function concluirLogin(u) {
