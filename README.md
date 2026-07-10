@@ -62,4 +62,4 @@ O backend também expõe `?action=producaoPorPacote&mes=2026-06` (JSON, deduplic
 | `limpar_duplicados.gs` | Utilitário antigo de limpeza (o `Code.gs` já cobre via `limparDuplicados`) |
 | `manifest.json` / `sw.js` / `icon-*.png` | PWA |
 | `pacotes.csv` | Snapshot de referência da aba Pacotes |
-| `icon_*.png` | Ícones das frentes usados pelo app |
+| `icon_*.webp` | Ícones das frentes usados pelo app (versões otimizadas ~30 KB; os `icon_*_<timestamp>.png` de 1024px são a arte original) |

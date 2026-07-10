@@ -1298,6 +1298,17 @@ function getCSVField(row, fieldName) {
   return key ? row[key] : '';
 }
 
+// Escapa texto para interpolação segura no HTML gerado (conteúdo e atributos
+// value="…"). Sem isso, uma aspa digitada num campo livre quebra o markup do
+// formulário no próximo re-render.
+function escHtml(v) {
+  return String(v == null ? '' : v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function getLocalISODate(d) {
   if (!d) return '';
   const pad = n => (n < 10 ? '0' : '') + n;
@@ -2036,8 +2047,12 @@ window.atualizarBotoesTopo = function() {
 // ====================================================================
 // CARREGAMENTO INICIAL
 // ====================================================================
-async function carregarTudo() {
-  setSyncStatus('loading', 'Carregando dados…');
+// `opts.fundo = true` marca o refresh automático (setInterval): ele não pode
+// atrapalhar quem está usando o app — nada de re-render em cima de formulário
+// aberto ou campo focado, e nada de toast de erro repetido quando o sinal cai.
+async function carregarTudo(opts = {}) {
+  const fundo = opts && opts.fundo === true;
+  if (!fundo) setSyncStatus('loading', 'Carregando dados…');
   try {
     const [c, p, k, r, d] = await Promise.all([
       fetchCSV(CONFIG.csv.cronograma),
@@ -2056,11 +2071,27 @@ async function carregarTudo() {
     STATE.lastSync = new Date();
     const hm = STATE.lastSync.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
     setSyncStatus('ok', `Sincronizado às ${hm} · ${p.length} pacotes, ${r.length} serviços`);
+
+    // Refresh de fundo em página de formulário (ou com campo focado em qualquer
+    // página): NÃO re-renderiza — derrubaria foco/teclado do apontador no meio
+    // da digitação. Os dados novos já estão no STATE; só os contadores mudam.
+    const emFormulario = ['rdo', 'rdodiario'].includes(STATE.currentPage);
+    const digitando = document.activeElement &&
+      ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
+    if (fundo && (emFormulario || digitando)) {
+      const rc = document.getElementById('rdoCount');
+      if (rc) rc.textContent = STATE.rdoavanco.length;
+      const dc = document.getElementById('diarioCount');
+      if (dc) dc.textContent = (STATE.rdodiario || []).length;
+      return;
+    }
     render();
   } catch(e) {
-    STATE.loaded = false;
+    // Mantém STATE.loaded como está: se já houve uma carga boa, os dados velhos
+    // continuam navegáveis (antes, uma falha de fundo deixava toda navegação em
+    // branco até a próxima sincronização bem-sucedida).
     setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar novamente</span>');
-    toast('Sem conexão com Google Sheets. Verifique sua internet.', 'error', 6000);
+    if (!fundo) toast('Sem conexão com Google Sheets. Verifique sua internet.', 'error', 6000);
   }
 }
 
@@ -3209,16 +3240,16 @@ function renderExecutivo() {
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px;">
        ${Object.entries(porFrente).sort((a,b) => b[1].pctPond - a[1].pctPond).map(([f, d], i) => {
           const fn = f.toLowerCase();
-          let img = 'icon_geral_1778462022462.png';
-          if (fn.includes('demoli')) img = 'icon_demolicao_1778462008716.png';
-          else if (fn.includes('dren')) img = 'icon_drenagem_1778461958999.png';
-          else if (fn.includes('vala')) img = 'icon_vala_1778462526569.png';
-          else if (fn.includes('sinaliza')) img = 'icon_sinalizacao_1778462512844.png';
-          else if (fn.includes('desapro')) img = 'icon_desapropriacao_1778462555963.png';
-          else if (fn.includes('rígido') || fn.includes('rigido')) img = 'icon_pav_rigido_1778462498313.png';
-          else if (fn.includes('pav') || fn.includes('flex')) img = 'icon_pavimento_1778461981373.png';
-          else if (fn.includes('passeio') || fn.includes('urban')) img = 'icon_passeio_1778461992999.png';
-          else if (fn.includes('via')) img = 'icon_via_1778462541097.png';
+          let img = 'icon_geral.webp';
+          if (fn.includes('demoli')) img = 'icon_demolicao.webp';
+          else if (fn.includes('dren')) img = 'icon_drenagem.webp';
+          else if (fn.includes('vala')) img = 'icon_vala.webp';
+          else if (fn.includes('sinaliza')) img = 'icon_sinalizacao.webp';
+          else if (fn.includes('desapro')) img = 'icon_desapropriacao.webp';
+          else if (fn.includes('rígido') || fn.includes('rigido')) img = 'icon_pav_rigido.webp';
+          else if (fn.includes('pav') || fn.includes('flex')) img = 'icon_pavimento.webp';
+          else if (fn.includes('passeio') || fn.includes('urban')) img = 'icon_passeio.webp';
+          else if (fn.includes('via')) img = 'icon_via.webp';
 
           return `
           <div class="tech-card-3d ${STATE.filtros.frente === f ? 'active' : ''} stagger-item" style="animation-delay:.${25 + i*5}s" onclick="atualizarFiltro('frente', '${f}')">
@@ -3284,6 +3315,9 @@ function renderExecutivo() {
 function montarGraficos() {
   if (STATE.currentPage !== 'executivo') return;
   if (!STATE.dashData) return;
+  // Se a CDN do chart.js não carregou (sinal fraco no campo), o painel segue
+  // funcionando sem os gráficos em vez de quebrar o JS da página inteira.
+  if (typeof Chart === 'undefined') return;
 
   // Dispara recomendação IA (cacheada 6h) — independente do gráfico
   if (STATE.dashData.metrics) {
@@ -5597,11 +5631,11 @@ function renderRDO() {
           </div>
           <div class="field">
             <label>Apontador</label>
-            <input type="text" data-draft="apontador" value="${d.apontador}" placeholder="Seu nome">
+            <input type="text" data-draft="apontador" value="${escHtml(d.apontador)}" placeholder="Seu nome">
           </div>
           <div class="field" style="grid-column:1/-1">
             <label>Observação geral (opcional)</label>
-            <input type="text" data-draft="observacaoGeral" value="${d.observacaoGeral}" placeholder="ex: Continuar amanhã">
+            <input type="text" data-draft="observacaoGeral" value="${escHtml(d.observacaoGeral)}" placeholder="ex: Continuar amanhã">
           </div>
         </div>
         <div style="margin-top:12px;padding:10px 14px;background:var(--blu-l);border-radius:var(--r);font-size:12px;color:var(--blu)">
@@ -5725,11 +5759,11 @@ function renderServicoRow(s, idx, frentes) {
         </div>
         <div class="field">
           <label>Equipe / Subcontratado</label>
-          <input type="text" data-svc="${idx}" data-field="equipe" value="${s.equipe}" placeholder="ex: Sena Obras">
+          <input type="text" data-svc="${idx}" data-field="equipe" value="${escHtml(s.equipe)}" placeholder="ex: Sena Obras">
         </div>
         <div class="field" style="grid-column:1/-1">
           <label>Observação do serviço (opcional)</label>
-          <input type="text" data-svc="${idx}" data-field="observacao" value="${s.observacao}" placeholder="ex: Continuar amanhã">
+          <input type="text" data-svc="${idx}" data-field="observacao" value="${escHtml(s.observacao)}" placeholder="ex: Continuar amanhã">
         </div>
       </div>
     </div>
@@ -5744,16 +5778,16 @@ function renderOutroServicoRow(o, idx) {
       <div class="form-grid" style="margin-top:6px">
         <div class="field" style="grid-column:1/-1">
           <label>Descrição do serviço</label>
-          <input type="text" data-outro="${idx}" data-field="descricao" value="${o.descricao||''}"
+          <input type="text" data-outro="${idx}" data-field="descricao" value="${escHtml(o.descricao||'')}"
             placeholder="ex: Limpeza manual da faixa de obra, remoção de entulho…">
         </div>
         <div class="field">
           <label>Equipe / Responsável (opcional)</label>
-          <input type="text" data-outro="${idx}" data-field="equipe" value="${o.equipe||''}" placeholder="ex: Sena Obras">
+          <input type="text" data-outro="${idx}" data-field="equipe" value="${escHtml(o.equipe||'')}" placeholder="ex: Sena Obras">
         </div>
         <div class="field">
           <label>Local / Referência (opcional)</label>
-          <input type="text" data-outro="${idx}" data-field="local" value="${o.local||''}" placeholder="ex: E110 a E120, canteiro, etc.">
+          <input type="text" data-outro="${idx}" data-field="local" value="${escHtml(o.local||'')}" placeholder="ex: E110 a E120, canteiro, etc.">
         </div>
       </div>
     </div>
@@ -6405,7 +6439,7 @@ function renderFormularioTurno() {
         <div class="form-grid">
           <div class="field">
             <label>Apontador ${turnoLabel}</label>
-            <input type="text" data-diario4="apontador" value="${td.apontador||''}" placeholder="Seu nome">
+            <input type="text" data-diario4="apontador" value="${escHtml(td.apontador||'')}" placeholder="Seu nome">
           </div>
           <div class="field">
             <label>Clima Manhã</label>
@@ -6454,7 +6488,7 @@ function renderFormularioTurno() {
             <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
               ${td.customEquip.map((eq, i) => `
                 <div class="field" style="position:relative">
-                  <label>${eq.label}</label>
+                  <label>${escHtml(eq.label)}</label>
                   <input type="number" data-equipcustom4="${i}" value="${eq.qtd||''}" placeholder="0" min="0">
                   <button class="btn-remove-custom" onclick="removerEquipCustomV4(${i})" title="Remover">×</button>
                 </div>
@@ -6475,15 +6509,15 @@ function renderFormularioTurno() {
         <div class="form-grid" style="grid-template-columns:1fr">
           <div class="field">
             <label>Visitas</label>
-            <input type="text" data-diario4="visitas" value="${td.visitas||''}" placeholder="ex: Fiscal SIURB de manhã">
+            <input type="text" data-diario4="visitas" value="${escHtml(td.visitas||'')}" placeholder="ex: Fiscal SIURB de manhã">
           </div>
           <div class="field">
             <label>Ocorrências</label>
-            <input type="text" data-diario4="ocorrencias" value="${td.ocorrencias||''}" placeholder="ex: Pequena interrupção por chuva">
+            <input type="text" data-diario4="ocorrencias" value="${escHtml(td.ocorrencias||'')}" placeholder="ex: Pequena interrupção por chuva">
           </div>
           <div class="field">
             <label>Observações gerais</label>
-            <textarea data-diario4="observacoes" rows="3" placeholder="Notas livres do turno">${td.observacoes||''}</textarea>
+            <textarea data-diario4="observacoes" rows="3" placeholder="Notas livres do turno">${escHtml(td.observacoes||'')}</textarea>
           </div>
         </div>
       </div>
@@ -6513,7 +6547,7 @@ function renderEfetivoV4(titulo, categorias, td, prefix, corBorda) {
         <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
           ${customList.map((f, i) => `
             <div class="field" style="position:relative">
-              <input type="text" data-customfun4="${prefix}|${i}|label" value="${f.label||''}" placeholder="Nome da função" style="margin-bottom:4px;font-size:11px">
+              <input type="text" data-customfun4="${prefix}|${i}|label" value="${escHtml(f.label||'')}" placeholder="Nome da função" style="margin-bottom:4px;font-size:11px">
               <input type="number" data-customfun4="${prefix}|${i}|qtd" value="${f.qtd||''}" placeholder="Qtd" min="0">
               <button class="btn-remove-custom" onclick="removerFuncaoCustomV4('${prefix}', ${i})" title="Remover">×</button>
             </div>
@@ -7714,8 +7748,9 @@ document.addEventListener('DOMContentLoaded', () => {
   navigate('executivo');
   carregarTudo();
 
-  // Auto-refresh a cada 5min
-  setInterval(carregarTudo, CONFIG.refreshMs);
+  // Auto-refresh a cada 5min — em modo "fundo": silencioso e sem re-render
+  // por cima de formulário aberto ou campo focado.
+  setInterval(() => carregarTudo({ fundo: true }), CONFIG.refreshMs);
 
   // Fila offline: mostra o que está pendente e tenta reenviar
   atualizarIndicadorOutbox();
