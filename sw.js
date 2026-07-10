@@ -9,7 +9,7 @@
 //  • Google Sheets / Apps Script / Gemini: NUNCA intercepta — dados de
 //    produção vêm sempre da rede (a fila offline do app cuida do resto).
 // ============================================================
-const VERSAO = 'teotonio-v1';
+const VERSAO = 'teotonio-v2'; // v2: limpa os ícones PNG pesados antigos do cache
 const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleusercontent.com', 'generativelanguage.googleapis.com'];
 
 self.addEventListener('install', () => self.skipWaiting());
@@ -28,16 +28,29 @@ self.addEventListener('fetch', (e) => {
   if (SO_REDE.some(h => url.hostname.endsWith(h))) return; // dados: sempre rede
 
   // Navegação (o próprio app): rede primeiro, cache como fallback offline.
+  // Com TIMEOUT: em sinal fraco (4G de campo), se a rede não responder em 4s
+  // e já houver cópia em cache, abre do cache na hora em vez de tela branca —
+  // a resposta da rede continua em segundo plano e atualiza o cache pro próximo open.
   if (e.request.mode === 'navigate' || url.pathname.endsWith('/index.html')) {
-    e.respondWith(
-      fetch(e.request)
-        .then(resp => {
-          const clone = resp.clone();
-          caches.open(VERSAO).then(c => c.put(e.request, clone));
-          return resp;
-        })
-        .catch(() => caches.match(e.request, { ignoreSearch: true }))
-    );
+    e.respondWith((async () => {
+      const rede = fetch(e.request).then(resp => {
+        const clone = resp.clone();
+        caches.open(VERSAO).then(c => c.put(e.request, clone));
+        return resp;
+      });
+      rede.catch(() => {}); // evita "unhandled rejection" quando servimos o cache
+      const timeout = new Promise(res => setTimeout(() => res(null), 4000));
+      try {
+        const resp = await Promise.race([rede, timeout]);
+        if (resp) return resp;
+        const hit = await caches.match(e.request, { ignoreSearch: true });
+        return hit || rede; // sem cache: espera a rede mesmo lenta
+      } catch (_) {
+        const hit = await caches.match(e.request, { ignoreSearch: true });
+        if (hit) return hit;
+        throw _;
+      }
+    })());
     return;
   }
 
