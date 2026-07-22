@@ -4320,6 +4320,18 @@ window.limparHistFiltro = function() {
   transitionTo(render);
 };
 
+// Filtro do histórico de RDOs Diários (independente da aba Serviços).
+let HIST_DIARIO_FILTRO = { mes: '' };
+
+window.setHistDiarioFiltro = function(campo, valor) {
+  HIST_DIARIO_FILTRO[campo] = valor;
+  transitionTo(render);
+};
+window.limparHistDiarioFiltro = function() {
+  HIST_DIARIO_FILTRO = { mes: '' };
+  transitionTo(render);
+};
+
 function renderHistoricoServicos() {
   const rdos = [...STATE.rdoavanco].reverse();
 
@@ -5396,7 +5408,28 @@ window.exportarRDOsXLS = function() {
 
 function renderHistoricoDiarios() {
   SELECTED_RDO_DATAS = new Set();
-  const diarios = [...(STATE.rdodiario||[])].reverse();
+  const diariosTodos = [...(STATE.rdodiario||[])].reverse();
+
+  // Meses disponíveis (derivados dos próprios RDOs) para o filtro.
+  const mesesDiarioSet = new Set();
+  diariosTodos.forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d) mesesDiarioSet.add(getLocalISODate(d).slice(0, 7));
+  });
+  const mesesDiario = [...mesesDiarioSet].sort().reverse();
+  const labelMesDiario = m => {
+    const dt = new Date(m + '-01T12:00:00');
+    const l = dt.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  };
+
+  // Aplica o filtro por mês (se selecionado) à lista exibida.
+  const diarios = HIST_DIARIO_FILTRO.mes
+    ? diariosTodos.filter(r => {
+        const d = parseISODate(getCSVField(r, 'Data'));
+        return d && getLocalISODate(d).slice(0, 7) === HIST_DIARIO_FILTRO.mes;
+      })
+    : diariosTodos;
 
   // Conta RDOs por data: data com >1 relatório = duplicata a verificar.
   const contagemPorData = {};
@@ -5411,7 +5444,8 @@ function renderHistoricoDiarios() {
   const datasDuplicadas = Object.keys(contagemPorData).filter(d => contagemPorData[d] > 1).sort();
   // Avalia TODOS os meses com dados (diário OU serviços) — ou o mês filtrado —
   // em vez de só os meses que já têm RDO Diário.
-  const mesesAvaliar = STATE.filtros.mes ? [STATE.filtros.mes] : mesesComDados();
+  const mesesAvaliar = HIST_DIARIO_FILTRO.mes ? [HIST_DIARIO_FILTRO.mes]
+    : STATE.filtros.mes ? [STATE.filtros.mes] : mesesComDados();
   const faltantes = diasUteisSemRDO(datasSet, mesesAvaliar);
 
   // Banners de aviso (tarefas: verificar duplicatas / dia útil sem lançamento).
@@ -5452,8 +5486,10 @@ function renderHistoricoDiarios() {
   }
 
   let bodyContent = '';
-  if (diarios.length === 0) {
+  if (diariosTodos.length === 0) {
     bodyContent = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum RDO Diário ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdodiario\')">+ Criar primeiro RDO Diário</button></div>';
+  } else if (diarios.length === 0) {
+    bodyContent = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum RDO Diário em ${labelMesDiario(HIST_DIARIO_FILTRO.mes)}</div><div class="empty-sub">Ajuste ou limpe o filtro de mês acima.</div></div>`;
   } else {
     const tableRows = diarios.map(r => {
       const total = efetivoTotaisRDO(r).total;
@@ -5511,6 +5547,11 @@ function renderHistoricoDiarios() {
           <div class="card-title-sub">👁 visualiza sem baixar · 📄 gera o PDF · selecione vários para lote · ⬇ exporta Excel</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select onchange="setHistDiarioFiltro('mes', this.value)" title="Filtrar RDOs por mês" style="white-space:nowrap">
+            <option value="">Todos os meses</option>
+            ${mesesDiario.map(m => `<option value="${m}" ${HIST_DIARIO_FILTRO.mes===m?'selected':''}>${labelMesDiario(m)}</option>`).join('')}
+          </select>
+          ${HIST_DIARIO_FILTRO.mes ? `<div class="filter-clear" onclick="limparHistDiarioFiltro()" style="cursor:pointer">Limpar ✕</div><span style="font-size:11px;color:var(--muted);white-space:nowrap">${diarios.length} de ${diariosTodos.length}</span>` : ''}
           <button class="btn btn-sm btn-outline" onclick="toggleSabadoUtil()" title="Conta sábado como dia útil no alerta de dias sem RDO" style="white-space:nowrap">${sabadoEhUtil()?'☑':'☐'} Sábado útil</button>
           <button class="btn btn-outline" onclick="exportarRDOsXLS()" title="Exporta os RDOs para Excel (.xlsx). Se houver itens selecionados, exporta só eles." style="white-space:nowrap">⬇ Exportar Excel</button>
           <button id="btnLotePDF" class="btn btn-primary" onclick="gerarPDFsEmLote()" disabled style="white-space:nowrap">📄 Gerar PDFs em Lote</button>
