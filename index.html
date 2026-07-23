@@ -1505,16 +1505,33 @@ window.descartarOutbox = function(ev) {
 function atualizarIndicadorOutbox() {
   let el = document.getElementById('outboxIndicator');
   const n = outboxLer().length;
-  if (n === 0) { if (el) el.style.display = 'none'; return; }
+  const offline = (navigator.onLine === false);
+  // Nada na fila E online → nada a mostrar.
+  if (n === 0 && !offline) { if (el) el.style.display = 'none'; return; }
   if (!el) {
     el = document.createElement('div');
     el.id = 'outboxIndicator';
-    el.onclick = () => outboxFlush(true);
     document.body.appendChild(el);
   }
   el.style.display = 'flex';
-  el.innerHTML = `<span style="font-size:15px">📡</span><span style="flex:1">${n} RDO${n>1?'s':''} aguardando envio · toque para enviar</span>`
-    + `<span onclick="descartarOutbox(event)" title="Descartar fila" style="margin-left:10px;padding:2px 7px;border-radius:6px;background:rgba(255,255,255,.2);font-weight:700">✕</span>`;
+  if (n > 0) {
+    // Há RDOs guardados → toque reenvia a fila.
+    el.style.background = '#1f2937';
+    el.style.cursor = 'pointer';
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-label', n + ' RDO(s) aguardando envio. Toque para enviar agora.');
+    el.onclick = () => outboxFlush(true);
+    el.innerHTML = `<span style="font-size:15px" aria-hidden="true">📡</span><span style="flex:1">${n} RDO${n>1?'s':''} aguardando envio · toque para enviar</span>`
+      + `<span onclick="descartarOutbox(event)" title="Descartar fila" aria-label="Descartar fila de envio" role="button" style="margin-left:10px;padding:2px 7px;border-radius:6px;background:rgba(255,255,255,.2);font-weight:700">✕</span>`;
+  } else {
+    // Offline sem nada pendente → só avisa que está sem conexão.
+    el.style.background = '#4b5563';
+    el.style.cursor = 'default';
+    el.removeAttribute('role');
+    el.setAttribute('aria-label', 'Sem conexão. Lançamentos serão guardados no aparelho e enviados quando o sinal voltar.');
+    el.onclick = null;
+    el.innerHTML = `<span style="font-size:15px" aria-hidden="true">📴</span><span style="flex:1">Sem conexão — lançamentos ficam guardados e enviam sozinhos depois</span>`;
+  }
 }
 
 function num(s) {
@@ -2072,7 +2089,7 @@ window.atualizarBotoesTopo = function() {
   const tb = document.getElementById('topbarActions');
   if (tb) {
     tb.innerHTML = (STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : '') +
-      '<button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>' +
+      '<button class="btn btn-outline btn-sm" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">↻</button>' +
       '<button class="btn btn-primary btn-sm" onclick="navigate(\'rdo\')">+ Novo Serviço</button>';
   }
 };
@@ -2280,7 +2297,7 @@ function renderShell() {
       <main class="main">
         <div class="topbar">
           <div style="display:flex;align-items:center;gap:6px">
-            <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+            <button class="mobile-menu-btn" onclick="toggleSidebar()" title="Abrir menu" aria-label="Abrir menu de navegação">☰</button>
             <div>
               <div class="topbar-title" id="pageTitle">Painel Executivo</div>
               <div class="topbar-sub" id="pageSubtitle">Visão consolidada da obra</div>
@@ -2288,7 +2305,7 @@ function renderShell() {
           </div>
           <div style="display:flex;gap:8px" id="topbarActions">
             ${STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : ''}
-            <button class="btn btn-outline btn-sm" onclick="carregarTudo()">↻</button>
+            <button class="btn btn-outline btn-sm" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">↻</button>
             <button class="btn btn-primary btn-sm" onclick="navigate('rdo')">+ Novo Serviço</button>
           </div>
         </div>
@@ -5561,7 +5578,7 @@ function renderHistoricoDiarios() {
 
       return `
         <tr${dup ? ' style="background:var(--red-l)"' : ''}>
-          <td style="width:32px;text-align:center"><input type="checkbox" class="rdo-check" data-data="${dStr}" onchange="toggleRDOSelect('${dStr}', this)" style="width:16px;height:16px;cursor:pointer"></td>
+          <td style="width:32px;text-align:center"><input type="checkbox" class="rdo-check" data-data="${dStr}" onchange="toggleRDOSelect('${dStr}', this)" aria-label="Selecionar RDO de ${fmtData(dStr)}" style="width:16px;height:16px;cursor:pointer"></td>
           <td class="t-mono">${rid}</td>
           <td>${fmtData(getCSVField(r, 'Data'))}${dup ? ` <span class="pill pill-red" title="Há ${contagemPorData[dStr]} RDOs nesta data — resolva qual é o oficial">⚠ ${contagemPorData[dStr]}×</span>` : ''}${ehOficial ? ' <span class="pill pill-grn" title="RDO oficial desta data">★ oficial</span>' : ''}</td>
           <td style="font-size:12px">${getCSVField(r, 'Encarregado')||''}</td>
@@ -5570,18 +5587,37 @@ function renderHistoricoDiarios() {
           <td class="t-num">${total}</td>
           <td>${hasNoturno ?'<span class="pill pill-blu">Sim</span>':'<span class="pill pill-ylw">Não</span>'}</td>
           <td style="white-space:nowrap">
-            <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${rid}')" title="Visualizar (não baixa arquivo)">👁</button>
-            ${dup ? `<button class="btn btn-sm" onclick="resolverDuplicata('${dStr}')" title="Resolver duplicata" style="margin-left:2px;background:var(--red);color:#fff;border:none">⚖</button>` : ''}
-            <button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')" title="Gerar PDF (baixa arquivo)" style="margin-left:2px">📄</button>
+            <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${rid}')" title="Visualizar (não baixa arquivo)" aria-label="Visualizar RDO de ${fmtData(dStr)}">👁</button>
+            <button class="btn btn-sm btn-outline" onclick="editarRDODiario('${dStr}')" title="Editar este RDO" aria-label="Editar RDO de ${fmtData(dStr)}" style="margin-left:2px">✏️</button>
+            ${dup ? `<button class="btn btn-sm" onclick="resolverDuplicata('${dStr}')" title="Resolver duplicata" aria-label="Resolver duplicata de ${fmtData(dStr)}" style="margin-left:2px;background:var(--red);color:#fff;border:none">⚖</button>` : ''}
+            <button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')" title="Gerar PDF (baixa arquivo)" aria-label="Gerar PDF do RDO de ${fmtData(dStr)}" style="margin-left:2px">📄</button>
           </td>
         </tr>
       `;
     }).join('');
 
-    bodyContent = `
+    // Resumo/totais da lista exibida (respeita o filtro de mês). Efetivo total
+    // somado, média por dia trabalhado (efetivo > 0) e nº de dias com turno noturno.
+    const efetivos = diarios.map(r => efetivoTotaisRDO(r).total);
+    const somaEfetivo = efetivos.reduce((s, v) => s + v, 0);
+    const diasTrabalhados = efetivos.filter(v => v > 0).length;
+    const mediaEfetivo = diasTrabalhados ? Math.round(somaEfetivo / diasTrabalhados) : 0;
+    const nNoturno = diarios.filter(r => getCSVField(r, 'Apontador_Noturno') || String(getCSVField(r, 'Tem_Turno_Noturno')).toLowerCase() === 'true' || getCSVField(r, 'Tem_Turno_Noturno') === 'Sim').length;
+    const chip = (rot, val) => `<div style="display:flex;flex-direction:column;gap:2px;min-width:96px"><span style="font-size:18px;font-weight:700;line-height:1">${val}</span><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">${rot}</span></div>`;
+    const escopo = HIST_DIARIO_FILTRO.mes ? labelMesDiario(HIST_DIARIO_FILTRO.mes) : 'todos os meses';
+    const resumoHtml = `
+      <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg-2)" aria-label="Resumo dos RDOs de ${escopo}">
+        ${chip('RDOs', diarios.length)}
+        ${chip('Efetivo total', fmtNum(somaEfetivo, 0))}
+        ${chip('Média/dia', mediaEfetivo)}
+        ${chip('Com noturno', nNoturno)}
+        <span style="font-size:11px;color:var(--muted);margin-left:auto">${escopo}</span>
+      </div>`;
+
+    bodyContent = resumoHtml + `
       <table class="t">
         <thead><tr>
-          <th style="width:32px;text-align:center"><input type="checkbox" id="cbTodos" onchange="toggleTodosRDOs(this)" title="Selecionar todos" style="width:16px;height:16px;cursor:pointer"></th>
+          <th style="width:32px;text-align:center"><input type="checkbox" id="cbTodos" onchange="toggleTodosRDOs(this)" title="Selecionar todos" aria-label="Selecionar todos os RDOs" style="width:16px;height:16px;cursor:pointer"></th>
           <th>ID</th><th>Data</th><th>Encarregado</th><th>Apontador</th>
           <th>Clima</th>
           <th class="t-num" style="text-align:right">Efetivo</th>
@@ -6419,9 +6455,20 @@ function carregarDiarioDaSheet(data) {
   d.noturno.ocorrencias = getCSVField(sheetRow, 'Ocorrencias_Noturno') || getCSVField(sheetRow, 'ocorrencias_noturno') || '';
   d.noturno.observacoes = getCSVField(sheetRow, 'Obs_Noturno') || getCSVField(sheetRow, 'obs_noturno') || '';
   d.noturno.preenchido = !!d.noturno.apontador;
-  
+
   return d;
 }
+
+// Abre a tela de lançamento já carregada com o RDO da data informada, para
+// edição a partir da lista do Histórico. Reusa carregarDiarioDaSheet (mesmo
+// caminho do formulário) e volta ao seletor de turno.
+window.editarRDODiario = function(data) {
+  if (!data) return;
+  DIARIO_V4 = carregarDiarioDaSheet(data) || loadDiarioV4(data) || defaultDiarioV4(data);
+  DIARIO_TURNO_ATIVO = null;
+  navigate('rdodiario');
+  toast('Editando RDO de ' + fmtData(data) + ' — escolha o turno para ajustar.', 'info', 4000);
+};
 
 function renderRDODiarioV4() {
   const dataHoje = getLocalISODate(new Date());
@@ -7852,7 +7899,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // Fila offline: mostra o que está pendente e tenta reenviar
   atualizarIndicadorOutbox();
   outboxFlush();
-  window.addEventListener('online', () => outboxFlush());
+  // Reflete perda/retomada de conexão no ponto de status e na faixa flutuante.
+  window.addEventListener('offline', () => {
+    const dot = document.getElementById('syncDot');
+    const txt = document.getElementById('syncText');
+    if (dot) dot.className = 'sync-dot offline';
+    if (txt) txt.innerHTML = 'Sem conexão — modo offline';
+    atualizarIndicadorOutbox();
+  });
+  window.addEventListener('online', () => {
+    atualizarIndicadorOutbox();
+    outboxFlush();
+    carregarTudo({ fundo: true }); // ressincroniza e restaura o status "Sincronizado"
+  });
   setInterval(() => outboxFlush(), 30000);
 
   // ===== MOBILE: teclado numérico em inputs de número =====
