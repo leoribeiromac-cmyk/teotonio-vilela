@@ -1620,6 +1620,39 @@ function diasUteisSemRDO(datasComRDO, mesesParaAvaliar) {
   return resultado;
 }
 
+// Espelho de diasUteisSemRDO, porém para dias NÃO úteis (fins de semana e
+// feriados nacionais) sem nenhum RDO. Útil quando houve trabalho em sábado/
+// domingo/feriado e o RDO desses dias ainda não foi lançado. Não cobra dias
+// futuros nem anteriores a RDO_INICIO. Retorna [{ mes:'2026-05', dias:[...] }].
+function diasNaoUteisSemRDO(datasComRDO, mesesParaAvaliar) {
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const inicioMes = RDO_INICIO.slice(0, 7);
+  let meses = (mesesParaAvaliar && mesesParaAvaliar.length) ? mesesParaAvaliar.slice() : null;
+  if (!meses) {
+    const s = new Set();
+    datasComRDO.forEach(iso => { if (iso && iso.length >= 7) s.add(iso.slice(0,7)); });
+    meses = [...s];
+  }
+  const resultado = [];
+  [...meses].sort().forEach(mes => {
+    if (mes < inicioMes) return;       // ignora meses anteriores ao início dos lançamentos
+    const ano = parseInt(mes.slice(0,4), 10);
+    const m   = parseInt(mes.slice(5,7), 10);
+    const ultimoDia = new Date(ano, m, 0).getDate();
+    const faltando = [];
+    for (let dia = 1; dia <= ultimoDia; dia++) {
+      const d = new Date(ano, m - 1, dia);
+      if (d > hoje) break;            // não aponta dia futuro
+      if (ehDiaUtil(d)) continue;      // pula dias úteis (o outro alerta cobre esses)
+      const iso = getLocalISODate(d);
+      if (iso < RDO_INICIO) continue;  // ignora dias anteriores ao início dos lançamentos
+      if (!datasComRDO.has(iso)) faltando.push(iso);
+    }
+    if (faltando.length) resultado.push({ mes, dias: faltando });
+  });
+  return resultado;
+}
+
 function nomeMesAno(mes) {
   const MESES_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
   return MESES_PT[parseInt(mes.slice(5,7),10)-1] + '/' + mes.slice(0,4);
@@ -5039,14 +5072,16 @@ async function executarExclusaoRDODiario(data, id) {
 // banner). Cria um RDO VAZIO por dia, pronto para preencher depois. Reusa
 // addRDODiario, que é idempotente por data no backend — datas que já tenham
 // RDO são atualizadas, não duplicadas. Requer o Code.gs republicado.
-window.criarRDOsFaltantes = function() {
-  const dias = (window.FALTANTES_DIAS || []).slice();
+window.criarRDOsFaltantes = function(dias, tipoLabel) {
+  dias = (dias && dias.length) ? dias.slice() : (window.FALTANTES_DIAS || []).slice();
   if (!dias.length) { toast('Nenhum dia faltante para criar.', 'info'); return; }
+  window._RDO_CRIAR_DIAS = dias;
+  const rotulo = tipoLabel || 'dia útil sem RDO';
   abrirModalRDO(`
     <div style="max-width:480px">
       <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">➕ Criar RDOs faltantes</h2>
       <p style="font-size:13px;line-height:1.6;margin:0 0 8px">
-        Serão criados <strong>${dias.length}</strong> RDO(s) Diário(s) <strong>em branco</strong>, um para cada dia útil sem RDO:
+        Serão criados <strong>${dias.length}</strong> RDO(s) Diário(s) <strong>em branco</strong>, um para cada ${rotulo}:
       </p>
       <p style="font-size:12px;color:var(--muted);max-height:120px;overflow:auto;margin:0 0 12px">${dias.map(fmtData).join(' · ')}</p>
       <p style="font-size:13px;color:var(--ylw-d);font-weight:600;margin:0 0 18px">
@@ -5061,7 +5096,7 @@ window.criarRDOsFaltantes = function() {
 };
 
 window.executarCriarRDOsFaltantes = async function() {
-  const dias = (window.FALTANTES_DIAS || []).slice();
+  const dias = (window._RDO_CRIAR_DIAS || window.FALTANTES_DIAS || []).slice();
   const btn = document.getElementById('btnCriaFaltantes');
   if (btn) btn.disabled = true;
   let criados = 0, jaExistiam = 0, falhou = 0;
@@ -5447,6 +5482,7 @@ function renderHistoricoDiarios() {
   const mesesAvaliar = HIST_DIARIO_FILTRO.mes ? [HIST_DIARIO_FILTRO.mes]
     : STATE.filtros.mes ? [STATE.filtros.mes] : mesesComDados();
   const faltantes = diasUteisSemRDO(datasSet, mesesAvaliar);
+  const faltantesNaoUteis = diasNaoUteisSemRDO(datasSet, mesesAvaliar);
 
   // Banners de aviso (tarefas: verificar duplicatas / dia útil sem lançamento).
   let avisosHtml = '';
@@ -5480,6 +5516,26 @@ function renderHistoricoDiarios() {
         <div style="margin-top:6px">${linhas}</div>
         <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <button class="btn btn-sm" onclick="criarRDOsFaltantes()" style="background:var(--ylw-d);color:#fff;border:none;white-space:nowrap">➕ Criar RDOs vazios destes ${totalDias} dia(s)</button>
+          <span style="font-size:11px;color:var(--muted)">cria 1 RDO em branco por dia, pronto pra preencher depois</span>
+        </div>
+      </details>`;
+  }
+  if (faltantesNaoUteis.length) {
+    const totalDiasNU = faltantesNaoUteis.reduce((s, f) => s + f.dias.length, 0);
+    window.FALTANTES_DIAS_NAO_UTEIS = faltantesNaoUteis.flatMap(f => f.dias);
+    const linhasNU = faltantesNaoUteis.map(f =>
+      `<div style="margin-top:4px"><strong>${nomeMesAno(f.mes)}:</strong> ${f.dias.map(fmtData).join(' · ')}</div>`
+    ).join('');
+    avisosHtml += `
+      <details style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--blu-l);border:1px solid var(--blu);font-size:13px">
+        <summary style="cursor:pointer;user-select:none">
+          <strong style="color:var(--blu)">🗓 Dias não úteis sem RDO</strong>
+          <span style="display:inline-flex;align-items:center;padding:2px 8px;margin:0 4px;border-radius:20px;font-size:11px;font-weight:700;background:var(--blu);color:#fff">${totalDiasNU}</span>
+          <span style="font-size:12px;color:var(--muted)">(fins de semana e feriados; use se houve trabalho nesses dias)</span>
+        </summary>
+        <div style="margin-top:6px">${linhasNU}</div>
+        <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="criarRDOsFaltantes(window.FALTANTES_DIAS_NAO_UTEIS, 'dia não útil (fim de semana/feriado) sem RDO')" style="background:var(--blu);color:#fff;border:none;white-space:nowrap">➕ Criar RDOs vazios destes ${totalDiasNU} dia(s)</button>
           <span style="font-size:11px;color:var(--muted)">cria 1 RDO em branco por dia, pronto pra preencher depois</span>
         </div>
       </details>`;
