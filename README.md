@@ -152,6 +152,6 @@ O backend também expõe `?action=producaoPorPacote&mes=2026-06` (JSON, deduplic
 | `index.html` | O app inteiro (telas, lógica, PDF/Excel de RDO) |
 | `Code.gs` | Backend Apps Script (colar no editor da planilha) |
 | `limpar_duplicados.gs` | Utilitário antigo de limpeza (o `Code.gs` já cobre via `limparDuplicados`) |
-| `manifest.json` / `sw.js` / `icon-*.png` | PWA |
+| `manifest.json` / `sw.js` / `icon-*.png` / `favicon.svg` | PWA — a marca é a avenida em perspectiva |
 | `pacotes.csv` | Snapshot de referência da aba Pacotes |
-| `icon_*.webp` | Ícones das frentes usados pelo app (versões otimizadas ~30 KB; os `icon_*_<timestamp>.png` de 1024px são a arte original) |
+| `js/ui/icones.js` | Conjunto de ícones do app — traço único na grade de 24, cor herdada do tema. Cobre navegação, ações e frentes de serviço (`icFrente()` escolhe pelo nome da frente) |

@@ -13,4 +13,6 @@ para a navegação, então a mudança chega sem precisar limpar cache.
 - `index.html` — app single-page (PWA). Todo o front-end (HTML/CSS/JS) fica aqui.
 - `Code.gs` / `limpar_duplicados.gs` — backend Google Apps Script (API de dados).
 - `sw.js` — service worker (cache: rede-primeiro na navegação).
-- `manifest.json`, `favicon.svg`, ícones `.png/.webp` — assets do PWA.
+- `js/ui/icones.js` — conjunto de ícones do app (SVG em traço, 24×24).
+  Usar `ic('nome')`; nada de emoji na interface.
+- `manifest.json`, `favicon.svg`, `icon-*.png` — assets do PWA.
