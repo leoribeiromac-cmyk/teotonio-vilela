@@ -7,8 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Sistema Teotônio Vilela — Controle Integrado</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%231a1612'/%3E%3Cpath d='M32 15 Q53 17 53 39 L11 39 Q11 17 32 15Z' fill='%23cc6633'/%3E%3Crect x='8' y='37' width='48' height='9' rx='4.5' fill='%23cc6633'/%3E%3Crect x='11' y='37' width='42' height='3' rx='1.5' fill='%23a84f22' opacity='.55'/%3E%3C/svg%3E">
-<meta name="theme-color" content="#1a1612">
+<!-- A marca é a própria avenida em perspectiva (ver favicon.svg). O data-URI
+     repete o desenho sem gradiente: é o que a aba mostra antes de o arquivo
+     externo carregar, e precisa ler bem a 16px. -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14.5' fill='%231a1612'/%3E%3Cpath d='M17.4 52.5 L27.2 15.4 H36.8 L46.6 52.5 Z' fill='%23d2682f'/%3E%3Cg fill='%23fdf6ef'%3E%3Crect x='29.4' y='43.6' width='5.2' height='7.2' rx='1.4'/%3E%3Crect x='30.05' y='32.4' width='3.9' height='5.6' rx='1.1'/%3E%3Crect x='30.6' y='23.6' width='2.8' height='4.2' rx='.9'/%3E%3Crect x='31.05' y='17.2' width='1.9' height='3' rx='.7'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -303,6 +306,23 @@ html,body{
 }
 .mono{font-family:'JetBrains Mono',monospace}
 
+/* ------------------------------------------------------------------
+   ÍCONES (js/ui/icones.js). Um conjunto só, traço de 1.7 na grade de
+   24, cor herdada do texto — some o emoji de cada aparelho e entra o
+   mesmo desenho em todo lugar: Android, iPhone, Windows e no PDF da
+   tela. Regra de ouro: ícone acompanha a linha do texto (1em) e nunca
+   encolhe dentro de um flex.
+   ------------------------------------------------------------------ */
+.ic{
+  display:inline-block;vertical-align:-0.14em;
+  flex-shrink:0;overflow:visible;
+}
+/* dentro de botão e de célula, o ícone alinha pelo miolo do texto */
+.btn .ic,.pill .ic,.nav-item .ic,td .ic,th .ic{vertical-align:-0.16em}
+/* ícone sozinho no botão (sem rótulo) fica centralizado */
+.btn-icone{padding-left:9px;padding-right:9px}
+.ic-gira{animation:spin 1s linear infinite}
+
 #root{height:100%;display:flex;flex-direction:column}
 
 /* ===================== LAYOUT ===================== */
@@ -346,7 +366,13 @@ html,body{
   content:'';position:absolute;left:-12px;top:50%;transform:translateY(-50%);
   width:3px;height:20px;background:var(--acc);border-radius:0 3px 3px 0;
 }
-.nav-icon{font-size:15px;width:18px;text-align:center;flex-shrink:0}
+.nav-icon{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:18px;height:18px;flex-shrink:0;opacity:.82;
+  transition:opacity calc(.12s*var(--anim-speed));
+}
+.nav-icon .ic{width:18px;height:18px;vertical-align:0}
+.nav-item:hover .nav-icon,.nav-item.active .nav-icon{opacity:1}
 .nav-counter{
   background:rgba(255,255,255,.1);color:var(--sidebar-text);
   font-size:10px;font-weight:700;
@@ -356,9 +382,21 @@ html,body{
 .nav-item.active .nav-counter{background:var(--acc);color:#fff}
 .nav-divider{border:none;border-top:1px solid var(--sidebar-border);margin:10px 20px}
 
-.sync-block{padding:12px 16px 16px;margin-top:auto;border-top:1px solid var(--sidebar-border);}
+/* A lista de telas rola sozinha: com o menu cheio (9 telas) mais o rodapé
+   de acesso e o seletor de tema, a barra passava da altura da janela e o
+   rodapé sumia. Agora logo e rodapé ficam fixos e só o meio rola. */
+.sidebar-nav{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+.sidebar-nav::-webkit-scrollbar{width:6px}
+.sidebar-nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:3px}
+
+.sync-block{padding:12px 16px 16px;flex-shrink:0;border-top:1px solid var(--sidebar-border);}
 .sync-row{display:flex;align-items:center;gap:8px;padding:8px 0}
-.sync-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:.3s}
+.sync-dot{width:8px;height:8px;min-width:8px;min-height:8px;
+  border-radius:50%;flex:0 0 8px;align-self:center;transition:.3s}
+/* Dois seletores de propósito: a classe .loading do bloco de carregamento
+   (padding:80px 20px, declarada depois) casava com .sync-dot.loading e
+   inflava a bolinha de estado para 40×160 enquanto o app buscava os dados. */
+.sync-row .sync-dot{padding:0;box-sizing:border-box}
 .sync-dot.ok{background:var(--grn);box-shadow:0 0 0 3px oklch(0.62 0.16 150 / .15)}
 .sync-dot.loading{background:var(--ylw);animation:pulse 1.2s infinite}
 .sync-dot.error{background:var(--red)}
@@ -372,6 +410,64 @@ html,body{
   cursor:pointer;transition:all calc(.15s * var(--anim-speed));font-family:inherit;
 }
 .btn-refresh:hover{background:rgba(255,255,255,.12);color:var(--sidebar-active);}
+.btn-refresh{display:flex;align-items:center;justify-content:center;gap:7px}
+.btn-refresh .ic{width:14px;height:14px;vertical-align:0;opacity:.9}
+
+/* ---- seletor de tema (claro / escuro / sistema) ---- */
+.tema-seletor{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:3px;margin-top:8px;
+  padding:3px;background:rgba(255,255,255,.05);
+  border:1px solid var(--sidebar-border);border-radius:9px;
+}
+.tema-op{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  padding:7px 2px;border:none;background:transparent;border-radius:6px;
+  color:var(--sidebar-text);font-family:inherit;font-size:9.5px;font-weight:700;
+  letter-spacing:.04em;text-transform:uppercase;cursor:pointer;
+  transition:background calc(.15s*var(--anim-speed)),color calc(.15s*var(--anim-speed));
+}
+.tema-op .ic{width:15px;height:15px;vertical-align:0;opacity:.85}
+.tema-op:hover{color:var(--sidebar-active);background:rgba(255,255,255,.07)}
+.tema-op.on{background:rgba(255,255,255,.14);color:var(--sidebar-active);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.tema-op.on .ic{opacity:1;color:var(--acc)}
+
+/* ---- conta / acesso no rodapé do menu ---- */
+.conta-box{display:flex;flex-direction:column;gap:8px;padding-bottom:2px}
+.conta-id{display:flex;align-items:center;gap:9px;min-width:0}
+.conta-avatar{
+  width:30px;height:30px;flex-shrink:0;border-radius:9px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--acc);color:#fff;font-size:13px;font-weight:700;
+}
+.conta-avatar--fora{
+  background:rgba(255,255,255,.07);color:var(--sidebar-text);
+  border:1px solid var(--sidebar-border);
+}
+.conta-avatar--fora .ic{width:16px;height:16px;vertical-align:0}
+.conta-nome{display:flex;flex-direction:column;min-width:0;line-height:1.25}
+.conta-nome strong{
+  font-size:12px;font-weight:700;color:var(--sidebar-active);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.conta-nome span{font-size:10px;color:var(--sidebar-text);opacity:.75}
+.conta-btn--entrar{
+  background:var(--acc);border-color:transparent;color:#fff;
+}
+.conta-btn--entrar:hover{background:var(--acc-d);color:#fff}
+
+/* ---- tela de acesso ---- */
+.login-card{max-width:400px;margin:40px auto;border-top:4px solid var(--acc)}
+.login-selo{
+  width:40px;height:40px;flex-shrink:0;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--acc-l);color:var(--acc-d);border:1px solid var(--acc);
+}
+.login-selo .ic{width:19px;height:19px;vertical-align:0}
+.login-nota{
+  display:flex;align-items:flex-start;gap:7px;margin-top:14px;
+  font-size:12px;line-height:1.5;color:var(--muted);
+}
+.login-nota .ic{width:14px;height:14px;vertical-align:0;margin-top:2px;flex-shrink:0}
 
 .mobile-menu-btn{display:none}
 .sidebar-overlay{display:none}
@@ -416,6 +512,10 @@ html,body{
   display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
 }
 .card-title{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);}
+/* o título do cartão é minúsculo (10px): o ícone precisa de tamanho próprio,
+   senão vira um risco ilegível ao lado do texto */
+.card-title .ic,.card-title-sub .ic{width:14px;height:14px;vertical-align:-.22em}
+.card-title .ic{color:var(--acc)}
 .card-title-sub{font-size:12px;color:var(--muted);font-weight:400;margin-top:3px;text-transform:none;letter-spacing:0;color:var(--text);}
 .card-body{padding:18px 22px}
 .card-body.compact{padding:12px 18px}
@@ -595,8 +695,14 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .toast.success{border-left:4px solid var(--grn)}
 .toast.error{border-left:4px solid var(--red)}
 .toast.info{border-left:4px solid var(--blu)}
-.toast-fechar{cursor:pointer;font-weight:700;opacity:.45;padding:0 2px 0 6px;flex-shrink:0;font-size:15px}
+.toast-fechar{cursor:pointer;opacity:.45;padding:0 2px 0 6px;flex-shrink:0;line-height:0;display:inline-flex;align-items:center}
+.toast-fechar .ic{width:15px;height:15px;vertical-align:0}
 .toast-fechar:hover{opacity:1}
+.toast-icone{flex-shrink:0;line-height:0;display:inline-flex;align-items:center}
+.toast-icone .ic{width:18px;height:18px;vertical-align:0}
+.toast.success .toast-icone{color:var(--grn)}
+.toast.error .toast-icone{color:var(--red)}
+.toast.info .toast-icone{color:var(--blu)}
 #outboxIndicator{
   position:fixed;left:50%;transform:translateX(-50%);bottom:16px;z-index:1100;
   display:none;align-items:center;gap:8px;cursor:pointer;
@@ -605,12 +711,20 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   max-width:92vw;animation:slideIn .25s cubic-bezier(.2,0,0,1);
 }
 #outboxIndicator:active{transform:translateX(-50%) scale(.97)}
+#outboxIndicator .ob-ic{display:inline-flex;align-items:center;line-height:0;flex-shrink:0}
+#outboxIndicator .ob-ic .ic{width:16px;height:16px;vertical-align:0}
 .campo-invalido{border:2px solid var(--red)!important;background:var(--red-l)!important}
 @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 
 /* ===================== EMPTY / LOADING ===================== */
 .empty{padding:60px 20px;text-align:center;color:var(--muted)}
-.empty-icon{font-size:42px;margin-bottom:12px;opacity:.5}
+.empty-icon{
+  display:flex;align-items:center;justify-content:center;
+  width:56px;height:56px;margin:0 auto 14px;border-radius:16px;
+  background:var(--bg-2);border:1px solid var(--border);
+  color:var(--muted-2);
+}
+.empty-icon .ic{width:26px;height:26px;vertical-align:0;stroke-width:1.5}
 .empty-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px}
 .empty-sub{font-size:12px;color:var(--muted);max-width:380px;margin:0 auto}
 
@@ -627,17 +741,22 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   .mobile-menu-btn{
     display:flex;align-items:center;justify-content:center;
     background:transparent;border:none;color:var(--text);
-    font-size:22px;cursor:pointer;padding:6px 10px;
+    cursor:pointer;padding:6px 10px;
     margin-right:-4px;
   }
+  .mobile-menu-btn .ic{width:22px;height:22px;vertical-align:0}
+  /* A gaveta abre POR CIMA da barra inferior (z-index 999): sem isso a
+     barra tapava o rodapé do menu — justo onde ficam entrar/sair e a
+     escolha de tema. */
   .sidebar{
-    position:fixed;left:0;top:0;height:100%;
+    position:fixed;left:0;top:0;height:100%;z-index:1001;
     transform:translateX(-100%);box-shadow:var(--sh-lg);
   }
   .sidebar.open{transform:translateX(0)}
+  .sidebar .sync-block{padding-bottom:calc(16px + env(safe-area-inset-bottom, 0px))}
   .sidebar-overlay{
     display:block;position:fixed;inset:0;
-    background:rgba(0,0,0,.4);z-index:9;
+    background:rgba(0,0,0,.4);z-index:1000;
     opacity:0;pointer-events:none;transition:.25s;
   }
   .sidebar-overlay.open{opacity:1;pointer-events:auto}
@@ -681,7 +800,15 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   min-height:140px;text-align:center;
 }
 .btn-turno-grande:hover{border-color:var(--acc);transform:translateY(-2px);box-shadow:var(--sh-md)}
-.btn-turno-icon{font-size:44px;line-height:1;margin-bottom:8px}
+.btn-turno-icon{
+  display:flex;align-items:center;justify-content:center;
+  width:56px;height:56px;margin-bottom:10px;border-radius:18px;
+  background:var(--bg-2);border:1px solid var(--border);color:var(--text-2);
+  transition:all .2s;
+}
+.btn-turno-icon .ic{width:28px;height:28px;vertical-align:0;stroke-width:1.5}
+.btn-turno-diurno:hover .btn-turno-icon{background:var(--ylw-l);border-color:var(--ylw);color:var(--ylw-d)}
+.btn-turno-noturno:hover .btn-turno-icon{background:var(--blu-l);border-color:var(--blu);color:var(--blu)}
 .btn-turno-titulo{font-size:18px;font-weight:700;letter-spacing:.04em;color:var(--text)}
 .btn-turno-status{font-size:11px;color:var(--muted);margin-top:6px}
 .btn-turno-status.preenchido{color:var(--grn);font-weight:600}
@@ -699,15 +826,42 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .loader-spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--pri); border-radius: 50%; animation: spin 0.8s linear infinite; }
 
 /* Botão de edição em tabela (reutilizado também no Histórico). */
-.gantt-edit-btn { background: none; border: 1px solid var(--border); border-radius: 3px; cursor: pointer; font-size: 10px; padding: 1px 5px; color: var(--muted); line-height: 1.4; }
+.gantt-edit-btn { background: none; border: 1px solid var(--border); border-radius: 5px; cursor: pointer; font-size: 10px; padding: 2px 5px; color: var(--muted); line-height: 1; display: inline-flex; align-items: center; justify-content: center; }
+.gantt-edit-btn .ic { width: 13px; height: 13px; vertical-align: 0; }
 .gantt-edit-btn:hover { background: var(--acc); color: #fff; border-color: var(--acc); }
 
 /* ===================== GRUPOS TÉCNICOS (3D PREMIUM) ===================== */
 .tech-card-3d { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); cursor: pointer; box-shadow: var(--sh); }
 .tech-card-3d:hover { transform: translateY(-6px) scale(1.02); box-shadow: var(--sh-lg); border-color: var(--pri); }
 .tech-card-3d.active { border-color: var(--pri); box-shadow: 0 0 0 3px var(--pri-l); }
-.tech-card-image { height: 160px; background-color: #fff; background-position: center; background-size: cover; background-repeat: no-repeat; position: relative; border-bottom: 1px solid var(--border); }
-.tech-card-image::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 60%); }
+/* Cabeçalho do cartão de frente: painel grafite com uma malha discreta e o
+   ícone da frente em traço. Substituiu as ilustrações 3D — pesavam ~500 KB
+   cada, mudavam de estilo a cada frente e não acompanhavam o tema. */
+.tech-card-image {
+  height: 160px; position: relative; overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  background:
+    radial-gradient(120px 120px at 20% 42%, rgba(224,120,60,.20) 0%, rgba(224,120,60,0) 70%),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, transparent 1px 22px),
+    repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 22px),
+    linear-gradient(150deg, #2b241c 0%, #191510 60%, #120f0b 100%);
+}
+/* filete de acento na diagonal — dá profundidade sem virar ilustração */
+.tech-card-image::before {
+  content: ''; position: absolute; right: -60px; top: -1px; bottom: -1px; width: 150px;
+  background: linear-gradient(255deg, rgba(255,255,255,.055) 0%, rgba(255,255,255,0) 62%);
+  transform: skewX(-16deg); transition: opacity .4s;
+}
+.tech-card-3d:hover .tech-card-image::before { opacity: .55; }
+.tech-card-image::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0) 62%); }
+.tech-card-marca {
+  position: absolute; left: 18px; top: 50%; transform: translateY(-54%);
+  color: var(--acc); opacity: .9; line-height: 0; z-index: 1;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,.45));
+  transition: transform .4s cubic-bezier(0.2,0.8,0.2,1);
+}
+.tech-card-marca .ic { stroke-width: 1.25; vertical-align: 0; }
+.tech-card-3d:hover .tech-card-marca { transform: translateY(-54%) scale(1.06); }
 .tech-card-title-overlay { position: absolute; bottom: 14px; left: 16px; right: 16px; color: #fff; z-index: 2; display: flex; justify-content: space-between; align-items: flex-end; }
 .tech-card-title { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 .tech-card-content { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
@@ -889,7 +1043,8 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .hero-ia.disabled .hero-ia-text {
   color: rgba(255,255,255,0.65);
 }
-.hero-ia-icon { font-size: 16px; flex-shrink: 0; line-height: 1.2; filter: drop-shadow(0 0 4px oklch(0.62 0.18 38 / 0.7)); }
+.hero-ia-icon { flex-shrink: 0; line-height: 0; color: var(--acc); filter: drop-shadow(0 0 5px oklch(0.62 0.18 38 / 0.55)); }
+.hero-ia-icon .ic { width: 17px; height: 17px; vertical-align: 0; }
 .hero-ia-body { flex: 1; min-width: 0; }
 .hero-ia-label { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--acc); display: block; margin-bottom: 4px; }
 .hero-ia-text { font-size: 13px; line-height: 1.55; color: rgba(255,255,255,0.92); }
@@ -1641,7 +1796,7 @@ async function outboxFlush(manual = false) {
     _flushEmAndamento = false;
   }
   if (enviados > 0) {
-    toast(`✓ ${enviados} RDO${enviados>1?'s':''} guardado${enviados>1?'s':''} enviado${enviados>1?'s':''} agora`, 'success', 4500);
+    toast(`${enviados} RDO${enviados>1?'s':''} guardado${enviados>1?'s':''} enviado${enviados>1?'s':''} agora`, 'success', 4500);
     setTimeout(() => carregarTudo(), 1500);
   } else if (manual && falhouRede) {
     toast('Ainda sem conexão com o servidor. Vou tentar sozinho de novo em instantes.', 'info', 4000);
@@ -1680,8 +1835,8 @@ function atualizarIndicadorOutbox() {
     el.setAttribute('role', 'button');
     el.setAttribute('aria-label', n + ' RDO(s) aguardando envio. Toque para enviar agora.');
     el.onclick = () => outboxFlush(true);
-    el.innerHTML = `<span style="font-size:15px" aria-hidden="true">📡</span><span style="flex:1">${n} RDO${n>1?'s':''} aguardando envio · toque para enviar</span>`
-      + `<span onclick="descartarOutbox(event)" title="Descartar fila" aria-label="Descartar fila de envio" role="button" style="margin-left:10px;padding:2px 7px;border-radius:6px;background:rgba(255,255,255,.2);font-weight:700">✕</span>`;
+    el.innerHTML = `<span class="ob-ic">${ic('antena')}</span><span style="flex:1">${n} RDO${n>1?'s':''} aguardando envio · toque para enviar</span>`
+      + `<span onclick="descartarOutbox(event)" title="Descartar fila" aria-label="Descartar fila de envio" role="button" style="margin-left:10px;padding:3px 7px 1px;border-radius:6px;background:rgba(255,255,255,.2)">${ic('fechar')}</span>`;
   } else {
     // Offline sem nada pendente → só avisa que está sem conexão.
     el.style.background = '#4b5563';
@@ -1689,7 +1844,7 @@ function atualizarIndicadorOutbox() {
     el.removeAttribute('role');
     el.setAttribute('aria-label', 'Sem conexão. Lançamentos serão guardados no aparelho e enviados quando o sinal voltar.');
     el.onclick = null;
-    el.innerHTML = `<span style="font-size:15px" aria-hidden="true">📴</span><span style="flex:1">Sem conexão — lançamentos ficam guardados e enviam sozinhos depois</span>`;
+    el.innerHTML = `<span class="ob-ic">${ic('syncOff')}</span><span style="flex:1">Sem conexão — lançamentos ficam guardados e enviam sozinhos depois</span>`;
   }
 }
 
@@ -1858,11 +2013,11 @@ function toast(msg, type = 'info', durationMs = 3500) {
   const wrap = document.getElementById('toastWrap');
   const t = document.createElement('div');
   t.className = `toast ${type}`;
-  const icon = type === 'success' ? '✓' : type === 'error' ? '✕' : 'i';
+  const icon = ic(type === 'success' ? 'checkCirculo' : type === 'error' ? 'syncErro' : 'info');
   // durationMs <= 0: toast fixo, só some quando o usuário fecha
   const fixo = durationMs <= 0;
-  t.innerHTML = `<span style="font-weight:700">${icon}</span><span style="flex:1">${msg}</span>`
-    + (fixo ? `<span class="toast-fechar" title="Fechar">✕</span>` : '');
+  t.innerHTML = `<span class="toast-icone">${icon}</span><span style="flex:1">${msg}</span>`
+    + (fixo ? `<span class="toast-fechar" title="Fechar" role="button" aria-label="Fechar aviso">${ic('fechar')}</span>` : '');
   const fechar = () => {
     t.style.animation = 'slideIn .2s reverse';
     setTimeout(() => t.remove(), 200);
@@ -1907,7 +2062,7 @@ window.abrirConfigIA = function() {
   modal.innerHTML = `
     <div style="background:var(--surface);border-radius:var(--r-lg);max-width:480px;width:100%;padding:28px 28px 22px;box-shadow:var(--sh-lg);">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-        <span style="font-size:22px;">✨</span>
+        <span style="color:var(--acc);line-height:0">${ic('ia',22)}</span>
         <h2 style="font-size:17px;font-weight:700;letter-spacing:-.01em;margin:0;">Configurar IA</h2>
       </div>
       <p style="font-size:13px;color:var(--muted);line-height:1.55;margin:8px 0 18px;">
@@ -2255,7 +2410,7 @@ function telaBloqueada(tela) {
   };
   return `<div class="card" style="max-width:520px;margin:40px auto;border-top:4px solid var(--wrn,#d69e2e)">
     <div class="card-body" style="text-align:center;padding:28px">
-      <div style="font-size:32px;margin-bottom:10px">🔒</div>
+      <div class="empty-icon" style="margin-bottom:14px">${ic('cadeado')}</div>
       <div style="font-weight:700;font-size:15px;margin-bottom:6px">Acesso não liberado</div>
       <div style="font-size:13px;color:var(--muted,#718096)">
         Seu acesso de <b>${escHtml(perfilNome())}</b> não abre ${nomes[tela] || 'esta tela'}.<br>
@@ -2287,11 +2442,14 @@ function erroLegivel(msg) {
 
 function renderLogin() {
   return `
-    <div class="card" style="max-width: 400px; margin: 40px auto; border-top: 4px solid var(--acc);">
+    <div class="card login-card">
       <div class="card-header">
-        <div>
-          <div class="card-title">Acesso Restrito</div>
-          <div class="card-title-sub">Identifique-se para lançar serviços e RDOs no sistema</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="login-selo">${ic('cadeado')}</span>
+          <div>
+            <div class="card-title">Acesso restrito</div>
+            <div class="card-title-sub">Identifique-se para lançar serviços e RDOs no sistema</div>
+          </div>
         </div>
       </div>
       <div class="card-body">
@@ -2306,7 +2464,8 @@ function renderLogin() {
           <label>Senha</label>
           <input type="password" id="loginPass" placeholder="••••••••" onkeyup="if(event.key==='Enter') fazerLogin()">
         </div>
-        <button class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">Entrar</button>
+        <button class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">${ic('entrar')} Entrar</button>
+        <div class="login-nota">${ic('info')} Sem entrar, o sistema segue aberto para consulta: painel, avanço, cronograma e histórico.</div>
       </div>
     </div>
   `;
@@ -2372,14 +2531,16 @@ window.fazerLogout = function() {
 window.atualizarBotoesTopo = function() {
   const tb = document.getElementById('topbarActions');
   if (!tb) return;
-  const sair = STATE.usuarioLogado
-    ? `<button class="btn btn-ghost btn-sm" onclick="fazerLogout()" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</button>`
-    : '';
+  // Entrar/sair mora no rodapé do menu lateral; aqui fica o atalho de topo,
+  // que no celular é o único visível sem abrir a gaveta.
+  const acesso = STATE.usuarioLogado
+    ? `<button class="btn btn-ghost btn-sm" onclick="fazerLogout()" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">${ic('sair')} Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</button>`
+    : `<button class="btn btn-outline btn-sm" onclick="irParaLogin()" title="Entrar para lançar serviços e RDOs">${ic('entrar')} Entrar</button>`;
   const novo = pode('lancarServico')
-    ? '<button class="btn btn-primary btn-sm" onclick="navigate(\'rdo\')">+ Novo Serviço</button>'
+    ? `<button class="btn btn-primary btn-sm" onclick="navigate('rdo')">${ic('mais')} Novo Serviço</button>`
     : '';
-  tb.innerHTML = sair +
-    '<button class="btn btn-outline btn-sm" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">↻</button>' +
+  tb.innerHTML = acesso +
+    '<button class="btn btn-outline btn-sm btn-icone" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">' + ic('atualizar') + '</button>' +
     novo;
 };
 
@@ -2444,7 +2605,7 @@ function renderFotosPrev(idx) {
   box.innerHTML = lista.map((f, i) => `<div style="position:relative">
     <img src="${f.thumb}" alt="foto ${i + 1}" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid var(--border-strong)">
     <button type="button" onclick="removerFotoServico(${idx},${i})" title="Remover foto" aria-label="Remover foto"
-      style="position:absolute;top:-7px;right:-7px;padding:1px 7px;border-radius:50%;background:var(--red);color:#fff;border:none;cursor:pointer;font-size:12px">✕</button>
+      style="position:absolute;top:-7px;right:-7px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;padding:0;border-radius:50%;background:var(--red);color:#fff;border:none;cursor:pointer">${ic('fechar',11)}</button>
   </div>`).join('');
   const c = document.getElementById('fotosCount' + idx);
   if (c) c.textContent = lista.length ? `${lista.length}/${MAX_FOTOS_SERVICO}` : '';
@@ -2543,7 +2704,7 @@ async function enviarFotosDoLote(mapaIdParaFotos) {
       }
     }
   }
-  if (enviadas) toast(`✓ ${enviadas} foto(s) enviada(s)`, 'success', 3000);
+  if (enviadas) toast(`${enviadas} foto(s) enviada(s)`, 'success', 3000);
   if (falhas) toast(`${falhas} foto(s) não subiram. O serviço foi salvo assim mesmo.`, 'info', 6000);
 }
 
@@ -2691,7 +2852,7 @@ function grupoNav(titulo, itens) {
         <div class="nav-group">
           <div class="nav-label">${titulo}</div>
           ${vis.map(it => `<div class="nav-item ${STATE.currentPage === it.id ? 'active' : ''}" data-page="${it.id}" onclick="navigate('${it.id}')">
-            <span class="nav-icon">${it.icone}</span>
+            <span class="nav-icon">${ic(it.icone)}</span>
             <span>${it.texto}</span>
             ${it.contador ? `<span class="nav-counter" id="${it.contador}">0</span>` : ''}
           </div>`).join('')}
@@ -2710,48 +2871,50 @@ function renderShell() {
           <h1>Av. Senador<br>Teotônio Vilela</h1>
           <p>Sistema integrado<br>de planejamento</p>
         </div>
-        
+
+        <!-- só a lista de telas rola; logo e rodapé de acesso ficam presos -->
+        <nav class="sidebar-nav" aria-label="Telas do sistema">
         ${grupoNav('Análise', [
-          { id: 'executivo',    icone: '◆', texto: 'Painel Executivo' },
-          { id: 'avancofisico', icone: '◰', texto: 'Avanço Físico' },
-          { id: 'cronograma',   icone: '◷', texto: 'Cronograma' },
-          { id: 'medicao',      icone: '⌗', texto: 'Apoio Medição' },
-          { id: 'analista',     icone: '✨', texto: 'Analista IA' },
+          { id: 'executivo',    icone: 'painel',     texto: 'Painel Executivo' },
+          { id: 'avancofisico', icone: 'avanco',     texto: 'Avanço Físico' },
+          { id: 'cronograma',   icone: 'cronograma', texto: 'Cronograma' },
+          { id: 'medicao',      icone: 'medicao',    texto: 'Apoio Medição' },
+          { id: 'analista',     icone: 'ia',         texto: 'Analista IA' },
         ])}
 
         ${grupoNav('Operação', [
-          { id: 'rdo',       icone: '⊕',  texto: 'Lançar Serviço', contador: 'rdoCount' },
-          { id: 'rdodiario', icone: '📋', texto: 'RDO Diário',     contador: 'diarioCount' },
-          { id: 'historico', icone: '≡',  texto: 'Histórico' },
-          { id: 'equip',     icone: '🚜', texto: 'Equipamentos' },
-          { id: 'galeria',   icone: '📷', texto: 'Galeria de Fotos' },
+          { id: 'rdo',       icone: 'lancar',       texto: 'Lançar Serviço', contador: 'rdoCount' },
+          { id: 'rdodiario', icone: 'diario',       texto: 'RDO Diário',     contador: 'diarioCount' },
+          { id: 'historico', icone: 'historico',    texto: 'Histórico' },
+          { id: 'equip',     icone: 'equipamentos', texto: 'Equipamentos' },
+          { id: 'galeria',   icone: 'galeria',      texto: 'Galeria de Fotos' },
         ])}
 
         ${grupoNav('Suprimentos', [
-          { id: 'notas', icone: '🧾', texto: 'Notas Fiscais' },
+          { id: 'notas', icone: 'notas', texto: 'Notas Fiscais' },
         ])}
 
         ${grupoNav('Administração', [
-          { id: 'usuarios', icone: '👷', texto: 'Usuários' },
+          { id: 'usuarios', icone: 'usuarios', texto: 'Usuários' },
         ])}
+        </nav>
 
         <div class="sync-block">
+          ${blocoContaSidebar()}
           <hr class="nav-divider" style="margin:10px 0">
           <div class="sync-row">
             <div class="sync-dot loading" id="syncDot"></div>
             <div class="sync-text" id="syncText">Carregando…</div>
           </div>
-          <button class="btn-refresh" onclick="carregarTudo()">↻ ATUALIZAR</button>
-          <button class="btn-refresh" onclick="toggleTema()" title="Alternar tema claro/escuro" id="btnTema" style="margin-top:6px">
-            ${temaAtual() === 'dark' ? '☀ TEMA CLARO' : '☾ TEMA ESCURO'}
-          </button>
+          <button class="btn-refresh" onclick="carregarTudo()">${ic('atualizar')} ATUALIZAR</button>
+          ${seletorTema()}
         </div>
       </aside>
-      
+
       <main class="main">
         <div class="topbar">
           <div style="display:flex;align-items:center;gap:6px">
-            <button class="mobile-menu-btn" onclick="toggleSidebar()" title="Abrir menu" aria-label="Abrir menu de navegação">☰</button>
+            <button class="mobile-menu-btn" onclick="toggleSidebar()" title="Abrir menu" aria-label="Abrir menu de navegação">${ic('menu')}</button>
             <div>
               <div class="topbar-title" id="pageTitle">Painel Executivo</div>
               <div class="topbar-sub" id="pageSubtitle">Visão consolidada da obra</div>
@@ -2771,38 +2934,136 @@ function renderShell() {
 /* As quatro telas do dia a dia que o perfil enxerga, na ordem em que o
    apontador usa. Menos de duas não vira barra — vira ruído. */
 const NAV_CAMPO = [
-  { id: 'rdo',          icone: '⊕',  texto: 'Lançar' },
-  { id: 'rdodiario',    icone: '📋', texto: 'RDO' },
-  { id: 'historico',    icone: '≡',  texto: 'Histórico' },
-  { id: 'avancofisico', icone: '◰',  texto: 'Avanço' },
-  { id: 'executivo',    icone: '◆',  texto: 'Painel' },
-  { id: 'notas',        icone: '🧾', texto: 'Notas' },
-  { id: 'equip',        icone: '🚜', texto: 'Equip.' },
-  { id: 'medicao',      icone: '⌗',  texto: 'Medição' },
+  { id: 'rdo',          icone: 'lancar',       texto: 'Lançar' },
+  { id: 'rdodiario',    icone: 'diario',       texto: 'RDO' },
+  { id: 'historico',    icone: 'historico',    texto: 'Histórico' },
+  { id: 'avancofisico', icone: 'avanco',       texto: 'Avanço' },
+  { id: 'executivo',    icone: 'painel',       texto: 'Painel' },
+  { id: 'notas',        icone: 'notas',        texto: 'Notas' },
+  { id: 'equip',        icone: 'equipamentos', texto: 'Equip.' },
+  { id: 'medicao',      icone: 'medicao',      texto: 'Medição' },
 ];
 function barraInferior() {
   const itens = NAV_CAMPO.filter(it => podeVer(it.id)).slice(0, 4);
   if (itens.length < 2) return '';
   return `<nav class="bottom-nav-mobile" aria-label="Atalhos">${itens.map(it =>
     `<button class="bottom-nav-item ${STATE.currentPage === it.id ? 'active' : ''}" onclick="navigate('${it.id}')">
-      <span class="nav-icon">${it.icone}</span>${it.texto}</button>`).join('')}</nav>`;
+      <span class="nav-icon">${ic(it.icone)}</span>${it.texto}</button>`).join('')}</nav>`;
 }
 
-/* Tema: a escolha do usuário manda; sem escolha, segue o aparelho. */
-function temaAtual() {
-  return localStorage.getItem('teotonio_tema_v1') ||
-    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+/* ------------------------------------------------------------------
+   TEMA — três posições, não duas.
+     Claro   : o fundo branco de sempre (bom para sol na tela e para
+               conferir planilha e PDF lado a lado);
+     Escuro  : o atual, para turno da noite e barracão;
+     Sistema : segue o aparelho, que é o que a maioria espera.
+   A escolha é POR APARELHO (localStorage). "Sistema" é a ausência de
+   escolha — por isso ele APAGA a chave em vez de gravar 'auto'; assim
+   o app volta a obedecer o prefers-color-scheme na hora, sem recarregar.
+   ------------------------------------------------------------------ */
+const LS_TEMA = 'teotonio_tema_v1';
+
+/* o que o usuário escolheu: 'light' | 'dark' | 'auto' */
+function temaEscolhido() {
+  const t = localStorage.getItem(LS_TEMA);
+  return (t === 'light' || t === 'dark') ? t : 'auto';
 }
-window.toggleTema = function() {
-  const t = temaAtual() === 'dark' ? 'light' : 'dark';
-  localStorage.setItem('teotonio_tema_v1', t);
-  document.documentElement.setAttribute('data-theme', t);
-  const b = document.getElementById('btnTema');
-  if (b) b.textContent = t === 'dark' ? '☀ TEMA CLARO' : '☾ TEMA ESCURO';
+/* o que está valendo na tela agora: 'light' | 'dark' */
+function temaAtual() {
+  const t = temaEscolhido();
+  return t !== 'auto' ? t
+    : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+
+function aplicarTemaNoDocumento() {
+  const esc = temaEscolhido();
+  // em 'auto' o atributo sai de cena e quem manda é a @media do CSS
+  if (esc === 'auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', esc);
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', temaAtual() === 'dark' ? '#14120e' : '#1a1612');
+}
+
+/* Segmento de 3 posições na barra lateral. */
+function seletorTema() {
+  const esc = temaEscolhido();
+  const op = [
+    { v: 'light', i: 'sol',     t: 'Claro',   d: 'Tema claro (fundo branco)' },
+    { v: 'dark',  i: 'lua',     t: 'Escuro',  d: 'Tema escuro' },
+    { v: 'auto',  i: 'monitor', t: 'Sistema', d: 'Seguir o tema do aparelho' },
+  ];
+  return `<div class="tema-seletor" role="group" aria-label="Tema do aplicativo">
+    ${op.map(o => `<button type="button" class="tema-op ${esc === o.v ? 'on' : ''}"
+      onclick="definirTema('${o.v}')" title="${o.d}" aria-pressed="${esc === o.v}">
+      ${ic(o.i)}<span>${o.t}</span></button>`).join('')}
+  </div>`;
+}
+
+window.definirTema = function(t) {
+  if (t === 'auto') localStorage.removeItem(LS_TEMA);
+  else localStorage.setItem(LS_TEMA, t);
+  aplicarTemaNoDocumento();
+  const box = document.querySelector('.tema-seletor');
+  if (box) box.outerHTML = seletorTema();
   // os gráficos são desenhados com as cores lidas no momento do render
   setTimeout(montarGraficos, 60);
 };
-document.documentElement.setAttribute('data-theme', temaAtual());
+
+/* atalho antigo, ainda usado por quem tinha o botão único: claro ⇄ escuro */
+window.toggleTema = function() { definirTema(temaAtual() === 'dark' ? 'light' : 'dark'); };
+
+aplicarTemaNoDocumento();
+// em 'auto', trocar o tema do celular troca o do app na hora
+if (matchMedia('(prefers-color-scheme: dark)').addEventListener) {
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    if (temaEscolhido() === 'auto') { aplicarTemaNoDocumento(); setTimeout(montarGraficos, 60); }
+  });
+}
+
+/* ------------------------------------------------------------------
+   CONTA NA BARRA LATERAL. Antes, entrar e sair só existia no topo de
+   telas restritas: quem abria o painel público não via caminho nenhum
+   para entrar. Agora o acesso mora no rodapé do menu, do lado do
+   estado da sincronização — visível em qualquer tela, no celular e no
+   computador.
+   ------------------------------------------------------------------ */
+function blocoContaSidebar() {
+  if (STATE.usuarioLogado) {
+    const nome = String(STATE.usuarioLogado);
+    const inicial = nome.trim().charAt(0).toUpperCase() || '?';
+    return `<div class="conta-box">
+      <div class="conta-id">
+        <span class="conta-avatar" aria-hidden="true">${escHtml(inicial)}</span>
+        <span class="conta-nome">
+          <strong>${escHtml(nome)}</strong>
+          <span>${escHtml(perfilNome())}</span>
+        </span>
+      </div>
+      <button class="btn-refresh conta-btn" onclick="fazerLogout()"
+        title="Encerrar a sessão neste aparelho">${ic('sair')} SAIR</button>
+    </div>`;
+  }
+  return `<div class="conta-box">
+    <div class="conta-id conta-id--fora">
+      <span class="conta-avatar conta-avatar--fora" aria-hidden="true">${ic('usuario')}</span>
+      <span class="conta-nome">
+        <strong>Visitante</strong>
+        <span>Somente consulta</span>
+      </span>
+    </div>
+    <button class="btn-refresh conta-btn conta-btn--entrar" onclick="irParaLogin()"
+      title="Entrar para lançar serviços e RDOs">${ic('entrar')} ENTRAR</button>
+  </div>`;
+}
+
+/* Leva para a tela de acesso a partir de qualquer lugar. Sem login, a
+   tela de lançamento já é o formulário de entrada — é para lá que vai. */
+window.irParaLogin = function() {
+  toggleSidebar(false);
+  if (STATE.currentPage === 'rdo') transitionTo(render);
+  else navigate('rdo');
+  setTimeout(() => { const s = document.getElementById('loginUser'); if (s) s.focus(); }, 300);
+};
 
 function toggleSidebar(open) {
   const sb = document.getElementById('sidebar');
@@ -2823,7 +3084,7 @@ function render() {
     avancofisico: ['Avanço Físico', 'Pacotes, mapa de estacas e produtividade'],
     cronograma: ['Cronograma', 'Planejamento reverso · quando iniciar cada saldo'],
     medicao: ['Apoio à Medição', 'Consumo derivado por item contratual'],
-    analista: ['✨ Analista IA', 'Resumo inteligente da obra'],
+    analista: ['Analista IA', 'Resumo inteligente da obra'],
     rdo: ['Lançar Serviço', 'Registra serviços executados · grava em RDO_Avanco'],
     rdodiario: ['RDO Diário', 'Cabeçalho do dia · efetivo, equipamentos, clima'],
     historico: ['Histórico', 'Serviços e RDOs diários lançados'],
@@ -2925,7 +3186,7 @@ function renderEquip() {
   <div class="grid" style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;align-items:start">
     <div class="card">
       <div class="card-header"><div>
-        <div class="card-title">🚜 Apontamento de equipamento</div>
+        <div class="card-title">${ic('equipamentos')} Apontamento de equipamento</div>
         <div class="card-title-sub">produção do dia: horas, paradas, horímetro, combustível</div>
       </div></div>
       <div class="card-body">
@@ -3016,7 +3277,7 @@ function eqListaUltimos() {
         ${a.paradas && a.paradas !== 'Sem paradas'
           ? `<div style="font-size:11.5px;color:var(--ylw-d)">paradas: ${escHtml(a.paradas)}</div>` : ''}
       </div>
-      ${podeExcluir(a) ? `<button class="btn btn-ghost btn-sm" onclick="eqApagar('${escHtml(String(a.carimbo))}')" title="Apagar">✕</button>` : ''}
+      ${podeExcluir(a) ? `<button class="btn btn-ghost btn-sm" onclick="eqApagar('${escHtml(String(a.carimbo))}')" title="Apagar" aria-label="Apagar apontamento">${ic('lixeira')}</button>` : ''}
     </div>`).join('');
 }
 
@@ -3050,7 +3311,7 @@ window.eqAddParada = function() {
       <select class="par-mot">${MOTIVOS_PARADA.map(m => `<option>${m}</option>`).join('')}</select></div>
     <div class="field" style="margin:0"><input type="time" class="par-ini" onchange="eqCalcHoras()"></div>
     <div class="field" style="margin:0"><input type="time" class="par-fim" onchange="eqCalcHoras()"></div>
-    <button class="btn btn-ghost btn-sm" onclick="this.closest('.par-row').remove();eqCalcHoras()" title="Remover">✕</button>`;
+    <button class="btn btn-ghost btn-sm" onclick="this.closest('.par-row').remove();eqCalcHoras()" title="Remover" aria-label="Remover parada">${ic('fechar')}</button>`;
   box.appendChild(row);
 };
 function eqParadasMin() {
@@ -3144,7 +3405,7 @@ window.eqEnviar = async function() {
   try {
     const r = await jsonp(CONFIG.appsScript, params, 0, 0, null);
     if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao enviar', 'error', 0); return; }
-    toast('Apontamento enviado ✓', 'success');
+    toast('Apontamento enviado', 'success');
     ['eqOper', 'eqHi', 'eqHf', 'eqComb', 'eqObs'].forEach(id => { document.getElementById(id).value = ''; });
     document.getElementById('eqParadas').innerHTML = '';
     eqLimparSign(); eqCalcHoras();
@@ -3204,7 +3465,7 @@ window.cadEquipSalvar = async function() {
     EQUIP.locadoras = r.locadoras || EQUIP.locadoras;
     fecharModalRDO();
     document.getElementById('page').innerHTML = renderEquip(); ligarEquipForm();
-    toast('Equipamento cadastrado ✓', 'success');
+    toast('Equipamento cadastrado', 'success');
   } catch (e) { toast('Sem conexão com o servidor.', 'error'); }
 };
 window.cadLocadoraModal = function() {
@@ -3227,7 +3488,7 @@ window.cadLocadoraSalvar = async function() {
     if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao cadastrar', 'error', 0); return; }
     EQUIP.locadoras = r.locadoras || EQUIP.locadoras;
     fecharModalRDO();
-    toast('Locadora cadastrada ✓', 'success');
+    toast('Locadora cadastrada', 'success');
   } catch (e) { toast('Sem conexão com o servidor.', 'error'); }
 };
 
@@ -3267,7 +3528,7 @@ function renderGaleria() {
   const todas = fotosDaObra();
   if (!todas.length) {
     return `<div class="card"><div class="card-body" style="text-align:center;padding:34px">
-      <div style="font-size:30px">📷</div>
+      <div class="empty-icon" style="width:48px;height:48px;margin-bottom:10px">${ic('galeria')}</div>
       <div style="font-weight:700;margin-top:8px">Nenhuma foto registrada ainda</div>
       <div style="font-size:13px;color:var(--muted);margin-top:5px">
         Anexe fotos ao lançar um serviço, em <b>Lançar Serviço</b>.</div>
@@ -3300,7 +3561,7 @@ function renderGaleria() {
       <img id="gal-${f.fileId}" alt="${escHtml(f.pacote)}" loading="lazy"
            style="width:100%;height:170px;object-fit:cover;display:none">
       <div id="galph-${f.fileId}" style="height:170px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px">
-        ${STATE.usuarioLogado ? 'carregando…' : '🔒 entre para ver'}
+        ${STATE.usuarioLogado ? 'carregando…' : ic('cadeado') + ' entre para ver'}
       </div>
       <span class="pill" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff">
         ${escHtml(f.data)}</span>
@@ -3356,7 +3617,7 @@ function renderUsuarios() {
     <div class="card stagger-item">
       <div class="card-header">
         <div>
-          <div class="card-title">👷 Usuários e acessos</div>
+          <div class="card-title">${ic('usuarios')} Usuários e acessos</div>
           <div class="card-title-sub">Quem entra no sistema e o que cada perfil enxerga</div>
         </div>
         <button class="btn btn-primary btn-sm" onclick="usuarioAbrirForm()">+ Novo usuário</button>
@@ -3484,14 +3745,14 @@ window.usuarioExcluirUI = async function(nome) {
 };
 
 // ====================================================================
-// VIEW: ✨ ANALISTA IA (ATUALIZADO)
+// VIEW: ANALISTA IA (ATUALIZADO)
 // ====================================================================
 function renderAnalistaIA() {
   return `
     <div class="card stagger-item">
       <div class="card-header">
         <div>
-          <div class="card-title">✨ Analista IA Avançado</div>
+          <div class="card-title">${ic('ia')} Analista IA Avançado</div>
           <div class="card-title-sub">Gere análises, projeções de prazos e detete gargalos da obra com base no contexto recente.</div>
         </div>
       </div>
@@ -3522,7 +3783,7 @@ function renderAnalistaIA() {
       <div class="card-body">
         <div id="ai-output" class="ai-content">
           <div class="empty">
-            <div class="empty-icon">✨</div>
+            <div class="empty-icon">${ic('ia')}</div>
             <div class="empty-title">Aguardando Parâmetros</div>
             <div class="empty-sub">Selecione o tipo de análise e o contexto histórico acima, depois clique em "Gerar Relatório IA" para obter os insights.</div>
           </div>
@@ -3607,7 +3868,7 @@ window.runAIAnalysis = async function() {
     } else if (err.code === 'CHAVE_INVALIDA') {
       acao = '<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="abrirConfigIA()">Revisar chave de IA</button>';
     }
-    output.innerHTML = `<div class="empty"><div class="empty-icon">⚠️</div><div class="empty-title">Erro na Análise</div><div class="empty-sub">${msg}</div>${acao}</div>`;
+    output.innerHTML = `<div class="empty"><div class="empty-icon" style="color:var(--red)">${ic('alerta')}</div><div class="empty-title">Erro na Análise</div><div class="empty-sub">${msg}</div>${acao}</div>`;
     toast('Erro ao gerar relatório', 'error');
   } finally {
     btn.disabled = false;
@@ -4219,12 +4480,12 @@ function renderExecutivo() {
   const frenteTag  = STATE.filtros.frente ? STATE.filtros.frente : '';
   const cls7  = metrics.delta7d  > 0.0001 ? 'up' : metrics.delta7d  < -0.0001 ? 'down' : 'flat';
   const cls30 = metrics.delta30d > 0.0001 ? 'up' : metrics.delta30d < -0.0001 ? 'down' : 'flat';
-  const arr7  = metrics.delta7d  > 0.0001 ? '↑' : metrics.delta7d  < -0.0001 ? '↓' : '→';
-  const arr30 = metrics.delta30d > 0.0001 ? '↑' : metrics.delta30d < -0.0001 ? '↓' : '→';
+  const arr7  = ic(metrics.delta7d  > 0.0001 ? 'tendSobe' : metrics.delta7d  < -0.0001 ? 'tendDesce' : 'tendEstavel');
+  const arr30 = ic(metrics.delta30d > 0.0001 ? 'tendSobe' : metrics.delta30d < -0.0001 ? 'tendDesce' : 'tendEstavel');
   // Gap (situação vs cronograma) — magnitude + direção, sem sinal "−"
   const gapAbs    = Math.abs(gap * 100);
   const statusCls = gap < -0.001 ? 'behind' : gap > 0.001 ? 'ahead' : 'ontrack';
-  const statusArr = gap < -0.001 ? '▼' : gap > 0.001 ? '▲' : '●';
+  const statusArr = ic(gap < -0.001 ? 'tendDesce' : gap > 0.001 ? 'tendSobe' : 'tendEstavel');
   const statusText = gap < -0.001 ? 'atrás do cronograma' : gap > 0.001 ? 'à frente do cronograma' : 'no prazo';
   const frentesParadas = fa.atencao.length;
   const totalFrentesNoFiltro = fa.total;
@@ -4247,7 +4508,7 @@ function renderExecutivo() {
         ${todasFrentes.map(f => `<option value="${f}" ${STATE.filtros.frente === f ? 'selected' : ''}>Frente: ${f}</option>`).join('')}
       </select>
       ${(STATE.filtros.mes || STATE.filtros.frente) ? 
-        `<div class="filter-clear" onclick="limparFiltros()">Limpar Filtros ✕</div>` : ''}
+        `<div class="filter-clear" onclick="limparFiltros()">Limpar Filtros ${ic('fechar')}</div>` : ''}
     </div>
 
     <!-- ============ HERO EXECUTIVO ============ -->
@@ -4290,18 +4551,18 @@ function renderExecutivo() {
           <div class="narrative-text">${narrativa}</div>
         </div>
         <div class="hero-ia loading" id="heroIA">
-          <span class="hero-ia-icon">✨</span>
+          <span class="hero-ia-icon">${ic('ia')}</span>
           <div class="hero-ia-body">
             <span class="hero-ia-label">Recomendação IA</span>
             <span class="hero-ia-text">Analisando indicadores executivos…</span>
           </div>
-          <button class="hero-ia-refresh" onclick="abrirConfigIA()" title="Configurar chave da IA" style="margin-right:4px;">⚙</button>
-          <button class="hero-ia-refresh" onclick="refreshIA()" title="Gerar nova recomendação">↻</button>
+          <button class="hero-ia-refresh" onclick="abrirConfigIA()" title="Configurar chave da IA" aria-label="Configurar chave da IA" style="margin-right:4px;">${ic('engrenagem')}</button>
+          <button class="hero-ia-refresh" onclick="refreshIA()" title="Gerar nova recomendação" aria-label="Gerar nova recomendação">${ic('atualizar')}</button>
         </div>
         <div class="hero-ritmo-ctrl">
           <span class="hero-ritmo-lbl">Base do ritmo</span>
           ${[7,14,30].map(n => `<button type="button" class="hero-ritmo-btn${STATE.execRitmo.janela===n?' on':''}" onclick="setExecRitmoJanela(${n})">${n}d</button>`).join('')}
-          <button type="button" class="hero-ritmo-btn${STATE.execRitmo.diasUteis?' on':''}" onclick="toggleExecDiasUteis()" title="Considerar apenas dias úteis (exclui domingos)">${STATE.execRitmo.diasUteis?'☑':'☐'} dias úteis</button>
+          <button type="button" class="hero-ritmo-btn${STATE.execRitmo.diasUteis?' on':''}" onclick="toggleExecDiasUteis()" title="Considerar apenas dias úteis (exclui domingos)">${ic(STATE.execRitmo.diasUteis?'caixaMarcada':'caixaVazia')} dias úteis</button>
         </div>
         <div class="hero-stats">
           <div>
@@ -4362,7 +4623,7 @@ function renderExecutivo() {
         <div class="card-body">
           ${rdosOrdenados.length > 0 ? `
             <div style="position:relative;height:260px"><canvas id="curvaS"></canvas></div>
-          ` : '<div class="empty"><div class="empty-icon">◷</div><div class="empty-title">Sem dados no filtro</div><div class="empty-sub">Altere o filtro de mês ou frente.</div></div>'}
+          ` : `<div class="empty"><div class="empty-icon">${ic('relogio')}</div><div class="empty-title">Sem dados no filtro</div><div class="empty-sub">Altere o filtro de mês ou frente.</div></div>`}
         </div>
       </div>
 
@@ -4398,7 +4659,7 @@ function renderExecutivo() {
                 </div>
                 <div class="exec-list-val warn">${a.dias === null ? '— d' : a.dias + ' d'}</div>
               </div>
-            `).join('') : '<div class="exec-list-empty">Todas as frentes com atividade recente ✓</div>'}
+            `).join('') : `<div class="exec-list-empty">${ic('check')} Todas as frentes com atividade recente</div>`}
           </div>
         </div>
       </div>
@@ -4407,21 +4668,13 @@ function renderExecutivo() {
     <div class="section-title stagger-item" style="animation-delay:.2s; font-size:18px; font-weight:800; margin: 24px 0 16px; color: var(--text);">Infraestrutura & Avanço Físico</div>
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px;">
        ${Object.entries(porFrente).sort((a,b) => b[1].pctPond - a[1].pctPond).map(([f, d], i) => {
-          const fn = f.toLowerCase();
-          let img = 'icon_geral.webp';
-          if (fn.includes('demoli')) img = 'icon_demolicao.webp';
-          else if (fn.includes('dren')) img = 'icon_drenagem.webp';
-          else if (fn.includes('vala')) img = 'icon_vala.webp';
-          else if (fn.includes('sinaliza')) img = 'icon_sinalizacao.webp';
-          else if (fn.includes('desapro')) img = 'icon_desapropriacao.webp';
-          else if (fn.includes('rígido') || fn.includes('rigido')) img = 'icon_pav_rigido.webp';
-          else if (fn.includes('pav') || fn.includes('flex')) img = 'icon_pavimento.webp';
-          else if (fn.includes('passeio') || fn.includes('urban')) img = 'icon_passeio.webp';
-          else if (fn.includes('via')) img = 'icon_via.webp';
-
+          // O ícone da frente sai do conjunto do app (icFrente lê o nome da
+          // frente), no lugar das ilustrações 3D: mesma linguagem do resto do
+          // sistema e frente nova já entra desenhada, sem cadastrar arquivo.
           return `
           <div class="tech-card-3d ${STATE.filtros.frente === f ? 'active' : ''} stagger-item" style="animation-delay:.${25 + i*5}s" onclick="atualizarFiltro('frente', '${f}')">
-            <div class="tech-card-image" style="background-image: url('${img}')">
+            <div class="tech-card-image">
+               <span class="tech-card-marca">${ic(icFrente(f), 74)}</span>
                <div class="tech-card-title-overlay">
                   <div class="tech-card-title">${f}</div>
                </div>
@@ -4452,7 +4705,7 @@ function renderExecutivo() {
       </div>
       <div class="card-body flush">
         ${ativosOrdenados.length === 0 ?
-          '<div class="empty"><div class="empty-icon">⊕</div><div class="empty-title">Nenhum RDO neste filtro</div></div>' :
+          `<div class="empty"><div class="empty-icon">${ic('lancar')}</div><div class="empty-title">Nenhum RDO neste filtro</div></div>` :
           `<table class="t">
             <thead>
               <tr><th>Pacote</th><th>Frente</th><th>Executado</th><th>Avanço Relativo</th><th>Última atividade</th></tr>
@@ -4847,7 +5100,7 @@ function renderHeatmap(av) {
     .filter(a => a.qtdExecutada > 0 || true).slice(0, 15); 
   
   if (pacotesAtivos.length === 0) {
-    return '<div class="empty"><div class="empty-icon">▦</div><div class="empty-title">Mapa vazio</div><div class="empty-sub">Lance RDOs com estaca preenchida pra ver o mapa se construir</div></div>';
+    return `<div class="empty"><div class="empty-icon">${ic('mapa')}</div><div class="empty-title">Mapa vazio</div><div class="empty-sub">Lance RDOs com estaca preenchida pra ver o mapa se construir</div></div>`;
   }
   
   const maxPorPac = {};
@@ -5225,7 +5478,7 @@ function renderCronogramaReverso() {
         <input type="date" value="${alvoGlobal}" onchange="planSetAlvoGlobal(this.value)"
                style="padding:6px 9px;font-size:13px;border:1px solid var(--border-strong);border-radius:6px">
       </div>
-      <button class="btn btn-outline btn-sm" onclick="planAplicarAlvoTodos()" title="Carimba este alvo em todos os pacotes em aberto">↳ Aplicar a todos</button>
+      <button class="btn btn-outline btn-sm" onclick="planAplicarAlvoTodos()" title="Carimba este alvo em todos os pacotes em aberto">${ic('ramificar')} Aplicar a todos</button>
       <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;user-select:none">
         <input type="checkbox" ${sabAtivo ? 'checked' : ''} onchange="toggleSabadoUtil()"> Sábado é dia útil
       </label>
@@ -5236,7 +5489,7 @@ function renderCronogramaReverso() {
   </div>`;
 
   if (!linhas.length) {
-    return controles + '<div class="card stagger-item"><div class="empty"><div class="empty-icon">↩</div><div class="empty-title">Nenhum pacote ativo</div><div class="empty-sub">Cadastre pacotes para planejar de trás para frente.</div></div></div>';
+    return controles + `<div class="card stagger-item"><div class="empty"><div class="empty-icon">${ic('retornar')}</div><div class="empty-title">Nenhum pacote ativo</div><div class="empty-sub">Cadastre pacotes para planejar de trás para frente.</div></div></div>`;
   }
 
   // ─── Filtro + agrupamento por frente, ordenado por urgência ──────────────
@@ -5253,9 +5506,9 @@ function renderCronogramaReverso() {
 
   const pill = (cls, txt) => `<span class="pill ${cls}">${txt}</span>`;
   const statusPill = l => ({
-    concluido: pill('pill-grn', '✓ Concluído'),
-    atrasado:  pill('pill-red', '⚠ Atrasado'),
-    critico:   pill('pill-ylw', '● Crítico'),
+    concluido: pill('pill-grn', ic('check') + ' Concluído'),
+    atrasado:  pill('pill-red', ic('alerta') + ' Atrasado'),
+    critico:   pill('pill-ylw', ic('relogio') + ' Crítico'),
     noprazo:   pill('pill-blu', 'No prazo'),
     semdados:  pill('pill-acc', 'Definir alvo'),
   }[l.status]);
@@ -5314,7 +5567,7 @@ function renderCronogramaReverso() {
         else if (l.folga === 0) folgaTxt = 'comece hoje';
         else                  folgaTxt = `${Math.abs(l.folga)} dia${Math.abs(l.folga)!==1?'s':''} úteis em atraso`;
         row += `<td style="font-size:13px">
-          <div style="font-weight:700;color:${cor}">${atrasado ? '⚠ ' : '📅 '}${fmtData(l.inicioNec)}</div>
+          <div style="font-weight:700;color:${cor};display:inline-flex;align-items:center;gap:5px">${ic(atrasado ? 'alerta' : 'calendario')}${fmtData(l.inicioNec)}</div>
           <div style="font-size:10px;color:${cor}">${folgaTxt}</div></td>`;
       } else {
         row += '<td style="color:var(--muted)">defina alvo e produtividade</td>';
@@ -5438,12 +5691,12 @@ function renderMedicao(){
           <option value="">Obra inteira</option>
           ${meses.map(m => `<option value="${m}" ${MEDICAO_MES===m?'selected':''}>${labelMes(m)}</option>`).join('')}
         </select>
-        <button class="btn btn-outline btn-sm" onclick="exportarMedicaoCSV()">⬇ CSV p/ conferência</button>
+        <button class="btn btn-outline btn-sm" onclick="exportarMedicaoCSV()">${ic('baixar')} CSV p/ conferência</button>
         <span style="font-size:11px;color:var(--muted)">${lista.length} itens</span>
       </div>
     </div>
     <div class="card-body flush">
-      ${lista.length===0?'<div class="empty"><div class="empty-icon">⌗</div><div class="empty-title">Nada consumido neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade (ou mude o mês do filtro) para ver os itens contratuais derivados.</div></div>':`
+      ${lista.length===0?`<div class="empty"><div class="empty-icon">${ic('medicao')}</div><div class="empty-title">Nada consumido neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade (ou mude o mês do filtro) para ver os itens contratuais derivados.</div></div>`:`
       <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">Consumido</th><th>Pacotes</th></tr></thead>
       <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${x.item}</strong></td><td>${x.descricao}</td><td class="t-mono">${x.unidadeItem}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td></tr>`).join('')}</tbody>
       </table>`}
@@ -5556,12 +5809,12 @@ function renderHistoricoServicos() {
         <option value="">Todos os apontadores</option>
         ${apontadores.map(a => `<option value="${a}" ${HIST_FILTRO.apontador===a?'selected':''}>${a}</option>`).join('')}
       </select>
-      ${filtroAtivo ? `<div class="filter-clear" onclick="limparHistFiltro()">Limpar ✕</div><span style="font-size:11px;color:var(--muted)">${visiveis.length} de ${rdos.length}</span>` : ''}
+      ${filtroAtivo ? `<div class="filter-clear" onclick="limparHistFiltro()">Limpar ${ic('fechar')}</div><span style="font-size:11px;color:var(--muted)">${visiveis.length} de ${rdos.length}</span>` : ''}
     </div>`;
 
   let bodyContent = '';
   if (rdos.length === 0) {
-    bodyContent = '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum serviço ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdo\')">+ Lançar primeiro serviço</button></div>';
+    bodyContent = `<div class="empty"><div class="empty-icon">${ic('servicos')}</div><div class="empty-title">Nenhum serviço ainda</div><br><button class="btn btn-primary" onclick="navigate('rdo')">${ic('mais')} Lançar primeiro serviço</button></div>`;
   } else if (visiveis.length === 0) {
     bodyContent = '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum serviço com esses filtros</div><div class="empty-sub">Ajuste ou limpe os filtros acima.</div></div>';
   } else {
@@ -5601,8 +5854,8 @@ function renderHistoricoServicos() {
           <td style="font-size:12px">${equipe}</td>
           <td style="font-size:12px">${apontador}</td>
           <td style="text-align:center;white-space:nowrap">
-            ${podeEditar(r) ? `<button class="gantt-edit-btn" id="hedit-toggle-${idx}" onclick="histEditarServico(${idx})" title="Editar este lançamento">✏</button>` : ''}
-            ${podeExcluir(r) ? `<button class="gantt-edit-btn" onclick="histDeletarServico(${idx})" title="Apagar este lançamento" style="color:var(--err,#e53e3e);margin-left:2px">🗑</button>` : ''}
+            ${podeEditar(r) ? `<button class="gantt-edit-btn" id="hedit-toggle-${idx}" onclick="histEditarServico(${idx})" title="Editar este lançamento" aria-label="Editar lançamento">${ic('editar')}</button>` : ''}
+            ${podeExcluir(r) ? `<button class="gantt-edit-btn" onclick="histDeletarServico(${idx})" title="Apagar este lançamento" aria-label="Apagar lançamento" style="color:var(--err,#e53e3e);margin-left:2px">${ic('lixeira')}</button>` : ''}
           </td>
         </tr>
         <tr id="hist-edit-row-${idx}" style="display:none">
@@ -5692,8 +5945,8 @@ function renderHistoricoServicos() {
           <div class="card-title-sub">Cada linha = 1 pacote executado · alimenta avanço físico e medição</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${rdos.length > 0 ? `<button class="btn btn-outline btn-sm" onclick="exportarHistoricoCSV()">⬇ CSV</button>` : ''}
-          ${ehAdmin() && rdos.length > 0 ? `<button class="btn btn-sm" style="background:var(--err,#e53e3e);color:#fff;border:none;padding:5px 12px;border-radius:var(--r);cursor:pointer;font-size:12px;font-weight:600" onclick="apagarDuplicatasRDO()">🗑 Apagar duplicatas</button>` : ''}
+          ${rdos.length > 0 ? `<button class="btn btn-outline btn-sm" onclick="exportarHistoricoCSV()">${ic('baixar')} CSV</button>` : ''}
+          ${ehAdmin() && rdos.length > 0 ? `<button class="btn btn-sm" style="background:var(--err,#e53e3e);color:#fff;border:none;padding:5px 12px;border-radius:var(--r);cursor:pointer;font-size:12px;font-weight:600" onclick="apagarDuplicatasRDO()">${ic('lixeira')} Apagar duplicatas</button>` : ''}
         </div>
       </div>
       <div class="card-body flush">
@@ -5779,12 +6032,12 @@ window.histSalvarEdicao = async function(idx) {
   const payload = { id, data, turno, pacote_id: pacoteId, pacote_nome: pacoteNome, quantidade: qtd, unidade, local_estaca: localEstaca, equipe, subcontratado: equipe, apontador, observacao: obs };
 
   const btn = document.getElementById(`hedit-btn-${idx}`);
-  if (btn) { btn.disabled = true; btn.innerHTML = '⏳'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = ic('ampulheta', 0, 'ic-gira'); }
 
   try {
     const result = await jsonp(CONFIG.appsScript, { action: 'updateRDO', payload: JSON.stringify(payload), ...authParams() }, 0);
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
-    toast('✓ Lançamento atualizado', 'success');
+    toast('Lançamento atualizado', 'success');
     histCancelarEdicao(idx);
     setTimeout(() => carregarTudo(), 800);
   } catch(e) {
@@ -5812,7 +6065,7 @@ window.histDeletarServico = async function(idx) {
     // (que é cacheado pelo Google e demora minutos para atualizar).
     STATE.rdoavanco = STATE.rdoavanco.filter(x => String(getCSVField(x,'ID')).trim() !== String(id).trim());
     render();
-    toast('✓ Lançamento apagado', 'success');
+    toast('Lançamento apagado', 'success');
 
     // Reconcilia com o servidor e detecta backend que insere em vez de apagar.
     await verificarBackendNaoCriou(antes, 1, 'apagar');
@@ -5877,13 +6130,13 @@ window.apagarDuplicatasRDO = async function() {
   if (!confirm(`Foram encontradas ~${qtdDup} linha(s) duplicada(s).\n\nA limpeza roda no servidor (faz backup automático antes) e apaga todas de uma vez.\n\nApagar agora?`)) return;
 
   const btn = document.querySelector('[onclick="apagarDuplicatasRDO()"]');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Limpando no servidor…'; }
+  if (btn) { btn.disabled = true; btn.innerHTML = ic('ampulheta', 0, 'ic-gira') + ' Limpando no servidor…'; }
 
   try {
     // Uma única chamada limpa milhares de linhas no servidor (com backup).
     const result = await jsonp(CONFIG.appsScript, { action: 'limparDuplicados', ...authParams() }, 0, 0, null);
     if (!result.ok) throw new Error(result.error || 'erro');
-    toast(`✓ ${result.removidas} duplicata(s) removida(s) de ${result.total}. Backup: ${result.backup||'criado'}.`, 'success', 7000);
+    toast(`${result.removidas} duplicata(s) removida(s) de ${result.total}. Backup: ${result.backup||'criado'}.`, 'success', 7000);
     // Espera o CSV publicado atualizar e recarrega.
     setTimeout(() => carregarTudo(), 4000);
   } catch(e) {
@@ -5892,7 +6145,7 @@ window.apagarDuplicatasRDO = async function() {
       : '';
     toast('Falha ao limpar: ' + e.message + extra, 'error', 0);
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '🗑 Apagar duplicatas'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = ic('lixeira') + ' Apagar duplicatas'; }
   }
 };
 
@@ -5918,7 +6171,7 @@ function atualizarBotaoLote() {
   if (!btn) return;
   const n = SELECTED_RDO_DATAS.size;
   btn.disabled = n === 0;
-  btn.textContent = n > 0 ? `📄 Gerar ${n} PDF${n > 1 ? 's' : ''}` : '📄 Gerar PDFs em Lote';
+  btn.innerHTML = ic('pdf') + (n > 0 ? ` Gerar ${n} PDF${n > 1 ? 's' : ''}` : ' Gerar PDFs em Lote');
 }
 
 function gerarPDFsEmLote() {
@@ -5932,7 +6185,7 @@ function gerarPDFsEmLote() {
     const lista = naoResolvidas.map(d =>
       `• ${fmtData(d)} — IDs em conflito: ${rdosDaData(d).map(r => getCSVField(r,'ID')).join(', ')}`
     ).join('<br>');
-    toast(`⛔ Exportação bloqueada: ${naoResolvidas.length} data(s) com duplicata não resolvida. Defina o RDO oficial (ou exclua o errado) antes de exportar:<br>${lista}`, 'error', 0);
+    toast(`Exportação bloqueada: ${naoResolvidas.length} data(s) com duplicata não resolvida. Defina o RDO oficial (ou exclua o errado) antes de exportar:<br>${lista}`, 'error', 0);
     if (naoResolvidas.length === 1) resolverDuplicata(naoResolvidas[0]);
     return;
   }
@@ -6066,7 +6319,7 @@ function visualizarRDO(id) {
   const linha = (lbl, val) => `<div style="display:flex;gap:8px;font-size:13px;padding:3px 0"><span style="color:var(--muted);min-width:130px">${lbl}</span><span style="font-weight:600">${val || '—'}</span></div>`;
   abrirModalRDO(`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <h2 style="font-size:17px;font-weight:700;margin:0">👁 RDO Diário — ${fmtData(data)}</h2>
+      <h2 style="font-size:17px;font-weight:700;margin:0;display:flex;align-items:center;gap:8px">${ic('olho')} RDO Diário — ${fmtData(data)}</h2>
       <button class="btn btn-sm btn-outline" onclick="fecharModalRDO()">Fechar</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
@@ -6093,7 +6346,7 @@ function visualizarRDO(id) {
       ${servHtml}
     </div>
     <div style="margin-top:16px;text-align:right">
-      <button class="btn btn-primary btn-sm" onclick="gerarPDFDiario('${data}')">📄 Gerar PDF</button>
+      <button class="btn btn-primary btn-sm" onclick="gerarPDFDiario('${data}')">${ic('pdf')} Gerar PDF</button>
     </div>
   `);
 }
@@ -6114,7 +6367,7 @@ function resolverDuplicata(data) {
       <div style="flex:1;min-width:250px;border:2px solid ${ehOf ? 'var(--grn)' : 'var(--border)'};border-radius:var(--r);padding:14px;background:${ehOf ? 'var(--grn-l)' : 'var(--bg)'}">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:8px">
           <span class="t-mono" style="font-size:12px;font-weight:700">${s.id || '(sem ID)'}</span>
-          ${ehOf ? '<span class="pill pill-grn">★ oficial</span>' : ''}
+          ${ehOf ? `<span class="pill pill-grn">${ic('estrela')} oficial</span>` : ''}
         </div>
         <div style="font-size:12px;line-height:1.7">
           <div><span style="color:var(--muted)">Encarregado:</span> ${s.encarregado}</div>
@@ -6126,20 +6379,20 @@ function resolverDuplicata(data) {
           <div><span style="color:var(--muted)">Efetivo noturno (${soma(det.noturno)}):</span> ${efTxt(det.noturno)}</div>
         </div>
         <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
-          <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${s.id}')">👁 Ver completo</button>
-          ${ehOf ? '' : `<button class="btn btn-sm btn-primary" onclick="definirOficial('${data}','${s.id}')">✓ Definir como oficial</button>`}
-          <button class="btn btn-sm" onclick="excluirRDODiario('${data}','${s.id}')" style="background:var(--red);color:#fff;border:none">🗑 Excluir</button>
+          <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${s.id}')">${ic('olho')} Ver completo</button>
+          ${ehOf ? '' : `<button class="btn btn-sm btn-primary" onclick="definirOficial('${data}','${s.id}')">${ic('check')} Definir como oficial</button>`}
+          <button class="btn btn-sm" onclick="excluirRDODiario('${data}','${s.id}')" style="background:var(--red);color:#fff;border:none">${ic('lixeira')} Excluir</button>
         </div>
       </div>`;
   }).join('');
   abrirModalRDO(`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-      <h2 style="font-size:17px;font-weight:700;margin:0">⚖ Resolver duplicata — ${fmtData(data)}</h2>
+      <h2 style="font-size:17px;font-weight:700;margin:0;display:flex;align-items:center;gap:8px">${ic('balanca')} Resolver duplicata — ${fmtData(data)}</h2>
       <button class="btn btn-sm btn-outline" onclick="fecharModalRDO()">Fechar</button>
     </div>
     <p style="font-size:13px;color:var(--muted);margin:4px 0 14px;line-height:1.6">
       Há <strong>${lista.length}</strong> RDOs nesta data. Escolha o <strong>oficial</strong> (usado na exportação) ou exclua o errado.
-      <span style="color:var(--red);font-weight:600">⚠ Excluir altera a planilha de produção (RDO_Diario) e não pode ser desfeito.</span>
+      <span style="color:var(--red);font-weight:600">${ic('alerta')} Excluir altera a planilha de produção (RDO_Diario) e não pode ser desfeito.</span>
     </p>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch">${cards}</div>
   `);
@@ -6148,7 +6401,7 @@ function resolverDuplicata(data) {
 // (4) Define qual RDO é o oficial da data (só no navegador).
 function definirOficial(data, id) {
   setOficialRDO(data, id);
-  toast('✓ RDO oficial definido para ' + fmtData(data), 'success');
+  toast('RDO oficial definido para ' + fmtData(data), 'success');
   render();
   resolverDuplicata(data);
 }
@@ -6161,12 +6414,12 @@ function excluirRDODiario(data, id) {
   if (!id) { toast('ID não informado', 'error'); return; }
   abrirModalRDO(`
     <div style="max-width:480px">
-      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">🗑 Excluir RDO Diário</h2>
+      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:8px;color:var(--red)">${ic('lixeira')} Excluir RDO Diário</h2>
       <p style="font-size:13px;line-height:1.6;margin:0 0 8px">
         Confirma a exclusão do RDO <strong>${id}</strong> de <strong>${fmtData(data)}</strong>?
       </p>
       <p style="font-size:13px;color:var(--red);font-weight:600;margin:0 0 18px">
-        ⚠ Esta ação ALTERA a planilha de produção (RDO_Diario) e NÃO pode ser desfeita.
+        ${ic('alerta')} Esta ação ALTERA a planilha de produção (RDO_Diario) e NÃO pode ser desfeita.
       </p>
       <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
         <button class="btn btn-sm btn-outline" onclick="resolverDuplicata('${data}')">Cancelar</button>
@@ -6194,7 +6447,7 @@ async function executarExclusaoRDODiario(data, id) {
     // Remoção otimista (o CSV publicado demora a atualizar).
     STATE.rdodiario = (STATE.rdodiario || []).filter(x => String(getCSVField(x, 'ID')).trim() !== String(id).trim());
     if (String(getOficialRDO(data)).trim() === String(id).trim()) setOficialRDO(data, '');
-    toast('✓ RDO Diário ' + id + ' excluído', 'success');
+    toast('RDO Diário ' + id + ' excluído', 'success');
     render();
     if (rdosDaData(data).length > 1) resolverDuplicata(data); else fecharModalRDO();
   } catch (e) {
@@ -6214,7 +6467,7 @@ window.criarRDOsFaltantes = function(dias, tipoLabel) {
   const rotulo = tipoLabel || 'dia útil sem RDO';
   abrirModalRDO(`
     <div style="max-width:480px">
-      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px">➕ Criar RDOs faltantes</h2>
+      <h2 style="font-size:17px;font-weight:700;margin:0 0 10px;display:flex;align-items:center;gap:8px">${ic('maisCirculo')} Criar RDOs faltantes</h2>
       <p style="font-size:13px;line-height:1.6;margin:0 0 8px">
         Serão criados <strong>${dias.length}</strong> RDO(s) Diário(s) <strong>em branco</strong>, um para cada ${rotulo}:
       </p>
@@ -6262,7 +6515,7 @@ window.executarCriarRDOsFaltantes = async function() {
     } catch (e) { falhou++; }
   }
   fecharModalRDO();
-  const partes = [`✓ ${criados} RDO(s) criado(s)`];
+  const partes = [`${criados} RDO(s) criado(s)`];
   if (jaExistiam) partes.push(`${jaExistiam} já existiam`);
   if (falhou) partes.push(`${falhou} falharam`);
   toast(partes.join(' · '), falhou ? 'error' : 'success', 6000);
@@ -6625,11 +6878,11 @@ function renderHistoricoDiarios() {
     const naoResolvidas = datasDuplicadas.filter(d => !getOficialRDO(d)).length;
     const chips = datasDuplicadas.map(d => {
       const ok = !!getOficialRDO(d);
-      return `<button class="btn btn-sm btn-outline" onclick="resolverDuplicata('${d}')" style="margin:4px 4px 0 0;white-space:nowrap">${ok ? '✓' : '⚖'} ${fmtData(d)} (${contagemPorData[d]}×)${ok ? ' — resolvido' : ' — resolver'}</button>`;
+      return `<button class="btn btn-sm btn-outline" onclick="resolverDuplicata('${d}')" style="margin:4px 4px 0 0;white-space:nowrap">${ic(ok ? 'check' : 'balanca')} ${fmtData(d)} (${contagemPorData[d]}×)${ok ? ' — resolvido' : ' — resolver'}</button>`;
     }).join('');
     avisosHtml += `
       <div style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--red-l);border:1px solid var(--red);font-size:13px">
-        <strong style="color:var(--red)">⚠ ${datasDuplicadas.length} data(s) com mais de um RDO${naoResolvidas ? ` (${naoResolvidas} sem oficial definido)` : ''}.</strong>
+        <strong style="color:var(--red)">${ic('alerta')} ${datasDuplicadas.length} data(s) com mais de um RDO${naoResolvidas ? ` (${naoResolvidas} sem oficial definido)` : ''}.</strong>
         Defina o RDO <em>oficial</em> de cada data (ou exclua o errado) antes de exportar — a exportação em lote fica <strong>bloqueada</strong> enquanto houver duplicata não resolvida.
         <div style="margin-top:4px">${chips}</div>
       </div>`;
@@ -6644,13 +6897,13 @@ function renderHistoricoDiarios() {
     avisosHtml += `
       <details style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--ylw-l);border:1px solid var(--ylw-d);font-size:13px">
         <summary style="cursor:pointer;user-select:none">
-          <strong style="color:var(--ylw-d)">📌 Dias úteis sem RDO</strong>
+          <strong style="color:var(--ylw-d)">${ic('pino')} Dias úteis sem RDO</strong>
           <span style="display:inline-flex;align-items:center;padding:2px 8px;margin:0 4px;border-radius:20px;font-size:11px;font-weight:700;background:var(--ylw-d);color:#fff">${totalDias}</span>
           <span style="font-size:12px;color:var(--muted)">(${regra}, exceto feriados nacionais; mês corrente só até hoje)</span>
         </summary>
         <div style="margin-top:6px">${linhas}</div>
         <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-sm" onclick="criarRDOsFaltantes()" style="background:var(--ylw-d);color:#fff;border:none;white-space:nowrap">➕ Criar RDOs vazios destes ${totalDias} dia(s)</button>
+          <button class="btn btn-sm" onclick="criarRDOsFaltantes()" style="background:var(--ylw-d);color:#fff;border:none;white-space:nowrap">${ic('mais')} Criar RDOs vazios destes ${totalDias} dia(s)</button>
           <span style="font-size:11px;color:var(--muted)">cria 1 RDO em branco por dia, pronto pra preencher depois</span>
         </div>
       </details>`;
@@ -6664,13 +6917,13 @@ function renderHistoricoDiarios() {
     avisosHtml += `
       <details style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--blu-l);border:1px solid var(--blu);font-size:13px">
         <summary style="cursor:pointer;user-select:none">
-          <strong style="color:var(--blu)">🗓 Dias não úteis sem RDO</strong>
+          <strong style="color:var(--blu)">${ic('calendario')} Dias não úteis sem RDO</strong>
           <span style="display:inline-flex;align-items:center;padding:2px 8px;margin:0 4px;border-radius:20px;font-size:11px;font-weight:700;background:var(--blu);color:#fff">${totalDiasNU}</span>
           <span style="font-size:12px;color:var(--muted)">(fins de semana e feriados; use se houve trabalho nesses dias)</span>
         </summary>
         <div style="margin-top:6px">${linhasNU}</div>
         <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-sm" onclick="criarRDOsFaltantes(window.FALTANTES_DIAS_NAO_UTEIS, 'dia não útil (fim de semana/feriado) sem RDO')" style="background:var(--blu);color:#fff;border:none;white-space:nowrap">➕ Criar RDOs vazios destes ${totalDiasNU} dia(s)</button>
+          <button class="btn btn-sm" onclick="criarRDOsFaltantes(window.FALTANTES_DIAS_NAO_UTEIS, 'dia não útil (fim de semana/feriado) sem RDO')" style="background:var(--blu);color:#fff;border:none;white-space:nowrap">${ic('mais')} Criar RDOs vazios destes ${totalDiasNU} dia(s)</button>
           <span style="font-size:11px;color:var(--muted)">cria 1 RDO em branco por dia, pronto pra preencher depois</span>
         </div>
       </details>`;
@@ -6678,9 +6931,9 @@ function renderHistoricoDiarios() {
 
   let bodyContent = '';
   if (diariosTodos.length === 0) {
-    bodyContent = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum RDO Diário ainda</div><br><button class="btn btn-primary" onclick="navigate(\'rdodiario\')">+ Criar primeiro RDO Diário</button></div>';
+    bodyContent = `<div class="empty"><div class="empty-icon">${ic('diario')}</div><div class="empty-title">Nenhum RDO Diário ainda</div><br><button class="btn btn-primary" onclick="navigate('rdodiario')">${ic('mais')} Criar primeiro RDO Diário</button></div>`;
   } else if (diarios.length === 0) {
-    bodyContent = `<div class="empty"><div class="empty-icon">📋</div><div class="empty-title">Nenhum RDO Diário em ${labelMesDiario(HIST_DIARIO_FILTRO.mes)}</div><div class="empty-sub">Ajuste ou limpe o filtro de mês acima.</div></div>`;
+    bodyContent = `<div class="empty"><div class="empty-icon">${ic('diario')}</div><div class="empty-title">Nenhum RDO Diário em ${labelMesDiario(HIST_DIARIO_FILTRO.mes)}</div><div class="empty-sub">Ajuste ou limpe o filtro de mês acima.</div></div>`;
   } else {
     const tableRows = diarios.map(r => {
       const total = efetivoTotaisRDO(r).total;
@@ -6698,17 +6951,17 @@ function renderHistoricoDiarios() {
         <tr${dup ? ' style="background:var(--red-l)"' : ''}>
           <td style="width:32px;text-align:center"><input type="checkbox" class="rdo-check" data-data="${dStr}" onchange="toggleRDOSelect('${dStr}', this)" aria-label="Selecionar RDO de ${fmtData(dStr)}" style="width:16px;height:16px;cursor:pointer"></td>
           <td class="t-mono">${rid}</td>
-          <td>${fmtData(getCSVField(r, 'Data'))}${dup ? ` <span class="pill pill-red" title="Há ${contagemPorData[dStr]} RDOs nesta data — resolva qual é o oficial">⚠ ${contagemPorData[dStr]}×</span>` : ''}${ehOficial ? ' <span class="pill pill-grn" title="RDO oficial desta data">★ oficial</span>' : ''}</td>
+          <td>${fmtData(getCSVField(r, 'Data'))}${dup ? ` <span class="pill pill-red" title="Há ${contagemPorData[dStr]} RDOs nesta data — resolva qual é o oficial">${ic('alerta')} ${contagemPorData[dStr]}×</span>` : ''}${ehOficial ? `<span class="pill pill-grn" title="RDO oficial desta data">${ic('estrela')} oficial</span>` : ''}</td>
           <td style="font-size:12px">${getCSVField(r, 'Encarregado')||''}</td>
           <td style="font-size:12px">${getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || ''}</td>
           <td style="font-size:11px;color:var(--muted)">${climaResumo}</td>
           <td class="t-num">${total}</td>
           <td>${hasNoturno ?'<span class="pill pill-blu">Sim</span>':'<span class="pill pill-ylw">Não</span>'}</td>
           <td style="white-space:nowrap">
-            <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${rid}')" title="Visualizar (não baixa arquivo)" aria-label="Visualizar RDO de ${fmtData(dStr)}">👁</button>
-            <button class="btn btn-sm btn-outline" onclick="editarRDODiario('${dStr}')" title="Editar este RDO" aria-label="Editar RDO de ${fmtData(dStr)}" style="margin-left:2px">✏️</button>
-            ${dup ? `<button class="btn btn-sm" onclick="resolverDuplicata('${dStr}')" title="Resolver duplicata" aria-label="Resolver duplicata de ${fmtData(dStr)}" style="margin-left:2px;background:var(--red);color:#fff;border:none">⚖</button>` : ''}
-            <button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')" title="Gerar PDF (baixa arquivo)" aria-label="Gerar PDF do RDO de ${fmtData(dStr)}" style="margin-left:2px">📄</button>
+            <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${rid}')" title="Visualizar (não baixa arquivo)" aria-label="Visualizar RDO de ${fmtData(dStr)}">${ic('olho')}</button>
+            <button class="btn btn-sm btn-outline" onclick="editarRDODiario('${dStr}')" title="Editar este RDO" aria-label="Editar RDO de ${fmtData(dStr)}" style="margin-left:2px">${ic('editar')}</button>
+            ${dup ? `<button class="btn btn-sm" onclick="resolverDuplicata('${dStr}')" title="Resolver duplicata" aria-label="Resolver duplicata de ${fmtData(dStr)}" style="margin-left:2px;background:var(--red);color:#fff;border:none">${ic('balanca')}</button>` : ''}
+            <button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')" title="Gerar PDF (baixa arquivo)" aria-label="Gerar PDF do RDO de ${fmtData(dStr)}" style="margin-left:2px">${ic('pdf')}</button>
           </td>
         </tr>
       `;
@@ -6754,17 +7007,17 @@ function renderHistoricoDiarios() {
       <div class="card-header">
         <div>
           <div class="card-title">RDOs Diários</div>
-          <div class="card-title-sub">👁 visualiza sem baixar · 📄 gera o PDF · selecione vários para lote · ⬇ exporta Excel</div>
+          <div class="card-title-sub">${ic('olho')} visualiza sem baixar · ${ic('pdf')} gera o PDF · selecione vários para lote · ${ic('baixar')} exporta Excel</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <select onchange="setHistDiarioFiltro('mes', this.value)" title="Filtrar RDOs por mês" style="white-space:nowrap">
             <option value="">Todos os meses</option>
             ${mesesDiario.map(m => `<option value="${m}" ${HIST_DIARIO_FILTRO.mes===m?'selected':''}>${labelMesDiario(m)}</option>`).join('')}
           </select>
-          ${HIST_DIARIO_FILTRO.mes ? `<div class="filter-clear" onclick="limparHistDiarioFiltro()" style="cursor:pointer">Limpar ✕</div><span style="font-size:11px;color:var(--muted);white-space:nowrap">${diarios.length} de ${diariosTodos.length}</span>` : ''}
-          <button class="btn btn-sm btn-outline" onclick="toggleSabadoUtil()" title="Conta sábado como dia útil no alerta de dias sem RDO" style="white-space:nowrap">${sabadoEhUtil()?'☑':'☐'} Sábado útil</button>
-          <button class="btn btn-outline" onclick="exportarRDOsXLS()" title="Exporta os RDOs para Excel (.xlsx). Se houver itens selecionados, exporta só eles." style="white-space:nowrap">⬇ Exportar Excel</button>
-          <button id="btnLotePDF" class="btn btn-primary" onclick="gerarPDFsEmLote()" disabled style="white-space:nowrap">📄 Gerar PDFs em Lote</button>
+          ${HIST_DIARIO_FILTRO.mes ? `<div class="filter-clear" onclick="limparHistDiarioFiltro()" style="cursor:pointer">Limpar ${ic('fechar')}</div><span style="font-size:11px;color:var(--muted);white-space:nowrap">${diarios.length} de ${diariosTodos.length}</span>` : ''}
+          <button class="btn btn-sm btn-outline" onclick="toggleSabadoUtil()" title="Conta sábado como dia útil no alerta de dias sem RDO" style="white-space:nowrap">${ic(sabadoEhUtil()?'caixaMarcada':'caixaVazia')} Sábado útil</button>
+          <button class="btn btn-outline" onclick="exportarRDOsXLS()" title="Exporta os RDOs para Excel (.xlsx). Se houver itens selecionados, exporta só eles." style="white-space:nowrap">${ic('baixar')} Exportar Excel</button>
+          <button id="btnLotePDF" class="btn btn-primary" onclick="gerarPDFsEmLote()" disabled style="white-space:nowrap">${ic('pdf')} Gerar PDFs em Lote</button>
         </div>
       </div>
       ${avisosHtml ? `<div style="padding:14px 16px 0">${avisosHtml}</div>` : ''}
@@ -6846,7 +7099,7 @@ function renderRDO() {
     const partes = Object.entries(turnosHoje).map(([t, n]) => `${n} ${t}`).join(', ');
     const pend = pendentesRdo > 0 ? ` · <strong>${pendentesRdo} aguardando envio</strong>` : '';
     const txt = lancHoje.length > 0
-      ? `✓ Hoje (${hojeBR}) já tem ${lancHoje.length} lançamento${lancHoje.length>1?'s':''}: ${partes}${pend}`
+      ? `${ic('check')} Hoje (${hojeBR}) já tem ${lancHoje.length} lançamento${lancHoje.length>1?'s':''}: ${partes}${pend}`
       : `Hoje (${hojeBR}): ${pendentesRdo} lançamento${pendentesRdo>1?'s':''} aguardando envio`;
     bannerHoje = `<div style="background:var(--grn-l);border:1px solid var(--grn);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--grn)">${txt}</div>`;
   }
@@ -6854,7 +7107,7 @@ function renderRDO() {
   return `
     ${temRascunho ? `
       <div style="background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-        <div style="font-size:13px;color:var(--ylw-d)">📝 Rascunho salvo${draftHora ? ` às ${draftHora}` : ' na última sessão'} restaurado.</div>
+        <div style="font-size:13px;color:var(--ylw-d);display:flex;align-items:center;gap:6px">${ic('rascunho')} Rascunho salvo${draftHora ? ` às ${draftHora}` : ' na última sessão'} restaurado.</div>
         <button class="btn btn-sm btn-outline" onclick="resetDraft()">Limpar e começar novo</button>
       </div>
     ` : ''}
@@ -6876,8 +7129,8 @@ function renderRDO() {
           <div class="field">
             <label>Turno</label>
             <div class="btn-toggle-group">
-              <button type="button" class="btn-toggle ${d.turno==='Diurno'?'active':''}" onclick="setTurno('Diurno')">☀ Diurno</button>
-              <button type="button" class="btn-toggle ${d.turno==='Noturno'?'active':''}" onclick="setTurno('Noturno')">🌙 Noturno</button>
+              <button type="button" class="btn-toggle ${d.turno==='Diurno'?'active':''}" onclick="setTurno('Diurno')">${ic('sol')} Diurno</button>
+              <button type="button" class="btn-toggle ${d.turno==='Noturno'?'active':''}" onclick="setTurno('Noturno')">${ic('lua')} Noturno</button>
             </div>
           </div>
           <div class="field">
@@ -6902,7 +7155,7 @@ function renderRDO() {
           <div class="card-title-sub">Adicione 1 linha por pacote · cada linha vira 1 lançamento em RDO_Avanco</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
-          <button class="btn btn-outline btn-sm" onclick="copiarServicosDeOntem()" title="Preenche frente, pacote, estacas e equipe do último dia lançado — só a quantidade fica em branco">⧉ Copiar do último dia</button>
+          <button class="btn btn-outline btn-sm" onclick="copiarServicosDeOntem()" title="Preenche frente, pacote, estacas e equipe do último dia lançado — só a quantidade fica em branco">${ic('copiar')} Copiar do último dia</button>
           <span style="font-size:11px;color:var(--muted)">${d.servicos.length} serviço${d.servicos.length>1?'s':''}</span>
         </div>
       </div>
@@ -6932,11 +7185,11 @@ function renderRDO() {
 
     <div class="stagger-item" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;animation-delay:.2s">
       <div style="font-size:12px;color:var(--muted);max-width:520px">
-        ⓘ Cada serviço vira 1 linha em <strong>RDO_Avanco</strong>. O dashboard atualiza em até 5 min.
+        ${ic('info')} Cada serviço vira 1 linha em <strong>RDO_Avanco</strong>. O dashboard atualiza em até 5 min.
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-outline" onclick="resetDraft()">Limpar</button>
-        <button class="btn btn-primary btn-lg" id="btnSalvarRDO" onclick="salvarRDO()">💾 Salvar Serviços</button>
+        <button class="btn btn-primary btn-lg" id="btnSalvarRDO" onclick="salvarRDO()">${ic('salvar')} Salvar Serviços</button>
       </div>
     </div>
   `;
@@ -6969,7 +7222,7 @@ function renderServicoRow(s, idx, frentes) {
         <div class="field">
           <label>Pacote / Serviço</label>
           <select data-svc="${idx}" data-field="pacoteId" ${!s.frente ? 'disabled' : ''}>
-            <option value="">${s.frente ? '— escolher pacote —' : '↑ escolha frente primeiro'}</option>
+            <option value="">${s.frente ? '— escolher pacote —' : '↑ escolha a frente primeiro'}</option>
             ${pacotesDaFrente.map(p => `<option value="${getCSVField(p, 'ID')}" ${s.pacoteId===getCSVField(p, 'ID')?'selected':''}>${getCSVField(p, 'Pacote')} (${getCSVField(p, 'Unidade Física')||''})</option>`).join('')}
           </select>
         </div>
@@ -7005,7 +7258,7 @@ function renderServicoRow(s, idx, frentes) {
             if (!a || a.qtdEstimada <= 0) return '';
             const saldo = Math.max(0, a.qtdEstimada - a.qtdExecutada);
             const estoura = num(s.quantidade) > saldo + 0.001;
-            return `<div style="font-size:11px;margin-top:3px;color:${estoura ? 'var(--red)' : 'var(--muted)'}">${estoura ? '⚠️ acima do ' : ''}saldo do pacote: ${fmtNum(saldo)} ${unidade}</div>`;
+            return `<div style="font-size:11px;margin-top:3px;color:${estoura ? 'var(--red)' : 'var(--muted)'}">${estoura ? 'acima do ' : ''}saldo do pacote: ${fmtNum(saldo)} ${unidade}</div>`;
           })()}
         </div>
         <div class="field">
@@ -7388,7 +7641,7 @@ async function salvarRDO() {
   const totalItens = batch.length;
 
   btn.disabled = true;
-  btn.innerHTML = '⏳ Salvando…';
+  btn.innerHTML = ic('ampulheta', 0, 'ic-gira') + ' Salvando…';
 
   const clientId = 'b_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
   const reqParams = { action: 'addBatchRDO', batch: JSON.stringify(batch), clientId: clientId, ...authParams() };
@@ -7419,7 +7672,7 @@ async function salvarRDO() {
 
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
 
-    toast(`✓ ${totalItens} item${totalItens>1?'s':''} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
+    toast(`${totalItens} item${totalItens>1?'s':''} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
 
     if (totalFotos) {
       toast(`Enviando ${totalFotos} foto(s)…`, 'info', 2500);
@@ -7656,13 +7909,13 @@ function renderSeletorTurno() {
 
   const pendentesDiario = outboxLer().filter(it => it.kind === 'diario').length;
   const bannerPend = pendentesDiario > 0
-    ? `<div style="max-width:680px;margin:0 auto 14px;background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:10px 14px;font-size:13px;color:var(--ylw-d)">📡 ${pendentesDiario} turno${pendentesDiario>1?'s':''} aguardando envio — vai enviar sozinho quando o sinal voltar.</div>`
+    ? `<div style="max-width:680px;margin:0 auto 14px;background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:10px 14px;font-size:13px;color:var(--ylw-d)">${ic('antena')} ${pendentesDiario} turno${pendentesDiario>1?'s':''} aguardando envio — vai enviar sozinho quando o sinal voltar.</div>`
     : '';
 
   let botoesHtml = '';
   if (d.diurno.preenchido || d.noturno.preenchido) {
     botoesHtml += `<div style="margin-top:16px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r-sm);font-size:12px;color:var(--muted)">ℹ Selecionar um turno já preenchido permite editar os dados.</div>`;
-    botoesHtml += `<div style="margin-top:14px;text-align:center"><button class="btn btn-outline" onclick="gerarPDFDiarioV4('${DIARIO_V4.data}')">📄 Gerar PDF Oficial Completo</button></div>`;
+    botoesHtml += `<div style="margin-top:14px;text-align:center"><button class="btn btn-outline" onclick="gerarPDFDiarioV4('${DIARIO_V4.data}')">${ic('pdf')} Gerar PDF Oficial Completo</button></div>`;
   }
 
   return `
@@ -7687,18 +7940,18 @@ function renderSeletorTurno() {
           
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
             <button onclick="selecionarTurnoV4('diurno')" class="btn-turno-grande btn-turno-diurno ${d.diurno.preenchido?'preenchido':''}">
-              <div class="btn-turno-icon">☀️</div>
+              <div class="btn-turno-icon">${ic('sol')}</div>
               <div class="btn-turno-titulo">DIURNO</div>
               ${d.diurno.preenchido 
-                ? `<div class="btn-turno-status preenchido">✓ Já preenchido por ${d.diurno.apontador}</div>` 
+                ? `<div class="btn-turno-status preenchido">${ic('check')} Já preenchido por ${d.diurno.apontador}</div>` 
                 : '<div class="btn-turno-status">Não preenchido</div>'}
             </button>
             
             <button onclick="selecionarTurnoV4('noturno')" class="btn-turno-grande btn-turno-noturno ${d.noturno.preenchido?'preenchido':''}">
-              <div class="btn-turno-icon">🌙</div>
+              <div class="btn-turno-icon">${ic('lua')}</div>
               <div class="btn-turno-titulo">NOTURNO</div>
               ${d.noturno.preenchido 
-                ? `<div class="btn-turno-status preenchido">✓ Já preenchido por ${d.noturno.apontador}</div>` 
+                ? `<div class="btn-turno-status preenchido">${ic('check')} Já preenchido por ${d.noturno.apontador}</div>` 
                 : '<div class="btn-turno-status">Não preenchido</div>'}
             </button>
           </div>
@@ -7714,7 +7967,7 @@ function renderFormularioTurno() {
   const t = DIARIO_TURNO_ATIVO; 
   const td = d[t]; 
   const turnoLabel = t === 'diurno' ? 'DIURNO' : 'NOTURNO';
-  const turnoIcon = t === 'diurno' ? '☀️' : '🌙';
+  const turnoIcon = ic(t === 'diurno' ? 'sol' : 'lua');
   const cor = t === 'diurno' ? '#d4a810' : '#326496';
   const outroTurno = t === 'diurno' ? 'noturno' : 'diurno';
   const outroLabel = t === 'diurno' ? 'NOTURNO' : 'DIURNO';
@@ -7736,7 +7989,7 @@ function renderFormularioTurno() {
         <div style="font-size:11px;opacity:.85;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Você está preenchendo</div>
         <div style="font-size:18px;font-weight:700;margin-top:2px">${turnoIcon} TURNO ${turnoLabel} · ${fmtData(d.data)}</div>
       </div>
-      <button class="btn-outline" onclick="voltarSeletorTurnoV4()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff">← Voltar</button>
+      <button class="btn-outline" onclick="voltarSeletorTurnoV4()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff">${ic('voltar')} Voltar</button>
     </div>
     
     ${infoOutroHtml}
@@ -7842,8 +8095,8 @@ function renderFormularioTurno() {
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-outline" onclick="resetTurnoV4()">Limpar turno</button>
-        <button class="btn btn-acc" onclick="gerarPDFInternoTurnoV4()">📊 PDF Interno do turno</button>
-        <button class="btn btn-primary btn-lg" id="btnSalvarDiarioV4" onclick="salvarDiarioV4()">💾 Salvar turno</button>
+        <button class="btn btn-acc" onclick="gerarPDFInternoTurnoV4()">${ic('grafico')} PDF Interno do turno</button>
+        <button class="btn btn-primary btn-lg" id="btnSalvarDiarioV4" onclick="salvarDiarioV4()">${ic('salvar')} Salvar turno</button>
       </div>
     </div>
   `;
@@ -8013,7 +8266,7 @@ async function salvarDiarioV4() {
   const btn = document.getElementById('btnSalvarDiarioV4');
   const original = btn.innerHTML;
   btn.disabled = true;
-  btn.innerHTML = '⏳ Salvando…';
+  btn.innerHTML = ic('ampulheta', 0, 'ic-gira') + ' Salvando…';
   
   td.preenchido = true;
   saveDiarioV4(d);
@@ -8062,7 +8315,7 @@ async function salvarDiarioV4() {
   try {
     const result = await jsonp(CONFIG.appsScript, {...params, ...authParams()}, 0, 0, null);
     if (!result.ok) throw new Error(result.error || 'Erro');
-    toast(`✓ Turno ${t.toUpperCase()} salvo`, 'success', 4000);
+    toast(`Turno ${t.toUpperCase()} salvo`, 'success', 4000);
     setTimeout(() => carregarTudo(), 1500);
     btn.disabled = false;
     btn.innerHTML = original;

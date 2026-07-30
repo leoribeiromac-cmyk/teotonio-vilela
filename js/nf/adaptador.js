@@ -95,7 +95,7 @@ function abrirModal(titulo, html, larg) {
   abrirModalRDO(`
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px">
       <div style="font-weight:700;font-size:16px">${titulo || ''}</div>
-      <button class="btn btn-ghost btn-sm" onclick="fecharModal()" aria-label="Fechar">✕</button>
+      <button class="btn btn-ghost btn-sm btn-icone" onclick="fecharModal()" aria-label="Fechar">${typeof ic === 'function' ? ic('fechar') : '&times;'}</button>
     </div>
     <div${larg ? ` style="max-width:${larg}px"` : ''}>${html}</div>`);
 }
