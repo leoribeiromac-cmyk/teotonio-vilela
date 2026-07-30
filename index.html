@@ -15,6 +15,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
+     "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
+<script src="js/ui/icones.js"></script>
+<script src="js/nf/adaptador.js"></script>
+<script src="js/nf/notas.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
 <!-- xlsx-js-style: fork do SheetJS 0.18.5 (mesma API de leitura) que TAMBÉM grava estilos (bordas/cores/fontes) usados na exportação de RDOs em Excel. -->
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
@@ -71,6 +76,160 @@
   --anim-speed:1;
   --kpi-size:42px;
 }
+
+/* ------------------------------------------------------------------
+   TEMA ESCURO. Duas entradas de propósito: o aparelho no escuro já abre
+   escuro (prefers-color-scheme), e o botão da barra lateral manda por
+   cima (data-theme) — no canteiro, sol na tela e escuro no sistema são
+   coisas diferentes. A escolha fica guardada por aparelho.
+   Só as cores mudam; medidas, raios e fontes seguem as mesmas.
+   ------------------------------------------------------------------ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg:#14120e; --bg-2:#1c1813; --surface:#211d17; --surface-2:#2a251e;
+    --border:#332d24; --border-strong:#463f33;
+    --text:#f2ede3; --text-2:#d8d1c4; --muted:#948b7c; --muted-2:#7d7566;
+    --sidebar-bg:#0f0d0a;
+    --sidebar-text:rgba(242,237,227,0.68);
+    --sidebar-active-bg:rgba(255,255,255,0.12);
+    --sidebar-hover-bg:rgba(255,255,255,0.06);
+    --sidebar-border:rgba(255,255,255,0.1);
+    --pri:oklch(0.62 0.14 240); --pri-l:oklch(0.30 0.06 240); --pri-d:oklch(0.72 0.14 240);
+    --acc:oklch(0.68 0.17 38);  --acc-l:oklch(0.30 0.07 38);  --acc-d:oklch(0.78 0.15 38);
+    --grn:oklch(0.70 0.15 150); --grn-l:oklch(0.30 0.06 150);
+    --blu:oklch(0.68 0.16 250); --blu-l:oklch(0.30 0.06 250);
+    --ylw:oklch(0.80 0.15 85);  --ylw-l:oklch(0.32 0.07 85); --ylw-d:oklch(0.68 0.15 85);
+    --red:oklch(0.66 0.19 20);  --red-l:oklch(0.30 0.08 20);
+    --sh:0 1px 3px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.3);
+    --sh-md:0 6px 20px rgba(0,0,0,.4);
+    --sh-lg:0 16px 40px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"] {
+  --bg:#14120e; --bg-2:#1c1813; --surface:#211d17; --surface-2:#2a251e;
+  --border:#332d24; --border-strong:#463f33;
+  --text:#f2ede3; --text-2:#d8d1c4; --muted:#948b7c; --muted-2:#7d7566;
+  --sidebar-bg:#0f0d0a;
+  --sidebar-text:rgba(242,237,227,0.68);
+  --sidebar-active-bg:rgba(255,255,255,0.12);
+  --sidebar-hover-bg:rgba(255,255,255,0.06);
+  --sidebar-border:rgba(255,255,255,0.1);
+  --pri:oklch(0.62 0.14 240); --pri-l:oklch(0.30 0.06 240); --pri-d:oklch(0.72 0.14 240);
+  --acc:oklch(0.68 0.17 38);  --acc-l:oklch(0.30 0.07 38);  --acc-d:oklch(0.78 0.15 38);
+  --grn:oklch(0.70 0.15 150); --grn-l:oklch(0.30 0.06 150);
+  --blu:oklch(0.68 0.16 250); --blu-l:oklch(0.30 0.06 250);
+  --ylw:oklch(0.80 0.15 85);  --ylw-l:oklch(0.32 0.07 85); --ylw-d:oklch(0.68 0.15 85);
+  --red:oklch(0.66 0.19 20);  --red-l:oklch(0.30 0.08 20);
+  --sh:0 1px 3px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.3);
+  --sh-md:0 6px 20px rgba(0,0,0,.4);
+  --sh-lg:0 16px 40px rgba(0,0,0,.5);
+}
+:root[data-theme="light"] {
+  --bg:#f5f3ef; --bg-2:#eeebe5; --surface:#ffffff; --surface-2:#fafaf7;
+  --border:#e4e0d8; --border-strong:#ccc8bf;
+  --text:#1a1712; --text-2:#3a3530; --muted:#7a7570; --muted-2:#a09b94;
+  --sidebar-bg:#1a1612;
+  --sidebar-text:rgba(255,255,255,0.65);
+  --sidebar-active-bg:rgba(255,255,255,0.09);
+  --sidebar-hover-bg:rgba(255,255,255,0.05);
+  --sidebar-border:rgba(255,255,255,0.09);
+}
+
+/* ------------------------------------------------------------------
+   BARRA INFERIOR (celular). No canteiro se usa uma mão só, e o menu
+   lateral exige abrir a gaveta para trocar de tela. Aqui ficam as
+   telas do dia a dia que o perfil enxerga, ao alcance do polegar.
+   ------------------------------------------------------------------ */
+.bottom-nav-mobile { display: none; }
+@media (max-width: 768px) {
+  .bottom-nav-mobile {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--sidebar-bg); border-top: 1px solid var(--sidebar-border);
+    z-index: 999; justify-content: space-around; align-items: stretch;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -4px 18px rgba(0,0,0,.22);
+  }
+  .bottom-nav-item {
+    background: transparent; border: none; color: var(--sidebar-text);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; font-size: 11px; font-weight: 600; cursor: pointer;
+    padding: 9px 4px 10px; flex: 1; min-height: 58px; position: relative;
+    -webkit-tap-highlight-color: transparent; transition: color .15s;
+  }
+  .bottom-nav-item.active { color: var(--sidebar-active); font-weight: 700; }
+  .bottom-nav-item.active::before {
+    content: ''; position: absolute; top: 0; left: 22%; right: 22%;
+    height: 2.5px; background: var(--acc); border-radius: 0 0 3px 3px;
+  }
+  .bottom-nav-item .nav-icon { display: flex; font-size: 21px; line-height: 1 }
+  .bottom-nav-item:active { background: rgba(127,127,127,.14) }
+  /* a barra não pode tapar o fim da página */
+  .page { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important }
+}
+
+/* ============================================================
+   MÓDULO DE NOTAS FISCAIS — compatibilidade de estilo
+   O js/nf/notas.js é o mesmo arquivo do app "Gestor" e gera HTML com
+   as classes de lá (card-h, kpi-s, btn-pri…). Em vez de reescrever o
+   módulo, as classes dele são desenhadas aqui com os tokens deste app.
+   ============================================================ */
+.card-h{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:16px 18px 12px;border-bottom:1px solid var(--border)}
+.card-t{font-weight:700;font-size:14.5px;display:flex;align-items:center;gap:7px}
+.card-st{font-size:12px;color:var(--muted);margin-top:2px}
+.card-b{padding:16px 18px}
+.kpi-s{font-size:11.5px;color:var(--muted);line-height:1.5}
+.kpi-l{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.kpi-v{font-size:22px;font-weight:700;line-height:1.15;margin:2px 0}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px}
+.kpi-hero .kpi-v{font-size:30px}
+.fl{display:block;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:5px}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-start}
+.row>.field{flex:1;min-width:150px}
+.grid{display:grid;gap:14px}
+.grid.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.grid.g4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+.btn-pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+.btn-pri:hover{filter:brightness(1.06)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border:1px solid var(--border-strong);
+  border-radius:999px;font-size:12px;background:var(--surface)}
+.chip.on{background:var(--acc-l);border-color:var(--acc);color:var(--acc-d)}
+.mono{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.tbl-wrap{overflow-x:auto}
+.empty{text-align:center;color:var(--muted);padding:34px 20px}
+.ic-tx{display:inline-flex;color:var(--muted)}
+.pill-grn{color:var(--grn);border-color:var(--grn)}
+.pill-red{color:var(--red);border-color:var(--red)}
+.pill-ylw{color:var(--ylw-d);border-color:var(--ylw-d)}
+.pill-blu{color:var(--blu);border-color:var(--blu)}
+
+/* --- regras próprias do módulo, copiadas do Gestor --- */
+.nf-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+.nf-card{overflow:hidden;padding:0;display:flex;flex-direction:column;transition:all .2s cubic-bezier(.2,0,0,1)}
+.nf-card:hover{transform:translateY(-3px);box-shadow:var(--sh-md);border-color:var(--border-strong)}
+.nf-card-img{position:relative;background:var(--surface-2);cursor:zoom-in;height:150px;overflow:hidden}
+.nf-card-img img{width:100%;height:150px;object-fit:cover;object-position:top center;display:block}
+.nf-card-sem{height:150px;display:flex;align-items:center;justify-content:center;font-size:40px;opacity:.35}
+.nf-card-st{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.62);color:#fff;backdrop-filter:blur(3px)}
+.nf-card-b{padding:12px 14px 13px;flex:1;display:flex;flex-direction:column}
+.nf-sep{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  margin:18px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.nf-alerta{border-radius:var(--r-sm);padding:10px 13px;font-size:12.5px;line-height:1.45;margin-bottom:13px}
+.nf-alerta-red{background:rgba(217,100,90,.13);border:1px solid rgba(217,100,90,.34);color:var(--text)}
+.nf-alerta-ylw{background:rgba(217,165,51,.13);border:1px solid rgba(217,165,51,.34);color:var(--text)}
+.nf-tag-confira{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:20px;font-size:9px;
+  font-weight:700;letter-spacing:.06em;background:rgba(217,165,51,.18);color:var(--amarelo)}
+.nf-item{border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 11px 8px;margin-bottom:9px;background:var(--surface-2)}
+.nf-vinc{font-size:11.5px;color:var(--muted);line-height:1.6;padding:2px 0}
+.nf-vinc b{color:var(--text-2)}
+.nf-chip-sug{cursor:pointer;padding:2px 9px;font-size:11px;margin:2px 3px 2px 0;border-style:dashed}
+.nf-chip-sug:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.nf-passo{display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:13.5px}
+.nf-1linha{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nf-simples .nf-extra{display:none!important}
+
 
 @keyframes pageEnter {
   from { opacity: 0; transform: translateY(16px); }
@@ -1283,7 +1442,7 @@ const CONFIG = {
   estacasCB: { ini: 99, fim: 141, label: 'Centro→Bairro' },
   estacasBC: { ini: 201, fim: 244, label: 'Bairro→Centro' },
   refreshMs: 5 * 60 * 1000,
-  ls: { rdoDraft: 'teotonio_rdo_draft_v1', apontador: 'teotonio_apontador_v1', sabadoUtil: 'teotonio_sabado_util_v1', oficialRDO: 'teotonio_oficial_rdo_v1', token: 'teotonio_token_v1' }
+  ls: { rdoDraft: 'teotonio_rdo_draft_v1', apontador: 'teotonio_apontador_v1', sabadoUtil: 'teotonio_sabado_util_v1', oficialRDO: 'teotonio_oficial_rdo_v1', token: 'teotonio_token_v1', perfil: 'teotonio_perfil_v1' }
 };
 
 // ====================================================================
@@ -1892,7 +2051,11 @@ const STATE = {
   execRitmo: { janela: 14, diasUteis: false },
   curvaHorizonte: 'obra',
   draft: null,
-  usuarioLogado: localStorage.getItem('teotonio_user') || null
+  usuarioLogado: localStorage.getItem('teotonio_user') || null,
+  // perfil de acesso de quem está logado (vem do servidor no login)
+  perfilLogado: localStorage.getItem('teotonio_perfil_v1') || '',
+  usuariosCache: [],
+  galPacote: 'Todos', galMes: 'Todos'
 };
 
 const PRODUTIVIDADE_PADRAO = {
@@ -1938,6 +2101,9 @@ function navigate(page) {
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.page === page);
   });
+  // a barra inferior do celular acompanha a mesma navegação
+  const barra = document.querySelector('.bottom-nav-mobile');
+  if (barra) barra.outerHTML = barraInferior();
   toggleSidebar(false);
   transitionTo(render);
 }
@@ -1994,6 +2160,110 @@ window.setCurvaHorizonte = function(h) {
 // ====================================================================
 const USUARIOS_UI = ['Leonardo', 'Wallace', 'Guilherme'];
 
+/* ============================================================
+   PERFIS DE ACESSO — mesma régua do "Gestor — Controle de Obras",
+   traduzida para as telas desta obra.
+
+     campo          apontador: lança serviço e RDO diário
+     administrativo escritório: acompanha e exporta, não lança campo
+     engenharia     tudo da obra — lança, confere, analisa e exporta
+     diretoria      só consulta
+     admin          tudo, e é o único que gerencia usuários
+
+   EXCLUSÃO: quem apaga é o ADMIN ou a PRÓPRIA PESSOA que lançou.
+   A mesma regra vale no Code.gs — esconder botão não é segurança.
+   ============================================================ */
+const PERFIS = {
+  campo: {
+    nome: 'Campo',
+    desc: 'Apontador — lança a produção do dia',
+    telas: ['rdo', 'rdodiario', 'historico', 'avancofisico', 'galeria', 'equip', 'notas'],
+    pode: ['lancarServico', 'lancarDiario', 'apontarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque']
+  },
+  administrativo: {
+    nome: 'Administrativo',
+    desc: 'Escritório — acompanha, confere e exporta',
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'historico', 'galeria', 'equip', 'notas'],
+    pode: ['exportar', 'relatorio', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'saidaEstoque']
+  },
+  engenharia: {
+    nome: 'Engenharia',
+    desc: 'Engenheiro da obra — lança, confere e analisa',
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'equip', 'notas'],
+    pode: ['lancarServico', 'lancarDiario', 'editar', 'exportar', 'relatorio', 'analiseIA', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque']
+  },
+  diretoria: {
+    nome: 'Diretoria',
+    desc: 'Consulta — acompanha sem lançar',
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'analista', 'historico', 'galeria', 'notas'],
+    pode: ['exportar', 'relatorio', 'analiseIA']
+  },
+  admin: { nome: 'Administrador', desc: 'Acesso completo', telas: '*', pode: '*' }
+};
+
+/* Perfil que está valendo agora. Quem entrou por um token antigo (gravado
+   antes desta versão, sem perfil) cai em engenharia — o meio-termo: usa a
+   obra inteira, mas não gerencia usuários. */
+function perfilAtual() {
+  const p = String(STATE.perfilLogado || '').toLowerCase().trim();
+  const apelidos = {
+    apontador: 'campo', obra: 'campo', canteiro: 'campo',
+    administrador: 'admin', master: 'admin',
+    adm: 'administrativo', escritorio: 'administrativo',
+    engenheiro: 'engenharia', eng: 'engenharia',
+    diretor: 'diretoria', gestao: 'diretoria'
+  };
+  const norm = apelidos[p] || p;
+  return PERFIS[norm] ? norm : 'engenharia';
+}
+function perfilInfo() { return PERFIS[perfilAtual()] || PERFIS.engenharia; }
+function perfilNome() { return perfilInfo().nome; }
+function ehAdmin() { return perfilAtual() === 'admin'; }
+
+/* Sem login, o app é o painel público de consulta: mostra as telas de
+   análise e barra as de lançamento (que já pediam login antes). */
+function podeVer(tela) {
+  if (!STATE.usuarioLogado) return !['rdo', 'rdodiario', 'usuarios'].includes(tela);
+  if (tela === 'usuarios') return ehAdmin();
+  const t = perfilInfo().telas;
+  return t === '*' || t.includes(tela);
+}
+function pode(acao) {
+  if (!STATE.usuarioLogado) return false;
+  const p = perfilInfo().pode;
+  return p === '*' || p.includes(acao);
+}
+/* Pode apagar ESTE registro? admin, ou quem o lançou. */
+function podeExcluir(reg) {
+  if (!STATE.usuarioLogado) return false;
+  if (ehAdmin()) return true;
+  const meu = String(STATE.usuarioLogado || '').trim().toLowerCase();
+  const dele = String((reg && (reg.usuario || reg.Usuario || reg.apontador || reg.Apontador)) || '').trim().toLowerCase();
+  if (!meu || !dele) return false;          // registro antigo, sem dono: só o admin
+  return dele === meu;
+}
+/* Editar: o dono, o admin e a engenharia (que corrige dado de terceiro
+   para fechar a medição). */
+function podeEditar(reg) { return podeExcluir(reg) || pode('editar'); }
+
+function telaBloqueada(tela) {
+  const nomes = {
+    executivo: 'o Painel Executivo', avancofisico: 'o Avanço Físico', cronograma: 'o Cronograma',
+    medicao: 'o Apoio à Medição', analista: 'o Analista IA', rdo: 'o lançamento de serviços',
+    rdodiario: 'o RDO Diário', historico: 'o Histórico', usuarios: 'a gestão de usuários',
+    equip: 'os Equipamentos', galeria: 'a Galeria de Fotos', notas: 'as Notas Fiscais'
+  };
+  return `<div class="card" style="max-width:520px;margin:40px auto;border-top:4px solid var(--wrn,#d69e2e)">
+    <div class="card-body" style="text-align:center;padding:28px">
+      <div style="font-size:32px;margin-bottom:10px">🔒</div>
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px">Acesso não liberado</div>
+      <div style="font-size:13px;color:var(--muted,#718096)">
+        Seu acesso de <b>${escHtml(perfilNome())}</b> não abre ${nomes[tela] || 'esta tela'}.<br>
+        Fale com o administrador do sistema se precisar deste acesso.
+      </div>
+    </div></div>`;
+}
+
 function tokenSessao() {
   return localStorage.getItem(CONFIG.ls.token) || '';
 }
@@ -2009,6 +2279,9 @@ function erroLegivel(msg) {
   const m = String(msg || '');
   if (m.includes('TOKEN_INVALIDO')) return 'Sessão expirada — saia e faça login de novo para continuar.';
   if (m.includes('CREDENCIAIS_INVALIDAS')) return 'Usuário ou senha incorretos.';
+  if (m.includes('MUITAS_TENTATIVAS')) return 'Conta bloqueada por 15 minutos após tentativas seguidas de senha errada.';
+  if (m.includes('SEM_PERMISSAO')) return 'Seu acesso não permite esta ação. Só o administrador, ou quem lançou o registro, pode apagá-lo.';
+  if (m.includes('ADMIN_REQUER_TOKEN')) return 'Gerenciar usuários exige a propriedade EXIGIR_TOKEN = true no Apps Script.';
   return m;
 }
 
@@ -2048,10 +2321,11 @@ window.fazerLogin = async function() {
     const r = await jsonp(CONFIG.appsScript, { action: 'login', usuario: u, senha: p }, 0);
     if (r.ok && r.token) {
       localStorage.setItem(CONFIG.ls.token, r.token);
-      concluirLogin(u);
+      concluirLogin(u, r.perfil);
       return;
     }
     if (r.error === 'CREDENCIAIS_INVALIDAS') { toast(erroLegivel(r.error), 'error'); return; }
+    if (r.error === 'MUITAS_TENTATIVAS') { toast(r.mensagem || erroLegivel(r.error), 'error', 0); return; }
     if (r.error === 'LOGIN_NAO_CONFIGURADO') { toast('Login não configurado no servidor: defina a propriedade USUARIOS no Apps Script.', 'error', 0); return; }
     // Backend antigo (sem action=login): sem senha local — oriente a republicar.
     toast('Backend desatualizado — republique o Code.gs (com action=login) no Apps Script.', 'error', 0);
@@ -2060,7 +2334,7 @@ window.fazerLogin = async function() {
     // Sem rede: reentra offline SOMENTE quem já autenticou online neste
     // aparelho (token guardado no login anterior). Nenhuma senha embutida.
     if (localStorage.getItem(CONFIG.ls.token) && localStorage.getItem('teotonio_user') === u) {
-      concluirLogin(u);
+      concluirLogin(u, localStorage.getItem(CONFIG.ls.perfil));
       return;
     }
     toast('Sem conexão. Só é possível entrar offline em um aparelho que já fez login online antes.', 'error', 6000);
@@ -2068,31 +2342,210 @@ window.fazerLogin = async function() {
   }
 };
 
-function concluirLogin(u) {
+function concluirLogin(u, perfil) {
   STATE.usuarioLogado = u;
+  STATE.perfilLogado = String(perfil || '').toLowerCase();
   localStorage.setItem('teotonio_user', u);
-  toast('Acesso liberado!', 'success');
+  if (STATE.perfilLogado) localStorage.setItem(CONFIG.ls.perfil, STATE.perfilLogado);
+  else localStorage.removeItem(CONFIG.ls.perfil);
+  toast(`Acesso liberado — ${perfilNome()}`, 'success');
+  renderShell();                 // o menu muda conforme o perfil
   atualizarBotoesTopo();
+  // a tela em que estava pode não ser permitida para este perfil
+  if (!podeVer(STATE.currentPage)) STATE.currentPage = podeVer('executivo') ? 'executivo' : 'rdo';
   transitionTo(render);
 }
 
 window.fazerLogout = function() {
   STATE.usuarioLogado = null;
+  STATE.perfilLogado = '';
   localStorage.removeItem('teotonio_user');
   localStorage.removeItem(CONFIG.ls.token);
+  localStorage.removeItem(CONFIG.ls.perfil);
   toast('Você saiu do sistema.', 'info');
+  renderShell();
   atualizarBotoesTopo();
+  if (!podeVer(STATE.currentPage)) STATE.currentPage = 'executivo';
   transitionTo(render);
 };
 
 window.atualizarBotoesTopo = function() {
   const tb = document.getElementById('topbarActions');
-  if (tb) {
-    tb.innerHTML = (STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : '') +
-      '<button class="btn btn-outline btn-sm" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">↻</button>' +
-      '<button class="btn btn-primary btn-sm" onclick="navigate(\'rdo\')">+ Novo Serviço</button>';
-  }
+  if (!tb) return;
+  const sair = STATE.usuarioLogado
+    ? `<button class="btn btn-ghost btn-sm" onclick="fazerLogout()" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</button>`
+    : '';
+  const novo = pode('lancarServico')
+    ? '<button class="btn btn-primary btn-sm" onclick="navigate(\'rdo\')">+ Novo Serviço</button>'
+    : '';
+  tb.innerHTML = sair +
+    '<button class="btn btn-outline btn-sm" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">↻</button>' +
+    novo;
 };
+
+// ====================================================================
+// FOTOS DO SERVIÇO
+// A foto é a comprovação da execução — vale no pleito, na medição e na
+// prestação de contas. Fluxo: comprime no aparelho (o campo tem 4G ruim),
+// sobe para uma pasta PRIVADA do Drive pelo backend e a planilha guarda
+// só o ponteiro "drive_id:<id>". Como arquivo privado não abre em <img>,
+// a imagem volta pelo backend e fica guardada localmente.
+// ====================================================================
+const MAX_FOTOS_SERVICO = 3;
+let _fotosPorServico = {};   // { '<idx do serviço>': [{thumb, full}] }
+
+function comprimirImg(file, maxLado, qualidade) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        const maior = Math.max(w, h);
+        if (maior > maxLado) { const k = maxLado / maior; w = Math.round(w * k); h = Math.round(h * k); }
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        try { resolve(c.toDataURL('image/jpeg', qualidade)); } catch (e) { reject(e); }
+      };
+      img.onerror = reject;
+      img.src = fr.result;
+    };
+    fr.onerror = reject;
+    fr.readAsDataURL(file);
+  });
+}
+
+window.fotosSelecionadas = async function(input, idx) {
+  const arquivos = [...(input.files || [])];
+  input.value = '';
+  const lista = _fotosPorServico[idx] = _fotosPorServico[idx] || [];
+  for (const f of arquivos) {
+    if (lista.length >= MAX_FOTOS_SERVICO) { toast(`Máximo de ${MAX_FOTOS_SERVICO} fotos por serviço`, 'info'); break; }
+    if (!/^image\//.test(f.type)) continue;
+    try {
+      // duas versões: a miniatura desenha a tela, a cheia é a que sobe
+      const [thumb, full] = await Promise.all([comprimirImg(f, 320, .5), comprimirImg(f, 1280, .72)]);
+      lista.push({ thumb, full });
+    } catch (e) { toast('Não foi possível ler a imagem', 'error'); }
+  }
+  renderFotosPrev(idx);
+};
+
+window.removerFotoServico = function(idx, i) {
+  (_fotosPorServico[idx] || []).splice(i, 1);
+  renderFotosPrev(idx);
+};
+
+function renderFotosPrev(idx) {
+  const box = document.getElementById('fotosPrev' + idx);
+  if (!box) return;
+  const lista = _fotosPorServico[idx] || [];
+  box.innerHTML = lista.map((f, i) => `<div style="position:relative">
+    <img src="${f.thumb}" alt="foto ${i + 1}" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid var(--border-strong)">
+    <button type="button" onclick="removerFotoServico(${idx},${i})" title="Remover foto" aria-label="Remover foto"
+      style="position:absolute;top:-7px;right:-7px;padding:1px 7px;border-radius:50%;background:var(--red);color:#fff;border:none;cursor:pointer;font-size:12px">✕</button>
+  </div>`).join('');
+  const c = document.getElementById('fotosCount' + idx);
+  if (c) c.textContent = lista.length ? `${lista.length}/${MAX_FOTOS_SERVICO}` : '';
+}
+
+/* Campo de foto de uma linha de serviço. `capture="environment"` abre direto
+   a câmera traseira no celular, que é como o apontador usa. */
+function campoFotos(idx) {
+  return `
+    <div class="field" style="grid-column:1/-1">
+      <label>Fotos do serviço <span id="fotosCount${idx}" style="color:var(--muted);font-weight:400"></span></label>
+      <input type="file" accept="image/*" capture="environment" multiple
+             onchange="fotosSelecionadas(this,${idx})" style="font-size:13px">
+      <div id="fotosPrev${idx}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+        Comprovação de execução — vai para o Drive privado e aparece na Galeria.
+      </div>
+    </div>`;
+}
+
+/* Guarda local da imagem cheia. O localStorage é pequeno demais para foto;
+   a miniatura basta na tela, a cheia fica aqui para ampliar e baixar. */
+const IDB_NOME = 'teotonioFotos', IDB_STORE = 'fotos';
+function idbAbrir() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(IDB_NOME, 1);
+    r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains(IDB_STORE)) d.createObjectStore(IDB_STORE); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function fotoGuardar(chave, dataUri) {
+  try {
+    const d = await idbAbrir();
+    await new Promise((res, rej) => {
+      const t = d.transaction(IDB_STORE, 'readwrite');
+      t.objectStore(IDB_STORE).put(dataUri, chave);
+      t.oncomplete = res; t.onerror = () => rej(t.error);
+    });
+  } catch (e) { /* sem IndexedDB: a foto é buscada de novo quando precisar */ }
+}
+async function fotoLer(chave) {
+  try {
+    const d = await idbAbrir();
+    return await new Promise((res, rej) => {
+      const t = d.transaction(IDB_STORE, 'readonly');
+      const q = t.objectStore(IDB_STORE).get(chave);
+      q.onsuccess = () => res(q.result || ''); q.onerror = () => rej(q.error);
+    });
+  } catch (e) { return ''; }
+}
+
+// "drive_id:1AbC..." → "1AbC...". Aceita também link antigo do Drive.
+function fotoFileId(valor) {
+  const u = String(valor || '');
+  let m = u.match(/^drive_id:([\w-]+)/);
+  if (m) return m[1];
+  m = u.match(/[?&]id=([\w-]+)/) || u.match(/\/d\/([\w-]+)/);
+  return (m && /drive\.google\.com/.test(u)) ? m[1] : '';
+}
+
+// Ponteiros de foto de uma linha do RDO (a célula pode ter várias, separadas por espaço)
+function fotosDaLinha(r) {
+  return String(getCSVField(r, 'foto_link') || getCSVField(r, 'fotos') || '')
+    .split(/[\s;]+/).map(s => s.trim()).filter(s => fotoFileId(s));
+}
+
+async function baixarFotoServidor(fileId) {
+  const cache = await fotoLer(fileId);
+  if (cache) return cache;
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'obterFoto', fileId, ...authParams() }, 0);
+    if (r && r.ok && r.dataUri) { fotoGuardar(fileId, r.dataUri); return r.dataUri; }
+  } catch (e) {}
+  return '';
+}
+
+// Sobe as fotos DEPOIS que os serviços foram gravados: cada foto vai ligada
+// ao id do serviço, que o app gera antes de enviar o lote.
+async function enviarFotosDoLote(mapaIdParaFotos) {
+  const ids = Object.keys(mapaIdParaFotos);
+  if (!ids.length) return;
+  let enviadas = 0, falhas = 0;
+  for (const id of ids) {
+    const lista = mapaIdParaFotos[id];
+    for (let i = 0; i < lista.length; i++) {
+      const params = { action: 'rdoFoto', id, idx: i, foto: lista[i].full, ...authParams() };
+      try {
+        const r = await jsonp(CONFIG.appsScript, params, 0, 0, null);
+        if (r && r.ok) { enviadas++; continue; }
+        falhas++;
+      } catch (e) {
+        // sem sinal: a foto espera na fila junto com o resto
+        try { outboxAdicionar({ kind: 'foto', params, descricao: 'foto do serviço ' + id }); }
+        catch (err) { falhas++; }
+      }
+    }
+  }
+  if (enviadas) toast(`✓ ${enviadas} foto(s) enviada(s)`, 'success', 3000);
+  if (falhas) toast(`${falhas} foto(s) não subiram. O serviço foi salvo assim mesmo.`, 'info', 6000);
+}
 
 // ====================================================================
 // CARREGAMENTO INICIAL
@@ -2227,6 +2680,24 @@ function calcularConsumoItens(avanco) {
 // ====================================================================
 // LAYOUT PRINCIPAL
 // ====================================================================
+/* Um grupo do menu lateral. Item que o perfil não enxerga não é renderizado —
+   e grupo que ficou sem nenhum item some junto com o seu divisor, para não
+   deixar título órfão na barra. */
+function grupoNav(titulo, itens) {
+  const vis = itens.filter(it => podeVer(it.id));
+  if (!vis.length) return '';
+  const divisor = titulo === 'Análise' ? '' : '<hr class="nav-divider">';
+  return `${divisor}
+        <div class="nav-group">
+          <div class="nav-label">${titulo}</div>
+          ${vis.map(it => `<div class="nav-item ${STATE.currentPage === it.id ? 'active' : ''}" data-page="${it.id}" onclick="navigate('${it.id}')">
+            <span class="nav-icon">${it.icone}</span>
+            <span>${it.texto}</span>
+            ${it.contador ? `<span class="nav-counter" id="${it.contador}">0</span>` : ''}
+          </div>`).join('')}
+        </div>`;
+}
+
 function renderShell() {
   const root = document.getElementById('root');
   if (!root) return;
@@ -2240,50 +2711,30 @@ function renderShell() {
           <p>Sistema integrado<br>de planejamento</p>
         </div>
         
-        <div class="nav-group">
-          <div class="nav-label">Análise</div>
-          <div class="nav-item active" data-page="executivo" onclick="navigate('executivo')">
-            <span class="nav-icon">◆</span>
-            <span>Painel Executivo</span>
-          </div>
-          <div class="nav-item" data-page="avancofisico" onclick="navigate('avancofisico')">
-            <span class="nav-icon">◰</span>
-            <span>Avanço Físico</span>
-          </div>
-          <div class="nav-item" data-page="cronograma" onclick="navigate('cronograma')">
-            <span class="nav-icon">◷</span>
-            <span>Cronograma</span>
-          </div>
-          <div class="nav-item" data-page="medicao" onclick="navigate('medicao')">
-            <span class="nav-icon">⌗</span>
-            <span>Apoio Medição</span>
-          </div>
-          <div class="nav-item" data-page="analista" onclick="navigate('analista')">
-            <span class="nav-icon">✨</span>
-            <span>Analista IA</span>
-          </div>
-        </div>
-        
-        <hr class="nav-divider">
-        
-        <div class="nav-group">
-          <div class="nav-label">Operação</div>
-          <div class="nav-item" data-page="rdo" onclick="navigate('rdo')">
-            <span class="nav-icon">⊕</span>
-            <span>Lançar Serviço</span>
-            <span class="nav-counter" id="rdoCount">0</span>
-          </div>
-          <div class="nav-item" data-page="rdodiario" onclick="navigate('rdodiario')">
-            <span class="nav-icon">📋</span>
-            <span>RDO Diário</span>
-            <span class="nav-counter" id="diarioCount">0</span>
-          </div>
-          <div class="nav-item" data-page="historico" onclick="navigate('historico')">
-            <span class="nav-icon">≡</span>
-            <span>Histórico</span>
-          </div>
-        </div>
-        
+        ${grupoNav('Análise', [
+          { id: 'executivo',    icone: '◆', texto: 'Painel Executivo' },
+          { id: 'avancofisico', icone: '◰', texto: 'Avanço Físico' },
+          { id: 'cronograma',   icone: '◷', texto: 'Cronograma' },
+          { id: 'medicao',      icone: '⌗', texto: 'Apoio Medição' },
+          { id: 'analista',     icone: '✨', texto: 'Analista IA' },
+        ])}
+
+        ${grupoNav('Operação', [
+          { id: 'rdo',       icone: '⊕',  texto: 'Lançar Serviço', contador: 'rdoCount' },
+          { id: 'rdodiario', icone: '📋', texto: 'RDO Diário',     contador: 'diarioCount' },
+          { id: 'historico', icone: '≡',  texto: 'Histórico' },
+          { id: 'equip',     icone: '🚜', texto: 'Equipamentos' },
+          { id: 'galeria',   icone: '📷', texto: 'Galeria de Fotos' },
+        ])}
+
+        ${grupoNav('Suprimentos', [
+          { id: 'notas', icone: '🧾', texto: 'Notas Fiscais' },
+        ])}
+
+        ${grupoNav('Administração', [
+          { id: 'usuarios', icone: '👷', texto: 'Usuários' },
+        ])}
+
         <div class="sync-block">
           <hr class="nav-divider" style="margin:10px 0">
           <div class="sync-row">
@@ -2291,6 +2742,9 @@ function renderShell() {
             <div class="sync-text" id="syncText">Carregando…</div>
           </div>
           <button class="btn-refresh" onclick="carregarTudo()">↻ ATUALIZAR</button>
+          <button class="btn-refresh" onclick="toggleTema()" title="Alternar tema claro/escuro" id="btnTema" style="margin-top:6px">
+            ${temaAtual() === 'dark' ? '☀ TEMA CLARO' : '☾ TEMA ESCURO'}
+          </button>
         </div>
       </aside>
       
@@ -2303,17 +2757,52 @@ function renderShell() {
               <div class="topbar-sub" id="pageSubtitle">Visão consolidada da obra</div>
             </div>
           </div>
-          <div style="display:flex;gap:8px" id="topbarActions">
-            ${STATE.usuarioLogado ? '<button class="btn btn-ghost btn-sm" onclick="fazerLogout()">Sair (' + STATE.usuarioLogado + ')</button>' : ''}
-            <button class="btn btn-outline btn-sm" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">↻</button>
-            <button class="btn btn-primary btn-sm" onclick="navigate('rdo')">+ Novo Serviço</button>
-          </div>
+          <!-- os botões saem de atualizarBotoesTopo(): dependem de quem entrou -->
+          <div style="display:flex;gap:8px" id="topbarActions"></div>
         </div>
         <div class="page page-enter" id="page"></div>
       </main>
+      ${barraInferior()}
     </div>
   `;
+  atualizarBotoesTopo();
 }
+
+/* As quatro telas do dia a dia que o perfil enxerga, na ordem em que o
+   apontador usa. Menos de duas não vira barra — vira ruído. */
+const NAV_CAMPO = [
+  { id: 'rdo',          icone: '⊕',  texto: 'Lançar' },
+  { id: 'rdodiario',    icone: '📋', texto: 'RDO' },
+  { id: 'historico',    icone: '≡',  texto: 'Histórico' },
+  { id: 'avancofisico', icone: '◰',  texto: 'Avanço' },
+  { id: 'executivo',    icone: '◆',  texto: 'Painel' },
+  { id: 'notas',        icone: '🧾', texto: 'Notas' },
+  { id: 'equip',        icone: '🚜', texto: 'Equip.' },
+  { id: 'medicao',      icone: '⌗',  texto: 'Medição' },
+];
+function barraInferior() {
+  const itens = NAV_CAMPO.filter(it => podeVer(it.id)).slice(0, 4);
+  if (itens.length < 2) return '';
+  return `<nav class="bottom-nav-mobile" aria-label="Atalhos">${itens.map(it =>
+    `<button class="bottom-nav-item ${STATE.currentPage === it.id ? 'active' : ''}" onclick="navigate('${it.id}')">
+      <span class="nav-icon">${it.icone}</span>${it.texto}</button>`).join('')}</nav>`;
+}
+
+/* Tema: a escolha do usuário manda; sem escolha, segue o aparelho. */
+function temaAtual() {
+  return localStorage.getItem('teotonio_tema_v1') ||
+    (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+window.toggleTema = function() {
+  const t = temaAtual() === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('teotonio_tema_v1', t);
+  document.documentElement.setAttribute('data-theme', t);
+  const b = document.getElementById('btnTema');
+  if (b) b.textContent = t === 'dark' ? '☀ TEMA CLARO' : '☾ TEMA ESCURO';
+  // os gráficos são desenhados com as cores lidas no momento do render
+  setTimeout(montarGraficos, 60);
+};
+document.documentElement.setAttribute('data-theme', temaAtual());
 
 function toggleSidebar(open) {
   const sb = document.getElementById('sidebar');
@@ -2338,18 +2827,31 @@ function render() {
     rdo: ['Lançar Serviço', 'Registra serviços executados · grava em RDO_Avanco'],
     rdodiario: ['RDO Diário', 'Cabeçalho do dia · efetivo, equipamentos, clima'],
     historico: ['Histórico', 'Serviços e RDOs diários lançados'],
+    equip: ['Equipamentos', 'Frota da obra · apontamento de hora de máquina'],
+    notas: ['Notas Fiscais', 'DANFE, estoque de material e histórico de preço'],
+    galeria: ['Galeria de Fotos', 'Registro fotográfico dos serviços lançados'],
+    usuarios: ['Usuários', 'Quem entra no sistema e com qual acesso'],
   };
   const [t, s] = titles[STATE.currentPage] || ['', ''];
   document.getElementById('pageTitle').textContent = t;
   document.getElementById('pageSubtitle').textContent = s;
-  document.getElementById('rdoCount').textContent = STATE.rdoavanco.length;
-  document.getElementById('diarioCount').textContent = (STATE.rdodiario||[]).length;
-  
-  const telasRestritas = ['rdo', 'rdodiario'];
+  // os contadores só existem se o perfil enxerga aquelas telas
+  const elRdoCount = document.getElementById('rdoCount');
+  if (elRdoCount) elRdoCount.textContent = STATE.rdoavanco.length;
+  const elDiarioCount = document.getElementById('diarioCount');
+  if (elDiarioCount) elDiarioCount.textContent = (STATE.rdodiario||[]).length;
+
+  const telasRestritas = ['rdo', 'rdodiario', 'usuarios', 'equip', 'notas'];
   if (telasRestritas.includes(STATE.currentPage) && !STATE.usuarioLogado) {
     document.getElementById('pageTitle').textContent = 'Login Necessário';
     document.getElementById('pageSubtitle').textContent = 'Área restrita à equipe de apontamento e engenharia';
     pageEl.innerHTML = renderLogin();
+    return;
+  }
+  // Esconder o item do menu não basta: dá para chegar aqui por outro caminho
+  // (link antigo, estado salvo, navigate no console).
+  if (!podeVer(STATE.currentPage)) {
+    pageEl.innerHTML = telaBloqueada(STATE.currentPage);
     return;
   }
 
@@ -2361,9 +2863,625 @@ function render() {
   else if (STATE.currentPage === 'rdo') { pageEl.innerHTML = renderRDO(); attachRDOForm(); }
   else if (STATE.currentPage === 'rdodiario') { pageEl.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
   else if (STATE.currentPage === 'historico') pageEl.innerHTML = renderHistorico();
-  
+  else if (STATE.currentPage === 'equip') { pageEl.innerHTML = renderEquip(); ligarEquipForm(); if (!EQUIP.carregado) carregarEquip(); }
+  else if (STATE.currentPage === 'notas') { pageEl.innerHTML = viewNotas(obra()); nfCarregar(obra().id); }
+  else if (STATE.currentPage === 'galeria') { pageEl.innerHTML = renderGaleria(); carregarImagensGaleria(); }
+  else if (STATE.currentPage === 'usuarios') { pageEl.innerHTML = renderUsuarios(); usuariosCarregarLista(); }
+
   setTimeout(montarGraficos, 50);
 }
+
+// ====================================================================
+// VIEW: EQUIPAMENTOS
+// Hora de máquina é medição: entra em relatório e em cobrança de
+// locadora. Por isso o apontamento guarda paradas (que descontam da
+// hora trabalhada), horímetro, combustível e assinatura do operador.
+// ====================================================================
+const TIPOS_EQUIP = ['Escavadeira', 'Retroescavadeira', 'Pá carregadeira', 'Motoniveladora',
+  'Rolo compactador', 'Caminhão basculante', 'Caminhão pipa', 'Munck', 'Vibroacabadora',
+  'Fresadora', 'Trator de esteira', 'Placa vibratória', 'Compressor', 'Gerador', 'Outros'];
+const MOTIVOS_PARADA = ['Chuva', 'Manutenção corretiva', 'Manutenção preventiva', 'Abastecimento',
+  'Falta de frente de serviço', 'Falta de material', 'Interferência de concessionária',
+  'Almoço/refeição', 'Troca de turno', 'Outros'];
+const SITUACOES_EQUIP = ['Operando', 'Disponível parado', 'Em manutenção', 'Indisponível'];
+
+const EQUIP = { equipamentos: [], locadoras: [], apontamentos: [], carregado: false,
+                filtroMes: 'Todos', filtroEquip: 'Todos' };
+
+async function carregarEquip() {
+  try {
+    const [lista, apont] = await Promise.all([
+      jsonp(CONFIG.appsScript, { action: 'equipListar', ...authParams() }, 0),
+      jsonp(CONFIG.appsScript, { action: 'equipApontamentos', ...authParams() }, 0)
+    ]);
+    if (lista && lista.ok) { EQUIP.equipamentos = lista.equipamentos || []; EQUIP.locadoras = lista.locadoras || []; }
+    if (apont && apont.ok) EQUIP.apontamentos = apont.apontamentos || [];
+    EQUIP.carregado = true;
+    if (STATE.currentPage === 'equip') { document.getElementById('page').innerHTML = renderEquip(); ligarEquipForm(); }
+  } catch (e) {
+    EQUIP.carregado = true;
+    const box = document.getElementById('eqUltimos');
+    if (box) box.innerHTML = '<div style="font-size:13px;color:var(--red)">Sem conexão com o servidor.</div>';
+  }
+}
+
+function renderEquip() {
+  if (!STATE.usuarioLogado) return renderLogin();
+  const eqOpts = EQUIP.equipamentos.map(e =>
+    `<option value="${escHtml(e.nome)}">${escHtml(e.nome)}${e.tipo ? ' · ' + escHtml(e.tipo) : ''}${e.locadora ? ' · ' + escHtml(e.locadora) : ''}</option>`).join('');
+  const meses = [...new Set(EQUIP.apontamentos.map(a => normalizarDataCSV(a.data).slice(0, 7)).filter(m => /^\d{4}-\d{2}$/.test(m)))].sort().reverse();
+  const nomes = [...new Set(EQUIP.apontamentos.map(a => a.equipamento).filter(Boolean))];
+
+  return `
+  <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
+    <span class="pill">${EQUIP.equipamentos.length} equipamento(s)${EQUIP.locadoras.length ? ' · ' + EQUIP.locadoras.length + ' locadora(s)' : ''}</span>
+    <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+      ${pode('cadastrarEquip') || ehAdmin() ? `
+        <button class="btn btn-sm btn-outline" onclick="cadEquipModal()">+ Equipamento</button>
+        <button class="btn btn-sm btn-outline" onclick="cadLocadoraModal()">+ Locadora</button>` : ''}
+    </div>
+  </div>
+
+  <div class="grid" style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;align-items:start">
+    <div class="card">
+      <div class="card-header"><div>
+        <div class="card-title">🚜 Apontamento de equipamento</div>
+        <div class="card-title-sub">produção do dia: horas, paradas, horímetro, combustível</div>
+      </div></div>
+      <div class="card-body">
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
+          <div class="field"><label>Data</label><input type="date" id="eqData" value="${getLocalISODate(new Date())}"></div>
+          <div class="field"><label>Turno</label>
+            <select id="eqTurno" onchange="eqAplicarTurno()">
+              <option value="Diurno" data-ini="07:00" data-fim="17:00">Diurno (07–17)</option>
+              <option value="Noturno" data-ini="19:00" data-fim="05:00">Noturno (19–05)</option>
+            </select></div>
+          <div class="field" style="grid-column:1/-1"><label>Equipamento</label>
+            <select id="eqEquip">${eqOpts || '<option value="">— cadastre um equipamento —</option>'}</select></div>
+          <div class="field" style="grid-column:1/-1"><label>Operador</label>
+            <input id="eqOper" placeholder="Nome do operador"></div>
+          <div class="field"><label>Início</label><input type="time" id="eqIni" value="07:00" onchange="eqCalcHoras()"></div>
+          <div class="field"><label>Fim</label><input type="time" id="eqFim" value="17:00" onchange="eqCalcHoras()"></div>
+          <div class="field"><label>Horas trabalhadas</label>
+            <input id="eqHoras" readonly value="10.00" class="t-mono" style="font-weight:700"></div>
+        </div>
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px">
+          <label style="margin:0;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Paradas</label>
+          <button class="btn btn-sm btn-outline" onclick="eqAddParada()">+ Parada</button>
+        </div>
+        <div id="eqParadas"></div>
+
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:10px">
+          <div class="field"><label>Horímetro inicial</label><input type="number" step="any" id="eqHi" placeholder="h ou km"></div>
+          <div class="field"><label>Horímetro final</label><input type="number" step="any" id="eqHf" placeholder="h ou km"></div>
+          <div class="field"><label>Combustível (L)</label><input type="number" step="any" id="eqComb" placeholder="litros"></div>
+          <div class="field"><label>Situação</label>
+            <select id="eqSit">${SITUACOES_EQUIP.map(s => `<option>${s}</option>`).join('')}</select></div>
+          <div class="field" style="grid-column:1/-1"><label>Observações</label>
+            <textarea id="eqObs" rows="2" placeholder="Frente atendida, ocorrências…"></textarea></div>
+          <div class="field" style="grid-column:1/-1"><label>Assinatura do operador (opcional)</label>
+            <canvas id="eqSign" width="520" height="120"
+              style="width:100%;height:110px;background:#fff;border:1px solid var(--border-strong);border-radius:var(--r-sm);touch-action:none;cursor:crosshair"></canvas>
+            <button class="btn btn-sm btn-ghost" onclick="eqLimparSign()" style="margin-top:4px">Limpar assinatura</button></div>
+        </div>
+        <button class="btn btn-primary btn-lg" style="width:100%;justify-content:center;margin-top:14px" onclick="eqEnviar()">
+          Enviar apontamento</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><div>
+        <div class="card-title">Últimos apontamentos</div>
+        <div class="card-title-sub">${EQUIP.apontamentos.length} no total</div>
+      </div></div>
+      <div class="card-body" style="padding-top:6px">
+        <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+          <div class="field"><label>Mês</label>
+            <select onchange="EQUIP.filtroMes=this.value;document.getElementById('eqUltimos').innerHTML=eqListaUltimos()">
+              <option value="Todos">Todos</option>
+              ${meses.map(m => `<option ${EQUIP.filtroMes === m ? 'selected' : ''}>${m}</option>`).join('')}
+            </select></div>
+          <div class="field"><label>Equipamento</label>
+            <select onchange="EQUIP.filtroEquip=this.value;document.getElementById('eqUltimos').innerHTML=eqListaUltimos()">
+              <option value="Todos">Todos</option>
+              ${nomes.map(n => `<option ${EQUIP.filtroEquip === n ? 'selected' : ''}>${escHtml(n)}</option>`).join('')}
+            </select></div>
+        </div>
+        <div id="eqUltimos">${eqListaUltimos()}</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function eqApontamentosFiltrados() {
+  return EQUIP.apontamentos.filter(a =>
+    (EQUIP.filtroMes === 'Todos' || normalizarDataCSV(a.data).slice(0, 7) === EQUIP.filtroMes) &&
+    (EQUIP.filtroEquip === 'Todos' || a.equipamento === EQUIP.filtroEquip));
+}
+
+function eqListaUltimos() {
+  if (!EQUIP.carregado) return '<div style="font-size:13px;color:var(--muted);padding:10px 0">Carregando…</div>';
+  const lista = eqApontamentosFiltrados().slice(0, 20);
+  if (!lista.length) return '<div style="font-size:13px;color:var(--muted);padding:10px 0">Nenhum apontamento no filtro.</div>';
+  const horas = eqApontamentosFiltrados().reduce((s, a) => s + horasNum(a.horas), 0);
+  return `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">
+      Total no filtro: <b style="color:var(--text)">${fmtNum(horas)} h</b></div>` +
+    lista.map(a => `<div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;gap:10px">
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600;font-size:13.5px">${escHtml(a.equipamento)}
+          <span style="font-weight:400;color:var(--muted)">· ${escHtml(String(a.horas))} h</span></div>
+        <div style="font-size:11.5px;color:var(--muted)">
+          ${escHtml(normalizarDataCSV(a.data))} · ${escHtml(a.turno || '')} · ${escHtml(a.operador || '')} · ${escHtml(a.situacao || '')}</div>
+        ${a.paradas && a.paradas !== 'Sem paradas'
+          ? `<div style="font-size:11.5px;color:var(--ylw-d)">paradas: ${escHtml(a.paradas)}</div>` : ''}
+      </div>
+      ${podeExcluir(a) ? `<button class="btn btn-ghost btn-sm" onclick="eqApagar('${escHtml(String(a.carimbo))}')" title="Apagar">✕</button>` : ''}
+    </div>`).join('');
+}
+
+/* horas e paradas — a hora cheia menos as paradas é o que se mede */
+function hm(t) { if (!t) return 0; const p = String(t).split(':'); return (+p[0] || 0) * 60 + (+p[1] || 0); }
+
+/* As horas são gravadas com ponto decimal ("8.50", de toFixed). O num() do
+   app lê no formato pt-BR e trataria esse ponto como milhar — "8.50" viraria
+   850 e o total do mês sairia cem vezes maior. Aqui o ponto é decimal. */
+function horasNum(v) {
+  if (typeof v === 'number') return v;
+  const n = parseFloat(String(v == null ? '' : v).trim().replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+window.eqAplicarTurno = function() {
+  const s = document.getElementById('eqTurno');
+  const o = s.options[s.selectedIndex];
+  document.getElementById('eqIni').value = o.getAttribute('data-ini');
+  document.getElementById('eqFim').value = o.getAttribute('data-fim');
+  eqCalcHoras();
+};
+function eqParadasRows() { return [...document.querySelectorAll('#eqParadas .par-row')]; }
+window.eqAddParada = function() {
+  const box = document.getElementById('eqParadas');
+  if (!box) return;
+  const row = document.createElement('div');
+  row.className = 'par-row';
+  row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:flex-end;flex-wrap:wrap';
+  row.innerHTML = `
+    <div class="field" style="margin:0;flex:1.4;min-width:140px">
+      <select class="par-mot">${MOTIVOS_PARADA.map(m => `<option>${m}</option>`).join('')}</select></div>
+    <div class="field" style="margin:0"><input type="time" class="par-ini" onchange="eqCalcHoras()"></div>
+    <div class="field" style="margin:0"><input type="time" class="par-fim" onchange="eqCalcHoras()"></div>
+    <button class="btn btn-ghost btn-sm" onclick="this.closest('.par-row').remove();eqCalcHoras()" title="Remover">✕</button>`;
+  box.appendChild(row);
+};
+function eqParadasMin() {
+  let s = 0;
+  eqParadasRows().forEach(r => {
+    const i = r.querySelector('.par-ini').value, f = r.querySelector('.par-fim').value;
+    if (i && f) { let m = hm(f) - hm(i); if (m < 0) m += 1440; s += m; }
+  });
+  return s;
+}
+function eqParadasTxt() {
+  const a = [];
+  eqParadasRows().forEach(r => {
+    const m = r.querySelector('.par-mot').value, i = r.querySelector('.par-ini').value, f = r.querySelector('.par-fim').value;
+    if (i && f) a.push(`${m} ${i}-${f}`);
+  });
+  return a.join('; ');
+}
+window.eqCalcHoras = function() {
+  const b = document.getElementById('eqHoras');
+  if (!b) return;
+  let w = hm(document.getElementById('eqFim').value) - hm(document.getElementById('eqIni').value);
+  if (w < 0) w += 1440;                       // turno noturno cruza a meia-noite
+  let t = w - eqParadasMin();
+  if (t < 0) t = 0;
+  b.value = (t / 60).toFixed(2);
+};
+
+/* assinatura no canvas — funciona com dedo e com mouse */
+function ligarEquipForm() {
+  const c = document.getElementById('eqSign');
+  if (!c || c._init) return;
+  c._init = true;
+  const ctx = c.getContext('2d');
+  ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#111';
+  let desenhando = false, px, py;
+  const pos = e => {
+    const r = c.getBoundingClientRect();
+    const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
+    const y = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
+    return [x * (c.width / r.width), y * (c.height / r.height)];
+  };
+  const start = e => { desenhando = true;[px, py] = pos(e); c._tem = true; e.preventDefault(); };
+  const move = e => {
+    if (!desenhando) return;
+    const [x, y] = pos(e);
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
+    px = x; py = y; e.preventDefault();
+  };
+  const end = () => { desenhando = false; };
+  c.addEventListener('mousedown', start); c.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', end);
+  c.addEventListener('touchstart', start, { passive: false });
+  c.addEventListener('touchmove', move, { passive: false });
+  c.addEventListener('touchend', end);
+}
+window.eqLimparSign = function() {
+  const c = document.getElementById('eqSign');
+  if (c) { c.getContext('2d').clearRect(0, 0, c.width, c.height); c._tem = false; }
+};
+function eqAssinaturaData() {
+  const c = document.getElementById('eqSign');
+  return (c && c._tem) ? c.toDataURL('image/png') : '';
+}
+
+window.eqEnviar = async function() {
+  if (!pode('apontarEquip') && !ehAdmin()) { toast('Seu acesso não aponta equipamento.', 'error'); return; }
+  const equipamento = document.getElementById('eqEquip').value;
+  if (!equipamento) { toast('Selecione um equipamento.', 'error'); return; }
+  const horas = horasNum(document.getElementById('eqHoras').value);
+  if (!horas) { toast('Horas zeradas — confira os horários e as paradas.', 'error'); return; }
+  const hi = parseFloat(document.getElementById('eqHi').value);
+  const hf = parseFloat(document.getElementById('eqHf').value);
+  if (!isNaN(hi) && !isNaN(hf) && hf < hi) { toast('Horímetro final menor que o inicial.', 'error'); return; }
+
+  const carimbo = Date.now() + '_' + Math.floor(Math.random() * 9000 + 1000);
+  const params = {
+    action: 'equipApontar', carimbo, clientId: carimbo,
+    data: document.getElementById('eqData').value || getLocalISODate(new Date()),
+    turno: document.getElementById('eqTurno').value,
+    equipamento, operador: document.getElementById('eqOper').value.trim(),
+    inicio: document.getElementById('eqIni').value, fim: document.getElementById('eqFim').value,
+    horas: document.getElementById('eqHoras').value,
+    paradas: eqParadasTxt() || 'Sem paradas',
+    horimIni: document.getElementById('eqHi').value, horimFim: document.getElementById('eqHf').value,
+    combustivel: document.getElementById('eqComb').value,
+    situacao: document.getElementById('eqSit').value,
+    observacoes: document.getElementById('eqObs').value.trim(),
+    assinatura: eqAssinaturaData(), ...authParams()
+  };
+  try {
+    const r = await jsonp(CONFIG.appsScript, params, 0, 0, null);
+    if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao enviar', 'error', 0); return; }
+    toast('Apontamento enviado ✓', 'success');
+    ['eqOper', 'eqHi', 'eqHf', 'eqComb', 'eqObs'].forEach(id => { document.getElementById(id).value = ''; });
+    document.getElementById('eqParadas').innerHTML = '';
+    eqLimparSign(); eqCalcHoras();
+    carregarEquip();
+  } catch (e) {
+    if (ehErroDeRede(e)) {
+      outboxAdicionar({ kind: 'equip', params, descricao: `${equipamento} · ${params.horas}h · ${params.data}` });
+      toast('Sem internet — apontamento guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
+    } else {
+      toast('Falha ao enviar: ' + e.message, 'error', 0);
+    }
+  }
+};
+
+window.eqApagar = async function(carimbo) {
+  if (!confirm('Apagar este apontamento de equipamento?')) return;
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'equipApagar', carimbo, ...authParams() }, 0);
+    if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao apagar', 'error', 0); return; }
+    toast('Apontamento apagado.', 'success');
+    carregarEquip();
+  } catch (e) { toast('Sem conexão com o servidor.', 'error'); }
+};
+
+/* cadastros — formulário em modal, o mesmo do RDO */
+window.cadEquipModal = function() {
+  abrirModalRDO(`
+    <div style="font-weight:700;font-size:15px;margin-bottom:14px">Cadastrar equipamento</div>
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
+      <div class="field" style="grid-column:1/-1"><label>Nome *</label>
+        <input id="ceNome" placeholder="ex.: Escavadeira 01"></div>
+      <div class="field"><label>Tipo</label>
+        <select id="ceTipo">${TIPOS_EQUIP.map(t => `<option>${t}</option>`).join('')}</select></div>
+      <div class="field"><label>Vínculo</label>
+        <select id="ceVinc" onchange="document.getElementById('ceLocWrap').style.display=this.value==='Próprio'?'none':''">
+          <option>Próprio</option><option>Locado</option></select></div>
+      <div class="field" id="ceLocWrap" style="display:none;grid-column:1/-1"><label>Locadora</label>
+        <select id="ceLoc"><option value="">—</option>
+          ${EQUIP.locadoras.map(l => `<option>${escHtml(l.nome)}</option>`).join('')}</select></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary btn-sm" onclick="cadEquipSalvar()">Cadastrar</button>
+      <button class="btn btn-ghost btn-sm" onclick="fecharModalRDO()">Cancelar</button>
+    </div>`);
+};
+window.cadEquipSalvar = async function() {
+  const nome = document.getElementById('ceNome').value.trim();
+  if (!nome) { toast('Informe o nome do equipamento.', 'error'); return; }
+  const vinculo = document.getElementById('ceVinc').value;
+  try {
+    const r = await jsonp(CONFIG.appsScript, {
+      action: 'equipCadastrar', nome, tipo: document.getElementById('ceTipo').value, vinculo,
+      locadora: vinculo === 'Próprio' ? '' : document.getElementById('ceLoc').value, ...authParams()
+    }, 0);
+    if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao cadastrar', 'error', 0); return; }
+    EQUIP.equipamentos = r.equipamentos || EQUIP.equipamentos;
+    EQUIP.locadoras = r.locadoras || EQUIP.locadoras;
+    fecharModalRDO();
+    document.getElementById('page').innerHTML = renderEquip(); ligarEquipForm();
+    toast('Equipamento cadastrado ✓', 'success');
+  } catch (e) { toast('Sem conexão com o servidor.', 'error'); }
+};
+window.cadLocadoraModal = function() {
+  abrirModalRDO(`
+    <div style="font-weight:700;font-size:15px;margin-bottom:14px">Cadastrar locadora</div>
+    <div class="field"><label>Nome *</label><input id="clNome" placeholder="Empresa locadora"></div>
+    <div class="field"><label>Observações</label><textarea id="clObs" rows="2"></textarea></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary btn-sm" onclick="cadLocadoraSalvar()">Cadastrar</button>
+      <button class="btn btn-ghost btn-sm" onclick="fecharModalRDO()">Cancelar</button>
+    </div>`);
+};
+window.cadLocadoraSalvar = async function() {
+  const nome = document.getElementById('clNome').value.trim();
+  if (!nome) { toast('Informe o nome da locadora.', 'error'); return; }
+  try {
+    const r = await jsonp(CONFIG.appsScript, {
+      action: 'locadoraCadastrar', nome, observacoes: document.getElementById('clObs').value.trim(), ...authParams()
+    }, 0);
+    if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao cadastrar', 'error', 0); return; }
+    EQUIP.locadoras = r.locadoras || EQUIP.locadoras;
+    fecharModalRDO();
+    toast('Locadora cadastrada ✓', 'success');
+  } catch (e) { toast('Sem conexão com o servidor.', 'error'); }
+};
+
+// ====================================================================
+// VIEW: GALERIA DE FOTOS
+// As imagens ficam privadas no Drive; a planilha guarda só o ponteiro.
+// Aqui elas são buscadas pelo backend (exige login) e guardadas no
+// aparelho, para a segunda visita abrir na hora.
+// ====================================================================
+function fotosDaObra() {
+  const out = [];
+  (STATE.rdoavanco || []).forEach(r => {
+    const ponteiros = fotosDaLinha(r);
+    if (!ponteiros.length) return;
+    const data = normalizarDataCSV(getCSVField(r, 'Data'));
+    ponteiros.forEach((ponteiro, i) => out.push({
+      fileId: fotoFileId(ponteiro), idx: i, data,
+      pacote: getCSVField(r, 'Pacote_Nome') || getCSVField(r, 'Pacote_ID') || 'Serviço',
+      pacoteId: getCSVField(r, 'Pacote_ID') || '',
+      estaca: getCSVField(r, 'Local_Estaca') || '',
+      turno: getCSVField(r, 'Turno') || '',
+      equipe: getCSVField(r, 'Equipe') || getCSVField(r, 'Subcontratado') || '',
+      apontador: getCSVField(r, 'Apontador') || getCSVField(r, 'Usuario') || '',
+      qtd: getCSVField(r, 'Quantidade') || '', un: getCSVField(r, 'Unidade') || ''
+    }));
+  });
+  return out.sort((a, b) => String(b.data).localeCompare(String(a.data)));
+}
+
+// A data do CSV vem em formatos diferentes conforme quem gravou a linha.
+function normalizarDataCSV(v) {
+  const d = parseISODate(v);
+  return d ? getLocalISODate(d) : String(v || '').slice(0, 10);
+}
+
+function renderGaleria() {
+  const todas = fotosDaObra();
+  if (!todas.length) {
+    return `<div class="card"><div class="card-body" style="text-align:center;padding:34px">
+      <div style="font-size:30px">📷</div>
+      <div style="font-weight:700;margin-top:8px">Nenhuma foto registrada ainda</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:5px">
+        Anexe fotos ao lançar um serviço, em <b>Lançar Serviço</b>.</div>
+    </div></div>`;
+  }
+  const meses = [...new Set(todas.map(f => String(f.data).slice(0, 7)))].filter(Boolean).sort().reverse();
+  const pacotes = [...new Set(todas.map(f => f.pacote))].sort();
+  const fs = todas.filter(f =>
+    (STATE.galPacote === 'Todos' || !STATE.galPacote || f.pacote === STATE.galPacote) &&
+    (STATE.galMes === 'Todos' || !STATE.galMes || String(f.data).slice(0, 7) === STATE.galMes));
+
+  const filtros = `<div class="card" style="margin-bottom:16px"><div class="card-body">
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:end">
+      <div class="field"><label>Pacote / serviço</label>
+        <select onchange="STATE.galPacote=this.value;transitionTo(render)">
+          <option value="Todos">Todos os pacotes</option>
+          ${pacotes.map(p => `<option ${STATE.galPacote === p ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
+        </select></div>
+      <div class="field"><label>Mês</label>
+        <select onchange="STATE.galMes=this.value;transitionTo(render)">
+          <option value="Todos">Todos os meses</option>
+          ${meses.map(m => `<option value="${m}" ${STATE.galMes === m ? 'selected' : ''}>${m}</option>`).join('')}
+        </select></div>
+      <div style="text-align:right"><span class="pill">${fs.length} foto(s)</span></div>
+    </div></div></div>`;
+
+  const cartoes = fs.map(f => `<div class="card" style="overflow:hidden;padding:0">
+    <div style="position:relative;background:var(--surface-2);cursor:zoom-in;height:170px"
+         onclick="ampliarFoto('${f.fileId}','${escHtml(f.pacote)}')">
+      <img id="gal-${f.fileId}" alt="${escHtml(f.pacote)}" loading="lazy"
+           style="width:100%;height:170px;object-fit:cover;display:none">
+      <div id="galph-${f.fileId}" style="height:170px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px">
+        ${STATE.usuarioLogado ? 'carregando…' : '🔒 entre para ver'}
+      </div>
+      <span class="pill" style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,.6);color:#fff">
+        ${escHtml(f.data)}</span>
+    </div>
+    <div style="padding:11px 13px">
+      <div style="font-weight:600;font-size:13px;line-height:1.3">${escHtml(f.pacote)}</div>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:3px">
+        ${escHtml(f.estaca)}${f.turno ? ' · ' + escHtml(f.turno) : ''}</div>
+      <div style="font-size:11.5px;color:var(--muted)">
+        ${f.qtd ? fmtNum(num(f.qtd)) + ' ' + escHtml(f.un) : ''}${f.apontador ? ' · por ' + escHtml(f.apontador) : ''}</div>
+    </div></div>`).join('');
+
+  return `${filtros}
+    ${STATE.usuarioLogado ? '' : `<div class="card" style="margin-bottom:14px;border-left:3px solid var(--ylw)">
+      <div class="card-body" style="padding:11px 16px;font-size:13px">
+        As fotos ficam <b>privadas no Drive</b>. Faça login para vê-las.</div></div>`}
+    <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px">${cartoes}</div>`;
+}
+
+// Busca as imagens uma a uma para não estourar a cota do Apps Script.
+async function carregarImagensGaleria() {
+  if (!STATE.usuarioLogado) return;
+  const vistos = [...document.querySelectorAll('[id^="gal-"]')].map(el => el.id.slice(4));
+  for (const fileId of vistos.slice(0, 30)) {
+    const src = await baixarFotoServidor(fileId);
+    const img = document.getElementById('gal-' + fileId);
+    const ph = document.getElementById('galph-' + fileId);
+    if (!img) continue;                       // trocou de tela no meio
+    if (src) { img.src = src; img.style.display = 'block'; if (ph) ph.style.display = 'none'; }
+    else if (ph) ph.textContent = 'imagem indisponível';
+  }
+}
+
+window.ampliarFoto = async function(fileId, legenda) {
+  const src = await baixarFotoServidor(fileId);
+  if (!src) { toast('Não foi possível abrir a imagem.', 'error'); return; }
+  const janela = document.createElement('div');
+  janela.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;display:flex;' +
+    'flex-direction:column;align-items:center;justify-content:center;padding:20px;cursor:zoom-out';
+  janela.onclick = () => janela.remove();
+  janela.innerHTML = `<img src="${src}" alt="${escHtml(legenda || '')}" style="max-width:100%;max-height:82vh;border-radius:8px">
+    <div style="color:#fff;margin-top:12px;font-size:13px">${escHtml(legenda || '')} — toque para fechar</div>`;
+  document.body.appendChild(janela);
+};
+
+// ====================================================================
+// VIEW: USUÁRIOS (só admin)
+// Cria, muda o perfil, troca a senha e exclui — sem abrir o Apps Script.
+// A senha vai para o servidor, volta hasheada de lá e nunca retorna ao app.
+// ====================================================================
+function renderUsuarios() {
+  return `
+    <div class="card stagger-item">
+      <div class="card-header">
+        <div>
+          <div class="card-title">👷 Usuários e acessos</div>
+          <div class="card-title-sub">Quem entra no sistema e o que cada perfil enxerga</div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="usuarioAbrirForm()">+ Novo usuário</button>
+      </div>
+      <div class="card-body" id="usuariosLista">
+        <div style="color:var(--muted,#718096);font-size:13px">Carregando…</div>
+      </div>
+    </div>
+
+    <div class="card stagger-item" style="margin-top:16px">
+      <div class="card-header"><div><div class="card-title">O que cada perfil faz</div></div></div>
+      <div class="card-body" style="padding:0">
+        <div style="overflow-x:auto">
+          <table style="width:100%;border-collapse:collapse;font-size:13px">
+            <thead><tr style="text-align:left;border-bottom:1px solid var(--border)">
+              <th style="padding:10px 14px">Perfil</th><th style="padding:10px 14px">Acesso</th>
+            </tr></thead>
+            <tbody>
+              ${Object.keys(PERFIS).map(k => `<tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:10px 14px;font-weight:600;white-space:nowrap">${PERFIS[k].nome}</td>
+                <td style="padding:10px 14px;color:var(--muted,#718096)">${PERFIS[k].desc}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div id="usuarioFormWrap"></div>`;
+}
+
+async function usuariosCarregarLista() {
+  const alvo = document.getElementById('usuariosLista');
+  if (!alvo) return;
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'usuariosListar', ...authParams() }, 0);
+    if (!r.ok) {
+      alvo.innerHTML = `<div style="color:var(--err,#e53e3e);font-size:13px">${escHtml(r.mensagem || erroLegivel(r.error))}</div>`;
+      return;
+    }
+    STATE.usuariosCache = r.usuarios || [];
+    if (!STATE.usuariosCache.length) {
+      alvo.innerHTML = '<div style="color:var(--muted,#718096);font-size:13px">Nenhum usuário cadastrado ainda.</div>';
+      return;
+    }
+    alvo.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;border-bottom:1px solid var(--border)">
+        <th style="padding:10px 12px">Usuário</th><th style="padding:10px 12px">Perfil</th>
+        <th style="padding:10px 12px">Senha</th><th style="padding:10px 12px"></th>
+      </tr></thead><tbody>
+      ${STATE.usuariosCache.map((u, i) => `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:10px 12px;font-weight:600">${escHtml(u.nome)}${u.nome === r.eu ? ' <span style="font-weight:400;color:var(--muted,#718096)">(você)</span>' : ''}</td>
+        <td style="padding:10px 12px">${escHtml((PERFIS[u.perfil] || {}).nome || u.perfil)}</td>
+        <td style="padding:10px 12px">${u.formatoAntigo
+          ? '<span style="color:var(--wrn,#d69e2e)" title="Senha ainda em texto puro nas Propriedades do script. Rode migrarSenhasParaHash() ou salve uma senha nova aqui.">em texto — trocar</span>'
+          : '<span style="color:var(--muted,#718096)">protegida</span>'}</td>
+        <td style="padding:10px 12px;text-align:right;white-space:nowrap">
+          <button class="btn btn-ghost btn-sm" onclick="usuarioAbrirForm(${i})">Editar</button>
+          ${u.nome === r.eu ? '' : `<button class="btn btn-ghost btn-sm" style="color:var(--err,#e53e3e)" onclick="usuarioExcluirUI('${escHtml(u.nome)}')">Excluir</button>`}
+        </td></tr>`).join('')}
+      </tbody></table></div>`;
+  } catch (e) {
+    alvo.innerHTML = '<div style="color:var(--err,#e53e3e);font-size:13px">Sem conexão com o servidor.</div>';
+  }
+}
+
+window.usuarioAbrirForm = function(idx) {
+  const u = (idx === undefined) ? null : (STATE.usuariosCache || [])[idx];
+  const wrap = document.getElementById('usuarioFormWrap');
+  if (!wrap) return;
+  wrap.innerHTML = `
+    <div class="card stagger-item" style="margin-top:16px;border-top:4px solid var(--acc)">
+      <div class="card-header"><div>
+        <div class="card-title">${u ? 'Editar ' + escHtml(u.nome) : 'Novo usuário'}</div>
+        <div class="card-title-sub">${u ? 'Deixe a senha em branco para mantê-la' : 'A senha é gravada protegida no servidor'}</div>
+      </div></div>
+      <div class="card-body">
+        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px">
+          <div class="field"><label>Nome</label>
+            <input type="text" id="usrNome" value="${u ? escHtml(u.nome) : ''}" maxlength="40" placeholder="Como aparece no login"></div>
+          <div class="field"><label>Perfil</label>
+            <select id="usrPerfil">${Object.keys(PERFIS).map(k =>
+              `<option value="${k}" ${u && u.perfil === k ? 'selected' : ''}>${PERFIS[k].nome}</option>`).join('')}</select></div>
+          <div class="field"><label>Senha ${u ? '(opcional)' : ''}</label>
+            <input type="password" id="usrSenha" placeholder="${u ? 'manter a atual' : 'mínimo 4 caracteres'}"></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="btn btn-primary btn-sm" onclick="usuarioSalvarUI(${u ? `'${escHtml(u.nome)}'` : 'null'})">Salvar</button>
+          <button class="btn btn-ghost btn-sm" onclick="document.getElementById('usuarioFormWrap').innerHTML=''">Cancelar</button>
+        </div>
+      </div>
+    </div>`;
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
+
+window.usuarioSalvarUI = async function(nomeAntigo) {
+  const nome = document.getElementById('usrNome').value.trim();
+  const perfil = document.getElementById('usrPerfil').value;
+  const senha = document.getElementById('usrSenha').value;
+  if (!nome) { toast('Informe o nome do usuário.', 'error'); return; }
+  try {
+    const r = await jsonp(CONFIG.appsScript, {
+      action: 'usuarioSalvar', nome, perfil, senha,
+      nomeAntigo: nomeAntigo || '', ...authParams()
+    }, 0);
+    if (!r.ok) { toast(r.mensagem || erroLegivel(r.error), 'error', 0); return; }
+    toast(`${nome} salvo como ${PERFIS[perfil].nome}.`, 'success');
+    document.getElementById('usuarioFormWrap').innerHTML = '';
+    usuariosCarregarLista();
+  } catch (e) {
+    toast('Sem conexão com o servidor.', 'error');
+  }
+};
+
+window.usuarioExcluirUI = async function(nome) {
+  if (!confirm(`Excluir o usuário ${nome}? Ele perde o acesso ao sistema.`)) return;
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'usuarioExcluir', nome, ...authParams() }, 0);
+    if (!r.ok) { toast(r.mensagem || erroLegivel(r.error), 'error', 0); return; }
+    toast(`${nome} removido.`, 'success');
+    usuariosCarregarLista();
+  } catch (e) {
+    toast('Sem conexão com o servidor.', 'error');
+  }
+};
 
 // ====================================================================
 // VIEW: ✨ ANALISTA IA (ATUALIZADO)
@@ -4483,8 +5601,8 @@ function renderHistoricoServicos() {
           <td style="font-size:12px">${equipe}</td>
           <td style="font-size:12px">${apontador}</td>
           <td style="text-align:center;white-space:nowrap">
-            <button class="gantt-edit-btn" id="hedit-toggle-${idx}" onclick="histEditarServico(${idx})" title="Editar este lançamento">✏</button>
-            ${STATE.usuarioLogado ? `<button class="gantt-edit-btn" onclick="histDeletarServico(${idx})" title="Apagar este lançamento" style="color:var(--err,#e53e3e);margin-left:2px">🗑</button>` : ''}
+            ${podeEditar(r) ? `<button class="gantt-edit-btn" id="hedit-toggle-${idx}" onclick="histEditarServico(${idx})" title="Editar este lançamento">✏</button>` : ''}
+            ${podeExcluir(r) ? `<button class="gantt-edit-btn" onclick="histDeletarServico(${idx})" title="Apagar este lançamento" style="color:var(--err,#e53e3e);margin-left:2px">🗑</button>` : ''}
           </td>
         </tr>
         <tr id="hist-edit-row-${idx}" style="display:none">
@@ -4575,7 +5693,7 @@ function renderHistoricoServicos() {
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap">
           ${rdos.length > 0 ? `<button class="btn btn-outline btn-sm" onclick="exportarHistoricoCSV()">⬇ CSV</button>` : ''}
-          ${STATE.usuarioLogado && rdos.length > 0 ? `<button class="btn btn-sm" style="background:var(--err,#e53e3e);color:#fff;border:none;padding:5px 12px;border-radius:var(--r);cursor:pointer;font-size:12px;font-weight:600" onclick="apagarDuplicatasRDO()">🗑 Apagar duplicatas</button>` : ''}
+          ${ehAdmin() && rdos.length > 0 ? `<button class="btn btn-sm" style="background:var(--err,#e53e3e);color:#fff;border:none;padding:5px 12px;border-radius:var(--r);cursor:pointer;font-size:12px;font-weight:600" onclick="apagarDuplicatasRDO()">🗑 Apagar duplicatas</button>` : ''}
         </div>
       </div>
       <div class="card-body flush">
@@ -5898,6 +7016,7 @@ function renderServicoRow(s, idx, frentes) {
           <label>Observação do serviço (opcional)</label>
           <input type="text" data-svc="${idx}" data-field="observacao" value="${escHtml(s.observacao)}" placeholder="ex: Continuar amanhã">
         </div>
+        ${campoFotos(idx)}
       </div>
     </div>
   `;
@@ -5946,6 +7065,10 @@ function attachRDOForm() {
     outrosList.addEventListener('input', outrosInputHandler);
     outrosList.addEventListener('change', outrosInputHandler);
   }
+
+  // O formulário é redesenhado a cada mudança de campo; as fotos já escolhidas
+  // vivem em memória, então voltam a aparecer aqui.
+  Object.keys(_fotosPorServico).forEach(idx => renderFotosPrev(idx));
 }
 
 function svcInputHandler(ev) {
@@ -6147,6 +7270,11 @@ async function salvarRDO() {
   const btn = document.getElementById('btnSalvarRDO');
   const btnTxtOriginal = btn.innerHTML;
 
+  // Índice de cada serviço no formulário, para casar com as fotos escolhidas.
+  const idxOriginal = new Map();
+  d.servicos.forEach((s, i) => idxOriginal.set(s, i));
+  const fotosDoLote = {};   // { '<id do serviço>': [{thumb, full}] }
+
   const batchPacotes = d.servicos
     .filter(s => s.pacoteId && num(s.quantidade) > 0)
     .map(s => {
@@ -6155,7 +7283,14 @@ async function salvarRDO() {
       let localEstaca = '';
       if (s.estacaIni && s.estacaFim) localEstaca = `${s.estacaIni} a ${s.estacaFim} (${s.sentido||'CB'})`;
       else if (s.estacaIni) localEstaca = `${s.estacaIni} (${s.sentido||'CB'})`;
+      // O id sai daqui, não do servidor: é ele que amarra a foto ao serviço
+      // (a foto sobe depois que a linha já foi gravada). Mesmo formato que o
+      // backend geraria, para não quebrar as limpezas por prefixo de data.
+      const idSvc = gerarIdServico(idxOriginal.get(s) || 0);
+      const fotosSvc = _fotosPorServico[idxOriginal.get(s)] || [];
+      if (fotosSvc.length) fotosDoLote[idSvc] = fotosSvc.slice();
       return {
+        id: idSvc,
         data: d.data,
         turno: d.turno || 'Diurno',
         pacote_id: s.pacoteId,
@@ -6272,12 +7407,25 @@ async function salvarRDO() {
   // NÃO confiamos no navigator.onLine (dá "offline" falso mesmo com internet).
   // Tentamos enviar de verdade: se estiver mesmo sem rede, o JSONP falha em
   // milissegundos e caímos no catch, que guarda na fila. Sem falso "sem internet".
+  // Só sobem as fotos dos serviços que realmente foram enviados (o filtro
+  // anti-duplicação pode ter tirado algum do lote).
+  const idsEnviados = new Set(batch.map(o => o.id).filter(Boolean));
+  const fotosEnviar = {};
+  Object.keys(fotosDoLote).forEach(id => { if (idsEnviados.has(id)) fotosEnviar[id] = fotosDoLote[id]; });
+  const totalFotos = Object.values(fotosEnviar).reduce((n, l) => n + l.length, 0);
+
   try {
     const result = await jsonp(CONFIG.appsScript, reqParams, 0, 0, null);
 
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
 
     toast(`✓ ${totalItens} item${totalItens>1?'s':''} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
+
+    if (totalFotos) {
+      toast(`Enviando ${totalFotos} foto(s)…`, 'info', 2500);
+      enviarFotosDoLote(fotosEnviar);   // não segura o apontador esperando
+    }
+    _fotosPorServico = {};
 
     limparFormularioRDO();
     setTimeout(() => carregarTudo(), 1500);
@@ -6290,13 +7438,34 @@ async function salvarRDO() {
     btn.innerHTML = btnTxtOriginal;
     if (ehErroDeRede(e)) {
       outboxAdicionar({ kind: 'rdo', params: reqParams, descricao: descricaoFila });
-      toast('Sem internet — RDO guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
+      // As fotos vão para a mesma fila, atrás do lote: quando o RDO subir, a
+      // linha já existe e a foto acha o serviço pelo id.
+      let fotosNaFila = 0;
+      Object.keys(fotosEnviar).forEach(id => fotosEnviar[id].forEach((f, i) => {
+        try {
+          outboxAdicionar({ kind: 'foto', params: { action: 'rdoFoto', id, idx: i, foto: f.full },
+            descricao: 'foto do serviço ' + id });
+          fotosNaFila++;
+        } catch (err) { /* memória do aparelho cheia: a foto se perde, o RDO não */ }
+      }));
+      _fotosPorServico = {};
+      toast('Sem internet — RDO' + (fotosNaFila ? ` e ${fotosNaFila} foto(s)` : '') +
+        ' guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
       limparFormularioRDO();
       transitionTo(render);
     } else {
       toast('Falha ao salvar: ' + e.message, 'error', 0);
     }
   }
+}
+
+/* Mesmo formato de id do backend (yyyyMMddHHmmss_k_aleatório), gerado no
+   aparelho para que a foto saiba a qual serviço se ligar. */
+function gerarIdServico(k) {
+  const d = new Date();
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}` +
+    `_${k}_${Math.floor(Math.random() * 9000 + 1000)}`;
 }
 
 // ====================================================================

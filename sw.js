@@ -9,7 +9,7 @@
 //  • Google Sheets / Apps Script / Gemini: NUNCA intercepta — dados de
 //    produção vêm sempre da rede (a fila offline do app cuida do resto).
 // ============================================================
-const VERSAO = 'teotonio-v2'; // v2: limpa os ícones PNG pesados antigos do cache
+const VERSAO = 'teotonio-v3'; // v3: entram os módulos js/ (notas fiscais, ícones)
 const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleusercontent.com', 'generativelanguage.googleapis.com'];
 
 self.addEventListener('install', () => self.skipWaiting());
