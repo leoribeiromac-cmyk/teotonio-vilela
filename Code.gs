@@ -93,6 +93,7 @@ function rotear(e) {
       case 'nfConsultarChave':  resp = nfConsultarChave(p); break;
       case 'saidaSalvar':       resp = saidaSalvar(p); break;
       case 'saidaExcluir':      resp = saidaExcluir(p.obra, p.id, p.token); break;
+      case 'clima':           resp = climaDoDia(p.data); break;
       case 'rdoFoto':         resp = rdoFoto(p); break;
       case 'obterFoto':       resp = obterFotoPrivada(p.fileId); break;
       case 'usuariosListar':  resp = usuariosListar(p.token); break;
@@ -425,6 +426,105 @@ function gerarId(data, k) {
 }
 
 // ------------------------------------------------------------
+// CLIMA DO DIA — chuva registrada por estação oficial
+//
+// Por que passa pelo servidor e não direto do navegador: o app é uma
+// página estática, e API de terceiro raramente manda cabeçalho de CORS.
+// Aqui o UrlFetchApp busca sem essa amarra, guarda em cache e ainda
+// deixa trocar de provedor sem republicar o index.html.
+//
+// Por que INMET: num contrato público, chuva registrada pelo instituto
+// oficial de meteorologia sustenta justificativa de prazo muito melhor
+// do que uma API estrangeira qualquer. É dado público e sem licença
+// comercial no caminho (o tier gratuito do Open-Meteo, por exemplo, é
+// só para uso NÃO comercial — não serve para obra).
+//
+// Propriedades do script (opcionais):
+//   INMET_ESTACAO  código da estação automática (padrão A701, São Paulo
+//                  – Mirante de Santana). Troque pela estação mais perto
+//                  da obra: portal.inmet.gov.br/paginas/catalogoaut
+//   CLIMA_URL      molde de URL de outro provedor, com {ini} {fim} {est}
+//
+// ATENÇÃO: a leitura dos campos do INMET segue a nomenclatura publicada
+// das estações automáticas (CHUVA por hora, HR_MEDICAO como hora UTC).
+// Se o provedor mudar os nomes, climaDoDia devolve ok:false com o
+// motivo, e o RDO continua sendo preenchido à mão — nunca trava.
+// ------------------------------------------------------------
+var INMET_ESTACAO_PADRAO = 'A701';
+
+function climaDoDia(dataISO) {
+  var d = String(dataISO || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return { ok: false, motivo: 'Data inválida' };
+
+  var cache = CacheService.getScriptCache();
+  var chave = 'clima_' + d;
+  var guardado = cache.get(chave);
+  if (guardado) { try { return JSON.parse(guardado); } catch (e) {} }
+
+  var props = PropertiesService.getScriptProperties();
+  var est = props.getProperty('INMET_ESTACAO') || INMET_ESTACAO_PADRAO;
+  var molde = props.getProperty('CLIMA_URL') ||
+              'https://apitempo.inmet.gov.br/estacao/{ini}/{fim}/{est}';
+  var url = molde.replace('{ini}', d).replace('{fim}', d).replace('{est}', est);
+
+  var linhas;
+  try {
+    var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
+    if (r.getResponseCode() !== 200) {
+      return { ok: false, motivo: 'A estação respondeu ' + r.getResponseCode() + '.' };
+    }
+    linhas = JSON.parse(r.getContentText() || '[]');
+  } catch (e) {
+    return { ok: false, motivo: 'Não foi possível falar com a estação: ' + e };
+  }
+  if (!linhas || !linhas.length) {
+    return { ok: false, motivo: 'A estação ' + est + ' não tem registro para ' + d +
+                                ' (dado costuma sair com algumas horas de atraso).' };
+  }
+
+  // Somatório de chuva por período do dia. A hora do INMET vem em UTC
+  // ("HH00"); São Paulo é UTC-3, então 09 UTC = 06 local.
+  var soma = { manha: 0, tarde: 0, noite: 0 }, lidas = 0;
+  linhas.forEach(function (l) {
+    var hh = parseInt(String(l.HR_MEDICAO == null ? '' : l.HR_MEDICAO).slice(0, 2), 10);
+    if (!isFinite(hh)) return;
+    var local = (hh - 3 + 24) % 24;
+    var mm = parseFloat(String(l.CHUVA == null ? '' : l.CHUVA).replace(',', '.'));
+    if (!isFinite(mm)) mm = 0;
+    lidas++;
+    if (local >= 6 && local < 12) soma.manha += mm;
+    else if (local >= 12 && local < 18) soma.tarde += mm;
+    else if (local >= 18) soma.noite += mm;
+  });
+  if (!lidas) return { ok: false, motivo: 'Registro sem hora legível — provedor mudou o formato?' };
+
+  var resp = {
+    ok: true,
+    manha: classificarChuva_(soma.manha),
+    tarde: classificarChuva_(soma.tarde),
+    noite: classificarChuva_(soma.noite),
+    mm: { manha: +soma.manha.toFixed(1), tarde: +soma.tarde.toFixed(1), noite: +soma.noite.toFixed(1) },
+    estacao: est,
+    fonte: 'INMET · estação ' + est
+  };
+  // 6 h: dia passado não muda mais, e dia corrente ainda recebe horas novas
+  try { cache.put(chave, JSON.stringify(resp), 21600); } catch (e) {}
+  return resp;
+}
+
+/* Milímetros medidos → o vocabulário que o RDO já usa. Os cortes seguem
+   a leitura corrente de campo: traço de chuva não para serviço, acima de
+   5 mm no período para. Sem chuva o retorno é "Bom" e NÃO "Encoberto":
+   a estação mede precipitação, não cobertura de nuvem, e afirmar céu
+   limpo a partir de chuva zero seria inventar dado. */
+function classificarChuva_(mm) {
+  if (!(mm > 0)) return 'Bom';
+  if (mm <= 0.5) return 'Garoa';
+  if (mm <= 5) return 'Chuva';
+  return 'Chuva forte';
+}
+
+// ------------------------------------------------------------
 // FOTOS DO RDO — a imagem vai para uma pasta PRIVADA do Drive e a
 // planilha guarda só o ponteiro "drive_id:<id>". Nada de link público:
 // foto de obra mostra placa, rosto e endereço.
@@ -460,11 +560,27 @@ function rdoFoto(p) {
       aba.getRange(1, aba.getLastColumn() + 1).setValue('foto_link');
       iFotos = aba.getLastColumn() - 1;
     }
+    // Coordenada da foto em coluna própria. O carimbo na imagem é a prova
+    // para quem olha; a coluna é o que dá para filtrar, conferir e levar
+    // para um mapa. Só grava a da PRIMEIRA foto da linha: são fotos do
+    // mesmo ponto, e sobrescrever a cada uma só trocaria ruído de GPS.
+    var iLat = -1, iLon = -1;
+    if (p.lat !== '' && p.lat != null && !isNaN(parseFloat(p.lat))) {
+      iLat = idxColuna(cab, 'foto_lat');
+      if (iLat === -1) { aba.getRange(1, aba.getLastColumn() + 1).setValue('foto_lat'); iLat = aba.getLastColumn() - 1; }
+      iLon = idxColuna(cab, 'foto_lon');
+      if (iLon === -1) { aba.getRange(1, aba.getLastColumn() + 1).setValue('foto_lon'); iLon = aba.getLastColumn() - 1; }
+    }
+
     if (iId !== -1) {
       for (var i = 1; i < dados.length; i++) {
         if (String(dados[i][iId]).trim() === String(p.id || '').trim()) {
           var atual = String(dados[i][iFotos] == null ? '' : dados[i][iFotos]).trim();
           aba.getRange(i + 1, iFotos + 1).setValue(atual ? atual + ' ' + ponteiro : ponteiro);
+          if (iLat !== -1 && !String(dados[i][iLat] == null ? '' : dados[i][iLat]).trim()) {
+            aba.getRange(i + 1, iLat + 1).setValue(parseFloat(p.lat));
+            aba.getRange(i + 1, iLon + 1).setValue(parseFloat(p.lon));
+          }
           break;
         }
       }

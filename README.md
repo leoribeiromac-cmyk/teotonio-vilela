@@ -34,6 +34,28 @@ As senhas antigas ficaram públicas no histórico deste repositório. Para blind
 
 Pronto: o login passa a ser validado no servidor e **toda escrita/exclusão exige token de sessão** (6 h, renovado a cada uso) — quem tiver só a URL do `/exec` não consegue mais injetar nem apagar dados. Sem essas propriedades, tudo funciona como antes (fallback de migração).
 
+## Clima automático no RDO (opcional)
+
+O botão **Buscar chuva registrada**, no RDO Diário, preenche os três períodos
+pela chuva medida pela estação automática do **INMET** — chuva digitada de
+memória três dias depois não sustenta justificativa de prazo; chuva medida por
+estação oficial, sim.
+
+Funciona sem configurar nada (estação padrão `A701`, São Paulo – Mirante de
+Santana). Para apontar para a estação mais próxima da obra, crie nas
+**Propriedades do script**:
+
+| Propriedade | Para quê |
+|---|---|
+| `INMET_ESTACAO` | Código da estação automática. Catálogo: portal.inmet.gov.br/paginas/catalogoaut |
+| `CLIMA_URL` | Só se quiser outro provedor. Molde de URL com `{ini}`, `{fim}` e `{est}` |
+
+A tradução de milímetros para o vocabulário do RDO: `0` → Bom · até `0,5 mm` →
+Garoa · até `5 mm` → Chuva · acima disso → Chuva forte. Sem chuva o retorno é
+**Bom** e não *Encoberto*: a estação mede precipitação, não cobertura de nuvem.
+O valor preenchido é sempre editável — quem esteve na obra sabe mais que o
+pluviômetro a alguns quilômetros.
+
 ## Níveis de acesso
 
 Cada pessoa entra com o seu usuário e vê só o que o perfil dela permite:
