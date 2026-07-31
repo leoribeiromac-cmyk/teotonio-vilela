@@ -2460,8 +2460,12 @@ function ehAdmin() { return perfilAtual() === 'admin'; }
 
 /* Sem login, o app é o painel público de consulta: mostra as telas de
    análise e barra as de lançamento (que já pediam login antes). */
+/* Telas que exigem login. A lista é a mesma consultada no render() — item de
+   menu que só leva à tela de login é promessa que o app não cumpre. */
+const TELAS_COM_LOGIN = ['rdo', 'rdodiario', 'usuarios', 'equip', 'notas'];
+
 function podeVer(tela) {
-  if (!STATE.usuarioLogado) return !['rdo', 'rdodiario', 'usuarios'].includes(tela);
+  if (!STATE.usuarioLogado) return !TELAS_COM_LOGIN.includes(tela);
   if (tela === 'usuarios') return ehAdmin();
   const t = perfilInfo().telas;
   return t === '*' || t.includes(tela);
@@ -3510,7 +3514,7 @@ function render() {
   const elDiarioCount = document.getElementById('diarioCount');
   if (elDiarioCount) elDiarioCount.textContent = (STATE.rdodiario||[]).length;
 
-  const telasRestritas = ['rdo', 'rdodiario', 'usuarios', 'equip', 'notas'];
+  const telasRestritas = TELAS_COM_LOGIN;
   if (telasRestritas.includes(STATE.currentPage) && !STATE.usuarioLogado) {
     document.getElementById('pageTitle').textContent = 'Login Necessário';
     document.getElementById('pageSubtitle').textContent = 'Área restrita à equipe de apontamento e engenharia';
