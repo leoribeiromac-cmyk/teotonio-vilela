@@ -716,6 +716,43 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .campo-invalido{border:2px solid var(--red)!important;background:var(--red-l)!important}
 @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 
+/* ===================== TEMPO × ESTACA ===================== */
+.tc-filtros{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.tc-flabel{font-size:9px;font-weight:800;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
+.tc-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px 10px;border-radius:20px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);
+  color:var(--muted);font-family:inherit;font-size:11px;font-weight:600;
+  transition:all .15s;
+}
+.tc-chip i{width:8px;height:8px;border-radius:50%;background:var(--tc-cor,var(--muted-2));flex-shrink:0}
+.tc-chip:hover{border-color:var(--border-strong);color:var(--text)}
+.tc-chip.on{background:var(--text);border-color:var(--text);color:var(--surface)}
+.tc-bloco{margin-bottom:20px}
+.tc-titulo{
+  font-size:11px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;
+}
+/* altura fixa: o gráfico é lido pela INCLINAÇÃO das linhas, e altura
+   elástica mudaria a inclinação sem a produtividade ter mudado */
+.tc-canvas-wrap{position:relative;height:340px;width:100%}
+@media(max-width:768px){ .tc-canvas-wrap{height:260px} }
+.tc-legenda{
+  display:flex;align-items:flex-start;gap:8px;
+  padding:10px 12px;border-radius:var(--r-sm);
+  background:var(--bg-2);border:1px solid var(--border);
+  font-size:11.5px;line-height:1.55;color:var(--muted);
+}
+.tc-legenda .ic{width:15px;height:15px;vertical-align:0;margin-top:1px;flex-shrink:0}
+.tc-nada{
+  display:flex;align-items:center;justify-content:center;gap:9px;
+  height:120px;border-radius:var(--r-sm);
+  border:1px dashed var(--border-strong);background:var(--bg-2);
+  font-size:12px;color:var(--muted);text-align:center;padding:0 18px;
+}
+.tc-nada .ic{width:16px;height:16px;vertical-align:0;flex-shrink:0}
+
 /* ===================== EMPTY / LOADING ===================== */
 .empty{padding:60px 20px;text-align:center;color:var(--muted)}
 .empty-icon{
@@ -4734,6 +4771,9 @@ function renderExecutivo() {
 }
 
 function montarGraficos() {
+  // Ponto único de montagem de gráfico: todo mundo que troca de tela ou de
+  // tema já chama daqui, então o Tempo × Estaca entra junto sem hook novo.
+  if (STATE.currentPage === 'avancofisico') { montarTempoCaminhamento(); return; }
   if (STATE.currentPage !== 'executivo') return;
   if (!STATE.dashData) return;
   // Se a CDN do chart.js não carregou (sinal fraco no campo), o painel segue
@@ -5023,6 +5063,331 @@ function montarGraficos() {
 }
 
 // ====================================================================
+// TEMPO-CAMINHAMENTO (time-location / time-chainage)
+// --------------------------------------------------------------------
+// O formato de planejamento de obra LINEAR — rodovia, ferrovia, duto,
+// avenida. Um eixo é a posição na via (estaca), o outro é o tempo. Cada
+// frente vira uma diagonal descendo pela avenida, e a INCLINAÇÃO da
+// diagonal é a produtividade: linha deitada = frente andando rápido,
+// linha em pé = frente parada no mesmo trecho.
+//
+// O que ele mostra e o Gantt não mostra: duas frentes que vão se
+// encontrar na MESMA estaca na MESMA semana. No Gantt são duas barras
+// paralelas que parecem conviver bem; aqui as diagonais se cruzam, e o
+// cruzamento é o conflito.
+//
+// Os dados já existiam: cada linha de RDO_Avanco tem data e estaca.
+// ====================================================================
+
+/* Cor estável por frente, sem ninguém cadastrar paleta.
+   Matizes escolhidos a dedo e BEM separados: derivar a cor de um hash do
+   nome parecia elegante, mas na prática entregava dois verdes quase
+   iguais para Calçada e Pavimentação — num gráfico de linhas cruzadas,
+   cor parecida é o mesmo que cor errada. A posição vem da ordem
+   alfabética das frentes do contrato, então a cor de cada uma só muda se
+   a lista de frentes mudar. Frente fora da lista cai no hash do nome. */
+const HUES_FRENTE = [145, 250, 320, 75, 195, 15, 285, 105, 225, 350];
+
+function frentesDoContrato() {
+  var s = {};
+  (STATE.pacotes || []).forEach(function (p) {
+    var f = getCSVField(p, 'Frente');
+    if (f) s[f] = 1;
+  });
+  return Object.keys(s).sort();
+}
+
+function corDaFrente(nome, alpha) {
+  var n = String(nome || '');
+  var i = frentesDoContrato().indexOf(n);
+  if (i < 0) {                                  // frente que não veio da aba Pacotes
+    var h = 0;
+    for (var k = 0; k < n.length; k++) h = (h * 31 + n.charCodeAt(k)) % HUES_FRENTE.length;
+    i = h;
+  }
+  var hue = HUES_FRENTE[i % HUES_FRENTE.length];
+  // uma segunda volta na paleta escurece/clareia, para 11+ frentes não repetirem
+  var volta = Math.floor(i / HUES_FRENTE.length);
+  var escuro = temaAtual() === 'dark';
+  var l = (escuro ? 0.74 : 0.53) + (volta % 2 ? (escuro ? -0.16 : 0.14) : 0);
+  return 'oklch(' + l.toFixed(2) + ' 0.16 ' + hue + (alpha != null ? ' / ' + alpha : '') + ')';
+}
+
+/* Extrai as estacas de um lançamento. Mesma regra do resto do app: o
+   deslocamento "+10" sai antes, senão "E106+10" viraria a estaca E10. */
+function estacasDoLancamento(r) {
+  return String(getCSVField(r, 'Local_Estaca') || '')
+    .toUpperCase().replace(/\+\s*\d+/g, '').match(/E?\d{2,3}/g) || [];
+}
+
+/* Monta os pontos do gráfico: um por (lançamento × estaca citada).
+   Devolve separado por sentido, porque a avenida tem duas faixas de
+   numeração disjuntas (E099–E141 e E201–E244) e um eixo só deixaria um
+   vazio enorme no meio. */
+function dadosTempoCaminhamento() {
+  var faixa = { CB: CONFIG.estacasCB, BC: CONFIG.estacasBC };
+  var out = { CB: [], BC: [] };
+
+  (STATE.rdoavanco || []).forEach(function (r) {
+    var d = parseISODate(getCSVField(r, 'Data'));
+    if (!d) return;
+    var pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    var pac = STATE.pacotes.find(function (p) { return getCSVField(p, 'ID') === pid; });
+    var frente = (pac && getCSVField(pac, 'Frente')) || getCSVField(r, 'Frente') || 'Outros';
+    var nomePac = (pac && getCSVField(pac, 'Pacote')) || pid || '—';
+    var ests = estacasDoLancamento(r);
+    if (!ests.length) return;
+    var q = num(getCSVField(r, 'Quantidade'));
+    var qPorEstaca = q / ests.length;
+
+    ests.forEach(function (e) {
+      var n = parseInt(String(e).replace(/^E/, ''), 10);
+      if (!isFinite(n)) return;
+      var sentido = (n >= faixa.CB.ini && n <= faixa.CB.fim) ? 'CB'
+                  : (n >= faixa.BC.ini && n <= faixa.BC.fim) ? 'BC' : null;
+      if (!sentido) return;   // estaca fora das faixas do contrato
+      out[sentido].push({
+        x: n, y: d.getTime(), q: qPorEstaca,
+        frente: frente, pacote: nomePac,
+        data: getCSVField(r, 'Data'),
+        unidade: (pac && getCSVField(pac, 'Unidade Física')) || ''
+      });
+    });
+  });
+  return out;
+}
+
+/* A "linha de frente": por dia, a estaca MEDIANA em que a frente
+   trabalhou. A mediana e não a média porque um lançamento perdido a 30
+   estacas de distância torceria a média e inventaria um avanço que não
+   houve. */
+function linhaDeFrente(pontos) {
+  var porDia = {};
+  pontos.forEach(function (p) {
+    (porDia[p.y] = porDia[p.y] || []).push(p.x);
+  });
+  return Object.keys(porDia).map(Number).sort(function (a, b) { return a - b; })
+    .map(function (t) {
+      var xs = porDia[t].sort(function (a, b) { return a - b; });
+      var m = Math.floor(xs.length / 2);
+      var med = xs.length % 2 ? xs[m] : (xs[m - 1] + xs[m]) / 2;
+      return { x: med, y: t };
+    });
+}
+
+/* Estado da tela: qual frente está isolada e quantos dias para trás. */
+const TC = { frente: '', dias: 90 };
+
+/* O filtro mora aqui e é usado pelo render E pela montagem do gráfico —
+   as duas precisam concordar sobre o que sobrou, senão o render desenha
+   um canvas que a montagem descobre estar vazio e o bloco fica em branco
+   sem explicar nada. Acontece de verdade: uma frente que já passou da
+   última estaca do sentido some daquele gráfico nos últimos 30 dias. */
+function filtrarTC(pts) {
+  var corte = TC.dias ? Date.now() - TC.dias * 86400000 : 0;
+  return pts.filter(function (p) {
+    return (!corte || p.y >= corte) && (!TC.frente || p.frente === TC.frente);
+  });
+}
+
+window.tcSetFrente = function (f) { TC.frente = f; recarregarTempoCaminhamento(); };
+window.tcSetDias = function (d) { TC.dias = parseInt(d, 10) || 0; recarregarTempoCaminhamento(); };
+
+function recarregarTempoCaminhamento() {
+  var box = document.getElementById('tcBloco');
+  if (!box) return;
+  box.outerHTML = renderTempoCaminhamento();
+  setTimeout(montarTempoCaminhamento, 30);
+}
+
+function renderTempoCaminhamento() {
+  var dados = dadosTempoCaminhamento();
+  var total = dados.CB.length + dados.BC.length;
+  var frentes = [].concat(dados.CB, dados.BC)
+    .map(function (p) { return p.frente; })
+    .filter(function (v, i, a) { return a.indexOf(v) === i; })
+    .sort();
+
+  var corpo;
+  if (!total) {
+    corpo = '<div class="empty"><div class="empty-icon">' + ic('cronograma') + '</div>' +
+      '<div class="empty-title">Sem estaca para posicionar</div>' +
+      '<div class="empty-sub">O gráfico se desenha a partir da estaca preenchida em cada lançamento. ' +
+      'Lance serviços com o campo de estaca para ver as frentes andarem pela avenida.</div></div>';
+  } else {
+    corpo =
+      '<div class="tc-filtros">' +
+        '<span class="tc-flabel">FRENTE</span>' +
+        '<button class="tc-chip ' + (TC.frente ? '' : 'on') + '" onclick="tcSetFrente(\'\')">Todas</button>' +
+        frentes.map(function (f) {
+          return '<button class="tc-chip ' + (TC.frente === f ? 'on' : '') + '" ' +
+            'style="--tc-cor:' + corDaFrente(f) + '" onclick="tcSetFrente(' + JSON.stringify(f).replace(/"/g, '&quot;') + ')">' +
+            '<i></i>' + escHtml(f) + '</button>';
+        }).join('') +
+        '<span class="tc-flabel" style="margin-left:auto">PERÍODO</span>' +
+        [[30, '30 d'], [90, '90 d'], [180, '180 d'], [0, 'Tudo']].map(function (o) {
+          return '<button class="tc-chip ' + (TC.dias === o[0] ? 'on' : '') + '" onclick="tcSetDias(' + o[0] + ')">' + o[1] + '</button>';
+        }).join('') +
+      '</div>' +
+      blocoTC('CB', 'Sentido Centro→Bairro · E' + CONFIG.estacasCB.ini + '–E' + CONFIG.estacasCB.fim) +
+      blocoTC('BC', 'Sentido Bairro→Centro · E' + CONFIG.estacasBC.ini + '–E' + CONFIG.estacasBC.fim) +
+      '<div class="tc-legenda">' + ic('info') +
+        '<span>Cada bolha é um lançamento na estaca — quanto maior, maior a quantidade. ' +
+        'A linha cheia é a frente de trabalho dia a dia: <b>quanto mais deitada, mais rápido a frente anda</b>. ' +
+        'Duas linhas que se cruzam são duas frentes no mesmo trecho na mesma data.</span></div>';
+  }
+
+  function blocoTC(sent, label) {
+    if (!dados[sent].length) return '';                 // sentido sem lançamento nenhum
+    var visiveis = filtrarTC(dados[sent]);
+    var miolo = visiveis.length
+      ? '<div class="tc-canvas-wrap"><canvas id="tc' + sent + '"></canvas></div>'
+      : '<div class="tc-nada">' + ic('filtro') +
+        '<span>Nada neste sentido com o filtro atual' +
+        (TC.frente ? ' — <b>' + escHtml(TC.frente) + '</b> não trabalhou neste trecho no período' : '') +
+        '.</span></div>';
+    return '<div class="tc-bloco">' +
+      '<div class="tc-titulo">' + label + '</div>' + miolo +
+    '</div>';
+  }
+
+  return '<div class="card stagger-item" id="tcBloco" style="animation-delay:.05s">' +
+    '<div class="card-header"><div>' +
+      '<div class="card-title">' + ic('cronograma') + ' Tempo × Estaca</div>' +
+      '<div class="card-title-sub">Onde cada frente esteve, dia a dia, ao longo da avenida</div>' +
+    '</div></div>' +
+    '<div class="card-body">' + corpo + '</div>' +
+  '</div>';
+}
+
+/* Instancia os dois gráficos. Separado do render porque o canvas só
+   existe depois que o HTML entrou na página. */
+function montarTempoCaminhamento() {
+  if (typeof Chart === 'undefined') return;      // CDN não carregou: a tela segue viva
+  var dados = dadosTempoCaminhamento();
+
+  ['CB', 'BC'].forEach(function (sent) {
+    var el = document.getElementById('tc' + sent);
+    if (window['tcChart' + sent]) { window['tcChart' + sent].destroy(); window['tcChart' + sent] = null; }
+    if (!el) return;                       // filtro esvaziou: o render pôs o aviso no lugar do canvas
+
+    var pts = filtrarTC(dados[sent]);
+    if (!pts.length) return;
+
+    var maxQ = Math.max.apply(null, pts.map(function (p) { return p.q; })) || 1;
+    var frentes = pts.map(function (p) { return p.frente; })
+      .filter(function (v, i, a) { return a.indexOf(v) === i; }).sort();
+
+    // Só os lançamentos viram dataset. A "linha de frente" é ANOTAÇÃO, não
+    // dado: como dataset ela entrava no teste de acerto e roubava o tooltip
+    // — o dedo caía na linha e o app respondia "frente do dia" em vez de
+    // dizer qual pacote, qual estaca e quanto foi lançado.
+    var datasets = frentes.map(function (f) {
+      var cor = corDaFrente(f);
+      return {
+        label: f, frenteNome: f,
+        data: pts.filter(function (p) { return p.frente === f; }),
+        borderColor: cor, backgroundColor: corDaFrente(f, 0.45),
+        showLine: false,
+        pointRadius: function (c) {
+          var p = c.raw; return p ? 2.5 + Math.sqrt(p.q / maxQ) * 6.5 : 3;
+        },
+        pointHoverRadius: function (c) {
+          var p = c.raw; return p ? 4.5 + Math.sqrt(p.q / maxQ) * 6.5 : 5;
+        },
+        pointBorderWidth: 1.2
+      };
+    });
+
+    var linhaFrentePlugin = {
+      id: 'linhaFrente',
+      beforeDatasetsDraw: function (chart) {          // atrás das bolhas
+        var xs = chart.scales.x, ys = chart.scales.y, c = chart.ctx;
+        if (!xs || !ys) return;
+        chart.data.datasets.forEach(function (ds, i) {
+          if (chart.getDatasetMeta(i).hidden) return;
+          var linha = linhaDeFrente(ds.data);
+          if (linha.length < 2) return;
+          c.save();
+          c.strokeStyle = ds.borderColor;
+          c.lineWidth = 2;
+          c.lineJoin = 'round';
+          c.beginPath();
+          linha.forEach(function (p, k) {
+            var px = xs.getPixelForValue(p.x), py = ys.getPixelForValue(p.y);
+            if (k === 0) c.moveTo(px, py); else c.lineTo(px, py);
+          });
+          c.stroke();
+          c.restore();
+        });
+      }
+    };
+
+    var faixa = sent === 'CB' ? CONFIG.estacasCB : CONFIG.estacasBC;
+    var eixo = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#7a7570';
+    var grade = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#e4e0d8';
+
+    window['tcChart' + sent] = new Chart(el, {
+      type: 'scatter',
+      data: { datasets: datasets },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        // intersect:false porque no celular ninguém acerta uma bolha de 4px
+        // com o dedo — assim o toque pega o ponto mais próximo
+        interaction: { mode: 'nearest', intersect: false },
+        scales: {
+          x: {
+            type: 'linear', min: faixa.ini, max: faixa.fim,
+            title: { display: true, text: 'ESTACA', color: eixo,
+                     font: { size: 9, weight: '700' } },
+            ticks: { color: eixo, font: { size: 9, family: 'JetBrains Mono, monospace' },
+                     maxTicksLimit: 14, callback: function (v) { return 'E' + v; } },
+            grid: { color: grade }
+          },
+          y: {
+            type: 'linear', reverse: true,   // tempo desce: o mais antigo em cima
+            title: { display: true, text: 'DATA', color: eixo,
+                     font: { size: 9, weight: '700' } },
+            ticks: {
+              color: eixo, font: { size: 9, family: 'JetBrains Mono, monospace' },
+              maxTicksLimit: 9,
+              callback: function (v) {
+                var d = new Date(v);
+                return isNaN(d) ? '' : ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2);
+              }
+            },
+            grid: { color: grade }
+          }
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: eixo, boxWidth: 9, boxHeight: 9, usePointStyle: true,
+              font: { size: 10 }
+            }
+          },
+          tooltip: {
+            callbacks: {
+              title: function (ctx) {
+                var p = ctx[0] && ctx[0].raw;
+                return p && p.data ? fmtData(p.data) : '';
+              },
+              label: function (ctx) {
+                var p = ctx.raw;
+                if (!p) return '';
+                return [p.frente + ' · ' + p.pacote,
+                        'E' + p.x + ' — ' + fmtNum(p.q, 1) + ' ' + (p.unidade || '')];
+              }
+            }
+          }
+        }
+      },
+      plugins: [linhaFrentePlugin]
+    });
+  });
+}
+
+// ====================================================================
 // VIEW: AVANÇO FÍSICO
 // ====================================================================
 function renderAvancoFisico() {
@@ -5047,7 +5412,9 @@ function renderAvancoFisico() {
         ${renderHeatmap(av)}
       </div>
     </div>
-    
+
+    ${renderTempoCaminhamento()}
+
     <div class="card stagger-item" style="animation-delay: .1s">
       <div class="card-header">
         <div>
