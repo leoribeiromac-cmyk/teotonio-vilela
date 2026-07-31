@@ -716,6 +716,17 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .campo-invalido{border:2px solid var(--red)!important;background:var(--red-l)!important}
 @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 
+/* ===================== CLIMA AUTOMÁTICO ===================== */
+.clima-auto{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin-top:14px;padding-top:14px;border-top:1px solid var(--border);
+}
+.clima-fonte{
+  display:flex;align-items:flex-start;gap:6px;flex:1;min-width:200px;
+  font-size:11.5px;line-height:1.5;color:var(--muted);
+}
+.clima-fonte .ic{width:14px;height:14px;vertical-align:0;margin-top:1px;flex-shrink:0}
+
 /* ===================== CARIMBO DA FOTO ===================== */
 .cb-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
 @media(max-width:820px){ .cb-grid{grid-template-columns:1fr} }
@@ -8520,6 +8531,53 @@ const CATEGORIAS_EQUIP_PADRAO = [
 
 const CLIMAS = ['Bom', 'Encoberto', 'Garoa', 'Chuva', 'Chuva forte'];
 
+/* --------------------------------------------------------------------
+   CLIMA AUTOMÁTICO
+   Chuva digitada de memória três dias depois não sustenta justificativa
+   de prazo. Chuva medida por estação oficial, com a data do registro,
+   sustenta. O backend busca no INMET (ver climaDoDia no Code.gs) e
+   devolve já traduzido para o vocabulário dos selects.
+
+   Preenche, mas não decide sozinho: o que veio da estação aparece
+   escrito na tela com os milímetros e a fonte, e o apontador continua
+   livre para corrigir — quem esteve na obra sabe mais que o pluviômetro
+   a 8 km de distância.
+   -------------------------------------------------------------------- */
+window.buscarClima = async function () {
+  const btn = document.getElementById('btnClima');
+  const fonte = document.getElementById('climaFonte');
+  const data = (DIARIO_V4 && DIARIO_V4.data) || getLocalISODate(new Date());
+  if (btn) { btn.disabled = true; btn.innerHTML = ic('ampulheta', 0, 'ic-gira') + ' Consultando…'; }
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'clima', data, ...authParams() }, 1, 2000);
+    if (!r || !r.ok) {
+      const motivo = (r && r.motivo) || 'A consulta não voltou.';
+      if (fonte) fonte.innerHTML = ic('alerta') + ' ' + escHtml(motivo) + ' Preencha à mão.';
+      toast(motivo, 'info', 6000);
+      return;
+    }
+    const mapa = { clima_manha: r.manha, clima_tarde: r.tarde, clima_noite: r.noite };
+    Object.entries(mapa).forEach(([campo, valor]) => {
+      if (!valor) return;
+      const sel = document.querySelector(`[data-diario4-clima="${campo}"]`);
+      if (sel) { sel.value = valor; }
+      DIARIO_V4[campo] = valor;
+    });
+    const mm = r.mm || {};
+    if (fonte) {
+      fonte.innerHTML = ic('checkCirculo') + ' <b>' + escHtml(r.fonte || 'estação oficial') + '</b> · ' +
+        'chuva medida: manhã ' + fmtNum(mm.manha || 0, 1) + ' mm · tarde ' + fmtNum(mm.tarde || 0, 1) +
+        ' mm · noite ' + fmtNum(mm.noite || 0, 1) + ' mm. Confira e corrija se a obra viu diferente.';
+    }
+    toast('Clima preenchido pela estação ' + (r.estacao || '') , 'success', 4000);
+  } catch (e) {
+    if (fonte) fonte.innerHTML = ic('syncOff') + ' Sem conexão com o servidor. Preencha à mão.';
+    toast('Sem conexão para consultar o clima.', 'info', 5000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = ic('nuvem') + ' Buscar chuva registrada'; }
+  }
+};
+
 // ====================================================================
 // ESTADO DO RDO DIÁRIO V4 E LÓGICA DE TURNOS
 // ====================================================================
@@ -8752,6 +8810,12 @@ function renderFormularioTurno() {
               ${CLIMAS.map(c => `<option ${d.clima_noite===c?'selected':''}>${c}</option>`).join('')}
             </select>
           </div>
+        </div>
+        <div class="clima-auto">
+          <button type="button" class="btn btn-outline btn-sm" id="btnClima" onclick="buscarClima()">
+            ${ic('nuvem')} Buscar chuva registrada
+          </button>
+          <span id="climaFonte" class="clima-fonte">Preenche os três períodos pela chuva medida na estação oficial do dia.</span>
         </div>
       </div>
     </div>
