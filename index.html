@@ -18,6 +18,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- PDF.js (Mozilla) vendorizado: é ele que extrai o TEXTO do PDF da DANFE.
+     Sem ele o app cai para OCR na foto, que erra muito mais. Vendorizado e
+     não em CDN porque o app precisa abrir offline no canteiro. -->
+<script src="vendor/pdfjs/pdf.min.js"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
 <script src="js/ui/icones.js"></script>
@@ -1755,6 +1759,51 @@ async function fetchCSV(url) {
   return parseCSV(await res.text());
 }
 
+/* ------------------------------------------------------------------
+   ENVIO POR POST — para o que não cabe numa URL.
+
+   O JSONP monta a chamada inteira na querystring (`<script src=…?…>`).
+   Isso resolve o CORS do Apps Script, mas impõe o limite de URL do
+   navegador (~8 mil caracteres). Qualquer imagem em base64 — foto do
+   serviço, assinatura do operador, DANFE fotografada, PDF da nota —
+   passa MUITO disso: a chamada simplesmente não sai, e o app parece
+   "não conseguir ler a nota".
+
+   POST com FormData não tem esse teto e continua sem preflight (é uma
+   requisição simples), então o /exec responde normalmente. É assim que
+   o app "Gestor — Controle de Obras" sempre fez.
+   ------------------------------------------------------------------ */
+// o worker do PDF.js precisa apontar para o arquivo local, senão o pdf.js
+// tenta buscar de um CDN e falha quando o app está offline
+if (window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js';
+
+const LIMITE_URL = 6000;   // margem confortável abaixo do teto do navegador
+
+async function enviarPost(params) {
+  const fd = new FormData();
+  Object.keys(params).forEach(k => fd.append(k, params[k] == null ? '' : params[k]));
+  if (!fd.has('token')) {
+    const t = tokenSessao();
+    if (t) fd.append('token', t);
+  }
+  const r = await fetch(CONFIG.appsScript, { method: 'POST', body: fd });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+
+// Tamanho aproximado que a chamada teria como querystring.
+function tamanhoComoURL(params) {
+  return Object.entries(params)
+    .reduce((n, [k, v]) => n + k.length + String(v == null ? '' : v).length + 2, 0);
+}
+
+/* Escolhe o transporte pelo tamanho: pequeno vai por JSONP (que já tem
+   retry e trata o Apps Script offline), grande vai por POST. */
+function enviarAcao(params, retries = 1, retryDelay = 2000) {
+  if (tamanhoComoURL(params) > LIMITE_URL) return enviarPost(params);
+  return jsonp(CONFIG.appsScript, params, retries, retryDelay);
+}
+
 function jsonp(url, params, retries = 2, retryDelay = 3000, onRetry = null) {
   function attempt() {
     return new Promise((resolve, reject) => {
@@ -1859,7 +1908,8 @@ async function outboxFlush(manual = false) {
     for (const item of itens) {
       try {
         // Token injetado no MOMENTO do envio (o da hora do enfileiramento pode ter expirado).
-        const result = await jsonp(CONFIG.appsScript, {...item.params, ...authParams()}, 1, 2000);
+        // foto e assinatura entram na fila em base64: enviarAcao troca para POST
+        const result = await enviarAcao({...item.params, ...authParams()}, 1, 2000);
         if (!result.ok) throw new Error('servidor: ' + (result.error || 'erro'));
         outboxRemover(item.id);
         enviados++;
@@ -3106,7 +3156,7 @@ async function enviarFotosDoLote(mapaIdParaFotos) {
                        lat: f.lat || '', lon: f.lon || '', prec: f.prec || '',
                        ...authParams() };
       try {
-        const r = await jsonp(CONFIG.appsScript, params, 0, 0, null);
+        const r = await enviarPost(params);   // base64 não cabe em querystring
         if (r && r.ok) { enviadas++; continue; }
         falhas++;
       } catch (e) {
@@ -3815,7 +3865,8 @@ window.eqEnviar = async function() {
     assinatura: eqAssinaturaData(), ...authParams()
   };
   try {
-    const r = await jsonp(CONFIG.appsScript, params, 0, 0, null);
+    // com assinatura do operador o payload passa do limite de URL
+    const r = await enviarAcao(params, 0);
     if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao enviar', 'error', 0); return; }
     toast('Apontamento enviado', 'success');
     ['eqOper', 'eqHi', 'eqHf', 'eqComb', 'eqObs'].forEach(id => { document.getElementById(id).value = ''; });

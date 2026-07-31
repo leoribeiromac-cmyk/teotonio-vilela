@@ -72,10 +72,17 @@ const BACKEND = true;
 function getToken() { return tokenSessao(); }
 function usuarioAtual() { return STATE.usuarioLogado || ''; }
 
-/* O módulo chama postAcao({action:…}) e espera a resposta do Apps
-   Script. Aqui isso é o jsonp do app, com o token da sessão. */
+/* O módulo chama postAcao({action:…}) e espera a resposta do Apps Script.
+
+   TEM DE SER POST, como no app de origem. A leitura da nota manda a
+   imagem da DANFE (ou o PDF) em base64: pelo JSONP isso viraria uma
+   querystring de centenas de KB e a chamada não sairia do navegador —
+   o app parecia "não conseguir ler a nota", enquanto a consulta pela
+   chave (payload curto) funcionava. `enviarAcao` decide pelo tamanho:
+   chamada curta segue pelo JSONP, que já tem retry; chamada com imagem
+   vai por POST. */
 function postAcao(params) {
-  return jsonp(CONFIG.appsScript, { ...params, ...authParams() }, 1, 2000);
+  return enviarAcao({ ...params, ...authParams() }, 1, 2000);
 }
 
 /* ---------- fila offline ----------
