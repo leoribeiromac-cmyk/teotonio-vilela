@@ -716,6 +716,41 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .campo-invalido{border:2px solid var(--red)!important;background:var(--red-l)!important}
 @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 
+/* ===================== CARIMBO DA FOTO ===================== */
+.cb-grid{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+@media(max-width:820px){ .cb-grid{grid-template-columns:1fr} }
+.cb-sec{
+  font-size:9px;font-weight:800;letter-spacing:.12em;color:var(--muted);
+  text-transform:uppercase;margin:18px 0 8px;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.cb-switch{
+  display:flex;align-items:center;gap:10px;cursor:pointer;
+  padding:11px 13px;border-radius:var(--r-sm);
+  background:var(--bg-2);border:1px solid var(--border);font-size:12.5px;
+}
+.cb-switch i{font-style:normal;font-size:11px;color:var(--muted)}
+.cb-switch input{width:17px;height:17px;flex-shrink:0;accent-color:var(--acc)}
+.cb-campos{display:grid;grid-template-columns:1fr 1fr;gap:5px 10px}
+.cb-item{
+  display:flex;align-items:center;gap:7px;cursor:pointer;
+  font-size:12.5px;padding:4px 2px;user-select:none;
+}
+.cb-item input{width:15px;height:15px;flex-shrink:0;accent-color:var(--acc)}
+.cb-ops{display:flex;gap:6px;flex-wrap:wrap}
+.cb-op{
+  padding:6px 13px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--border);background:var(--surface);
+  color:var(--muted);font-family:inherit;font-size:12px;font-weight:600;transition:.15s;
+}
+.cb-op:hover{border-color:var(--border-strong);color:var(--text)}
+.cb-op.on{background:var(--text);border-color:var(--text);color:var(--surface)}
+.cb-preview{
+  width:100%;border-radius:var(--r-sm);display:block;
+  border:1px solid var(--border-strong);background:var(--bg-2);
+  min-height:160px;
+}
+
 /* ===================== TEMPO × ESTACA ===================== */
 .tc-filtros{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px}
 .tc-flabel{font-size:9px;font-weight:800;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
@@ -2590,7 +2625,165 @@ window.atualizarBotoesTopo = function() {
 // a imagem volta pelo backend e fica guardada localmente.
 // ====================================================================
 const MAX_FOTOS_SERVICO = 3;
-let _fotosPorServico = {};   // { '<idx do serviço>': [{thumb, full}] }
+let _fotosPorServico = {};   // { '<idx do serviço>': [{thumb, full, lat, lon, prec}] }
+
+/* ====================================================================
+   GEORREFERENCIAMENTO E CARIMBO
+   --------------------------------------------------------------------
+   Uma foto solta prova pouco. A mesma foto com data, hora, coordenada e
+   o trecho onde foi tirada é peça de prova: liga a execução ao ponto do
+   contrato. O carimbo é queimado NA IMAGEM (não é sobreposição de tela),
+   então sobrevive a download, e-mail, impressão e PDF.
+
+   Tudo é configurável porque cada fiscalização pede um recorte
+   diferente: há quem exija coordenada, há quem só queira data e trecho,
+   e há quem precise do número do contrato em toda folha.
+   ==================================================================== */
+const LS_CARIMBO = 'teotonio_carimbo_v1';
+
+const CARIMBO_PADRAO = {
+  ligado: true,
+  posicao: 'inferior',     // 'inferior' | 'superior'
+  tamanho: 'medio',        // 'pequeno' | 'medio' | 'grande'
+  fundo: 0.55,             // opacidade da tarja atrás do texto
+  cor: '#e0783c',          // filete de acento
+  campos: {
+    data: true, hora: true, coord: true, estaca: true,
+    frente: true, pacote: true, apontador: true, turno: false,
+    obra: false, contrato: false, livre: false
+  },
+  // texto literal, não a constante RDO_LOCAL_TXT: ela só é declarada lá
+  // embaixo e um const em zona morta aqui derrubaria o script inteiro
+  obra: 'Av. Sen. Teotônio Vilela',
+  contrato: '',
+  livre: ''
+};
+
+function carimboCfg() {
+  try {
+    var g = JSON.parse(localStorage.getItem(LS_CARIMBO) || '{}');
+    return Object.assign({}, CARIMBO_PADRAO, g,
+      { campos: Object.assign({}, CARIMBO_PADRAO.campos, g.campos || {}) });
+  } catch (e) { return Object.assign({}, CARIMBO_PADRAO); }
+}
+function carimboSalvar(cfg) { localStorage.setItem(LS_CARIMBO, JSON.stringify(cfg)); }
+
+/* Coordenada do aparelho. Timeout curto e falha silenciosa de propósito:
+   no canteiro o GPS às vezes não fixa, e a foto sem coordenada continua
+   valendo mais do que foto nenhuma. Nunca trava o apontador. */
+function pegarCoordenada() {
+  return new Promise(function (resolve) {
+    if (!navigator.geolocation) return resolve(null);
+    var pronto = false;
+    var fim = function (v) { if (!pronto) { pronto = true; resolve(v); } };
+    setTimeout(function () { fim(null); }, 8000);
+    navigator.geolocation.getCurrentPosition(
+      function (p) {
+        fim({ lat: p.coords.latitude, lon: p.coords.longitude,
+              prec: Math.round(p.coords.accuracy || 0) });
+      },
+      function () { fim(null); },
+      { enableHighAccuracy: true, timeout: 7500, maximumAge: 60000 }
+    );
+  });
+}
+
+function fmtCoord(c) {
+  if (!c) return '';
+  return c.lat.toFixed(6) + ', ' + c.lon.toFixed(6) + (c.prec ? '  ±' + c.prec + 'm' : '');
+}
+
+/* Monta as linhas do carimbo a partir do que está ligado. Campo vazio não
+   vira linha vazia — o carimbo encolhe sozinho. */
+function linhasCarimbo(ctx, cfg) {
+  var C = cfg.campos, L = [];
+  var l1 = [];
+  if (C.data) l1.push(ctx.data);
+  if (C.hora) l1.push(ctx.hora);
+  if (C.turno && ctx.turno) l1.push(ctx.turno);
+  if (l1.length) L.push(l1.filter(Boolean).join('   ·   '));
+
+  var l2 = [];
+  if (C.frente && ctx.frente) l2.push(ctx.frente);
+  if (C.pacote && ctx.pacote) l2.push(ctx.pacote);
+  if (l2.length) L.push(l2.join('   ·   '));
+
+  var l3 = [];
+  if (C.estaca && ctx.estaca) l3.push(ctx.estaca);
+  if (C.apontador && ctx.apontador) l3.push(ctx.apontador);
+  if (l3.length) L.push(l3.join('   ·   '));
+
+  if (C.coord && ctx.coord) L.push(ctx.coord);
+  if (C.obra && cfg.obra) L.push(cfg.obra);
+  if (C.contrato && cfg.contrato) L.push(cfg.contrato);
+  if (C.livre && cfg.livre) L.push(cfg.livre);
+  return L;
+}
+
+/* Queima o carimbo na imagem e devolve o novo data URI. */
+function desenharCarimbo(dataUri, ctxDados, cfg) {
+  return new Promise(function (resolve) {
+    if (!cfg.ligado) return resolve(dataUri);
+    var linhas = linhasCarimbo(ctxDados, cfg);
+    if (!linhas.length) return resolve(dataUri);
+
+    var img = new Image();
+    img.onerror = function () { resolve(dataUri); };   // deu errado: foto original
+    img.onload = function () {
+      try {
+        var w = img.width, h = img.height;
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        var g = c.getContext('2d');
+        g.drawImage(img, 0, 0);
+
+        var k = { pequeno: 0.025, medio: 0.032, grande: 0.042 }[cfg.tamanho] || 0.032;
+        var fs = Math.max(10, Math.round(Math.min(w, h * 1.4) * k));
+        var lh = Math.round(fs * 1.42);
+        var pad = Math.round(fs * 0.72);
+        var alturaTarja = linhas.length * lh + pad * 2 - Math.round(fs * 0.32);
+        var y0 = cfg.posicao === 'superior' ? 0 : h - alturaTarja;
+
+        g.fillStyle = 'rgba(8,6,4,' + cfg.fundo + ')';
+        g.fillRect(0, y0, w, alturaTarja);
+        // filete de acento: dá assinatura visual e separa da imagem
+        g.fillStyle = cfg.cor;
+        g.fillRect(0, cfg.posicao === 'superior' ? alturaTarja - Math.max(2, fs * 0.09) : y0,
+                   w, Math.max(2, Math.round(fs * 0.09)));
+
+        g.textBaseline = 'top';
+        g.shadowColor = 'rgba(0,0,0,.6)';
+        g.shadowBlur = Math.round(fs * 0.25);
+        linhas.forEach(function (t, i) {
+          // a primeira linha (data/hora) sai em negrito: é a que se lê de longe
+          g.font = (i === 0 ? '700 ' : '400 ') + fs + 'px ui-monospace, "JetBrains Mono", Menlo, monospace';
+          g.fillStyle = i === 0 ? '#ffffff' : 'rgba(255,255,255,.88)';
+          g.fillText(t, pad, y0 + pad + i * lh);
+        });
+        resolve(c.toDataURL('image/jpeg', 0.82));
+      } catch (e) { resolve(dataUri); }
+    };
+    img.src = dataUri;
+  });
+}
+
+/* Contexto do carimbo lido do serviço que está sendo preenchido. */
+function contextoCarimbo(idx, coord) {
+  var s = (STATE.draft && STATE.draft.servicos && STATE.draft.servicos[idx]) || {};
+  var pac = STATE.pacotes.find(function (p) { return getCSVField(p, 'ID') === s.pacoteId; });
+  var agora = new Date();
+  var est = [s.estacaIni, s.estacaFim].filter(Boolean);
+  return {
+    data: agora.toLocaleDateString('pt-BR'),
+    hora: agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    turno: (STATE.draft && STATE.draft.turno) || '',
+    frente: s.frente || '',
+    pacote: (pac && getCSVField(pac, 'Pacote')) || '',
+    estaca: est.length ? (est.length > 1 && est[0] !== est[1] ? est[0] + ' a ' + est[1] : est[0]) : '',
+    apontador: STATE.usuarioLogado || '',
+    coord: fmtCoord(coord)
+  };
+}
 
 function comprimirImg(file, maxLado, qualidade) {
   return new Promise((resolve, reject) => {
@@ -2618,13 +2811,29 @@ window.fotosSelecionadas = async function(input, idx) {
   const arquivos = [...(input.files || [])];
   input.value = '';
   const lista = _fotosPorServico[idx] = _fotosPorServico[idx] || [];
+  const cfg = carimboCfg();
+  // uma leitura de GPS para o lote inteiro: são fotos do mesmo ponto, e
+  // pedir a posição três vezes só gastaria bateria e tempo do apontador
+  const coord = await pegarCoordenada();
+  if (!coord && cfg.ligado && cfg.campos.coord) {
+    toast('Sem sinal de GPS — a foto entra com data e hora, sem coordenada.', 'info', 4000);
+  }
+  const ctx = contextoCarimbo(idx, coord);
+
   for (const f of arquivos) {
     if (lista.length >= MAX_FOTOS_SERVICO) { toast(`Máximo de ${MAX_FOTOS_SERVICO} fotos por serviço`, 'info'); break; }
     if (!/^image\//.test(f.type)) continue;
     try {
-      // duas versões: a miniatura desenha a tela, a cheia é a que sobe
-      const [thumb, full] = await Promise.all([comprimirImg(f, 320, .5), comprimirImg(f, 1280, .72)]);
-      lista.push({ thumb, full });
+      // duas versões: a miniatura desenha a tela, a cheia é a que sobe.
+      // As duas levam o carimbo — a miniatura para o apontador conferir
+      // na hora que a foto saiu carimbada, sem precisar ampliar.
+      const [thumb0, full0] = await Promise.all([comprimirImg(f, 320, .5), comprimirImg(f, 1280, .72)]);
+      const [thumb, full] = await Promise.all([
+        desenharCarimbo(thumb0, ctx, cfg),
+        desenharCarimbo(full0, ctx, cfg)
+      ]);
+      lista.push({ thumb, full, lat: coord ? coord.lat : '', lon: coord ? coord.lon : '',
+                   prec: coord ? coord.prec : '' });
     } catch (e) { toast('Não foi possível ler a imagem', 'error'); }
   }
   renderFotosPrev(idx);
@@ -2651,16 +2860,162 @@ function renderFotosPrev(idx) {
 /* Campo de foto de uma linha de serviço. `capture="environment"` abre direto
    a câmera traseira no celular, que é como o apontador usa. */
 function campoFotos(idx) {
+  const cfg = carimboCfg();
   return `
     <div class="field" style="grid-column:1/-1">
-      <label>Fotos do serviço <span id="fotosCount${idx}" style="color:var(--muted);font-weight:400"></span></label>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <label style="margin:0">Fotos do serviço <span id="fotosCount${idx}" style="color:var(--muted);font-weight:400"></span></label>
+        <button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto;padding:3px 8px"
+                onclick="abrirConfigCarimbo()" title="Escolher o que aparece carimbado na foto">
+          ${ic('ajustes')} Carimbo: ${cfg.ligado ? 'ligado' : 'desligado'}
+        </button>
+      </div>
       <input type="file" accept="image/*" capture="environment" multiple
              onchange="fotosSelecionadas(this,${idx})" style="font-size:13px">
       <div id="fotosPrev${idx}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">
         Comprovação de execução — vai para o Drive privado e aparece na Galeria.
+        ${cfg.ligado ? 'A foto sai carimbada com data, hora e o que estiver ligado no carimbo.' : ''}
       </div>
     </div>`;
+}
+
+/* ====================================================================
+   TELA DO CARIMBO — prévia ao vivo
+   A prévia não é enfeite: carimbo é decisão visual, e ninguém acerta
+   tamanho e opacidade no escuro. O que aparece aqui é desenhado pela
+   MESMA função que queima a foto de verdade, então não há surpresa.
+   ==================================================================== */
+const CARIMBO_CAMPOS_UI = [
+  ['data', 'Data'], ['hora', 'Hora'], ['coord', 'Coordenada (GPS)'],
+  ['estaca', 'Estaca'], ['frente', 'Frente'], ['pacote', 'Pacote'],
+  ['apontador', 'Apontador'], ['turno', 'Turno'],
+  ['obra', 'Nome da obra'], ['contrato', 'Contrato'], ['livre', 'Texto livre']
+];
+
+window.abrirConfigCarimbo = function () {
+  const c = carimboCfg();
+  const chk = (k, r) => `<label class="cb-item">
+      <input type="checkbox" ${c.campos[k] ? 'checked' : ''} onchange="cbCampo('${k}',this.checked)">
+      <span>${r}</span></label>`;
+  const opt = (campo, val, rot) => `<button type="button" class="cb-op ${c[campo] === val ? 'on' : ''}"
+      onclick="cbSet('${campo}','${val}')">${rot}</button>`;
+
+  abrirModalRDO(`
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:4px">
+      <h2 style="font-size:17px;font-weight:700;margin:0;display:flex;align-items:center;gap:8px">
+        ${ic('camera')} Carimbo da foto</h2>
+      <button class="btn btn-ghost btn-sm btn-icone" onclick="fecharModalRDO()" aria-label="Fechar">${ic('fechar')}</button>
+    </div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:14px">
+      O carimbo é queimado na imagem — sobrevive a download, e-mail, impressão e PDF.
+    </div>
+
+    <div class="cb-grid">
+      <div>
+        <label class="cb-switch">
+          <input type="checkbox" ${c.ligado ? 'checked' : ''} onchange="cbSet('ligado',this.checked)">
+          <span><b>Carimbar as fotos</b><br><i>desligado, a foto sobe limpa</i></span>
+        </label>
+
+        <div class="cb-sec">O QUE APARECE</div>
+        <div class="cb-campos">${CARIMBO_CAMPOS_UI.map(([k, r]) => chk(k, r)).join('')}</div>
+
+        <div class="cb-sec">TEXTOS FIXOS</div>
+        <div class="field"><label>Nome da obra</label>
+          <input type="text" value="${escHtml(c.obra)}" oninput="cbSet('obra',this.value)"></div>
+        <div class="field" style="margin-top:8px"><label>Contrato</label>
+          <input type="text" value="${escHtml(c.contrato)}" placeholder="ex: Contrato 084/SPOBRAS/2024" oninput="cbSet('contrato',this.value)"></div>
+        <div class="field" style="margin-top:8px"><label>Texto livre</label>
+          <input type="text" value="${escHtml(c.livre)}" placeholder="ex: Gestor Engenharia · CC 182" oninput="cbSet('livre',this.value)"></div>
+
+        <div class="cb-sec">POSIÇÃO</div>
+        <div class="cb-ops">${opt('posicao', 'inferior', 'Rodapé')}${opt('posicao', 'superior', 'Topo')}</div>
+
+        <div class="cb-sec">TAMANHO DA LETRA</div>
+        <div class="cb-ops">${opt('tamanho', 'pequeno', 'Pequena')}${opt('tamanho', 'medio', 'Média')}${opt('tamanho', 'grande', 'Grande')}</div>
+
+        <div class="cb-sec">FUNDO DA TARJA <span id="cbFundoVal">${Math.round(c.fundo * 100)}%</span></div>
+        <input type="range" min="0" max="90" value="${Math.round(c.fundo * 100)}"
+               oninput="cbSet('fundo', this.value/100)" style="width:100%">
+      </div>
+
+      <div>
+        <div class="cb-sec" style="margin-top:0">PRÉVIA</div>
+        <img id="cbPreview" alt="Prévia do carimbo" class="cb-preview">
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5">
+          ${ic('info')} Os valores da prévia são de exemplo. Na foto de verdade entram a
+          data, a hora e a coordenada do momento, e a frente, o pacote e a estaca do
+          serviço que estiver sendo lançado.
+        </div>
+        <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+          <button class="btn btn-outline btn-sm" onclick="cbRestaurar()">${ic('atualizar')} Restaurar padrão</button>
+          <button class="btn btn-primary btn-sm" style="margin-left:auto" onclick="fecharModalRDO()">${ic('check')} Pronto</button>
+        </div>
+      </div>
+    </div>
+  `);
+  cbAtualizarPreview();
+};
+
+window.cbSet = function (campo, valor) {
+  const c = carimboCfg(); c[campo] = valor; carimboSalvar(c);
+  if (campo === 'fundo') {
+    const v = document.getElementById('cbFundoVal');
+    if (v) v.textContent = Math.round(valor * 100) + '%';
+  }
+  if (campo === 'posicao' || campo === 'tamanho' || campo === 'ligado') {
+    document.querySelectorAll('.cb-op').forEach(b => {
+      const m = b.getAttribute('onclick').match(/cbSet\('(\w+)','([\w]+)'\)/);
+      if (m) b.classList.toggle('on', carimboCfg()[m[1]] === m[2]);
+    });
+  }
+  cbAtualizarPreview();
+};
+window.cbCampo = function (k, v) {
+  const c = carimboCfg(); c.campos[k] = v; carimboSalvar(c); cbAtualizarPreview();
+};
+window.cbRestaurar = function () {
+  localStorage.removeItem(LS_CARIMBO);
+  fecharModalRDO(); abrirConfigCarimbo();
+  toast('Carimbo voltou ao padrão', 'info');
+};
+
+/* Foto de exemplo desenhada na hora — não depende de arquivo no
+   repositório nem de rede, e funciona offline no canteiro. */
+function cbImagemExemplo() {
+  const c = document.createElement('canvas');
+  c.width = 640; c.height = 420;
+  const g = c.getContext('2d');
+  const ceu = g.createLinearGradient(0, 0, 0, 250);
+  ceu.addColorStop(0, '#8fb3d0'); ceu.addColorStop(1, '#d8ceb8');
+  g.fillStyle = ceu; g.fillRect(0, 0, 640, 250);
+  g.fillStyle = '#6b6155'; g.fillRect(0, 250, 640, 170);       // terreno
+  g.fillStyle = '#3f3a33';                                      // pista em fuga
+  g.beginPath(); g.moveTo(150, 420); g.lineTo(270, 250); g.lineTo(370, 250); g.lineTo(490, 420); g.closePath(); g.fill();
+  g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 5; g.setLineDash([26, 20]);
+  g.beginPath(); g.moveTo(320, 420); g.lineTo(320, 250); g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#d2682f';                                      // máquina ao fundo
+  g.fillRect(430, 205, 74, 46); g.fillRect(496, 186, 34, 22);
+  g.fillStyle = '#2b2620';
+  g.beginPath(); g.arc(452, 254, 13, 0, 7); g.arc(490, 254, 13, 0, 7); g.fill();
+  return c.toDataURL('image/jpeg', 0.85);
+}
+
+function cbAtualizarPreview() {
+  const alvo = document.getElementById('cbPreview');
+  if (!alvo) return;
+  const exemplo = {
+    data: new Date().toLocaleDateString('pt-BR'),
+    hora: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+    turno: 'Diurno', frente: 'Pavimentação', pacote: 'CBUQ Binder',
+    estaca: 'E118 a E121', apontador: STATE.usuarioLogado || 'Apontador',
+    coord: fmtCoord({ lat: -23.678901, lon: -46.712345, prec: 8 })
+  };
+  desenharCarimbo(cbImagemExemplo(), exemplo, carimboCfg()).then(src => {
+    const el = document.getElementById('cbPreview');
+    if (el) el.src = src;
+  });
 }
 
 /* Guarda local da imagem cheia. O localStorage é pequeno demais para foto;
@@ -2729,7 +3084,12 @@ async function enviarFotosDoLote(mapaIdParaFotos) {
   for (const id of ids) {
     const lista = mapaIdParaFotos[id];
     for (let i = 0; i < lista.length; i++) {
-      const params = { action: 'rdoFoto', id, idx: i, foto: lista[i].full, ...authParams() };
+      const f = lista[i];
+      // lat/lon vão SEPARADOS da imagem: carimbo na foto é prova para
+      // quem olha, coluna na planilha é o que dá para filtrar e mapear
+      const params = { action: 'rdoFoto', id, idx: i, foto: f.full,
+                       lat: f.lat || '', lon: f.lon || '', prec: f.prec || '',
+                       ...authParams() };
       try {
         const r = await jsonp(CONFIG.appsScript, params, 0, 0, null);
         if (r && r.ok) { enviadas++; continue; }

@@ -460,11 +460,27 @@ function rdoFoto(p) {
       aba.getRange(1, aba.getLastColumn() + 1).setValue('foto_link');
       iFotos = aba.getLastColumn() - 1;
     }
+    // Coordenada da foto em coluna própria. O carimbo na imagem é a prova
+    // para quem olha; a coluna é o que dá para filtrar, conferir e levar
+    // para um mapa. Só grava a da PRIMEIRA foto da linha: são fotos do
+    // mesmo ponto, e sobrescrever a cada uma só trocaria ruído de GPS.
+    var iLat = -1, iLon = -1;
+    if (p.lat !== '' && p.lat != null && !isNaN(parseFloat(p.lat))) {
+      iLat = idxColuna(cab, 'foto_lat');
+      if (iLat === -1) { aba.getRange(1, aba.getLastColumn() + 1).setValue('foto_lat'); iLat = aba.getLastColumn() - 1; }
+      iLon = idxColuna(cab, 'foto_lon');
+      if (iLon === -1) { aba.getRange(1, aba.getLastColumn() + 1).setValue('foto_lon'); iLon = aba.getLastColumn() - 1; }
+    }
+
     if (iId !== -1) {
       for (var i = 1; i < dados.length; i++) {
         if (String(dados[i][iId]).trim() === String(p.id || '').trim()) {
           var atual = String(dados[i][iFotos] == null ? '' : dados[i][iFotos]).trim();
           aba.getRange(i + 1, iFotos + 1).setValue(atual ? atual + ' ' + ponteiro : ponteiro);
+          if (iLat !== -1 && !String(dados[i][iLat] == null ? '' : dados[i][iLat]).trim()) {
+            aba.getRange(i + 1, iLat + 1).setValue(parseFloat(p.lat));
+            aba.getRange(i + 1, iLon + 1).setValue(parseFloat(p.lon));
+          }
           break;
         }
       }
