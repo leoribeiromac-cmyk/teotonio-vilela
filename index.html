@@ -2850,11 +2850,13 @@ function desenharCarimbo(dataUri, ctxDados, cfg) {
   });
 }
 
-/* Contexto do carimbo lido do serviço que está sendo preenchido. */
-function contextoCarimbo(idx, coord) {
+/* Contexto do carimbo lido do serviço que está sendo preenchido.
+   `quando` permite carimbar a foto com a hora em que ELA foi feita (foto
+   anexada da galeria), e não com a hora do lançamento. */
+function contextoCarimbo(idx, coord, quando) {
   var s = (STATE.draft && STATE.draft.servicos && STATE.draft.servicos[idx]) || {};
   var pac = STATE.pacotes.find(function (p) { return getCSVField(p, 'ID') === s.pacoteId; });
-  var agora = new Date();
+  var agora = quando instanceof Date && !isNaN(quando) ? quando : new Date();
   var est = [s.estacaIni, s.estacaFim].filter(Boolean);
   return {
     data: agora.toLocaleDateString('pt-BR'),
@@ -2866,6 +2868,124 @@ function contextoCarimbo(idx, coord) {
     apontador: STATE.usuarioLogado || '',
     coord: fmtCoord(coord)
   };
+}
+
+/* ====================================================================
+   EXIF — quando e onde a foto ANEXADA foi feita
+   --------------------------------------------------------------------
+   Foto tirada na hora carimba o relógio e o GPS do aparelho, e isso está
+   certo. Foto anexada, não: o apontador pode estar no escritório, dias
+   depois. Carimbar "agora/aqui" numa foto de ontem seria inventar prova.
+   Então a foto anexada carimba a data e a coordenada que ela mesma traz
+   no EXIF — e, quando não traz, sai sem coordenada em vez de sair com
+   uma coordenada errada.
+   Leitor próprio, sem biblioteca: o app precisa funcionar offline.
+   ==================================================================== */
+var EXIF_TAM = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
+
+function exifAscii(dv, p, cont) {
+  var s = '';
+  for (var i = 0; i < cont && p + i < dv.byteLength; i++) {
+    var c = dv.getUint8(p + i);
+    if (!c) break;
+    s += String.fromCharCode(c);
+  }
+  return s;
+}
+function exifRacional(dv, p, le) {
+  var n = dv.getUint32(p, le), d = dv.getUint32(p + 4, le);
+  return d ? n / d : 0;
+}
+/* grau, minuto e segundo do EXIF viram grau decimal */
+function exifGraus(dv, p, le) {
+  return exifRacional(dv, p, le) + exifRacional(dv, p + 8, le) / 60 +
+         exifRacional(dv, p + 16, le) / 3600;
+}
+/* valor de até 4 bytes mora na própria entrada; acima disso, num offset */
+function exifPonteiro(dv, T, tipo, cont, pos, le) {
+  return (EXIF_TAM[tipo] || 1) * cont <= 4 ? pos : T + dv.getUint32(pos, le);
+}
+function exifIFD(dv, T, ifd, le, cb) {
+  if (!ifd || T + ifd + 2 > dv.byteLength) return;
+  var n = dv.getUint16(T + ifd, le);
+  for (var i = 0; i < n; i++) {
+    var e = T + ifd + 2 + i * 12;
+    if (e + 12 > dv.byteLength) return;
+    cb(dv.getUint16(e, le), dv.getUint16(e + 2, le), dv.getUint32(e + 4, le), e + 8);
+  }
+}
+/* "2026:07:31 14:22:08" */
+function exifData(s) {
+  var m = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2})/.exec((s || '').trim());
+  if (!m) return null;
+  var d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function exifDoJPEG(dv) {
+  if (dv.byteLength < 4 || dv.getUint16(0) !== 0xFFD8) return null;   // não é JPEG
+  var off = 2, app1 = -1;
+  while (off + 4 <= dv.byteLength) {
+    if (dv.getUint8(off) !== 0xFF) break;
+    var marcador = dv.getUint8(off + 1);
+    if (marcador === 0xDA || marcador === 0xD9) break;   // começou a imagem
+    var tam = dv.getUint16(off + 2);
+    if (marcador === 0xE1) { app1 = off + 4; break; }
+    if (tam < 2) break;
+    off += 2 + tam;
+  }
+  if (app1 < 0 || app1 + 14 > dv.byteLength) return null;
+  if (dv.getUint32(app1) !== 0x45786966) return null;   // "Exif"
+  var T = app1 + 6;                                     // início do bloco TIFF
+  var ordem = dv.getUint16(T);
+  if (ordem !== 0x4949 && ordem !== 0x4D4D) return null;
+  var le = ordem === 0x4949;                            // 'II' = little-endian
+
+  var res = { quando: null, lat: null, lon: null };
+  var exifIfd = 0, gpsIfd = 0;
+  exifIFD(dv, T, dv.getUint32(T + 4, le), le, function (tag, tipo, cont, pos) {
+    if (tag === 0x8769) exifIfd = dv.getUint32(pos, le);
+    else if (tag === 0x8825) gpsIfd = dv.getUint32(pos, le);
+  });
+
+  try {
+    exifIFD(dv, T, exifIfd, le, function (tag, tipo, cont, pos) {
+      // 0x9003 DateTimeOriginal; 0x9004 só entra se a original faltar
+      if (tag !== 0x9003 && !(tag === 0x9004 && !res.quando)) return;
+      var d = exifData(exifAscii(dv, exifPonteiro(dv, T, tipo, cont, pos, le), cont));
+      if (d) res.quando = d;
+    });
+  } catch (e) { /* data é opcional: segue para o GPS */ }
+
+  try {
+    var refLat = 'N', refLon = 'E', vLat = null, vLon = null;
+    exifIFD(dv, T, gpsIfd, le, function (tag, tipo, cont, pos) {
+      var p = exifPonteiro(dv, T, tipo, cont, pos, le);
+      if (tag === 1) refLat = exifAscii(dv, p, cont) || 'N';
+      else if (tag === 2 && cont >= 3) vLat = exifGraus(dv, p, le);
+      else if (tag === 3) refLon = exifAscii(dv, p, cont) || 'E';
+      else if (tag === 4 && cont >= 3) vLon = exifGraus(dv, p, le);
+    });
+    if (vLat !== null && vLon !== null) {
+      res.lat = /S/i.test(refLat) ? -vLat : vLat;
+      res.lon = /W/i.test(refLon) ? -vLon : vLon;
+    }
+  } catch (e) { /* sem coordenada: a foto continua valendo */ }
+
+  return res;
+}
+
+/* Lê o EXIF do arquivo. Nunca rejeita: sem EXIF a foto entra assim mesmo. */
+function lerExif(file) {
+  return new Promise(function (resolve) {
+    var fr = new FileReader();
+    fr.onerror = function () { resolve(null); };
+    fr.onload = function () {
+      try { resolve(exifDoJPEG(new DataView(fr.result))); } catch (e) { resolve(null); }
+    };
+    // 256 KB da frente bastam: o cabeçalho vem antes dos dados da imagem
+    try { fr.readAsArrayBuffer(file.slice(0, 256 * 1024)); } catch (e) { resolve(null); }
+  });
 }
 
 function comprimirImg(file, maxLado, qualidade) {
@@ -2890,23 +3010,61 @@ function comprimirImg(file, maxLado, qualidade) {
   });
 }
 
-window.fotosSelecionadas = async function(input, idx) {
+/* Reduz uma imagem que JÁ está em data URI (a foto que voltou do Drive) para
+   o tamanho que o papel realmente imprime. Uma foto ocupa ~90 mm de largura
+   no anexo: 800 px sobram, e o PDF que vai pro grupo não fica pesado.
+   Devolve {uri,w,h} — a proporção é o que impede a foto de sair esticada. */
+function reduzirDataUri(dataUri, maxLado, qualidade) {
+  return new Promise(function (resolve) {
+    var img = new Image();
+    img.onerror = function () { resolve(null); };
+    img.onload = function () {
+      try {
+        var w = img.width, h = img.height;
+        var maior = Math.max(w, h);
+        if (maior > maxLado) { var k = maxLado / maior; w = Math.round(w * k); h = Math.round(h * k); }
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve({ uri: c.toDataURL('image/jpeg', qualidade), w: w, h: h });
+      } catch (e) { resolve(null); }
+    };
+    img.src = dataUri;
+  });
+}
+
+window.fotosSelecionadas = async function(input, idx, origem) {
   const arquivos = [...(input.files || [])];
   input.value = '';
+  if (!arquivos.length) return;
+  const anexo = origem === 'anexo';
   const lista = _fotosPorServico[idx] = _fotosPorServico[idx] || [];
   const cfg = carimboCfg();
-  // uma leitura de GPS para o lote inteiro: são fotos do mesmo ponto, e
-  // pedir a posição três vezes só gastaria bateria e tempo do apontador
-  const coord = await pegarCoordenada();
-  if (!coord && cfg.ligado && cfg.campos.coord) {
+
+  // Foto tirada na hora: uma leitura de GPS para o lote inteiro — são fotos
+  // do mesmo ponto, e pedir a posição três vezes só gastaria bateria e tempo
+  // do apontador. Foto anexada não consulta o GPS do aparelho: quem anexa
+  // pode estar longe do serviço, e a posição vem do EXIF da própria foto.
+  const coordLote = anexo ? null : await pegarCoordenada();
+  if (!anexo && !coordLote && cfg.ligado && cfg.campos.coord) {
     toast('Sem sinal de GPS — a foto entra com data e hora, sem coordenada.', 'info', 4000);
   }
-  const ctx = contextoCarimbo(idx, coord);
 
+  let semCoord = 0;
   for (const f of arquivos) {
     if (lista.length >= MAX_FOTOS_SERVICO) { toast(`Máximo de ${MAX_FOTOS_SERVICO} fotos por serviço`, 'info'); break; }
     if (!/^image\//.test(f.type)) continue;
     try {
+      let coord = coordLote, quando = null;
+      if (anexo) {
+        const ex = await lerExif(f);
+        // sem data no EXIF, a data do arquivo é o palpite mais próximo do
+        // momento em que a foto foi salva no aparelho
+        quando = (ex && ex.quando) || (f.lastModified ? new Date(f.lastModified) : null);
+        if (ex && ex.lat !== null) coord = { lat: ex.lat, lon: ex.lon, prec: '' };
+        else semCoord++;
+      }
+      const ctx = contextoCarimbo(idx, coord, quando);
       // duas versões: a miniatura desenha a tela, a cheia é a que sobe.
       // As duas levam o carimbo — a miniatura para o apontador conferir
       // na hora que a foto saiu carimbada, sem precisar ampliar.
@@ -2919,7 +3077,17 @@ window.fotosSelecionadas = async function(input, idx) {
                    prec: coord ? coord.prec : '' });
     } catch (e) { toast('Não foi possível ler a imagem', 'error'); }
   }
+  if (anexo && semCoord && cfg.ligado && cfg.campos.coord) {
+    toast(semCoord === 1
+      ? 'A foto anexada não traz coordenada — entrou com a data dela, sem GPS.'
+      : `${semCoord} fotos anexadas não trazem coordenada — entraram sem GPS.`, 'info', 4000);
+  }
   renderFotosPrev(idx);
+};
+
+window.abrirFotoServico = function(idx, origem) {
+  const el = document.getElementById((origem === 'anexo' ? 'fotoArq' : 'fotoCam') + idx);
+  if (el) el.click();
 };
 
 window.removerFotoServico = function(idx, i) {
@@ -2940,8 +3108,11 @@ function renderFotosPrev(idx) {
   if (c) c.textContent = lista.length ? `${lista.length}/${MAX_FOTOS_SERVICO}` : '';
 }
 
-/* Campo de foto de uma linha de serviço. `capture="environment"` abre direto
-   a câmera traseira no celular, que é como o apontador usa. */
+/* Campo de foto de uma linha de serviço. Dois caminhos, porque o trabalho
+   tem dois momentos: "Tirar foto" (`capture="environment"`) abre direto a
+   câmera traseira, que é como o apontador usa no canteiro; "Anexar foto"
+   abre a galeria/arquivos, para quem fotografou antes e lança depois — e
+   nesse caso o carimbo usa a data e a coordenada do EXIF da própria foto. */
 function campoFotos(idx) {
   const cfg = carimboCfg();
   return `
@@ -2953,12 +3124,20 @@ function campoFotos(idx) {
           ${ic('ajustes')} Carimbo: ${cfg.ligado ? 'ligado' : 'desligado'}
         </button>
       </div>
-      <input type="file" accept="image/*" capture="environment" multiple
-             onchange="fotosSelecionadas(this,${idx})" style="font-size:13px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
+        <button type="button" class="btn btn-outline btn-sm" onclick="abrirFotoServico(${idx},'camera')">
+          ${ic('camera',15)} Tirar foto</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="abrirFotoServico(${idx},'anexo')">
+          ${ic('galeria',15)} Anexar foto</button>
+      </div>
+      <input id="fotoCam${idx}" type="file" accept="image/*" capture="environment" multiple
+             onchange="fotosSelecionadas(this,${idx},'camera')" style="display:none">
+      <input id="fotoArq${idx}" type="file" accept="image/*" multiple
+             onchange="fotosSelecionadas(this,${idx},'anexo')" style="display:none">
       <div id="fotosPrev${idx}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">
         Comprovação de execução — vai para o Drive privado e aparece na Galeria.
-        ${cfg.ligado ? 'A foto sai carimbada com data, hora e o que estiver ligado no carimbo.' : ''}
+        ${cfg.ligado ? 'A foto sai carimbada com data, hora e o que estiver ligado no carimbo. Na foto anexada, data e coordenada vêm da própria foto.' : ''}
       </div>
     </div>`;
 }
@@ -9693,7 +9872,9 @@ function gerarPDFDiario(data) {
 function gerarPDFInternoTurnoV4() {
   // Agora passamos o DIARIO_TURNO_ATIVO para a função saber qual turno isolar
   if (typeof gerarPDFInterno === 'function') {
-    gerarPDFInterno(DIARIO_V4.data, DIARIO_TURNO_ATIVO);
+    // agora é assíncrona (espera as fotos do anexo): a falha precisa de dono
+    Promise.resolve(gerarPDFInterno(DIARIO_V4.data, DIARIO_TURNO_ATIVO))
+      .catch(() => toast('Não consegui gerar o PDF Interno', 'error'));
   } else {
     toast('PDF Interno indisponível', 'error');
   }
@@ -9710,9 +9891,110 @@ function gerarPDFDiarioV4(data) {
 
 
 // ====================================================================
+// ANEXO FOTOGRÁFICO DO PDF
+// --------------------------------------------------------------------
+// A foto só provava execução para quem abria o app. Quem recebe o PDF no
+// grupo — engenheiro, fiscal, cliente — via a tabela e acreditava. Agora a
+// comprovação viaja junto: as fotos dos serviços do dia entram no fim do
+// relatório, 4 por página, cada uma com o serviço a que pertence.
+// Data, hora e coordenada não vão em legenda: já estão QUEIMADAS na
+// imagem pelo carimbo, que é o que dá valor de prova à foto.
+// ====================================================================
+const MAX_FOTOS_PDF = 24;   // 6 páginas: o suficiente sem estourar o WhatsApp
+
+function legendaServicoPDF(linha) {
+  const pac = (STATE && STATE.pacotes) ? STATE.pacotes.find(p => p['ID'] === linha['Pacote_ID']) : null;
+  const frente = pac ? (pac['Frente'] || '') : '';
+  return ((frente ? frente + ' · ' : '') + (linha['Pacote_Nome'] || '')).trim();
+}
+
+/* Acrescenta as páginas de fotos ao documento. Devolve quantas entraram.
+   Nunca derruba o PDF: foto que não baixa ou não decodifica é pulada, e o
+   relatório sai igual — melhor um RDO sem anexo do que RDO nenhum. */
+async function anexoFotosPDF(doc, itens, rodape) {
+  const alvos = [];
+  let disponiveis = 0;
+  (itens || []).forEach(it => fotosDaLinha(it.linha).forEach(ponteiro => {
+    disponiveis++;
+    if (alvos.length < MAX_FOTOS_PDF) alvos.push({ fileId: fotoFileId(ponteiro), it });
+  }));
+  if (!alvos.length) return 0;
+
+  toast(`Anexando ${alvos.length} foto(s) ao PDF…`, 'info', 5000);
+
+  // de quatro em quatro: aproveita a fila do navegador sem disparar 24
+  // chamadas de uma vez no Apps Script (as já vistas saem do cache local)
+  const prontas = [];
+  for (let i = 0; i < alvos.length; i += 4) {
+    const lote = alvos.slice(i, i + 4);
+    const uris = await Promise.all(lote.map(a =>
+      baixarFotoServidor(a.fileId).catch(() => '')));
+    for (let j = 0; j < lote.length; j++) {
+      if (!uris[j]) continue;
+      const img = await reduzirDataUri(uris[j], 800, .68);
+      if (img) prontas.push({ img, it: lote[j].it });
+    }
+  }
+  if (!prontas.length) {
+    toast('As fotos não vieram do Drive — o PDF sai sem o anexo.', 'info', 5000);
+    return 0;
+  }
+
+  const PW = 210, PH = 297, ML = 12, TW = 186;
+  const NAVY = [26, 22, 18], TERRACOTA = [201, 114, 64], CINZA = [120, 117, 112];
+  const COLS = 2, POR_PAGINA = 4, GAP = 6;
+  const CW = (TW - GAP) / COLS;              // 90 mm de largura por foto
+  const BOXH = 110, LEGH = 12, Y0 = 24;      // moldura + legenda embaixo
+  const paginas = Math.ceil(prontas.length / POR_PAGINA);
+
+  for (let p = 0; p < paginas; p++) {
+    doc.addPage();
+    doc.setFillColor(...NAVY); doc.rect(0, 0, PW, 18, 'F');
+    doc.setFillColor(...TERRACOTA); doc.rect(0, 18, PW, 2, 'F');
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+    doc.text('REGISTRO FOTOGRÁFICO', ML, 12);
+    doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(180, 175, 168);
+    doc.text('Fotos carimbadas na origem  ·  ' + (p + 1) + '/' + paginas,
+             PW - ML, 12, { align: 'right' });
+
+    prontas.slice(p * POR_PAGINA, (p + 1) * POR_PAGINA).forEach((f, i) => {
+      const cx = ML + (i % COLS) * (CW + GAP);
+      const cy = Y0 + Math.floor(i / COLS) * (BOXH + LEGH + 4);
+
+      doc.setFillColor(245, 243, 239); doc.rect(cx, cy, CW, BOXH, 'F');
+      // encaixa dentro da moldura pela menor escala: a foto nunca estica
+      const k = Math.min(CW / f.img.w, BOXH / f.img.h);
+      const w = f.img.w * k, h = f.img.h * k;
+      try {
+        doc.addImage(f.img.uri, 'JPEG', cx + (CW - w) / 2, cy + (BOXH - h) / 2, w, h);
+      } catch (e) { /* imagem recusada pelo jsPDF: fica a moldura vazia */ }
+
+      // a legenda é uma linha só: nome comprido sai com reticência, para
+      // ninguém ler um serviço truncado achando que é o nome inteiro
+      const umaLinha = t => {
+        const l = doc.splitTextToSize(String(t || ''), CW - 2);
+        return l.length > 1 ? l[0].replace(/\s+\S*$/, '') + '…' : (l[0] || '');
+      };
+      doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(...NAVY);
+      doc.text(umaLinha(legendaServicoPDF(f.it.linha)) || '—', cx, cy + BOXH + 5);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(...CINZA);
+      const sub = [f.it.linha['Local_Estaca'], f.it.turno].filter(Boolean).join('  ·  ');
+      if (sub) doc.text(umaLinha(sub), cx, cy + BOXH + 9);
+    });
+
+    if (rodape) rodape();
+  }
+
+  if (disponiveis > alvos.length) {
+    toast(`O anexo levou as ${alvos.length} primeiras de ${disponiveis} fotos do dia.`, 'info', 6000);
+  }
+  return prontas.length;
+}
+
+// ====================================================================
 // PDF INTERNO — Visual, pra mandar no grupo (sem logos formais)
 // ====================================================================
-function gerarPDFInterno(data, turnoFocus) {
+async function gerarPDFInterno(data, turnoFocus) {
   // Tornando a função à prova de falhas: se o botão não enviou o turno, ela mesma descobre qual tela está aberta
   const focus = turnoFocus || (typeof DIARIO_TURNO_ATIVO !== 'undefined' ? DIARIO_TURNO_ATIVO : null);
 
@@ -10158,14 +10440,23 @@ function gerarPDFInterno(data, turnoFocus) {
   if (focus === 'diurno') rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—');
   if (focus === 'noturno') rodapeTxt = 'Apontador Noturno: ' + (d.apontador_noturno || '—');
 
-  rect(0, PH - 14, PW, 14, NAVY);
-  sf(8, 'bold', [255, 255, 255]);
-  tx('GESTOR ENGENHARIA', ML, PH - 8);
-  sf(7, 'normal', [180, 175, 168]);
-  tx(rodapeTxt, ML, PH - 4);
-  
-  sf(7, 'normal', [180, 175, 168]);
-  tx('Gerado em ' + new Date().toLocaleString('pt-BR'), PW - ML, PH - 4, { align: 'right' });
+  // virou função porque o anexo de fotos acrescenta páginas, e página de RDO
+  // sem o rodapé assinado não se identifica quando é impressa solta
+  function rodape() {
+    rect(0, PH - 14, PW, 14, NAVY);
+    sf(8, 'bold', [255, 255, 255]);
+    tx('GESTOR ENGENHARIA', ML, PH - 8);
+    sf(7, 'normal', [180, 175, 168]);
+    tx(rodapeTxt, ML, PH - 4);
+    tx('Gerado em ' + new Date().toLocaleString('pt-BR'), PW - ML, PH - 4, { align: 'right' });
+  }
+  rodape();
+
+  // ANEXO FOTOGRÁFICO — a comprovação viaja junto com o relatório
+  const itensFoto = servicosDiurnos.map(l => ({ linha: l, turno: 'Diurno' }))
+    .concat(servicosNoturnos.map(l => ({ linha: l, turno: 'Noturno' })));
+  try { await anexoFotosPDF(doc, itensFoto, rodape); }
+  catch (e) { toast('Não consegui anexar as fotos — o PDF sai sem elas.', 'info', 5000); }
 
   // Nomeia o arquivo de acordo com o turno para não sobrepor se salvarem ambos
   let fname = 'RDO_INTERNO_' + data.replace(/-/g, '_');
