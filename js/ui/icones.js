@@ -159,24 +159,81 @@ var ICONES = {
   syncErro: '<circle cx="12" cy="12" r="8.4"/><path d="M12 7.8v4.8"/><circle cx="12" cy="16" r=".95" fill="currentColor" stroke="none"/>',
   syncOff: '<path d="M7.6 18.6a4.3 4.3 0 0 1-.5-8.5 5.5 5.5 0 0 1 6.6-3.3"/><path d="M16.9 9.5a3.9 3.9 0 0 1 .6 7.6"/><path d="M3.4 3.4 20.6 20.6"/>',
 
-  /* ================= FRENTES DE SERVIÇO ================= */
-  // serviços preliminares: piquete com bandeirola
-  fPreliminares: '<path d="M6.8 3.6v16.8"/><path d="M6.8 4.6h9.8l-2.6 3.2 2.6 3.2H6.8"/>',
-  // pavimentação: via com faixa central
-  fPavimentacao: '<path d="M8.6 3.6 5 20.4M15.4 3.6 19 20.4"/><path d="M12 5.2v2.6M12 10.8v2.6M12 16.4V19"/>',
-  // calçada: peças assentadas
-  fCalcada: '<rect x="3.2" y="6.8" width="17.6" height="10.4" rx="1.5"/><path d="M3.2 12h17.6"/><path d="M8.8 6.8V12M14.4 6.8V12M6 12v5.2M11.6 12v5.2M17.2 12v5.2"/>',
-  // demolição / remanejamento: marreta sobre o piso
-  fDemolicao: '<path d="M2.8 20.6h18.4"/><path d="M13.6 3.4l7 7-3.2 3.2-7-7z"/><path d="M11.8 8.6 4.6 15.8a1.9 1.9 0 0 0 0 2.7l.5.5a1.9 1.9 0 0 0 2.7 0l7.2-7.2"/>',
-  // drenagem: tubo e a água
-  fDrenagem: '<path d="M12 2.8s3.4 4.2 3.4 6.4a3.4 3.4 0 0 1-6.8 0c0-2.2 3.4-6.4 3.4-6.4z"/><rect x="2.8" y="14.4" width="18.4" height="5.8" rx="2.6"/><path d="M9 14.4v5.8M15 14.4v5.8"/>',
-  // terraplenagem: perfil do terreno
-  fTerraplenagem: '<path d="M2.8 19.6h18.4"/><path d="M3.4 19.6 9 9.8l4.2 5.2L17 8.4l3.8 11.2"/>',
-  // sinalização: placa no poste
-  fSinalizacao: '<path d="M12 12.6v8.2"/><path d="M8.4 20.8h7.2"/><path d="M12 3.4 19.4 8 12 12.6 4.6 8z"/>',
-  // qualquer frente que venha nova
-  fGenerico: '<circle cx="12" cy="12" r="7.6"/><path d="M12 8.2v7.6M8.2 12h7.6"/>'
+  /* ================= FRENTES DE SERVIÇO =================
+     Estes são os únicos ícones do conjunto com MASSA além do traço: uma
+     forma sólida em <g class="ic-fill"> (o CSS pinta com currentColor a
+     ~16% de opacidade) por baixo do contorno. Aqui isso não é enfeite —
+     eles aparecem grandes no cartão de frente do Painel, e só traço fino
+     nesse tamanho fica sem peso, apagado contra o painel escuro.
+
+     A regra de ouro é a SILHUETA: cada frente tem que ser reconhecível
+     pelo contorno, de longe, sem ler o rótulo. Duas frentes com desenho
+     parecido são duas frentes com desenho errado.
+     ======================================================= */
+
+  // serviços preliminares: piquete de topografia com bandeirola
+  fPreliminares: '<g class="ic-fill"><path d="M6.6 4.4h10.2l-2.8 3.4 2.8 3.4H6.6z"/></g>' +
+    '<path d="M6.6 3.2v17.6"/><path d="M6.6 4.4h10.2l-2.8 3.4 2.8 3.4H6.6"/><path d="M3.8 20.8h5.6"/>',
+
+  // via: a pista vista de cima, com a faixa central seccionada
+  fVia: '<g class="ic-fill"><path d="M9 3.6h6l4.6 16.8H4.4z"/></g>' +
+    '<path d="M9 3.6h6l4.6 16.8H4.4z"/>' +
+    '<path d="M12 6v2.6M12 11.4v2.8M12 17v2.4"/>',
+  // pavimento flexível: rolo compactador — a máquina é o que se vê no
+  // canteiro quando a frente do asfalto está rodando
+  fPavFlexivel: '<g class="ic-fill"><rect x="2.6" y="12.8" width="10.6" height="7.2" rx="3.6"/></g>' +
+    '<rect x="2.6" y="12.8" width="10.6" height="7.2" rx="3.6"/>' +
+    '<path d="M6.2 12.9v7M9.6 12.9v7"/>' +
+    '<path d="M13.2 20V9.8a2 2 0 0 1 2-2h4.4a2 2 0 0 1 2 2V20"/>' +
+    '<path d="M15.4 12.6h4"/>',
+  // pavimento rígido: placas de concreto e a junta entre elas
+  fPavRigido: '<g class="ic-fill"><path d="M2.8 8.8h18.4v5.4H2.8z"/></g>' +
+    '<path d="M2.8 8.8h18.4v5.4H2.8z"/>' +
+    '<path d="M12 8.8v5.4"/><path d="M9.2 11.5h5.6"/>' +
+    '<path d="M2.8 17.6h18.4"/>',
+  // calçada: peças intertravadas assentadas
+  fCalcada: '<g class="ic-fill"><path d="M3.2 6.8h17.6v10.4H3.2z"/></g>' +
+    '<rect x="3.2" y="6.8" width="17.6" height="10.4" rx="1.5"/><path d="M3.2 12h17.6"/>' +
+    '<path d="M8.8 6.8V12M14.4 6.8V12M6 12v5.2M11.6 12v5.2M17.2 12v5.2"/>',
+
+  // demolição / remanejamento: marreta batendo no piso
+  fDemolicao: '<g class="ic-fill"><path d="M13.6 3.4l7 7-3.2 3.2-7-7z"/></g>' +
+    '<path d="M2.8 20.6h18.4"/><path d="M13.6 3.4l7 7-3.2 3.2-7-7z"/>' +
+    '<path d="M11.8 8.6 4.6 15.8a1.9 1.9 0 0 0 0 2.7l.5.5a1.9 1.9 0 0 0 2.7 0l7.2-7.2"/>',
+
+  // drenagem: tubo de concreto em perspectiva, com a água correndo
+  fDrenagem: '<g class="ic-fill"><circle cx="12" cy="9.4" r="5.8"/></g>' +
+    '<circle cx="12" cy="9.4" r="5.8"/><circle cx="12" cy="9.4" r="2.4"/>' +
+    '<path d="M3.4 17.9c1.4 0 1.4 1.7 2.9 1.7s1.4-1.7 2.9-1.7 1.4 1.7 2.9 1.7 1.4-1.7 2.9-1.7 1.4 1.7 2.9 1.7 1.4-1.7 2.9-1.7"/>',
+  // vala técnica: o corte da vala com os dutos assentados
+  fValaTecnica: '<g class="ic-fill"><path d="M4.4 6.4h15.2v13.4H4.4z"/></g>' +
+    '<path d="M4.4 6.4v13.4h15.2V6.4"/>' +
+    '<path d="M2.2 6.4h4.4M17.4 6.4h4.4"/>' +
+    '<circle cx="8.7" cy="16" r="1.9"/><circle cx="15.3" cy="16" r="1.9"/><circle cx="12" cy="11.7" r="1.9"/>',
+  // terraplenagem: o perfil do terreno cortado, com o talude
+  fTerraplenagem: '<g class="ic-fill"><path d="M2.8 19.8 8.6 9.6l4.4 5.4 4-6.8 4.2 11.6z"/></g>' +
+    '<path d="M2.6 19.8h18.8"/><path d="M2.8 19.8 8.6 9.6l4.4 5.4 4-6.8 4.2 11.6"/>' +
+    '<path d="M8.6 9.6V5.4M6.8 7l1.8-1.8L10.4 7"/>',
+
+  // sinalização: a placa no poste, com o pé fincado
+  fSinalizacao: '<g class="ic-fill"><rect x="5.4" y="3.4" width="13.2" height="9.2" rx="1.8"/></g>' +
+    '<rect x="5.4" y="3.4" width="13.2" height="9.2" rx="1.8"/>' +
+    '<path d="M9 8h5.4M12.4 5.8 14.6 8l-2.2 2.2"/>' +
+    '<path d="M12 12.6v8.2M9 20.8h6"/>',
+  // desapropriação: o lote com o marco de divisa e o documento
+  fDesapropriacao: '<g class="ic-fill"><path d="M3.4 10.6h9.4v9.8H3.4z"/></g>' +
+    '<path d="M3.4 10.6h9.4v9.8H3.4z"/><path d="M3.4 10.6 8.1 6.4l4.7 4.2"/>' +
+    '<path d="M16.4 4.2h2.8l2.4 2.4v7.2h-5.2z"/><path d="M19.2 4.2v2.6h2.4"/>' +
+    '<path d="M17.8 16.6v3.8M16.2 20.4h3.2"/>',
+
+  // qualquer frente que venha nova e não case com nenhuma acima
+  fGenerico: '<g class="ic-fill"><rect x="4.2" y="4.2" width="15.6" height="15.6" rx="4"/></g>' +
+    '<rect x="4.2" y="4.2" width="15.6" height="15.6" rx="4"/><path d="M12 8.4v7.2M8.4 12h7.2"/>'
 };
+
+/* Apelidos: os desenhos antigos continuam respondendo pelo nome antigo,
+   para nada que já use ic('fPavimentacao') quebrar. */
+ICONES.fPavimentacao = ICONES.fPavFlexivel;
 
 /* devolve o SVG pronto. tam em px; sem tam, acompanha o texto (1em) */
 function ic(nome, tam, cls) {
@@ -193,13 +250,26 @@ function ic(nome, tam, cls) {
 function icFrente(nome) {
   var n = String(nome || '').toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  if (/prelimin|mobiliza|canteiro|topograf/.test(n)) return 'fPreliminares';
-  if (/pavimenta|asfalt|cbuq|binder|imprima/.test(n)) return 'fPavimentacao';
-  if (/calcada|passeio|guia|sarjeta|meio-fio/.test(n)) return 'fCalcada';
-  if (/demoli|remanej|remocao|retirada/.test(n)) return 'fDemolicao';
-  if (/drenagem|galeria|boca de lobo|tubo|pluvial/.test(n)) return 'fDrenagem';
-  if (/terraplen|escava|aterro|corte|reforc|subleito/.test(n)) return 'fTerraplenagem';
-  if (/sinaliza/.test(n)) return 'fSinalizacao';
+  // A ORDEM IMPORTA: o mais específico primeiro. "Pav. Rígido" tem que
+  // ser testado antes de qualquer regra de pavimento, senão cai na
+  // flexível e as duas frentes ficam com o mesmo desenho.
+  //
+  // Os padrões seguem o que está ESCRITO na aba Pacotes, não o nome por
+  // extenso: a planilha usa "Pav. Flexível" e "Pav. Rígido" abreviados,
+  // e a primeira versão desta função procurava "pavimenta" — resultado,
+  // as duas frentes de pavimentação caíam no ícone genérico junto com
+  // Via, Vala Técnica e Desapropriações. Cinco frentes, um só desenho.
+  if (/prelimin|mobiliza|canteiro|topograf|impla?nta[çc]/.test(n)) return 'fPreliminares';
+  if (/desapropri|deso?bstru[çc]|imissao|indeniza/.test(n))        return 'fDesapropriacao';
+  if (/vala|duto|conduite|multidut/.test(n))                       return 'fValaTecnica';
+  if (/drenagem|galeria|boca de lobo|tubo|pluvial|pv\b|po[çc]o/.test(n)) return 'fDrenagem';
+  if (/demoli|remanej|remo[çc]ao|retirada|fresa/.test(n))          return 'fDemolicao';
+  if (/sinaliza/.test(n))                                          return 'fSinalizacao';
+  if (/terraplen|escava|aterro|corte|refor[çc]o|subleito/.test(n)) return 'fTerraplenagem';
+  if (/calcada|passeio|guia|sarjeta|meio-?fio|intertrav/.test(n))  return 'fCalcada';
+  if (/(pav\.?|pavimenta\w*)\s*(rigid|concret)|rigid|concreto|placa/.test(n)) return 'fPavRigido';
+  if (/(pav\.?|pavimenta\w*)|asfalt|cbuq|binder|imprima|flexiv/.test(n))      return 'fPavFlexivel';
+  if (/\bvia\b|viario|pista|faixa|rodovi|duplica/.test(n))         return 'fVia';
   return 'fGenerico';
 }
 
