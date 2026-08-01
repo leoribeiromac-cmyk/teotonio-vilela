@@ -77,6 +77,7 @@ function rotear(e) {
       case 'addRDODiario':    resp = upsertRDODiario(p, false); break;
       case 'updateRDODiario': resp = upsertRDODiario(p, true); break;
       case 'deleteRDODiario': resp = deleteRDODiario(p.id, p.data, p.token); break;
+      case 'rdoDiarioDatas':  resp = rdoDiarioDatas(); break;
       case 'equipListar':       resp = equipListar(); break;
       case 'equipCadastrar':    resp = equipCadastrar(p); break;
       case 'equipDesativar':    resp = equipDesativar(p.nome, p.token); break;
@@ -1029,10 +1030,22 @@ function upsertRDODiario(p, deveExistir) {
       if (mesmaData && mesmoTurno) { linhaExistente = i + 1; break; }
     }
 
+    // TRAVA ANTI-SOBRESCRITA (criação em lote de RDOs vazios).
+    // Quem cria RDOs em branco pelos banners do Histórico manda
+    // criar_se_ausente=true: se a data JÁ tem RDO, a linha NÃO é tocada.
+    // Sem isto, um RDO lançado há poucos minutos — ainda ausente do CSV
+    // publicado, que o Google serve com atraso — era visto como "faltante"
+    // pelo app e voltava para a planilha ZERADO, apagando o que já estava lá.
+    if (linhaExistente !== -1 && ehVerdadeiro(p.criar_se_ausente)) {
+      return { ok: true, skipped: true, data: dataAlvo };
+    }
+
     var registro = {};
     Object.keys(p).forEach(function (chave) {
-      // 'token' é credencial, não dado do RDO: nunca vai para a planilha.
-      if (chave === 'action' || chave === 'callback' || chave === 'token') return;
+      // 'token' é credencial e 'criar_se_ausente' é controle: nem um nem outro
+      // são dados do RDO — nunca vão para a planilha.
+      if (chave === 'action' || chave === 'callback' || chave === 'token' ||
+          chave === 'criar_se_ausente') return;
       registro[chave.toLowerCase()] = p[chave];
     });
     var sessD = sessaoDoToken(p.token);
@@ -1095,6 +1108,136 @@ function gerarIdDiario(dados, iId) {
     if (m) { var n = parseInt(m[1], 10); if (!isNaN(n) && n > max) max = n; }
   }
   return 'D' + ('0000' + (max + 1)).slice(-4);
+}
+
+// 'true'/'sim'/'1' (em qualquer caixa) => true. Qualquer outra coisa => false.
+function ehVerdadeiro(v) {
+  var s = String(v == null ? '' : v).trim().toLowerCase();
+  return s === 'true' || s === 'sim' || s === '1';
+}
+
+// Datas (yyyy-MM-dd) que JÁ têm RDO Diário, lidas direto da planilha.
+// O app usa isto antes de criar RDOs em lote: o CSV publicado do Google chega
+// com atraso de minutos, então ele sozinho não serve para decidir o que falta.
+function rdoDiarioDatas() {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+  var cab = cabecalhoNormalizado(aba);
+  var iData = idxColuna(cab, 'data');
+  if (iData === -1) return { ok: false, error: 'Coluna "data" não encontrada em ' + NOME_ABA_DIARIO };
+  var dados = aba.getDataRange().getValues();
+  var vistas = {}, datas = [];
+  for (var i = 1; i < dados.length; i++) {
+    var nd = normData(dados[i][iData]);
+    if (nd && !vistas[nd]) { vistas[nd] = true; datas.push(nd); }
+  }
+  datas.sort();
+  return { ok: true, datas: datas, total: datas.length };
+}
+
+// ------------------------------------------------------------
+// 4b. RDO de domingo automático (gatilho semanal, segunda 9h)
+//     O domingo quase nunca tem expediente, mas o RDO precisa existir para a
+//     série do mês não ficar com buraco. Toda segunda de manhã o gatilho cria
+//     o RDO do domingo anterior — se ele ainda não existir. Nunca sobrescreve.
+//
+//     Para ligar: rode UMA vez, no editor do Apps Script, `configurarGatilhos()`
+//     (agenda este junto com o backup e o clima). Para ligar só este:
+//         instalarGatilhoRDODomingo()
+//     Para conferir:  statusGatilhoRDODomingo()
+//     Para desligar:  removerGatilhoRDODomingo()
+//
+//     O horário segue o fuso do projeto (⚙ Configurações do projeto). O Apps
+//     Script roda gatilhos por hora dentro de uma janela — "9h" na prática é
+//     entre 9h e 10h da segunda.
+// ------------------------------------------------------------
+var OBS_DOMINGO_AUTO = 'Domingo — sem expediente. RDO gerado automaticamente.';
+
+// Cria um RDO Diário VAZIO na data (yyyy-MM-dd) se — e só se — ela ainda não
+// tiver RDO. Devolve { criado:true, id } ou { criado:false, motivo:'ja_existe' }.
+function criarRDOVazioSeAusente(iso, observacoes) {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var cab = cabecalhoNormalizado(aba);
+    var iData = idxColuna(cab, 'data');
+    var iId = idxColuna(cab, 'id');
+    if (iData === -1) return { ok: false, error: 'Coluna "data" não encontrada em ' + NOME_ABA_DIARIO };
+    var dados = aba.getDataRange().getValues();
+
+    for (var i = 1; i < dados.length; i++) {
+      if (normData(dados[i][iData]) === iso) {
+        return { ok: true, criado: false, motivo: 'ja_existe', data: iso };
+      }
+    }
+
+    var registro = { data: iso, tem_turno_noturno: 'false' };
+    if (observacoes) registro['observacoes_gerais'] = observacoes;
+    if (iId !== -1) registro['id'] = gerarIdDiario(dados, iId);
+
+    var linha = cab.map(function (nc) { return registro.hasOwnProperty(nc) ? registro[nc] : ''; });
+    aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
+    registrarAuditoria('automático', 'sistema', 'addRDODiario',
+      registro['id'] || iso, '', 'RDO vazio automático · data ' + iso);
+    return { ok: true, criado: true, id: registro['id'] || '', data: iso };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+// Roda toda segunda ~9h: cria o RDO do domingo que acabou de passar.
+// Idempotente — se o RDO do domingo já foi lançado pela equipe, não faz nada.
+function criarRDODomingoAnterior() {
+  var tz = Session.getScriptTimeZone();
+  var hoje = new Date();
+  // Volta até o domingo imediatamente anterior a hoje (1 a 7 dias atrás).
+  var recuo = hoje.getDay() === 0 ? 7 : hoje.getDay();
+  var domingo = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() - recuo);
+  var iso = Utilities.formatDate(domingo, tz, 'yyyy-MM-dd');
+
+  var r = criarRDOVazioSeAusente(iso, OBS_DOMINGO_AUTO);
+  Logger.log('RDO automático de domingo (' + iso + '): ' + JSON.stringify(r));
+  return r;
+}
+
+// Instala (ou reinstala) o gatilho semanal: segunda-feira, por volta das 9h,
+// no fuso do script. Remove antes qualquer gatilho antigo do mesmo handler,
+// para não acabar com dois gatilhos rodando.
+function instalarGatilhoRDODomingo() {
+  removerGatilhoRDODomingo();
+  ScriptApp.newTrigger('criarRDODomingoAnterior')
+    .timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY)
+    .atHour(9)
+    .nearMinute(0)
+    .create();
+  var r = { ok: true, instalado: true, quando: 'segunda-feira às 9h (' + Session.getScriptTimeZone() + ')' };
+  Logger.log(JSON.stringify(r));
+  return r;
+}
+
+function removerGatilhoRDODomingo() {
+  var removidos = 0;
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'criarRDODomingoAnterior') {
+      ScriptApp.deleteTrigger(t);
+      removidos++;
+    }
+  });
+  return { ok: true, removidos: removidos };
+}
+
+function statusGatilhoRDODomingo() {
+  var ativos = ScriptApp.getProjectTriggers().filter(function (t) {
+    return t.getHandlerFunction() === 'criarRDODomingoAnterior';
+  });
+  var r = { ok: true, ativo: ativos.length > 0, gatilhos: ativos.length,
+            fuso: Session.getScriptTimeZone() };
+  Logger.log(JSON.stringify(r));
+  return r;
 }
 
 // ------------------------------------------------------------
@@ -1269,11 +1412,15 @@ function configurarGatilhos() {
   // Remove gatilhos antigos destas funções para não duplicar.
   ScriptApp.getProjectTriggers().forEach(function (t) {
     var fn = t.getHandlerFunction();
-    if (fn === 'backupDiario' || fn === 'registrarClimaAuto') ScriptApp.deleteTrigger(t);
+    if (fn === 'backupDiario' || fn === 'registrarClimaAuto' ||
+        fn === 'criarRDODomingoAnterior') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('backupDiario').timeBased().everyDays(1).atHour(2).create();
   ScriptApp.newTrigger('registrarClimaAuto').timeBased().everyDays(1).atHour(5).create();
-  Logger.log('Gatilhos criados: backupDiario (02h) e registrarClimaAuto (05h).');
+  ScriptApp.newTrigger('criarRDODomingoAnterior').timeBased()
+    .onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(9).nearMinute(0).create();
+  Logger.log('Gatilhos criados: backupDiario (02h), registrarClimaAuto (05h) e ' +
+             'criarRDODomingoAnterior (segunda, 09h).');
   return { ok: true };
 }
 

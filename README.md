@@ -89,8 +89,15 @@ No editor do Apps Script, selecione a função **`configurarGatilhos`** e clique
 
 - **`backupDiario`** (02h) — cópia completa da planilha na pasta "Backups Teotonio" do Drive, mantendo as 14 mais recentes.
 - **`registrarClimaAuto`** (05h) — chuva de ontem via Open-Meteo gravada em `RDO_Diario` (colunas `Chuva_mm_Auto`/`Clima_Fonte`, criadas sozinhas). Contraprova objetiva do clima apontado — base para pleitos de prazo. Ajuste `OBRA_LAT`/`OBRA_LON` se necessário.
+- **`criarRDODomingoAnterior`** (segunda, 09h) — cria o RDO em branco do domingo que acabou de passar, marcado como "Domingo — sem expediente. RDO gerado automaticamente." Se a equipe já lançou o RDO daquele domingo, não faz nada — nunca sobrescreve. Rodar `configurarGatilhos()` de novo é seguro (ele reinstala sem duplicar); para mexer só neste, há `instalarGatilhoRDODomingo()`, `statusGatilhoRDODomingo()` e `removerGatilhoRDODomingo()`.
+
+O horário dos gatilhos segue o fuso do projeto (⚙ Configurações do projeto) e o Apps Script os executa dentro de uma janela de uma hora — "09h" na prática é entre 9h e 10h.
 
 Utilitário: `criarRDOsVaziosDoMes()` preenche datas sem RDO de qualquer mês (edite `ANO_MES_ALVO` no topo da função antes de rodar).
+
+### Criar RDOs faltantes pelo Histórico (dias úteis / dias não úteis)
+
+Os dois botões do Histórico criam RDOs **em branco** e **nunca sobrescrevem** um RDO já lançado. Antes de criar, o app pergunta ao backend (`rdoDiarioDatas`) quais datas já têm RDO na planilha — o CSV publicado do Google chega com minutos de atraso e sozinho não serve para decidir o que falta. Cada criação ainda vai com `criar_se_ausente=true`, que proíbe o servidor de tocar em linha existente. Se a conferência falhar, **nada é criado**.
 
 ## Configuração pela planilha (sem mexer em código)
 

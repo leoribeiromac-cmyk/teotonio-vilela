@@ -7249,10 +7249,15 @@ async function executarExclusaoRDODiario(data, id) {
   }
 }
 
-// (6) CRIAR EM LOTE os RDOs Diários faltantes (dias úteis sem RDO listados no
-// banner). Cria um RDO VAZIO por dia, pronto para preencher depois. Reusa
-// addRDODiario, que é idempotente por data no backend — datas que já tenham
-// RDO são atualizadas, não duplicadas. Requer o Code.gs republicado.
+// (6) CRIAR EM LOTE os RDOs Diários faltantes (dias sem RDO listados no
+// banner). Cria um RDO VAZIO por dia, pronto para preencher depois.
+//
+// NUNCA sobrescreve RDO existente. A lista de faltantes sai do CSV publicado
+// do Google, que chega com minutos de atraso: um RDO lançado há pouco ainda
+// aparece como "faltante" e, antes, voltava para a planilha ZERADO. Agora a
+// data que já tem RDO é confirmada na planilha antes de enviar, e o backend
+// ainda recebe criar_se_ausente=true, que o proíbe de tocar em linha existente.
+// Requer o Code.gs republicado.
 window.criarRDOsFaltantes = function(dias, tipoLabel) {
   dias = (dias && dias.length) ? dias.slice() : (window.FALTANTES_DIAS || []).slice();
   if (!dias.length) { toast('Nenhum dia faltante para criar.', 'info'); return; }
@@ -7265,8 +7270,11 @@ window.criarRDOsFaltantes = function(dias, tipoLabel) {
         Serão criados <strong>${dias.length}</strong> RDO(s) Diário(s) <strong>em branco</strong>, um para cada ${rotulo}:
       </p>
       <p style="font-size:12px;color:var(--muted);max-height:120px;overflow:auto;margin:0 0 12px">${dias.map(fmtData).join(' · ')}</p>
-      <p style="font-size:13px;color:var(--ylw-d);font-weight:600;margin:0 0 18px">
-        Cada RDO fica pronto para você preencher (efetivo, clima, etc.) depois. Datas que já tenham RDO são ignoradas.
+      <p style="font-size:13px;color:var(--ylw-d);font-weight:600;margin:0 0 6px">
+        Cada RDO fica pronto para você preencher (efetivo, clima, etc.) depois.
+      </p>
+      <p style="font-size:12px;color:var(--muted);margin:0 0 18px">
+        ${ic('cadeado')} A lista é conferida na planilha antes de criar: data que já tenha RDO é <strong>pulada</strong>, nunca sobrescrita.
       </p>
       <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
         <button class="btn btn-sm btn-outline" onclick="fecharModalRDO()">Cancelar</button>
@@ -7276,10 +7284,50 @@ window.criarRDOsFaltantes = function(dias, tipoLabel) {
   `);
 };
 
+// Datas que JÁ têm RDO, lidas direto da planilha (não do CSV publicado, que o
+// Google serve com atraso de minutos). Devolve { datas:Set } ou { erro }.
+async function datasComRDONaPlanilha() {
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'rdoDiarioDatas', ...authParams() }, 1);
+    if (r && r.ok && Array.isArray(r.datas)) return { datas: new Set(r.datas) };
+    const err = (r && r.error) || 'resposta inesperada do servidor';
+    return { erro: /Ação desconhecida/i.test(err) ? 'backend_antigo' : err };
+  } catch (e) {
+    return { erro: String(e && e.message ? e.message : e) };
+  }
+}
+
 window.executarCriarRDOsFaltantes = async function() {
-  const dias = (window._RDO_CRIAR_DIAS || window.FALTANTES_DIAS || []).slice();
+  let dias = (window._RDO_CRIAR_DIAS || window.FALTANTES_DIAS || []).slice();
   const btn = document.getElementById('btnCriaFaltantes');
   if (btn) btn.disabled = true;
+
+  // 1º: confere na planilha quais dessas datas já têm RDO. É o que impede de
+  // mexer num RDO lançado minutos atrás, ainda invisível no CSV publicado.
+  // Se a conferência não sai, NÃO cria nada — melhor não criar do que apagar.
+  if (btn) btn.textContent = 'Conferindo na planilha…';
+  const conferencia = await datasComRDONaPlanilha();
+  if (conferencia.erro) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Tentar de novo'; }
+    toast(conferencia.erro === 'backend_antigo'
+      ? 'Nada foi criado: o backend ainda não tem a conferência que protege os RDOs já lançados. Cole o Code.gs atualizado no Apps Script e republique (Nova versão).'
+      : `Nada foi criado: não deu para conferir na planilha quais dias já têm RDO (${conferencia.erro}). Tente de novo.`,
+      'error', 0);
+    return;
+  }
+  let pulados = 0;
+  {
+    const antes = dias.length;
+    dias = dias.filter(d => !conferencia.datas.has(d));
+    pulados = antes - dias.length;
+  }
+  if (!dias.length) {
+    fecharModalRDO();
+    toast(pulados ? `Nada a criar — ${pulados} dia(s) já tinham RDO lançado.` : 'Nenhum dia faltante para criar.', 'info', 6000);
+    setTimeout(() => carregarTudo(), 600);
+    return;
+  }
+
   let criados = 0, jaExistiam = 0, falhou = 0;
   for (let i = 0; i < dias.length; i++) {
     const data = dias[i];
@@ -7287,10 +7335,12 @@ window.executarCriarRDOsFaltantes = async function() {
     try {
       const result = await jsonp(CONFIG.appsScript, {
         action: 'addRDODiario', data, tem_turno_noturno: 'false',
-        observacoes_gerais: '', ...authParams()
+        // Trava do servidor: se a data já tiver RDO, ele NÃO encosta na linha.
+        criar_se_ausente: 'true', ...authParams()
       }, 0);
       if (result && result.ok) {
-        if (result.updated) jaExistiam++; else criados++;
+        if (result.skipped || result.updated) jaExistiam++;
+        else criados++;
       } else {
         const err = (result && result.error) || '';
         if (/Ação desconhecida/i.test(err)) {
@@ -7309,7 +7359,8 @@ window.executarCriarRDOsFaltantes = async function() {
   }
   fecharModalRDO();
   const partes = [`${criados} RDO(s) criado(s)`];
-  if (jaExistiam) partes.push(`${jaExistiam} já existiam`);
+  const preservados = jaExistiam + pulados;
+  if (preservados) partes.push(`${preservados} já tinham RDO (preservados)`);
   if (falhou) partes.push(`${falhou} falharam`);
   toast(partes.join(' · '), falhou ? 'error' : 'success', 6000);
   setTimeout(() => carregarTudo(), 1200);
@@ -7717,8 +7768,9 @@ function renderHistoricoDiarios() {
         <div style="margin-top:6px">${linhasNU}</div>
         <div style="margin-top:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
           <button class="btn btn-sm" onclick="criarRDOsFaltantes(window.FALTANTES_DIAS_NAO_UTEIS, 'dia não útil (fim de semana/feriado) sem RDO')" style="background:var(--blu);color:#fff;border:none;white-space:nowrap">${ic('mais')} Criar RDOs vazios destes ${totalDiasNU} dia(s)</button>
-          <span style="font-size:11px;color:var(--muted)">cria 1 RDO em branco por dia, pronto pra preencher depois</span>
+          <span style="font-size:11px;color:var(--muted)">cria 1 RDO em branco por dia — dia que já tem RDO é pulado, nunca sobrescrito</span>
         </div>
+        <div style="margin-top:6px;font-size:11px;color:var(--muted)">${ic('relogio')} O RDO de <strong>domingo</strong> é gerado sozinho toda segunda-feira às 9h.</div>
       </details>`;
   }
 
