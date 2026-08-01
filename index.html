@@ -2838,11 +2838,13 @@ function desenharCarimbo(dataUri, ctxDados, cfg) {
   });
 }
 
-/* Contexto do carimbo lido do serviço que está sendo preenchido. */
-function contextoCarimbo(idx, coord) {
+/* Contexto do carimbo lido do serviço que está sendo preenchido.
+   `quando` permite carimbar a foto com a hora em que ELA foi feita (foto
+   anexada da galeria), e não com a hora do lançamento. */
+function contextoCarimbo(idx, coord, quando) {
   var s = (STATE.draft && STATE.draft.servicos && STATE.draft.servicos[idx]) || {};
   var pac = STATE.pacotes.find(function (p) { return getCSVField(p, 'ID') === s.pacoteId; });
-  var agora = new Date();
+  var agora = quando instanceof Date && !isNaN(quando) ? quando : new Date();
   var est = [s.estacaIni, s.estacaFim].filter(Boolean);
   return {
     data: agora.toLocaleDateString('pt-BR'),
@@ -2854,6 +2856,124 @@ function contextoCarimbo(idx, coord) {
     apontador: STATE.usuarioLogado || '',
     coord: fmtCoord(coord)
   };
+}
+
+/* ====================================================================
+   EXIF — quando e onde a foto ANEXADA foi feita
+   --------------------------------------------------------------------
+   Foto tirada na hora carimba o relógio e o GPS do aparelho, e isso está
+   certo. Foto anexada, não: o apontador pode estar no escritório, dias
+   depois. Carimbar "agora/aqui" numa foto de ontem seria inventar prova.
+   Então a foto anexada carimba a data e a coordenada que ela mesma traz
+   no EXIF — e, quando não traz, sai sem coordenada em vez de sair com
+   uma coordenada errada.
+   Leitor próprio, sem biblioteca: o app precisa funcionar offline.
+   ==================================================================== */
+var EXIF_TAM = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
+
+function exifAscii(dv, p, cont) {
+  var s = '';
+  for (var i = 0; i < cont && p + i < dv.byteLength; i++) {
+    var c = dv.getUint8(p + i);
+    if (!c) break;
+    s += String.fromCharCode(c);
+  }
+  return s;
+}
+function exifRacional(dv, p, le) {
+  var n = dv.getUint32(p, le), d = dv.getUint32(p + 4, le);
+  return d ? n / d : 0;
+}
+/* grau, minuto e segundo do EXIF viram grau decimal */
+function exifGraus(dv, p, le) {
+  return exifRacional(dv, p, le) + exifRacional(dv, p + 8, le) / 60 +
+         exifRacional(dv, p + 16, le) / 3600;
+}
+/* valor de até 4 bytes mora na própria entrada; acima disso, num offset */
+function exifPonteiro(dv, T, tipo, cont, pos, le) {
+  return (EXIF_TAM[tipo] || 1) * cont <= 4 ? pos : T + dv.getUint32(pos, le);
+}
+function exifIFD(dv, T, ifd, le, cb) {
+  if (!ifd || T + ifd + 2 > dv.byteLength) return;
+  var n = dv.getUint16(T + ifd, le);
+  for (var i = 0; i < n; i++) {
+    var e = T + ifd + 2 + i * 12;
+    if (e + 12 > dv.byteLength) return;
+    cb(dv.getUint16(e, le), dv.getUint16(e + 2, le), dv.getUint32(e + 4, le), e + 8);
+  }
+}
+/* "2026:07:31 14:22:08" */
+function exifData(s) {
+  var m = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2})/.exec((s || '').trim());
+  if (!m) return null;
+  var d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function exifDoJPEG(dv) {
+  if (dv.byteLength < 4 || dv.getUint16(0) !== 0xFFD8) return null;   // não é JPEG
+  var off = 2, app1 = -1;
+  while (off + 4 <= dv.byteLength) {
+    if (dv.getUint8(off) !== 0xFF) break;
+    var marcador = dv.getUint8(off + 1);
+    if (marcador === 0xDA || marcador === 0xD9) break;   // começou a imagem
+    var tam = dv.getUint16(off + 2);
+    if (marcador === 0xE1) { app1 = off + 4; break; }
+    if (tam < 2) break;
+    off += 2 + tam;
+  }
+  if (app1 < 0 || app1 + 14 > dv.byteLength) return null;
+  if (dv.getUint32(app1) !== 0x45786966) return null;   // "Exif"
+  var T = app1 + 6;                                     // início do bloco TIFF
+  var ordem = dv.getUint16(T);
+  if (ordem !== 0x4949 && ordem !== 0x4D4D) return null;
+  var le = ordem === 0x4949;                            // 'II' = little-endian
+
+  var res = { quando: null, lat: null, lon: null };
+  var exifIfd = 0, gpsIfd = 0;
+  exifIFD(dv, T, dv.getUint32(T + 4, le), le, function (tag, tipo, cont, pos) {
+    if (tag === 0x8769) exifIfd = dv.getUint32(pos, le);
+    else if (tag === 0x8825) gpsIfd = dv.getUint32(pos, le);
+  });
+
+  try {
+    exifIFD(dv, T, exifIfd, le, function (tag, tipo, cont, pos) {
+      // 0x9003 DateTimeOriginal; 0x9004 só entra se a original faltar
+      if (tag !== 0x9003 && !(tag === 0x9004 && !res.quando)) return;
+      var d = exifData(exifAscii(dv, exifPonteiro(dv, T, tipo, cont, pos, le), cont));
+      if (d) res.quando = d;
+    });
+  } catch (e) { /* data é opcional: segue para o GPS */ }
+
+  try {
+    var refLat = 'N', refLon = 'E', vLat = null, vLon = null;
+    exifIFD(dv, T, gpsIfd, le, function (tag, tipo, cont, pos) {
+      var p = exifPonteiro(dv, T, tipo, cont, pos, le);
+      if (tag === 1) refLat = exifAscii(dv, p, cont) || 'N';
+      else if (tag === 2 && cont >= 3) vLat = exifGraus(dv, p, le);
+      else if (tag === 3) refLon = exifAscii(dv, p, cont) || 'E';
+      else if (tag === 4 && cont >= 3) vLon = exifGraus(dv, p, le);
+    });
+    if (vLat !== null && vLon !== null) {
+      res.lat = /S/i.test(refLat) ? -vLat : vLat;
+      res.lon = /W/i.test(refLon) ? -vLon : vLon;
+    }
+  } catch (e) { /* sem coordenada: a foto continua valendo */ }
+
+  return res;
+}
+
+/* Lê o EXIF do arquivo. Nunca rejeita: sem EXIF a foto entra assim mesmo. */
+function lerExif(file) {
+  return new Promise(function (resolve) {
+    var fr = new FileReader();
+    fr.onerror = function () { resolve(null); };
+    fr.onload = function () {
+      try { resolve(exifDoJPEG(new DataView(fr.result))); } catch (e) { resolve(null); }
+    };
+    // 256 KB da frente bastam: o cabeçalho vem antes dos dados da imagem
+    try { fr.readAsArrayBuffer(file.slice(0, 256 * 1024)); } catch (e) { resolve(null); }
+  });
 }
 
 function comprimirImg(file, maxLado, qualidade) {
@@ -2878,23 +2998,38 @@ function comprimirImg(file, maxLado, qualidade) {
   });
 }
 
-window.fotosSelecionadas = async function(input, idx) {
+window.fotosSelecionadas = async function(input, idx, origem) {
   const arquivos = [...(input.files || [])];
   input.value = '';
+  if (!arquivos.length) return;
+  const anexo = origem === 'anexo';
   const lista = _fotosPorServico[idx] = _fotosPorServico[idx] || [];
   const cfg = carimboCfg();
-  // uma leitura de GPS para o lote inteiro: são fotos do mesmo ponto, e
-  // pedir a posição três vezes só gastaria bateria e tempo do apontador
-  const coord = await pegarCoordenada();
-  if (!coord && cfg.ligado && cfg.campos.coord) {
+
+  // Foto tirada na hora: uma leitura de GPS para o lote inteiro — são fotos
+  // do mesmo ponto, e pedir a posição três vezes só gastaria bateria e tempo
+  // do apontador. Foto anexada não consulta o GPS do aparelho: quem anexa
+  // pode estar longe do serviço, e a posição vem do EXIF da própria foto.
+  const coordLote = anexo ? null : await pegarCoordenada();
+  if (!anexo && !coordLote && cfg.ligado && cfg.campos.coord) {
     toast('Sem sinal de GPS — a foto entra com data e hora, sem coordenada.', 'info', 4000);
   }
-  const ctx = contextoCarimbo(idx, coord);
 
+  let semCoord = 0;
   for (const f of arquivos) {
     if (lista.length >= MAX_FOTOS_SERVICO) { toast(`Máximo de ${MAX_FOTOS_SERVICO} fotos por serviço`, 'info'); break; }
     if (!/^image\//.test(f.type)) continue;
     try {
+      let coord = coordLote, quando = null;
+      if (anexo) {
+        const ex = await lerExif(f);
+        // sem data no EXIF, a data do arquivo é o palpite mais próximo do
+        // momento em que a foto foi salva no aparelho
+        quando = (ex && ex.quando) || (f.lastModified ? new Date(f.lastModified) : null);
+        if (ex && ex.lat !== null) coord = { lat: ex.lat, lon: ex.lon, prec: '' };
+        else semCoord++;
+      }
+      const ctx = contextoCarimbo(idx, coord, quando);
       // duas versões: a miniatura desenha a tela, a cheia é a que sobe.
       // As duas levam o carimbo — a miniatura para o apontador conferir
       // na hora que a foto saiu carimbada, sem precisar ampliar.
@@ -2907,7 +3042,17 @@ window.fotosSelecionadas = async function(input, idx) {
                    prec: coord ? coord.prec : '' });
     } catch (e) { toast('Não foi possível ler a imagem', 'error'); }
   }
+  if (anexo && semCoord && cfg.ligado && cfg.campos.coord) {
+    toast(semCoord === 1
+      ? 'A foto anexada não traz coordenada — entrou com a data dela, sem GPS.'
+      : `${semCoord} fotos anexadas não trazem coordenada — entraram sem GPS.`, 'info', 4000);
+  }
   renderFotosPrev(idx);
+};
+
+window.abrirFotoServico = function(idx, origem) {
+  const el = document.getElementById((origem === 'anexo' ? 'fotoArq' : 'fotoCam') + idx);
+  if (el) el.click();
 };
 
 window.removerFotoServico = function(idx, i) {
@@ -2928,8 +3073,11 @@ function renderFotosPrev(idx) {
   if (c) c.textContent = lista.length ? `${lista.length}/${MAX_FOTOS_SERVICO}` : '';
 }
 
-/* Campo de foto de uma linha de serviço. `capture="environment"` abre direto
-   a câmera traseira no celular, que é como o apontador usa. */
+/* Campo de foto de uma linha de serviço. Dois caminhos, porque o trabalho
+   tem dois momentos: "Tirar foto" (`capture="environment"`) abre direto a
+   câmera traseira, que é como o apontador usa no canteiro; "Anexar foto"
+   abre a galeria/arquivos, para quem fotografou antes e lança depois — e
+   nesse caso o carimbo usa a data e a coordenada do EXIF da própria foto. */
 function campoFotos(idx) {
   const cfg = carimboCfg();
   return `
@@ -2941,12 +3089,20 @@ function campoFotos(idx) {
           ${ic('ajustes')} Carimbo: ${cfg.ligado ? 'ligado' : 'desligado'}
         </button>
       </div>
-      <input type="file" accept="image/*" capture="environment" multiple
-             onchange="fotosSelecionadas(this,${idx})" style="font-size:13px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
+        <button type="button" class="btn btn-outline btn-sm" onclick="abrirFotoServico(${idx},'camera')">
+          ${ic('camera',15)} Tirar foto</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="abrirFotoServico(${idx},'anexo')">
+          ${ic('galeria',15)} Anexar foto</button>
+      </div>
+      <input id="fotoCam${idx}" type="file" accept="image/*" capture="environment" multiple
+             onchange="fotosSelecionadas(this,${idx},'camera')" style="display:none">
+      <input id="fotoArq${idx}" type="file" accept="image/*" multiple
+             onchange="fotosSelecionadas(this,${idx},'anexo')" style="display:none">
       <div id="fotosPrev${idx}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
       <div style="font-size:11px;color:var(--muted);margin-top:4px">
         Comprovação de execução — vai para o Drive privado e aparece na Galeria.
-        ${cfg.ligado ? 'A foto sai carimbada com data, hora e o que estiver ligado no carimbo.' : ''}
+        ${cfg.ligado ? 'A foto sai carimbada com data, hora e o que estiver ligado no carimbo. Na foto anexada, data e coordenada vêm da própria foto.' : ''}
       </div>
     </div>`;
 }
