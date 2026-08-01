@@ -307,6 +307,9 @@ html,body{
   font-size:14px;
   font-feature-settings:'ss01','ss02','cv11';
   -webkit-font-smoothing:antialiased;
+  /* trava o repique/arrasto horizontal (rubber-band) no mobile */
+  overscroll-behavior-x:none;
+  max-width:100%;
 }
 .mono{font-family:'JetBrains Mono',monospace}
 
@@ -1644,12 +1647,15 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 }
 
 /* ===== Ajustes para evitar overflow horizontal global (jeito correto)
-   IMPORTANTE: NÃO usar `overflow-x: hidden` em .page nem .main —
-   eles são flex column containers; overflow-x:hidden força overflow-y:auto
-   por spec CSS, e o hero colapsa pra 30px de altura. Use min-width:0 nos
-   flex children para que possam encolher dentro do pai. ===== */
+   O .main tem overflow-y:auto; como o overflow-x ficava `visible`, a spec o
+   computava para `auto` → surgia uma rolagem horizontal de poucos px (o
+   "arrasta de lado" no mobile). Correção: `overflow-x: clip` (NUNCA `hidden`
+   em .page/.main — foi o `hidden` que colapsava o hero pra 30px). `clip` corta
+   só o eixo X sem forçar o overflow-y, então o hero NÃO colapsa. Mantemos
+   min-width:0 nos flex children para poderem encolher dentro do pai. ===== */
 @media (max-width: 768px) {
   .main, .page { min-width: 0; }
+  .main { overflow-x: clip; overscroll-behavior-x: none; }
   .card, .exec-kpi, .exec-hero, .cal-card, .avenue-card { min-width: 0; max-width: 100%; }
   .hero-main, .hero-side { min-width: 0; }
   .card-body.flush { overflow-x: auto; -webkit-overflow-scrolling: touch; }
