@@ -317,6 +317,12 @@ html,body{
   display:inline-block;vertical-align:-0.14em;
   flex-shrink:0;overflow:visible;
 }
+/* Massa sob o contorno. Os ícones de frente carregam um <g class="ic-fill">
+   com a silhueta sólida: só traço fino some quando o ícone aparece grande
+   sobre painel escuro. A cor vem do currentColor, então acompanha o tema e
+   a cor da frente sem ninguém declarar nada. */
+.ic .ic-fill{fill:currentColor;fill-opacity:.16;stroke:none}
+.ic .ic-fill *{fill:currentColor;stroke:none}
 /* dentro de botão e de célula, o ícone alinha pelo miolo do texto */
 .btn .ic,.pill .ic,.nav-item .ic,td .ic,th .ic{vertical-align:-0.16em}
 /* ícone sozinho no botão (sem rótulo) fica centralizado */
@@ -923,8 +929,11 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .tech-card-image {
   height: 160px; position: relative; overflow: hidden;
   border-bottom: 1px solid var(--border);
+  /* o halo herda a cor da frente (--f-halo), a mesma do gráfico Tempo ×
+     Estaca: o cartão e a linha do gráfico passam a falar da mesma frente
+     com a mesma cor, em vez de tudo laranja */
   background:
-    radial-gradient(120px 120px at 20% 42%, rgba(224,120,60,.20) 0%, rgba(224,120,60,0) 70%),
+    radial-gradient(150px 150px at 22% 44%, var(--f-halo, rgba(224,120,60,.22)) 0%, transparent 70%),
     repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 1px, transparent 1px 22px),
     repeating-linear-gradient(0deg, rgba(255,255,255,.05) 0 1px, transparent 1px 22px),
     linear-gradient(150deg, #2b241c 0%, #191510 60%, #120f0b 100%);
@@ -938,12 +947,15 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .tech-card-3d:hover .tech-card-image::before { opacity: .55; }
 .tech-card-image::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0) 62%); }
 .tech-card-marca {
-  position: absolute; left: 18px; top: 50%; transform: translateY(-54%);
-  color: var(--acc); opacity: .9; line-height: 0; z-index: 1;
-  filter: drop-shadow(0 2px 10px rgba(0,0,0,.45));
+  position: absolute; left: 20px; top: 50%; transform: translateY(-56%);
+  color: var(--f-cor, var(--acc)); line-height: 0; z-index: 1;
+  filter: drop-shadow(0 3px 14px rgba(0,0,0,.55));
   transition: transform .4s cubic-bezier(0.2,0.8,0.2,1);
 }
-.tech-card-marca .ic { stroke-width: 1.25; vertical-align: 0; }
+/* traço mais grosso do que no resto do conjunto: aqui o ícone é o
+   elemento principal do cartão, não um adorno ao lado de um rótulo */
+.tech-card-marca .ic { stroke-width: 1.45; vertical-align: 0; }
+.tech-card-marca .ic .ic-fill { fill-opacity: .22; }
 .tech-card-3d:hover .tech-card-marca { transform: translateY(-54%) scale(1.06); }
 .tech-card-title-overlay { position: absolute; bottom: 14px; left: 16px; right: 16px; color: #fff; z-index: 2; display: flex; justify-content: space-between; align-items: flex-end; }
 .tech-card-title { font-size: 18px; font-weight: 800; letter-spacing: -0.02em; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
@@ -5081,8 +5093,8 @@ function renderExecutivo() {
           // sistema e frente nova já entra desenhada, sem cadastrar arquivo.
           return `
           <div class="tech-card-3d ${STATE.filtros.frente === f ? 'active' : ''} stagger-item" style="animation-delay:.${25 + i*5}s" onclick="atualizarFiltro('frente', '${f}')">
-            <div class="tech-card-image">
-               <span class="tech-card-marca">${ic(icFrente(f), 74)}</span>
+            <div class="tech-card-image" style="--f-cor:${corDaFrente(f)};--f-halo:${corDaFrente(f, 0.22)}">
+               <span class="tech-card-marca">${ic(icFrente(f), 84)}</span>
                <div class="tech-card-title-overlay">
                   <div class="tech-card-title">${f}</div>
                </div>
