@@ -2998,6 +2998,29 @@ function comprimirImg(file, maxLado, qualidade) {
   });
 }
 
+/* Reduz uma imagem que JÁ está em data URI (a foto que voltou do Drive) para
+   o tamanho que o papel realmente imprime. Uma foto ocupa ~90 mm de largura
+   no anexo: 800 px sobram, e o PDF que vai pro grupo não fica pesado.
+   Devolve {uri,w,h} — a proporção é o que impede a foto de sair esticada. */
+function reduzirDataUri(dataUri, maxLado, qualidade) {
+  return new Promise(function (resolve) {
+    var img = new Image();
+    img.onerror = function () { resolve(null); };
+    img.onload = function () {
+      try {
+        var w = img.width, h = img.height;
+        var maior = Math.max(w, h);
+        if (maior > maxLado) { var k = maxLado / maior; w = Math.round(w * k); h = Math.round(h * k); }
+        var c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').drawImage(img, 0, 0, w, h);
+        resolve({ uri: c.toDataURL('image/jpeg', qualidade), w: w, h: h });
+      } catch (e) { resolve(null); }
+    };
+    img.src = dataUri;
+  });
+}
+
 window.fotosSelecionadas = async function(input, idx, origem) {
   const arquivos = [...(input.files || [])];
   input.value = '';
@@ -9831,7 +9854,9 @@ function gerarPDFDiario(data) {
 function gerarPDFInternoTurnoV4() {
   // Agora passamos o DIARIO_TURNO_ATIVO para a função saber qual turno isolar
   if (typeof gerarPDFInterno === 'function') {
-    gerarPDFInterno(DIARIO_V4.data, DIARIO_TURNO_ATIVO);
+    // agora é assíncrona (espera as fotos do anexo): a falha precisa de dono
+    Promise.resolve(gerarPDFInterno(DIARIO_V4.data, DIARIO_TURNO_ATIVO))
+      .catch(() => toast('Não consegui gerar o PDF Interno', 'error'));
   } else {
     toast('PDF Interno indisponível', 'error');
   }
@@ -9848,9 +9873,110 @@ function gerarPDFDiarioV4(data) {
 
 
 // ====================================================================
+// ANEXO FOTOGRÁFICO DO PDF
+// --------------------------------------------------------------------
+// A foto só provava execução para quem abria o app. Quem recebe o PDF no
+// grupo — engenheiro, fiscal, cliente — via a tabela e acreditava. Agora a
+// comprovação viaja junto: as fotos dos serviços do dia entram no fim do
+// relatório, 4 por página, cada uma com o serviço a que pertence.
+// Data, hora e coordenada não vão em legenda: já estão QUEIMADAS na
+// imagem pelo carimbo, que é o que dá valor de prova à foto.
+// ====================================================================
+const MAX_FOTOS_PDF = 24;   // 6 páginas: o suficiente sem estourar o WhatsApp
+
+function legendaServicoPDF(linha) {
+  const pac = (STATE && STATE.pacotes) ? STATE.pacotes.find(p => p['ID'] === linha['Pacote_ID']) : null;
+  const frente = pac ? (pac['Frente'] || '') : '';
+  return ((frente ? frente + ' · ' : '') + (linha['Pacote_Nome'] || '')).trim();
+}
+
+/* Acrescenta as páginas de fotos ao documento. Devolve quantas entraram.
+   Nunca derruba o PDF: foto que não baixa ou não decodifica é pulada, e o
+   relatório sai igual — melhor um RDO sem anexo do que RDO nenhum. */
+async function anexoFotosPDF(doc, itens, rodape) {
+  const alvos = [];
+  let disponiveis = 0;
+  (itens || []).forEach(it => fotosDaLinha(it.linha).forEach(ponteiro => {
+    disponiveis++;
+    if (alvos.length < MAX_FOTOS_PDF) alvos.push({ fileId: fotoFileId(ponteiro), it });
+  }));
+  if (!alvos.length) return 0;
+
+  toast(`Anexando ${alvos.length} foto(s) ao PDF…`, 'info', 5000);
+
+  // de quatro em quatro: aproveita a fila do navegador sem disparar 24
+  // chamadas de uma vez no Apps Script (as já vistas saem do cache local)
+  const prontas = [];
+  for (let i = 0; i < alvos.length; i += 4) {
+    const lote = alvos.slice(i, i + 4);
+    const uris = await Promise.all(lote.map(a =>
+      baixarFotoServidor(a.fileId).catch(() => '')));
+    for (let j = 0; j < lote.length; j++) {
+      if (!uris[j]) continue;
+      const img = await reduzirDataUri(uris[j], 800, .68);
+      if (img) prontas.push({ img, it: lote[j].it });
+    }
+  }
+  if (!prontas.length) {
+    toast('As fotos não vieram do Drive — o PDF sai sem o anexo.', 'info', 5000);
+    return 0;
+  }
+
+  const PW = 210, PH = 297, ML = 12, TW = 186;
+  const NAVY = [26, 22, 18], TERRACOTA = [201, 114, 64], CINZA = [120, 117, 112];
+  const COLS = 2, POR_PAGINA = 4, GAP = 6;
+  const CW = (TW - GAP) / COLS;              // 90 mm de largura por foto
+  const BOXH = 110, LEGH = 12, Y0 = 24;      // moldura + legenda embaixo
+  const paginas = Math.ceil(prontas.length / POR_PAGINA);
+
+  for (let p = 0; p < paginas; p++) {
+    doc.addPage();
+    doc.setFillColor(...NAVY); doc.rect(0, 0, PW, 18, 'F');
+    doc.setFillColor(...TERRACOTA); doc.rect(0, 18, PW, 2, 'F');
+    doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255);
+    doc.text('REGISTRO FOTOGRÁFICO', ML, 12);
+    doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(180, 175, 168);
+    doc.text('Fotos carimbadas na origem  ·  ' + (p + 1) + '/' + paginas,
+             PW - ML, 12, { align: 'right' });
+
+    prontas.slice(p * POR_PAGINA, (p + 1) * POR_PAGINA).forEach((f, i) => {
+      const cx = ML + (i % COLS) * (CW + GAP);
+      const cy = Y0 + Math.floor(i / COLS) * (BOXH + LEGH + 4);
+
+      doc.setFillColor(245, 243, 239); doc.rect(cx, cy, CW, BOXH, 'F');
+      // encaixa dentro da moldura pela menor escala: a foto nunca estica
+      const k = Math.min(CW / f.img.w, BOXH / f.img.h);
+      const w = f.img.w * k, h = f.img.h * k;
+      try {
+        doc.addImage(f.img.uri, 'JPEG', cx + (CW - w) / 2, cy + (BOXH - h) / 2, w, h);
+      } catch (e) { /* imagem recusada pelo jsPDF: fica a moldura vazia */ }
+
+      // a legenda é uma linha só: nome comprido sai com reticência, para
+      // ninguém ler um serviço truncado achando que é o nome inteiro
+      const umaLinha = t => {
+        const l = doc.splitTextToSize(String(t || ''), CW - 2);
+        return l.length > 1 ? l[0].replace(/\s+\S*$/, '') + '…' : (l[0] || '');
+      };
+      doc.setFontSize(7); doc.setFont('helvetica', 'bold'); doc.setTextColor(...NAVY);
+      doc.text(umaLinha(legendaServicoPDF(f.it.linha)) || '—', cx, cy + BOXH + 5);
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(...CINZA);
+      const sub = [f.it.linha['Local_Estaca'], f.it.turno].filter(Boolean).join('  ·  ');
+      if (sub) doc.text(umaLinha(sub), cx, cy + BOXH + 9);
+    });
+
+    if (rodape) rodape();
+  }
+
+  if (disponiveis > alvos.length) {
+    toast(`O anexo levou as ${alvos.length} primeiras de ${disponiveis} fotos do dia.`, 'info', 6000);
+  }
+  return prontas.length;
+}
+
+// ====================================================================
 // PDF INTERNO — Visual, pra mandar no grupo (sem logos formais)
 // ====================================================================
-function gerarPDFInterno(data, turnoFocus) {
+async function gerarPDFInterno(data, turnoFocus) {
   // Tornando a função à prova de falhas: se o botão não enviou o turno, ela mesma descobre qual tela está aberta
   const focus = turnoFocus || (typeof DIARIO_TURNO_ATIVO !== 'undefined' ? DIARIO_TURNO_ATIVO : null);
 
@@ -10296,14 +10422,23 @@ function gerarPDFInterno(data, turnoFocus) {
   if (focus === 'diurno') rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—');
   if (focus === 'noturno') rodapeTxt = 'Apontador Noturno: ' + (d.apontador_noturno || '—');
 
-  rect(0, PH - 14, PW, 14, NAVY);
-  sf(8, 'bold', [255, 255, 255]);
-  tx('GESTOR ENGENHARIA', ML, PH - 8);
-  sf(7, 'normal', [180, 175, 168]);
-  tx(rodapeTxt, ML, PH - 4);
-  
-  sf(7, 'normal', [180, 175, 168]);
-  tx('Gerado em ' + new Date().toLocaleString('pt-BR'), PW - ML, PH - 4, { align: 'right' });
+  // virou função porque o anexo de fotos acrescenta páginas, e página de RDO
+  // sem o rodapé assinado não se identifica quando é impressa solta
+  function rodape() {
+    rect(0, PH - 14, PW, 14, NAVY);
+    sf(8, 'bold', [255, 255, 255]);
+    tx('GESTOR ENGENHARIA', ML, PH - 8);
+    sf(7, 'normal', [180, 175, 168]);
+    tx(rodapeTxt, ML, PH - 4);
+    tx('Gerado em ' + new Date().toLocaleString('pt-BR'), PW - ML, PH - 4, { align: 'right' });
+  }
+  rodape();
+
+  // ANEXO FOTOGRÁFICO — a comprovação viaja junto com o relatório
+  const itensFoto = servicosDiurnos.map(l => ({ linha: l, turno: 'Diurno' }))
+    .concat(servicosNoturnos.map(l => ({ linha: l, turno: 'Noturno' })));
+  try { await anexoFotosPDF(doc, itensFoto, rodape); }
+  catch (e) { toast('Não consegui anexar as fotos — o PDF sai sem elas.', 'info', 5000); }
 
   // Nomeia o arquivo de acordo com o turno para não sobrepor se salvarem ambos
   let fname = 'RDO_INTERNO_' + data.replace(/-/g, '_');
