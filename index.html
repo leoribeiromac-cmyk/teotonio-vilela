@@ -8507,7 +8507,13 @@ async function salvarRDO() {
       let fotosNaFila = 0;
       Object.keys(fotosEnviar).forEach(id => fotosEnviar[id].forEach((f, i) => {
         try {
-          outboxAdicionar({ kind: 'foto', params: { action: 'rdoFoto', id, idx: i, foto: f.full },
+          // lat/lon acompanham a foto na fila. Este é o caminho de QUEM
+          // ESTÁ SEM SINAL — ou seja, o caso mais comum no canteiro. Sem
+          // isso a foto subia carimbada (o carimbo é queimado na imagem)
+          // mas chegava na planilha sem coordenada, justamente quando o
+          // apontador está em campo.
+          outboxAdicionar({ kind: 'foto', params: { action: 'rdoFoto', id, idx: i, foto: f.full,
+            lat: f.lat || '', lon: f.lon || '', prec: f.prec || '' },
             descricao: 'foto do serviço ' + id });
           fotosNaFila++;
         } catch (err) { /* memória do aparelho cheia: a foto se perde, o RDO não */ }
