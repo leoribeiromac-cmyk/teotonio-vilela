@@ -2850,24 +2850,55 @@ function desenharCarimbo(dataUri, ctxDados, cfg) {
   });
 }
 
+/* Contexto de carimbo de chaves que NÃO são do formulário de lançamento —
+   a foto anexada depois, pelo Histórico, se carimba com os dados do serviço
+   JÁ GRAVADO, não com os do rascunho aberto na tela. */
+let _ctxFotoPorChave = {};
+/* Quantas fotos ainda cabem numa chave. No lançamento são as 3 do serviço;
+   no Histórico, as 3 MENOS as que a linha já tem — senão o limite por
+   serviço seria burlado só por salvar duas vezes. */
+let _limiteFotoPorChave = {};
+function limiteFotos(chave) {
+  const l = _limiteFotoPorChave[chave];
+  return l == null ? MAX_FOTOS_SERVICO : l;
+}
+
+function contextoCarimboDeLinha(r) {
+  var pac = STATE.pacotes.find(function (p) {
+    return getCSVField(p, 'ID') === (getCSVField(r, 'Pacote_ID') || '');
+  });
+  return {
+    turno: getCSVField(r, 'Turno') || '',
+    frente: pac ? (getCSVField(pac, 'Frente') || '') : '',
+    pacote: (pac && getCSVField(pac, 'Pacote')) || getCSVField(r, 'Pacote_Nome') || '',
+    estaca: getCSVField(r, 'Local_Estaca') || '',
+    apontador: getCSVField(r, 'Apontador') || ''
+  };
+}
+
 /* Contexto do carimbo lido do serviço que está sendo preenchido.
    `quando` permite carimbar a foto com a hora em que ELA foi feita (foto
    anexada da galeria), e não com a hora do lançamento. */
 function contextoCarimbo(idx, coord, quando) {
-  var s = (STATE.draft && STATE.draft.servicos && STATE.draft.servicos[idx]) || {};
-  var pac = STATE.pacotes.find(function (p) { return getCSVField(p, 'ID') === s.pacoteId; });
   var agora = quando instanceof Date && !isNaN(quando) ? quando : new Date();
-  var est = [s.estacaIni, s.estacaFim].filter(Boolean);
-  return {
+  var base = _ctxFotoPorChave[idx];
+  if (!base) {
+    var s = (STATE.draft && STATE.draft.servicos && STATE.draft.servicos[idx]) || {};
+    var pac = STATE.pacotes.find(function (p) { return getCSVField(p, 'ID') === s.pacoteId; });
+    var est = [s.estacaIni, s.estacaFim].filter(Boolean);
+    base = {
+      turno: (STATE.draft && STATE.draft.turno) || '',
+      frente: s.frente || '',
+      pacote: (pac && getCSVField(pac, 'Pacote')) || '',
+      estaca: est.length ? (est.length > 1 && est[0] !== est[1] ? est[0] + ' a ' + est[1] : est[0]) : '',
+      apontador: STATE.usuarioLogado || ''
+    };
+  }
+  return Object.assign({}, base, {
     data: agora.toLocaleDateString('pt-BR'),
     hora: agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    turno: (STATE.draft && STATE.draft.turno) || '',
-    frente: s.frente || '',
-    pacote: (pac && getCSVField(pac, 'Pacote')) || '',
-    estaca: est.length ? (est.length > 1 && est[0] !== est[1] ? est[0] + ' a ' + est[1] : est[0]) : '',
-    apontador: STATE.usuarioLogado || '',
     coord: fmtCoord(coord)
-  };
+  });
 }
 
 /* ====================================================================
@@ -3052,7 +3083,7 @@ window.fotosSelecionadas = async function(input, idx, origem) {
 
   let semCoord = 0;
   for (const f of arquivos) {
-    if (lista.length >= MAX_FOTOS_SERVICO) { toast(`Máximo de ${MAX_FOTOS_SERVICO} fotos por serviço`, 'info'); break; }
+    if (lista.length >= limiteFotos(idx)) { toast(`Máximo de ${MAX_FOTOS_SERVICO} fotos por serviço`, 'info'); break; }
     if (!/^image\//.test(f.type)) continue;
     try {
       let coord = coordLote, quando = null;
@@ -3101,18 +3132,36 @@ function renderFotosPrev(idx) {
   const lista = _fotosPorServico[idx] || [];
   box.innerHTML = lista.map((f, i) => `<div style="position:relative">
     <img src="${f.thumb}" alt="foto ${i + 1}" style="width:74px;height:74px;object-fit:cover;border-radius:8px;border:1px solid var(--border-strong)">
-    <button type="button" onclick="removerFotoServico(${idx},${i})" title="Remover foto" aria-label="Remover foto"
+    <button type="button" onclick="removerFotoServico('${idx}',${i})" title="Remover foto" aria-label="Remover foto"
       style="position:absolute;top:-7px;right:-7px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;padding:0;border-radius:50%;background:var(--red);color:#fff;border:none;cursor:pointer">${ic('fechar',11)}</button>
   </div>`).join('');
   const c = document.getElementById('fotosCount' + idx);
-  if (c) c.textContent = lista.length ? `${lista.length}/${MAX_FOTOS_SERVICO}` : '';
+  if (c) c.textContent = lista.length ? `${lista.length}/${limiteFotos(idx)}` : '';
 }
 
-/* Campo de foto de uma linha de serviço. Dois caminhos, porque o trabalho
-   tem dois momentos: "Tirar foto" (`capture="environment"`) abre direto a
-   câmera traseira, que é como o apontador usa no canteiro; "Anexar foto"
-   abre a galeria/arquivos, para quem fotografou antes e lança depois — e
-   nesse caso o carimbo usa a data e a coordenada do EXIF da própria foto. */
+/* Os dois caminhos de foto, porque o trabalho tem dois momentos:
+   "Tirar foto" (`capture="environment"`) abre direto a câmera traseira, que
+   é como o apontador usa no canteiro; "Anexar foto" abre a galeria/arquivos,
+   para quem fotografou antes e lança depois — e nesse caso o carimbo usa a
+   data e a coordenada do EXIF da própria foto.
+   `chave` identifica de quem são as fotos: o índice do serviço no formulário
+   de lançamento, ou 'h<n>' na edição pelo Histórico. */
+function botoesFoto(chave) {
+  return `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
+        <button type="button" class="btn btn-outline btn-sm" onclick="abrirFotoServico('${chave}','camera')">
+          ${ic('camera',15)} Tirar foto</button>
+        <button type="button" class="btn btn-outline btn-sm" onclick="abrirFotoServico('${chave}','anexo')">
+          ${ic('galeria',15)} Anexar foto</button>
+      </div>
+      <input id="fotoCam${chave}" type="file" accept="image/*" capture="environment" multiple
+             onchange="fotosSelecionadas(this,'${chave}','camera')" style="display:none">
+      <input id="fotoArq${chave}" type="file" accept="image/*" multiple
+             onchange="fotosSelecionadas(this,'${chave}','anexo')" style="display:none">
+      <div id="fotosPrev${chave}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>`;
+}
+
+/* Campo de foto de uma linha de serviço no formulário de lançamento. */
 function campoFotos(idx) {
   const cfg = carimboCfg();
   return `
@@ -3124,17 +3173,7 @@ function campoFotos(idx) {
           ${ic('ajustes')} Carimbo: ${cfg.ligado ? 'ligado' : 'desligado'}
         </button>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:2px">
-        <button type="button" class="btn btn-outline btn-sm" onclick="abrirFotoServico(${idx},'camera')">
-          ${ic('camera',15)} Tirar foto</button>
-        <button type="button" class="btn btn-outline btn-sm" onclick="abrirFotoServico(${idx},'anexo')">
-          ${ic('galeria',15)} Anexar foto</button>
-      </div>
-      <input id="fotoCam${idx}" type="file" accept="image/*" capture="environment" multiple
-             onchange="fotosSelecionadas(this,${idx},'camera')" style="display:none">
-      <input id="fotoArq${idx}" type="file" accept="image/*" multiple
-             onchange="fotosSelecionadas(this,${idx},'anexo')" style="display:none">
-      <div id="fotosPrev${idx}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+      ${botoesFoto(idx)}
       <div style="font-size:11px;color:var(--muted);margin-top:4px">
         Comprovação de execução — vai para o Drive privado e aparece na Galeria.
         ${cfg.ligado ? 'A foto sai carimbada com data, hora e o que estiver ligado no carimbo. Na foto anexada, data e coordenada vêm da própria foto.' : ''}
@@ -3339,17 +3378,19 @@ async function baixarFotoServidor(fileId) {
 
 // Sobe as fotos DEPOIS que os serviços foram gravados: cada foto vai ligada
 // ao id do serviço, que o app gera antes de enviar o lote.
-async function enviarFotosDoLote(mapaIdParaFotos) {
+async function enviarFotosDoLote(mapaIdParaFotos, idxBase) {
   const ids = Object.keys(mapaIdParaFotos);
-  if (!ids.length) return;
+  if (!ids.length) return 0;
   let enviadas = 0, falhas = 0;
   for (const id of ids) {
     const lista = mapaIdParaFotos[id];
     for (let i = 0; i < lista.length; i++) {
       const f = lista[i];
       // lat/lon vão SEPARADOS da imagem: carimbo na foto é prova para
-      // quem olha, coluna na planilha é o que dá para filtrar e mapear
-      const params = { action: 'rdoFoto', id, idx: i, foto: f.full,
+      // quem olha, coluna na planilha é o que dá para filtrar e mapear.
+      // idxBase desloca a numeração quando a foto é anexada a um serviço
+      // que já tem fotos, para o arquivo no Drive não repetir nome.
+      const params = { action: 'rdoFoto', id, idx: (idxBase || 0) + i, foto: f.full,
                        lat: f.lat || '', lon: f.lon || '', prec: f.prec || '',
                        ...authParams() };
       try {
@@ -3365,6 +3406,7 @@ async function enviarFotosDoLote(mapaIdParaFotos) {
   }
   if (enviadas) toast(`${enviadas} foto(s) enviada(s)`, 'success', 3000);
   if (falhas) toast(`${falhas} foto(s) não subiram. O serviço foi salvo assim mesmo.`, 'info', 6000);
+  return enviadas;
 }
 
 // ====================================================================
@@ -6832,6 +6874,7 @@ function renderHistoricoServicos() {
         .join('');
 
       const esc = v => String(v).replace(/"/g,'&quot;');
+      const jaTemFotos = fotosDaLinha(r).length;
 
       return `
         <tr>
@@ -6904,6 +6947,28 @@ function renderHistoricoServicos() {
                   <button class="btn btn-primary btn-sm" id="hedit-btn-${idx}" onclick="histSalvarEdicao(${idx})">Salvar</button>
                   <button class="btn btn-ghost btn-sm" onclick="histCancelarEdicao(${idx})">Cancelar</button>
                 </div>
+              </div>
+              <div style="margin-top:12px;padding-top:10px;border-top:1px dashed var(--border)">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <div style="font-size:11px;font-weight:600;color:var(--muted)">
+                    FOTOS <span id="fotosCounth${idx}" style="font-weight:400"></span>
+                  </div>
+                  ${jaTemFotos ? `<span class="pill" style="font-size:10px">${jaTemFotos} já anexada${jaTemFotos>1?'s':''}</span>` : ''}
+                  <button type="button" class="btn btn-ghost btn-sm" style="margin-left:auto;padding:3px 8px"
+                          onclick="abrirConfigCarimbo()" title="Escolher o que aparece carimbado na foto">
+                    ${ic('ajustes')} Carimbo
+                  </button>
+                </div>
+                <div id="hfotos-exist-${idx}" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+                ${jaTemFotos >= MAX_FOTOS_SERVICO
+                  ? `<div style="font-size:11px;color:var(--muted);margin-top:8px">
+                       Este serviço já tem as ${MAX_FOTOS_SERVICO} fotos.</div>`
+                  : botoesFoto('h' + idx) + `
+                <div style="font-size:11px;color:var(--muted);margin-top:6px">
+                  A foto entra no serviço já lançado e sobe ao clicar em <b>Salvar</b>.
+                  Tirada agora, carimba a hora de agora; anexada, carimba a data e a
+                  coordenada que a própria foto traz.
+                </div>`}
               </div>
             </div>
           </td>
@@ -6982,14 +7047,53 @@ window.histEditarServico = function(idx) {
     const toggle = document.getElementById(`hedit-toggle-${idx}`);
     if (toggle) toggle.style.color = 'var(--primary)';
     row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    // A foto anexada aqui é de um serviço que JÁ EXISTE: o carimbo tem de
+    // sair com a frente, o pacote e a estaca DELE, não com o que estiver
+    // no formulário de lançamento.
+    const r = [...STATE.rdoavanco].reverse()[idx];
+    if (r) {
+      const jaTem = fotosDaLinha(r);
+      _ctxFotoPorChave['h' + idx] = contextoCarimboDeLinha(r);
+      _limiteFotoPorChave['h' + idx] = Math.max(0, MAX_FOTOS_SERVICO - jaTem.length);
+      histCarregarFotosExistentes(idx, jaTem);
+    }
+    renderFotosPrev('h' + idx);
   }
 };
+
+/* Mostra o que o serviço já tem, para ninguém anexar de novo a mesma foto
+   nem achar que está começando do zero. Vem do cache local quando já foi
+   vista na Galeria; clicando, amplia. */
+async function histCarregarFotosExistentes(idx, ponteiros) {
+  const box = document.getElementById(`hfotos-exist-${idx}`);
+  if (!box || !ponteiros.length) return;
+  box.innerHTML = `<span style="font-size:11px;color:var(--muted)">Carregando ${ponteiros.length} foto(s) já anexada(s)…</span>`;
+  const partes = [];
+  for (const ponteiro of ponteiros) {
+    const fileId = fotoFileId(ponteiro);
+    const src = await baixarFotoServidor(fileId);
+    if (src) {
+      partes.push(`<img src="${src}" alt="foto já anexada" title="Foto já anexada — clique para ampliar"
+        onclick="ampliarFoto('${fileId}','')" loading="lazy"
+        style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;
+               border:1px solid var(--border-strong);opacity:.85">`);
+    }
+  }
+  box.innerHTML = partes.length ? partes.join('')
+    : `<span style="font-size:11px;color:var(--muted)">${ponteiros.length} foto(s) no Drive — não consegui carregar a miniatura agora.</span>`;
+}
 
 window.histCancelarEdicao = function(idx) {
   const row = document.getElementById(`hist-edit-row-${idx}`);
   if (row) row.style.display = 'none';
   const toggle = document.getElementById(`hedit-toggle-${idx}`);
   if (toggle) toggle.style.color = '';
+  // fecha sem salvar = descarta o que foi escolhido, senão a foto
+  // reapareceria pendurada na próxima vez que a linha abrisse
+  delete _fotosPorServico['h' + idx];
+  delete _ctxFotoPorChave['h' + idx];
+  delete _limiteFotoPorChave['h' + idx];
 };
 
 window.histSalvarEdicao = async function(idx) {
@@ -7028,6 +7132,16 @@ window.histSalvarEdicao = async function(idx) {
     const result = await jsonp(CONFIG.appsScript, { action: 'updateRDO', payload: JSON.stringify(payload), ...authParams() }, 0);
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
     toast('Lançamento atualizado', 'success');
+
+    // As fotos escolhidas sobem DEPOIS do update, ligadas ao id que já
+    // existe: o backend anexa o ponteiro ao que a linha já tinha, então
+    // anexar depois não apaga a foto de antes.
+    const novas = _fotosPorServico['h' + idx] || [];
+    if (novas.length) {
+      const jaTinha = fotosDaLinha(r).length;
+      toast(`Enviando ${novas.length} foto(s)…`, 'info', 2500);
+      await enviarFotosDoLote({ [id]: novas }, jaTinha);
+    }
     histCancelarEdicao(idx);
     setTimeout(() => carregarTudo(), 800);
   } catch(e) {
