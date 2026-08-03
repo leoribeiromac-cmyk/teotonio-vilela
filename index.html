@@ -3322,15 +3322,25 @@ function cbAtualizarPreview() {
 /* Guarda local da imagem cheia. O localStorage é pequeno demais para foto;
    a miniatura basta na tela, a cheia fica aqui para ampliar e baixar. */
 const IDB_NOME = 'teotonioFotos', IDB_STORE = 'fotos';
+let _idbDbPromise = null;
 function idbAbrir() {
-  return new Promise((res, rej) => {
-    const r = indexedDB.open(IDB_NOME, 1);
-    r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains(IDB_STORE)) d.createObjectStore(IDB_STORE); };
-    r.onsuccess = () => res(r.result);
-    r.onerror = () => rej(r.error);
-  });
+  if (!_idbDbPromise) {
+    _idbDbPromise = new Promise((res, rej) => {
+      const r = indexedDB.open(IDB_NOME, 1);
+      r.onupgradeneeded = () => { const d = r.result; if (!d.objectStoreNames.contains(IDB_STORE)) d.createObjectStore(IDB_STORE); };
+      r.onsuccess = () => res(r.result);
+      r.onerror = () => { _idbDbPromise = null; rej(r.error); };
+    });
+  }
+  return _idbDbPromise;
 }
+
+const _fotoMemCache = new Map();
+const _fotoPendingRequests = new Map();
+
 async function fotoGuardar(chave, dataUri) {
+  if (!chave || !dataUri) return;
+  _fotoMemCache.set(chave, dataUri);
   try {
     const d = await idbAbrir();
     await new Promise((res, rej) => {
@@ -3338,16 +3348,21 @@ async function fotoGuardar(chave, dataUri) {
       t.objectStore(IDB_STORE).put(dataUri, chave);
       t.oncomplete = res; t.onerror = () => rej(t.error);
     });
-  } catch (e) { /* sem IndexedDB: a foto é buscada de novo quando precisar */ }
+  } catch (e) { /* sem IndexedDB: a foto fica no cache de memória durante a sessão */ }
 }
+
 async function fotoLer(chave) {
+  if (!chave) return '';
+  if (_fotoMemCache.has(chave)) return _fotoMemCache.get(chave);
   try {
     const d = await idbAbrir();
-    return await new Promise((res, rej) => {
+    const val = await new Promise((res, rej) => {
       const t = d.transaction(IDB_STORE, 'readonly');
       const q = t.objectStore(IDB_STORE).get(chave);
       q.onsuccess = () => res(q.result || ''); q.onerror = () => rej(q.error);
     });
+    if (val) _fotoMemCache.set(chave, val);
+    return val;
   } catch (e) { return ''; }
 }
 
@@ -3367,13 +3382,31 @@ function fotosDaLinha(r) {
 }
 
 async function baixarFotoServidor(fileId) {
+  if (!fileId) return '';
   const cache = await fotoLer(fileId);
   if (cache) return cache;
+  
+  if (_fotoPendingRequests.has(fileId)) {
+    return _fotoPendingRequests.get(fileId);
+  }
+  
+  const promise = (async () => {
+    try {
+      const r = await jsonp(CONFIG.appsScript, { action: 'obterFoto', fileId, ...authParams() }, 0);
+      if (r && r.ok && r.dataUri) {
+        fotoGuardar(fileId, r.dataUri);
+        return r.dataUri;
+      }
+    } catch (e) {}
+    return '';
+  })();
+  
+  _fotoPendingRequests.set(fileId, promise);
   try {
-    const r = await jsonp(CONFIG.appsScript, { action: 'obterFoto', fileId, ...authParams() }, 0);
-    if (r && r.ok && r.dataUri) { fotoGuardar(fileId, r.dataUri); return r.dataUri; }
-  } catch (e) {}
-  return '';
+    return await promise;
+  } finally {
+    _fotoPendingRequests.delete(fileId);
+  }
 }
 
 // Sobe as fotos DEPOIS que os serviços foram gravados: cada foto vai ligada
@@ -4288,17 +4321,49 @@ function renderGaleria() {
     <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px">${cartoes}</div>`;
 }
 
-// Busca as imagens uma a uma para não estourar a cota do Apps Script.
+// Carrega do cache local em paralelo e busca do servidor em lotes concorrentes.
 async function carregarImagensGaleria() {
   if (!STATE.usuarioLogado) return;
-  const vistos = [...document.querySelectorAll('[id^="gal-"]')].map(el => el.id.slice(4));
-  for (const fileId of vistos.slice(0, 30)) {
-    const src = await baixarFotoServidor(fileId);
+  const els = [...document.querySelectorAll('[id^="gal-"]')];
+  if (!els.length) return;
+  
+  const alvos = els.map(el => el.id.slice(4)).filter(Boolean);
+  
+  // 1. Processa tudo que já está em cache (memória / IndexedDB) em paralelo de forma ultra-rápida
+  const semCache = [];
+  await Promise.all(alvos.map(async (fileId) => {
+    const cached = await fotoLer(fileId);
     const img = document.getElementById('gal-' + fileId);
     const ph = document.getElementById('galph-' + fileId);
-    if (!img) continue;                       // trocou de tela no meio
-    if (src) { img.src = src; img.style.display = 'block'; if (ph) ph.style.display = 'none'; }
-    else if (ph) ph.textContent = 'imagem indisponível';
+    if (!img) return;
+    if (cached) {
+      img.src = cached;
+      img.style.display = 'block';
+      if (ph) ph.style.display = 'none';
+    } else {
+      semCache.push(fileId);
+    }
+  }));
+
+  if (!semCache.length) return;
+
+  // 2. Busca as fotos restantes em lotes concorrentes (4 chamadas simultâneas)
+  const CONCURRENCY = 4;
+  for (let i = 0; i < semCache.length; i += CONCURRENCY) {
+    const lote = semCache.slice(i, i + CONCURRENCY);
+    await Promise.all(lote.map(async (fileId) => {
+      const src = await baixarFotoServidor(fileId);
+      const img = document.getElementById('gal-' + fileId);
+      const ph = document.getElementById('galph-' + fileId);
+      if (!img) return;
+      if (src) {
+        img.src = src;
+        img.style.display = 'block';
+        if (ph) ph.style.display = 'none';
+      } else if (ph) {
+        ph.textContent = 'imagem indisponível';
+      }
+    }));
   }
 }
 
@@ -7094,18 +7159,22 @@ async function histCarregarFotosExistentes(idx, ponteiros) {
   const box = document.getElementById(`hfotos-exist-${idx}`);
   if (!box || !ponteiros.length) return;
   box.innerHTML = `<span style="font-size:11px;color:var(--muted)">Carregando ${ponteiros.length} foto(s) já anexada(s)…</span>`;
-  const partes = [];
-  for (const ponteiro of ponteiros) {
-    const fileId = fotoFileId(ponteiro);
+  
+  const fileIds = ponteiros.map(p => fotoFileId(p)).filter(Boolean);
+  const resultados = await Promise.all(fileIds.map(async (fileId) => {
     const src = await baixarFotoServidor(fileId);
-    if (src) {
-      partes.push(`<img src="${src}" alt="foto já anexada" title="Foto já anexada — clique para ampliar"
-        onclick="ampliarFoto('${fileId}','')" loading="lazy"
-        style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;
-               border:1px solid var(--border-strong);opacity:.85">`);
-    }
-  }
-  box.innerHTML = partes.length ? partes.join('')
+    return { fileId, src };
+  }));
+  
+  const partes = resultados.filter(r => r.src).map(r =>
+    `<img src="${r.src}" alt="foto já anexada" title="Foto já anexada — clique para ampliar"
+      onclick="ampliarFoto('${r.fileId}','')" loading="lazy"
+      style="width:64px;height:64px;object-fit:cover;border-radius:8px;cursor:pointer;
+             border:1px solid var(--border-strong);opacity:.85">`
+  );
+  const targetBox = document.getElementById(`hfotos-exist-${idx}`);
+  if (!targetBox) return;
+  targetBox.innerHTML = partes.length ? partes.join('')
     : `<span style="font-size:11px;color:var(--muted)">${ponteiros.length} foto(s) no Drive — não consegui carregar a miniatura agora.</span>`;
 }
 
