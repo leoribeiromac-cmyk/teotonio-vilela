@@ -99,6 +99,7 @@ function rotear(e) {
       case 'usuariosListar':  resp = usuariosListar(p.token); break;
       case 'usuarioSalvar':   resp = usuarioSalvar(p); break;
       case 'usuarioExcluir':  resp = usuarioExcluir(p); break;
+      case 'usuariosNomes':   resp = usuariosNomes(); break;
       default:
         // NUNCA inserir nada aqui. Ação desconhecida = erro, e ponto.
         resp = { ok: false, error: 'Ação desconhecida: "' + action + '"' };
@@ -1521,6 +1522,12 @@ function usuariosListar(token) {
     };
   });
   return { ok: true, usuarios: lista, eu: usuarioDoToken(token) };
+}
+
+function usuariosNomes() {
+  var mapa = usuariosCarregar();
+  var lista = Object.keys(mapa).sort(function (a, b) { return a.localeCompare(b); });
+  return { ok: true, usuarios: lista };
 }
 
 function usuarioSalvar(p) {
