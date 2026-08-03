@@ -2494,20 +2494,8 @@ function atualizarSelectLogin() {
   if (!sel) return;
   const valAtual = sel.value;
   sel.innerHTML = `<option value="">— selecione —</option>` +
-    USUARIOS_UI.map(u => `<option value="${escHtml(u)}" ${u === valAtual ? 'selected' : ''}>${escHtml(u)}</option>`).join('') +
-    `<option value="__outro__">Outro (digitar nome...)</option>`;
+    USUARIOS_UI.map(u => `<option value="${escHtml(u)}" ${u === valAtual ? 'selected' : ''}>${escHtml(u)}</option>`).join('');
 }
-
-window.toggleLoginUserCustom = function(val) {
-  const inputCustom = document.getElementById('loginUserCustom');
-  if (!inputCustom) return;
-  if (val === '__outro__') {
-    inputCustom.style.display = 'block';
-    inputCustom.focus();
-  } else {
-    inputCustom.style.display = 'none';
-  }
-};
 
 /* ============================================================
    PERFIS DE ACESSO — mesma régua do "Gestor — Controle de Obras",
@@ -2654,12 +2642,10 @@ function renderLogin() {
       <div class="card-body">
         <div class="field" style="margin-bottom: 14px;">
           <label>Usuário / Apontador</label>
-          <select id="loginUserSelect" onchange="toggleLoginUserCustom(this.value)">
+          <select id="loginUserSelect">
             <option value="">— selecione —</option>
             ${USUARIOS_UI.map(u => `<option value="${escHtml(u)}">${escHtml(u)}</option>`).join('')}
-            <option value="__outro__">Outro (digitar nome...)</option>
           </select>
-          <input type="text" id="loginUserCustom" placeholder="Digite o nome do usuário" style="display:none;margin-top:8px" onkeyup="if(event.key==='Enter') fazerLogin()">
         </div>
         <div class="field" style="margin-bottom: 18px;">
           <label>Senha</label>
@@ -2673,13 +2659,9 @@ function renderLogin() {
 }
 window.fazerLogin = async function() {
   const sel = document.getElementById('loginUserSelect') || document.getElementById('loginUser');
-  let u = sel ? sel.value : '';
-  if (u === '__outro__') {
-    const inputCustom = document.getElementById('loginUserCustom');
-    u = inputCustom ? inputCustom.value.trim() : '';
-  }
+  const u = sel ? sel.value : '';
   const p = document.getElementById('loginPass').value;
-  if (!u) { toast('Selecione ou digite um usuário', 'error'); return; }
+  if (!u) { toast('Selecione um usuário', 'error'); return; }
 
   // 1) Valida no servidor — a senha correta vive nas Propriedades do Apps Script.
   try {
@@ -11221,6 +11203,7 @@ document.addEventListener('DOMContentLoaded', () => {
   renderShell();
   navigate('executivo');
   carregarTudo();
+  carregarUsuariosNomes();
 
   // Auto-refresh a cada 5min — em modo "fundo": silencioso e sem re-render
   // por cima de formulário aberto ou campo focado.
