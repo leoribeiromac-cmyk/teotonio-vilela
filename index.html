@@ -5282,6 +5282,7 @@ function renderExecutivo() {
       </select>
       ${(STATE.filtros.mes || STATE.filtros.frente) ? 
         `<div class="filter-clear" onclick="limparFiltros()">Limpar Filtros ${ic('fechar')}</div>` : ''}
+      <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto" onclick="exportarRelatorioExecutivoPDF()" title="Exportar Relatório Executivo da Obra em PDF">${ic('baixar')} Exportar PDF</button>
     </div>
 
     <!-- ============ HERO EXECUTIVO ============ -->
@@ -5505,6 +5506,358 @@ function renderExecutivo() {
     </div>
   `;
 }
+
+window.exportarRelatorioExecutivoPDF = function() {
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    toast('Biblioteca de exportação em PDF não foi carregada.', 'error');
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const o = obra();
+  const today = new Date();
+  const dataHojeStr = today.toLocaleDateString('pt-BR');
+  const horaHojeStr = today.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const usuario = STATE.usuarioLogado || 'SISTEMA';
+
+  let data = STATE.dashData;
+  if (!data || !data.metrics) {
+    renderExecutivo();
+    data = STATE.dashData;
+  }
+  if (!data || !data.metrics) {
+    toast('Não foi possível obter os dados do Painel Executivo.', 'error');
+    return;
+  }
+
+  const metrics = data.metrics;
+  const fa = data.fa;
+  const totalPac = data.totalPac || 0;
+  const iniciados = data.iniciados || 0;
+  const gap = data.gap || 0;
+  const pctPond = metrics.current || 0;
+  const todayPlanned = data.todayPlanned || 0;
+
+  function stripHtml(html) {
+    if (!html) return '';
+    const tmp = document.createElement('DIV');
+    tmp.innerHTML = html;
+    return (tmp.textContent || tmp.innerText || '').trim();
+  }
+
+  const PRIMARY = [26, 22, 18];
+  const ACCENT = [210, 104, 47];
+  const HEADER_BG = [43, 37, 31];
+  const LIGHT_BG = [248, 247, 244];
+  const TEXT_COLOR = [26, 23, 18];
+  const MUTED_COLOR = [102, 97, 91];
+
+  let y = 14;
+
+  // --- CABEÇALHO ---
+  doc.setFillColor(...PRIMARY);
+  doc.rect(14, y, 182, 24, 'F');
+  
+  doc.setFillColor(...ACCENT);
+  doc.rect(14, y, 182, 2.5, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(13);
+  doc.text('RELATÓRIO EXECUTIVO DA OBRA', 20, y + 11);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.setTextColor(220, 215, 205);
+  doc.text(`${o.nome} · Contrato: ${o.contrato}`, 20, y + 17.5);
+
+  doc.setFontSize(7.5);
+  doc.setTextColor(180, 175, 165);
+  doc.text(`Emissão: ${dataHojeStr} ${horaHojeStr}`, 190, y + 10, { align: 'right' });
+  doc.text(`Emissor: ${usuario}`, 190, y + 15, { align: 'right' });
+
+  y += 28;
+
+  // --- BARRA DE FILTRO ---
+  let filtroTxt = 'Filtro Aplicado: Visão Geral (Todos os meses e frentes)';
+  if (STATE.filtros.mes || STATE.filtros.frente) {
+    const fParts = [];
+    if (STATE.filtros.mes) fParts.push(`Mês: ${STATE.filtros.mes}`);
+    if (STATE.filtros.frente) fParts.push(`Frente: ${STATE.filtros.frente}`);
+    filtroTxt = 'Filtro Aplicado: ' + fParts.join(' · ');
+  }
+
+  doc.setFillColor(235, 232, 226);
+  doc.rect(14, y, 182, 7, 'F');
+  doc.setTextColor(...MUTED_COLOR);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.text(filtroTxt.toUpperCase(), 18, y + 4.8);
+
+  y += 11;
+
+  // --- SEÇÃO 1: RESUMO DOS INDICADORES PRINCIPAIS ---
+  doc.setTextColor(...TEXT_COLOR);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('1. Indicadores Chave de Desempenho (KPIs)', 14, y);
+  y += 4;
+
+  const statusGapStr = gap < -0.001 ? `${Math.abs(gap * 100).toFixed(1).replace('.', ',')} p.p. (Atrasado vs Meta)`
+                     : gap > 0.001 ? `${(gap * 100).toFixed(1).replace('.', ',')} p.p. (À frente da Meta)`
+                     : 'No Prazo';
+
+  const terminoStr = metrics.dataPrevista ? fmtData(metrics.dataPrevista) : '—';
+  let situacaoPrazoStr = '—';
+  if (metrics.diasVsPrazo != null) {
+    if (metrics.diasVsPrazo > 0) situacaoPrazoStr = `+${metrics.diasVsPrazo} dias além do prazo contratual`;
+    else if (metrics.diasVsPrazo < 0) situacaoPrazoStr = `${Math.abs(metrics.diasVsPrazo)} dias de folga vs prazo contratual`;
+    else situacaoPrazoStr = 'No limite do prazo contratual';
+  }
+
+  const kpiData = [
+    [
+      { content: 'Avanço Ponderado Realizado:', styles: { fontStyle: 'bold' } },
+      `${(pctPond * 100).toFixed(1).replace('.', ',')}%`,
+      { content: 'Meta do Cronograma (Hoje):', styles: { fontStyle: 'bold' } },
+      `${(todayPlanned * 100).toFixed(1).replace('.', ',')}%`
+    ],
+    [
+      { content: 'Status vs Cronograma:', styles: { fontStyle: 'bold' } },
+      statusGapStr,
+      { content: 'Velocidade de Produção:', styles: { fontStyle: 'bold' } },
+      `${(metrics.velocity * 100).toFixed(2).replace('.', ',')} p.p./dia${metrics.diasUteis ? ' útil' : ''}`
+    ],
+    [
+      { content: 'Evolução Últimos 7 Dias:', styles: { fontStyle: 'bold' } },
+      fmtPctDelta(metrics.delta7d),
+      { content: 'Evolução Últimos 30 Dias:', styles: { fontStyle: 'bold' } },
+      fmtPctDelta(metrics.delta30d)
+    ],
+    [
+      { content: 'Previsão de Término (Ritmo Atual):', styles: { fontStyle: 'bold' } },
+      terminoStr,
+      { content: 'Situação do Prazo:', styles: { fontStyle: 'bold' } },
+      situacaoPrazoStr
+    ]
+  ];
+
+  doc.autoTable({
+    startY: y,
+    head: [],
+    body: kpiData,
+    theme: 'grid',
+    margin: { left: 14, right: 14 },
+    styles: { fontSize: 8.5, textColor: TEXT_COLOR, cellPadding: 3 },
+    columnStyles: {
+      0: { cellWidth: 53, fillColor: LIGHT_BG },
+      1: { cellWidth: 38 },
+      2: { cellWidth: 53, fillColor: LIGHT_BG },
+      3: { cellWidth: 38 }
+    }
+  });
+
+  y = doc.lastAutoTable.finalY + 8;
+
+  // --- SEÇÃO 2: LEITURA EXECUTIVA E RECOMENDAÇÃO ---
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('2. Diagnóstico & Recomendação Executiva', 14, y);
+  y += 4;
+
+  const narrativaPura = stripHtml(gerarNarrativaSemana(metrics, fa, totalPac, iniciados));
+  
+  let recIA = '';
+  const heroIAEl = document.querySelector('#heroIA .hero-ia-text');
+  if (heroIAEl) recIA = heroIAEl.textContent.trim();
+  if (!recIA || recIA.includes('Analisando') || recIA.includes('desativada')) recIA = '';
+
+  const diagBody = [
+    [{ content: 'Leitura da Semana:', styles: { fontStyle: 'bold', fillColor: LIGHT_BG } }, narrativaPura]
+  ];
+  if (recIA) {
+    diagBody.push([{ content: 'Recomendação IA:', styles: { fontStyle: 'bold', fillColor: LIGHT_BG } }, recIA]);
+  }
+
+  doc.autoTable({
+    startY: y,
+    head: [],
+    body: diagBody,
+    theme: 'grid',
+    margin: { left: 14, right: 14 },
+    styles: { fontSize: 8.5, textColor: TEXT_COLOR, cellPadding: 3.5 },
+    columnStyles: {
+      0: { cellWidth: 40 },
+      1: { cellWidth: 142 }
+    }
+  });
+
+  y = doc.lastAutoTable.finalY + 8;
+
+  // --- SEÇÃO 3: AVANÇO POR FRENTE DE SERVIÇO ---
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('3. Avanço Físico por Frente de Serviço', 14, y);
+  y += 4;
+
+  const pacotesAtivos = data.pacotesAtivos || [];
+  const rdosAtivos = data.rdosAtivos || [];
+  const av = calcularAvancoPorPacote(rdosAtivos, pacotesAtivos);
+  const pacotesFiltrados = Object.values(av).filter(a => a.pacote);
+
+  const porFrente = {};
+  pacotesFiltrados.forEach(a => {
+    const f = getCSVField(a.pacote, 'Frente') || 'Outros';
+    if (!porFrente[f]) porFrente[f] = { items: 0, totalDiasEstim: 0, totalDiasExec: 0 };
+    const pid = getCSVField(a.pacote, 'ID');
+    const prod = produtividadeDe(pid) || 1;
+    const estim = prod > 0 ? a.qtdEstimada / prod : 0;
+    const exec = a.pct * estim;
+    porFrente[f].items++;
+    porFrente[f].totalDiasEstim += estim;
+    porFrente[f].totalDiasExec += exec;
+  });
+
+  const frentesRows = Object.entries(porFrente)
+    .map(([f, d]) => {
+      const pct = d.totalDiasEstim > 0 ? d.totalDiasExec / d.totalDiasEstim : 0;
+      const statusFrente = pct >= 0.999 ? 'Concluído' : pct > 0 ? 'Em Andamento' : 'Não Iniciado';
+      return [f, d.items.toString(), (pct * 100).toFixed(1).replace('.', ',') + '%', statusFrente];
+    })
+    .sort((a, b) => parseFloat(b[2].replace(',', '.')) - parseFloat(a[2].replace(',', '.')));
+
+  doc.autoTable({
+    startY: y,
+    head: [['Frente de Serviço', 'Pacotes Ativos', 'Avanço Ponderado', 'Status da Frente']],
+    body: frentesRows,
+    theme: 'striped',
+    margin: { left: 14, right: 14 },
+    headStyles: { fillColor: HEADER_BG, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+    styles: { fontSize: 8, cellPadding: 2.5 },
+    columnStyles: {
+      0: { cellWidth: 70, fontStyle: 'bold' },
+      1: { cellWidth: 30, halign: 'center' },
+      2: { cellWidth: 40, halign: 'right', fontStyle: 'bold' },
+      3: { cellWidth: 42, halign: 'center' }
+    }
+  });
+
+  y = doc.lastAutoTable.finalY + 8;
+
+  // --- SEÇÃO 4: DESTAQUES & ATENÇÃO DA SEMANA ---
+  if (y > 230) { doc.addPage(); y = 16; }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('4. Destaques da Semana & Alertas de Atenção', 14, y);
+  y += 4;
+
+  const destaquesRows = fa.destaques.map(d => [
+    d.frente,
+    fmtData(d.ultData),
+    '+' + (d.valor * 100).toFixed(2).replace('.', ',') + ' p.p.'
+  ]);
+  if (!destaquesRows.length) destaquesRows.push(['Nenhuma frente com avanço expressivo nos últimos 7 dias', '—', '—']);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Frentes em Destaque (Avanço nos últimos 7 dias)', 'Última Atividade', 'Avanço 7d']],
+    body: destaquesRows,
+    theme: 'plain',
+    margin: { left: 14, right: 14 },
+    headStyles: { fillColor: [22, 101, 52], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    styles: { fontSize: 8, cellPadding: 2 },
+    columnStyles: {
+      0: { cellWidth: 100 },
+      1: { cellWidth: 42, halign: 'center' },
+      2: { cellWidth: 40, halign: 'right', fontStyle: 'bold', textColor: [22, 101, 52] }
+    }
+  });
+
+  y = doc.lastAutoTable.finalY + 4;
+
+  const atencaoRows = fa.atencao.map(a => [
+    a.frente,
+    a.ultData ? fmtData(a.ultData) : 'Sem RDOs cadastrados',
+    a.dias === null ? 'Sem histórico' : a.dias + ' dias sem RDO'
+  ]);
+  if (!atencaoRows.length) atencaoRows.push(['Todas as frentes possuem lançamentos recentes', '—', 'OK']);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Frentes que Merecem Atenção (Sem lançamentos recentes)', 'Última Atividade', 'Dias Parada']],
+    body: atencaoRows,
+    theme: 'plain',
+    margin: { left: 14, right: 14 },
+    headStyles: { fillColor: [185, 28, 28], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    styles: { fontSize: 8, cellPadding: 2 },
+    columnStyles: {
+      0: { cellWidth: 100 },
+      1: { cellWidth: 42, halign: 'center' },
+      2: { cellWidth: 40, halign: 'right', fontStyle: 'bold', textColor: [185, 28, 28] }
+    }
+  });
+
+  y = doc.lastAutoTable.finalY + 8;
+
+  // --- SEÇÃO 5: PACOTES EM EXECUÇÃO ---
+  if (y > 210) { doc.addPage(); y = 16; }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('5. Principais Pacotes de Serviço em Execução', 14, y);
+  y += 4;
+
+  const ativosOrdenados = pacotesFiltrados
+    .filter(a => a.qtdExecutada > 0)
+    .sort((a,b) => (b.ultimaData || 0) - (a.ultimaData || 0))
+    .slice(0, 18);
+
+  const pacotesRows = ativosOrdenados.map(a => [
+    getCSVField(a.pacote, 'Pacote'),
+    getCSVField(a.pacote, 'Frente') || '—',
+    `${fmtNum(a.qtdExecutada)} / ${fmtNum(a.qtdEstimada, 0)} ${getCSVField(a.pacote, 'Unidade Física') || ''}`,
+    fmtPct(a.pct),
+    a.ultimaData ? fmtData(a.ultimaData) : '—'
+  ]);
+
+  doc.autoTable({
+    startY: y,
+    head: [['Pacote / Serviço', 'Frente', 'Quantidade Executada / Estimada', 'Avanço', 'Último RDO']],
+    body: pacotesRows.length ? pacotesRows : [['Nenhum pacote com execução registrada', '—', '—', '—', '—']],
+    theme: 'striped',
+    margin: { left: 14, right: 14 },
+    headStyles: { fillColor: HEADER_BG, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    styles: { fontSize: 7.5, cellPadding: 2 },
+    columnStyles: {
+      0: { cellWidth: 62, fontStyle: 'bold' },
+      1: { cellWidth: 35 },
+      2: { cellWidth: 45, halign: 'right' },
+      3: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
+      4: { cellWidth: 20, halign: 'center' }
+    }
+  });
+
+  // --- RODAPÉ E PAGINAÇÃO EM TODAS AS PÁGINAS ---
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(210, 205, 195);
+    doc.setLineWidth(0.3);
+    doc.line(14, 283, 196, 283);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...MUTED_COLOR);
+    doc.text('Sistema Teotônio Vilela · Relatório Gerencial de Acompanhamento Executivo', 14, 287);
+    doc.text(`Página ${i} de ${pageCount}`, 196, 287, { align: 'right' });
+  }
+
+  const filename = `Relatorio_Executivo_Teotonio_${today.toISOString().slice(0, 10)}.pdf`;
+  doc.save(filename);
+  toast('Relatório Executivo PDF exportado com sucesso!', 'success');
+};
 
 function montarGraficos() {
   // Ponto único de montagem de gráfico: todo mundo que troca de tela ou de
