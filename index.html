@@ -1703,7 +1703,7 @@ const CONFIG = {
   estacasCB: { ini: 99, fim: 141, label: 'Centro→Bairro' },
   estacasBC: { ini: 201, fim: 244, label: 'Bairro→Centro' },
   refreshMs: 5 * 60 * 1000,
-  ls: { rdoDraft: 'teotonio_rdo_draft_v1', apontador: 'teotonio_apontador_v1', sabadoUtil: 'teotonio_sabado_util_v1', oficialRDO: 'teotonio_oficial_rdo_v1', token: 'teotonio_token_v1', perfil: 'teotonio_perfil_v1' }
+  ls: { rdoDraft: 'teotonio_rdo_draft_v1', apontador: 'teotonio_apontador_v1', sabadoUtil: 'teotonio_sabado_util_v1', oficialRDO: 'teotonio_oficial_rdo_v1', token: 'teotonio_token_v1', perfil: 'teotonio_perfil_v1', usuariosUI: 'teotonio_usuarios_ui_v1' }
 };
 
 // ====================================================================
@@ -2465,7 +2465,49 @@ window.setCurvaHorizonte = function(h) {
 // validadas no servidor — não há nenhuma senha embutida neste HTML. Offline,
 // só reentra quem já autenticou online neste aparelho (token guardado).
 // ====================================================================
-const USUARIOS_UI = ['Leonardo', 'Wallace', 'Guilherme'];
+let USUARIOS_UI = (function() {
+  try {
+    const raw = localStorage.getItem(CONFIG.ls.usuariosUI);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length) return parsed;
+    }
+  } catch(e) {}
+  return ['Leonardo', 'Wallace', 'Guilherme'];
+})();
+
+async function carregarUsuariosNomes() {
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'usuariosNomes' }, 0);
+    if (r && r.ok && Array.isArray(r.usuarios) && r.usuarios.length) {
+      const set = new Set(r.usuarios);
+      if (STATE.usuarioLogado) set.add(STATE.usuarioLogado);
+      USUARIOS_UI = [...set].sort((a,b) => a.localeCompare(b));
+      try { localStorage.setItem(CONFIG.ls.usuariosUI, JSON.stringify(USUARIOS_UI)); } catch(e){}
+      atualizarSelectLogin();
+    }
+  } catch (e) {}
+}
+
+function atualizarSelectLogin() {
+  const sel = document.getElementById('loginUserSelect') || document.getElementById('loginUser');
+  if (!sel) return;
+  const valAtual = sel.value;
+  sel.innerHTML = `<option value="">— selecione —</option>` +
+    USUARIOS_UI.map(u => `<option value="${escHtml(u)}" ${u === valAtual ? 'selected' : ''}>${escHtml(u)}</option>`).join('') +
+    `<option value="__outro__">Outro (digitar nome...)</option>`;
+}
+
+window.toggleLoginUserCustom = function(val) {
+  const inputCustom = document.getElementById('loginUserCustom');
+  if (!inputCustom) return;
+  if (val === '__outro__') {
+    inputCustom.style.display = 'block';
+    inputCustom.focus();
+  } else {
+    inputCustom.style.display = 'none';
+  }
+};
 
 /* ============================================================
    PERFIS DE ACESSO — mesma régua do "Gestor — Controle de Obras",
@@ -2597,6 +2639,7 @@ function erroLegivel(msg) {
 }
 
 function renderLogin() {
+  setTimeout(() => carregarUsuariosNomes(), 50);
   return `
     <div class="card login-card">
       <div class="card-header">
@@ -2611,10 +2654,12 @@ function renderLogin() {
       <div class="card-body">
         <div class="field" style="margin-bottom: 14px;">
           <label>Usuário / Apontador</label>
-          <select id="loginUser">
+          <select id="loginUserSelect" onchange="toggleLoginUserCustom(this.value)">
             <option value="">— selecione —</option>
-            ${USUARIOS_UI.map(u => `<option value="${u}">${u}</option>`).join('')}
+            ${USUARIOS_UI.map(u => `<option value="${escHtml(u)}">${escHtml(u)}</option>`).join('')}
+            <option value="__outro__">Outro (digitar nome...)</option>
           </select>
+          <input type="text" id="loginUserCustom" placeholder="Digite o nome do usuário" style="display:none;margin-top:8px" onkeyup="if(event.key==='Enter') fazerLogin()">
         </div>
         <div class="field" style="margin-bottom: 18px;">
           <label>Senha</label>
@@ -2627,9 +2672,14 @@ function renderLogin() {
   `;
 }
 window.fazerLogin = async function() {
-  const u = document.getElementById('loginUser').value;
+  const sel = document.getElementById('loginUserSelect') || document.getElementById('loginUser');
+  let u = sel ? sel.value : '';
+  if (u === '__outro__') {
+    const inputCustom = document.getElementById('loginUserCustom');
+    u = inputCustom ? inputCustom.value.trim() : '';
+  }
   const p = document.getElementById('loginPass').value;
-  if (!u) { toast('Selecione um usuário', 'error'); return; }
+  if (!u) { toast('Selecione ou digite um usuário', 'error'); return; }
 
   // 1) Valida no servidor — a senha correta vive nas Propriedades do Apps Script.
   try {
@@ -2661,6 +2711,10 @@ function concluirLogin(u, perfil) {
   STATE.usuarioLogado = u;
   STATE.perfilLogado = String(perfil || '').toLowerCase();
   localStorage.setItem('teotonio_user', u);
+  if (!USUARIOS_UI.includes(u)) {
+    USUARIOS_UI.push(u);
+    try { localStorage.setItem(CONFIG.ls.usuariosUI, JSON.stringify(USUARIOS_UI)); } catch(e){}
+  }
   if (STATE.perfilLogado) localStorage.setItem(CONFIG.ls.perfil, STATE.perfilLogado);
   else localStorage.removeItem(CONFIG.ls.perfil);
   toast(`Acesso liberado — ${perfilNome()}`, 'success');
@@ -3802,7 +3856,7 @@ window.irParaLogin = function() {
   toggleSidebar(false);
   if (STATE.currentPage === 'rdo') transitionTo(render);
   else navigate('rdo');
-  setTimeout(() => { const s = document.getElementById('loginUser'); if (s) s.focus(); }, 300);
+  setTimeout(() => { const s = document.getElementById('loginUserSelect') || document.getElementById('loginUser'); if (s) s.focus(); }, 300);
 };
 
 function toggleSidebar(open) {
@@ -4497,9 +4551,19 @@ window.usuarioSalvarUI = async function(nomeAntigo) {
       nomeAntigo: nomeAntigo || '', ...authParams()
     }, 0);
     if (!r.ok) { toast(r.mensagem || erroLegivel(r.error), 'error', 0); return; }
+    if (nomeAntigo && nomeAntigo !== nome) {
+      USUARIOS_UI = USUARIOS_UI.filter(u => u !== nomeAntigo);
+    }
+    if (!USUARIOS_UI.includes(nome)) {
+      USUARIOS_UI.push(nome);
+      USUARIOS_UI.sort((a,b) => a.localeCompare(b));
+    }
+    try { localStorage.setItem(CONFIG.ls.usuariosUI, JSON.stringify(USUARIOS_UI)); } catch(e){}
+    atualizarSelectLogin();
     toast(`${nome} salvo como ${PERFIS[perfil].nome}.`, 'success');
     document.getElementById('usuarioFormWrap').innerHTML = '';
     usuariosCarregarLista();
+    carregarUsuariosNomes();
   } catch (e) {
     toast('Sem conexão com o servidor.', 'error');
   }
@@ -4510,8 +4574,12 @@ window.usuarioExcluirUI = async function(nome) {
   try {
     const r = await jsonp(CONFIG.appsScript, { action: 'usuarioExcluir', nome, ...authParams() }, 0);
     if (!r.ok) { toast(r.mensagem || erroLegivel(r.error), 'error', 0); return; }
+    USUARIOS_UI = USUARIOS_UI.filter(u => u !== nome);
+    try { localStorage.setItem(CONFIG.ls.usuariosUI, JSON.stringify(USUARIOS_UI)); } catch(e){}
+    atualizarSelectLogin();
     toast(`${nome} removido.`, 'success');
     usuariosCarregarLista();
+    carregarUsuariosNomes();
   } catch (e) {
     toast('Sem conexão com o servidor.', 'error');
   }
