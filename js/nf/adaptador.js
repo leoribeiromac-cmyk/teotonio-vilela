@@ -25,6 +25,8 @@ const OBRA_TEOTONIO = {
   local: 'São Paulo/SP'
 };
 function obra() { return OBRA_TEOTONIO; }
+const ORDEM = ['teotonio'];
+const OBRAS = { teotonio: OBRA_TEOTONIO };
 
 /* ---------- estado das telas de nota ----------
    O módulo lê e escreve `estado.nfTab`, `estado.nfBusca` etc. */
@@ -114,6 +116,6 @@ if (typeof window !== 'undefined') {
   Object.assign(window, {
     obra, estado, el, esc, fmtBRL, fmtBRLc, fmtQtd, uid, hoje, isoAdd, mesLabel,
     frenteNome, isDemo, BACKEND, getToken, usuarioAtual, postAcao, outboxAdd,
-    fotoGuardarFull, fotoLerFull, abrirModal, fecharModal
+    fotoGuardarFull, fotoLerFull, abrirModal, fecharModal, ORDEM, OBRAS
   });
 }

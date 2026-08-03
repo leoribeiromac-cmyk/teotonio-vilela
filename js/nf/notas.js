@@ -1661,7 +1661,8 @@ function nfViewPainel(o) {
   const forn = nfFornecedores(o.id);
 
   // notas por obra (todas as obras geridas)
-  const porObra = ORDEM.map(id => OBRAS[id]).filter(x => x && !x.externo)
+  const listaObras = (typeof ORDEM !== 'undefined' && typeof OBRAS !== 'undefined') ? ORDEM.map(id => OBRAS[id]) : [o];
+  const porObra = listaObras.filter(x => x && !x.externo)
     .map(x => ({ nome: x.nome, n: nfGet(x.id).filter(n => n.status !== 'Cancelada').length, v: nfGet(x.id).filter(n => n.status !== 'Cancelada').reduce((a, n) => a + nfNum(n.vTotal), 0) }))
     .filter(x => x.n).sort((a, b) => b.v - a.v);
 
