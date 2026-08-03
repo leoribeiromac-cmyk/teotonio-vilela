@@ -5509,7 +5509,7 @@ function renderExecutivo() {
 
 window.exportarRelatorioExecutivoPDF = function() {
   if (!window.jspdf || !window.jspdf.jsPDF) {
-    toast('Biblioteca de exportação em PDF não foi carregada.', 'error');
+    toast('Biblioteca de exportação em PDF não foi carregada no navegador.', 'error');
     return;
   }
 
@@ -5546,41 +5546,47 @@ window.exportarRelatorioExecutivoPDF = function() {
     return (tmp.textContent || tmp.innerText || '').trim();
   }
 
-  const PRIMARY = [26, 22, 18];
-  const ACCENT = [210, 104, 47];
-  const HEADER_BG = [43, 37, 31];
-  const LIGHT_BG = [248, 247, 244];
-  const TEXT_COLOR = [26, 23, 18];
-  const MUTED_COLOR = [102, 97, 91];
+  // --- CORES & PALETA DO TEMA CANTEIRO EXECUTIVO ---
+  const PRIMARY = [26, 22, 18];       // #1a1612
+  const ACCENT = [210, 104, 47];       // #d2682f
+  const SURFACE_DARK = [33, 29, 23];  // #211d17
+  const BORDER_DARK = [56, 48, 38];   // #383026
+  const HEADER_BG = [43, 37, 31];     // #2b251f
+  const LIGHT_BG = [248, 247, 244];    // #f8f7f4
+  const TEXT_DARK = [26, 23, 18];
+  const MUTED_TEXT = [102, 97, 91];
+  const GREEN_COLOR = [22, 101, 52];
+  const RED_COLOR = [185, 28, 28];
 
-  let y = 14;
+  let y = 10;
 
-  // --- CABEÇALHO ---
+  // ================= 1. CABEÇALHO HERO (BARRA ESCURA INSTITUCIONAL) =================
   doc.setFillColor(...PRIMARY);
-  doc.rect(14, y, 182, 24, 'F');
-  
+  doc.rect(12, y, 186, 21, 'F');
+
   doc.setFillColor(...ACCENT);
-  doc.rect(14, y, 182, 2.5, 'F');
+  doc.rect(12, y, 186, 2.5, 'F');
 
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  doc.text('RELATÓRIO EXECUTIVO DA OBRA', 20, y + 11);
+  doc.text('SISTEMA TEOTÔNIO VILELA · PAINEL EXECUTIVO', 17, y + 10);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
-  doc.setTextColor(220, 215, 205);
-  doc.text(`${o.nome} · Contrato: ${o.contrato}`, 20, y + 17.5);
+  doc.setTextColor(215, 210, 200);
+  doc.text(`${o.nome} · Contrato: ${o.contrato}`, 17, y + 16);
 
   doc.setFontSize(7.5);
-  doc.setTextColor(180, 175, 165);
-  doc.text(`Emissão: ${dataHojeStr} ${horaHojeStr}`, 190, y + 10, { align: 'right' });
-  doc.text(`Emissor: ${usuario}`, 190, y + 15, { align: 'right' });
+  doc.setTextColor(175, 170, 160);
+  doc.text(`Emissão: ${dataHojeStr} ${horaHojeStr}`, 193, y + 10, { align: 'right' });
+  doc.text(`Emissor: ${usuario}`, 193, y + 15, { align: 'right' });
 
-  y += 28;
+  y += 24;
 
-  // --- BARRA DE FILTRO ---
-  let filtroTxt = 'Filtro Aplicado: Visão Geral (Todos os meses e frentes)';
+  // ================= 2. BARRA DE FILTRO APLICADO =================
+  let periodoTag = STATE.filtros.mes || STATE.filtros.frente ? 'FILTRO PERSONALIZADO' : 'VISÃO GERAL DO PROJETO';
+  let filtroTxt = 'Filtro Aplicado: Todos os meses e frentes';
   if (STATE.filtros.mes || STATE.filtros.frente) {
     const fParts = [];
     if (STATE.filtros.mes) fParts.push(`Mês: ${STATE.filtros.mes}`);
@@ -5589,123 +5595,199 @@ window.exportarRelatorioExecutivoPDF = function() {
   }
 
   doc.setFillColor(235, 232, 226);
-  doc.rect(14, y, 182, 7, 'F');
-  doc.setTextColor(...MUTED_COLOR);
+  doc.rect(12, y, 186, 6, 'F');
+  doc.setTextColor(...MUTED_TEXT);
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(8);
-  doc.text(filtroTxt.toUpperCase(), 18, y + 4.8);
+  doc.setFontSize(7.5);
+  doc.text(filtroTxt.toUpperCase(), 16, y + 4.2);
 
-  y += 11;
+  y += 9;
 
-  // --- SEÇÃO 1: RESUMO DOS INDICADORES PRINCIPAIS ---
-  doc.setTextColor(...TEXT_COLOR);
+  // ================= 3. HERO EXECUTIVO (CARD PRINCIPAL ESCURO COMO NO APP) =================
+  const heroHeight = 44;
+  doc.setFillColor(...SURFACE_DARK);
+  doc.setDrawColor(...BORDER_DARK);
+  doc.roundedRect(12, y, 186, heroHeight, 3, 3, 'FD');
+
+  // Coluna A: Avanço Ponderado Realizado
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('1. Indicadores Chave de Desempenho (KPIs)', 14, y);
-  y += 4;
+  doc.setFontSize(7);
+  doc.setTextColor(158, 148, 132);
+  doc.text('AVANÇO PONDERADO REALIZADO', 17, y + 8);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(125, 117, 102);
+  doc.text(`Escopo em dias-equivalentes (${periodoTag})`, 17, y + 12);
 
-  const statusGapStr = gap < -0.001 ? `${Math.abs(gap * 100).toFixed(1).replace('.', ',')} p.p. (Atrasado vs Meta)`
-                     : gap > 0.001 ? `${(gap * 100).toFixed(1).replace('.', ',')} p.p. (À frente da Meta)`
-                     : 'No Prazo';
+  const pctPondStr = (pctPond * 100).toFixed(1).replace('.', ',');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(26);
+  doc.setTextColor(255, 255, 255);
+  doc.text(pctPondStr, 17, y + 25);
+  doc.setFontSize(14);
+  doc.setTextColor(...ACCENT);
+  doc.text('%', 17 + doc.getTextWidth(pctPondStr) + 1, y + 21);
 
-  const terminoStr = metrics.dataPrevista ? fmtData(metrics.dataPrevista) : '—';
-  let situacaoPrazoStr = '—';
-  if (metrics.diasVsPrazo != null) {
-    if (metrics.diasVsPrazo > 0) situacaoPrazoStr = `+${metrics.diasVsPrazo} dias além do prazo contratual`;
-    else if (metrics.diasVsPrazo < 0) situacaoPrazoStr = `${Math.abs(metrics.diasVsPrazo)} dias de folga vs prazo contratual`;
-    else situacaoPrazoStr = 'No limite do prazo contratual';
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(175, 170, 160);
+  doc.text(`Meta do cronograma hoje: ${(todayPlanned * 100).toFixed(1).replace('.', ',')}%`, 17, y + 37);
+
+  // Divisor 1
+  doc.setDrawColor(...BORDER_DARK);
+  doc.line(72, y + 6, 72, y + heroHeight - 6);
+
+  // Coluna B: Status vs Cronograma (Badge Visual)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(158, 148, 132);
+  doc.text('STATUS VS CRONOGRAMA', 76, y + 8);
+
+  const gapAbs = Math.abs(gap * 100);
+  const gapAbsStr = gapAbs.toFixed(1).replace('.', ',');
+  let gapFill = [28, 40, 30], gapTextCol = [34, 197, 94], gapLabel = 'À FRENTE DO CRONOGRAMA';
+  if (gap < -0.001) {
+    gapFill = [51, 28, 25]; gapTextCol = [248, 113, 113]; gapLabel = 'ATRASADO VS CRONOGRAMA';
+  } else if (Math.abs(gap) <= 0.001) {
+    gapFill = [28, 35, 45]; gapTextCol = [96, 165, 250]; gapLabel = 'NO PRAZO DO CRONOGRAMA';
   }
 
-  const kpiData = [
-    [
-      { content: 'Avanço Ponderado Realizado:', styles: { fontStyle: 'bold' } },
-      `${(pctPond * 100).toFixed(1).replace('.', ',')}%`,
-      { content: 'Meta do Cronograma (Hoje):', styles: { fontStyle: 'bold' } },
-      `${(todayPlanned * 100).toFixed(1).replace('.', ',')}%`
-    ],
-    [
-      { content: 'Status vs Cronograma:', styles: { fontStyle: 'bold' } },
-      statusGapStr,
-      { content: 'Velocidade de Produção:', styles: { fontStyle: 'bold' } },
-      `${(metrics.velocity * 100).toFixed(2).replace('.', ',')} p.p./dia${metrics.diasUteis ? ' útil' : ''}`
-    ],
-    [
-      { content: 'Evolução Últimos 7 Dias:', styles: { fontStyle: 'bold' } },
-      fmtPctDelta(metrics.delta7d),
-      { content: 'Evolução Últimos 30 Dias:', styles: { fontStyle: 'bold' } },
-      fmtPctDelta(metrics.delta30d)
-    ],
-    [
-      { content: 'Previsão de Término (Ritmo Atual):', styles: { fontStyle: 'bold' } },
-      terminoStr,
-      { content: 'Situação do Prazo:', styles: { fontStyle: 'bold' } },
-      situacaoPrazoStr
-    ]
-  ];
+  doc.setFillColor(...gapFill);
+  doc.roundedRect(76, y + 13, 40, 19, 2, 2, 'F');
 
-  doc.autoTable({
-    startY: y,
-    head: [],
-    body: kpiData,
-    theme: 'grid',
-    margin: { left: 14, right: 14 },
-    styles: { fontSize: 8.5, textColor: TEXT_COLOR, cellPadding: 3 },
-    columnStyles: {
-      0: { cellWidth: 53, fillColor: LIGHT_BG },
-      1: { cellWidth: 38 },
-      2: { cellWidth: 53, fillColor: LIGHT_BG },
-      3: { cellWidth: 38 }
-    }
-  });
-
-  y = doc.lastAutoTable.finalY + 8;
-
-  // --- SEÇÃO 2: LEITURA EXECUTIVA E RECOMENDAÇÃO ---
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('2. Diagnóstico & Recomendação Executiva', 14, y);
-  y += 4;
+  doc.setFontSize(12);
+  doc.setTextColor(...gapTextCol);
+  doc.text(gapAbsStr + ' p.p.', 96, y + 21, { align: 'center' });
 
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(6);
+  doc.text(gapLabel, 96, y + 28, { align: 'center' });
+
+  // Divisor 2
+  doc.line(120, y + 6, 120, y + heroHeight - 6);
+
+  // Coluna C: Deltas de Evolução (7d e 30d)
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7);
+  doc.setTextColor(158, 148, 132);
+  doc.text('EVOLUÇÃO RECENTE', 124, y + 8);
+
+  // Delta 7d Box
+  doc.setFillColor(42, 37, 30);
+  doc.roundedRect(124, y + 13, 30, 24, 2, 2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(metrics.delta7d >= 0 ? 34 : 248, metrics.delta7d >= 0 ? 197 : 113, metrics.delta7d >= 0 ? 94 : 113);
+  doc.text(fmtPctDelta(metrics.delta7d), 139, y + 23, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(150, 145, 135);
+  doc.text('últimos 7 dias', 139, y + 31, { align: 'center' });
+
+  // Delta 30d Box
+  doc.setFillColor(42, 37, 30);
+  doc.roundedRect(157, y + 13, 30, 24, 2, 2, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(metrics.delta30d >= 0 ? 34 : 248, metrics.delta30d >= 0 ? 197 : 113, metrics.delta30d >= 0 ? 94 : 113);
+  doc.text(fmtPctDelta(metrics.delta30d), 172, y + 23, { align: 'center' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(150, 145, 135);
+  doc.text('últimos 30 dias', 172, y + 31, { align: 'center' });
+
+  y += heroHeight + 6;
+
+  // ================= 4. LEITURA DA SEMANA & RECOMENDAÇÃO IA =================
   const narrativaPura = stripHtml(gerarNarrativaSemana(metrics, fa, totalPac, iniciados));
-  
   let recIA = '';
   const heroIAEl = document.querySelector('#heroIA .hero-ia-text');
   if (heroIAEl) recIA = heroIAEl.textContent.trim();
   if (!recIA || recIA.includes('Analisando') || recIA.includes('desativada')) recIA = '';
 
-  const diagBody = [
-    [{ content: 'Leitura da Semana:', styles: { fontStyle: 'bold', fillColor: LIGHT_BG } }, narrativaPura]
-  ];
+  doc.setFillColor(250, 249, 245);
+  doc.setDrawColor(228, 224, 216);
+  doc.roundedRect(12, y, 186, recIA ? 22 : 14, 2, 2, 'FD');
+  
+  doc.setFillColor(...ACCENT);
+  doc.rect(12, y, 2, recIA ? 22 : 14, 'F');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(...TEXT_DARK);
+  doc.text('LEITURA EXECUTIVA DA SEMANA:', 17, y + 6);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(...MUTED_TEXT);
+  const narrLines = doc.splitTextToSize(narrativaPura, 176);
+  doc.text(narrLines, 17, y + 10.5);
+
   if (recIA) {
-    diagBody.push([{ content: 'Recomendação IA:', styles: { fontStyle: 'bold', fillColor: LIGHT_BG } }, recIA]);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7.5);
+    doc.setTextColor(...ACCENT);
+    doc.text('Recomendação IA: ' + recIA, 17, y + 18);
   }
 
-  doc.autoTable({
-    startY: y,
-    head: [],
-    body: diagBody,
-    theme: 'grid',
-    margin: { left: 14, right: 14 },
-    styles: { fontSize: 8.5, textColor: TEXT_COLOR, cellPadding: 3.5 },
-    columnStyles: {
-      0: { cellWidth: 40 },
-      1: { cellWidth: 142 }
-    }
+  y += (recIA ? 22 : 14) + 6;
+
+  // ================= 5. KPIS SECUNDÁRIOS (GRID DE 4 CARDS) =================
+  const cardW = 44.5;
+  const cardH = 18;
+  const gapX = 2.5;
+
+  const frentesParadas = fa.atencao.length;
+  const totalFrentesNoFiltro = fa.total;
+  const rdosOrdenados = [...data.rdosAtivos]
+    .map(r => ({ data: parseISODate(getCSVField(r, 'Data')) }))
+    .filter(r => r.data)
+    .sort((a,b) => a.data - b.data);
+  const ultimoRDO = rdosOrdenados.length > 0 ? rdosOrdenados[rdosOrdenados.length - 1].data : null;
+  const todayHoje = new Date(); todayHoje.setHours(0,0,0,0);
+  const diasDesdeUltimo = ultimoRDO ? Math.floor((todayHoje - ultimoRDO) / 86400000) : null;
+  const concluidos = (Object.values(calcularAvancoPorPacote(data.rdosAtivos, data.pacotesAtivos)).filter(a => a.pct >= 0.999)).length;
+
+  const kpiCards = [
+    { title: 'PACOTES EM EXECUÇÃO', val: `${iniciados} de ${totalPac}`, sub: `${concluidos} concluídos` },
+    { title: 'RDOs NO PERÍODO', val: `${data.rdosAtivos.length}`, sub: `${metrics.rdos7d} nos últimos 7d` },
+    { title: 'FRENTES EM ATENÇÃO', val: `${frentesParadas} de ${totalFrentesNoFiltro}`, sub: frentesParadas === 0 ? 'Todas ativas' : 'sem RDO > 7 dias', alert: frentesParadas > 0 },
+    { title: 'ÚLTIMO LANÇAMENTO', val: ultimoRDO ? fmtData(ultimoRDO) : '—', sub: diasDesdeUltimo === null ? 'Sem RDOs' : diasDesdeUltimo === 0 ? 'Hoje' : diasDesdeUltimo === 1 ? 'Ontem' : `há ${diasDesdeUltimo} dias` }
+  ];
+
+  kpiCards.forEach((c, idx) => {
+    const cx = 12 + idx * (cardW + gapX);
+    doc.setFillColor(248, 247, 244);
+    doc.setDrawColor(228, 224, 216);
+    doc.roundedRect(cx, y, cardW, cardH, 2, 2, 'FD');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(6.5);
+    doc.setTextColor(...MUTED_TEXT);
+    doc.text(c.title, cx + 4, y + 5);
+
+    doc.setFontSize(11);
+    doc.setTextColor(c.alert ? RED_COLOR[0] : TEXT_DARK[0], c.alert ? RED_COLOR[1] : TEXT_DARK[1], c.alert ? RED_COLOR[2] : TEXT_DARK[2]);
+    doc.text(c.val, cx + 4, y + 11.5);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.5);
+    doc.setTextColor(...MUTED_TEXT);
+    doc.text(c.sub, cx + 4, y + 15.5);
   });
 
-  y = doc.lastAutoTable.finalY + 8;
+  y += cardH + 7;
 
-  // --- SEÇÃO 3: AVANÇO POR FRENTE DE SERVIÇO ---
+  // ================= 6. AVANÇO FÍSICO POR FRENTE DE SERVIÇO =================
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('3. Avanço Físico por Frente de Serviço', 14, y);
+  doc.setFontSize(10);
+  doc.setTextColor(...TEXT_DARK);
+  doc.text('Avanço Físico Ponderado por Frente de Serviço', 12, y);
   y += 4;
 
-  const pacotesAtivos = data.pacotesAtivos || [];
-  const rdosAtivos = data.rdosAtivos || [];
-  const av = calcularAvancoPorPacote(rdosAtivos, pacotesAtivos);
+  const av = calcularAvancoPorPacote(data.rdosAtivos, data.pacotesAtivos);
   const pacotesFiltrados = Object.values(av).filter(a => a.pacote);
-
   const porFrente = {};
   pacotesFiltrados.forEach(a => {
     const f = getCSVField(a.pacote, 'Frente') || 'Outros';
@@ -5732,25 +5814,26 @@ window.exportarRelatorioExecutivoPDF = function() {
     head: [['Frente de Serviço', 'Pacotes Ativos', 'Avanço Ponderado', 'Status da Frente']],
     body: frentesRows,
     theme: 'striped',
-    margin: { left: 14, right: 14 },
-    headStyles: { fillColor: HEADER_BG, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
-    styles: { fontSize: 8, cellPadding: 2.5 },
+    margin: { left: 12, right: 12 },
+    headStyles: { fillColor: HEADER_BG, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+    styles: { fontSize: 7.5, cellPadding: 2 },
     columnStyles: {
       0: { cellWidth: 70, fontStyle: 'bold' },
       1: { cellWidth: 30, halign: 'center' },
-      2: { cellWidth: 40, halign: 'right', fontStyle: 'bold' },
-      3: { cellWidth: 42, halign: 'center' }
+      2: { cellWidth: 42, halign: 'right', fontStyle: 'bold' },
+      3: { cellWidth: 44, halign: 'center' }
     }
   });
 
-  y = doc.lastAutoTable.finalY + 8;
+  y = doc.lastAutoTable.finalY + 6;
 
-  // --- SEÇÃO 4: DESTAQUES & ATENÇÃO DA SEMANA ---
-  if (y > 230) { doc.addPage(); y = 16; }
+  // ================= 7. DESTAQUES & ALERTAS DA SEMANA =================
+  if (y > 230) { doc.addPage(); y = 14; }
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('4. Destaques da Semana & Alertas de Atenção', 14, y);
+  doc.setFontSize(10);
+  doc.setTextColor(...TEXT_DARK);
+  doc.text('Destaques da Semana & Alertas de Atenção', 12, y);
   y += 4;
 
   const destaquesRows = fa.destaques.map(d => [
@@ -5765,13 +5848,13 @@ window.exportarRelatorioExecutivoPDF = function() {
     head: [['Frentes em Destaque (Avanço nos últimos 7 dias)', 'Última Atividade', 'Avanço 7d']],
     body: destaquesRows,
     theme: 'plain',
-    margin: { left: 14, right: 14 },
-    headStyles: { fillColor: [22, 101, 52], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    styles: { fontSize: 8, cellPadding: 2 },
+    margin: { left: 12, right: 12 },
+    headStyles: { fillColor: GREEN_COLOR, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+    styles: { fontSize: 7.5, cellPadding: 2 },
     columnStyles: {
-      0: { cellWidth: 100 },
+      0: { cellWidth: 104 },
       1: { cellWidth: 42, halign: 'center' },
-      2: { cellWidth: 40, halign: 'right', fontStyle: 'bold', textColor: [22, 101, 52] }
+      2: { cellWidth: 40, halign: 'right', fontStyle: 'bold', textColor: GREEN_COLOR }
     }
   });
 
@@ -5789,30 +5872,31 @@ window.exportarRelatorioExecutivoPDF = function() {
     head: [['Frentes que Merecem Atenção (Sem lançamentos recentes)', 'Última Atividade', 'Dias Parada']],
     body: atencaoRows,
     theme: 'plain',
-    margin: { left: 14, right: 14 },
-    headStyles: { fillColor: [185, 28, 28], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
-    styles: { fontSize: 8, cellPadding: 2 },
+    margin: { left: 12, right: 12 },
+    headStyles: { fillColor: RED_COLOR, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 7.5 },
+    styles: { fontSize: 7.5, cellPadding: 2 },
     columnStyles: {
-      0: { cellWidth: 100 },
+      0: { cellWidth: 104 },
       1: { cellWidth: 42, halign: 'center' },
-      2: { cellWidth: 40, halign: 'right', fontStyle: 'bold', textColor: [185, 28, 28] }
+      2: { cellWidth: 40, halign: 'right', fontStyle: 'bold', textColor: RED_COLOR }
     }
   });
 
-  y = doc.lastAutoTable.finalY + 8;
+  y = doc.lastAutoTable.finalY + 6;
 
-  // --- SEÇÃO 5: PACOTES EM EXECUÇÃO ---
-  if (y > 210) { doc.addPage(); y = 16; }
+  // ================= 8. PRINCIPAIS PACOTES DE SERVIÇO EM EXECUÇÃO =================
+  if (y > 210) { doc.addPage(); y = 14; }
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(11);
-  doc.text('5. Principais Pacotes de Serviço em Execução', 14, y);
+  doc.setFontSize(10);
+  doc.setTextColor(...TEXT_DARK);
+  doc.text('Principais Pacotes de Serviço em Execução', 12, y);
   y += 4;
 
   const ativosOrdenados = pacotesFiltrados
     .filter(a => a.qtdExecutada > 0)
     .sort((a,b) => (b.ultimaData || 0) - (a.ultimaData || 0))
-    .slice(0, 18);
+    .slice(0, 20);
 
   const pacotesRows = ativosOrdenados.map(a => [
     getCSVField(a.pacote, 'Pacote'),
@@ -5827,31 +5911,31 @@ window.exportarRelatorioExecutivoPDF = function() {
     head: [['Pacote / Serviço', 'Frente', 'Quantidade Executada / Estimada', 'Avanço', 'Último RDO']],
     body: pacotesRows.length ? pacotesRows : [['Nenhum pacote com execução registrada', '—', '—', '—', '—']],
     theme: 'striped',
-    margin: { left: 14, right: 14 },
+    margin: { left: 12, right: 12 },
     headStyles: { fillColor: HEADER_BG, textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
     styles: { fontSize: 7.5, cellPadding: 2 },
     columnStyles: {
-      0: { cellWidth: 62, fontStyle: 'bold' },
+      0: { cellWidth: 64, fontStyle: 'bold' },
       1: { cellWidth: 35 },
-      2: { cellWidth: 45, halign: 'right' },
+      2: { cellWidth: 47, halign: 'right' },
       3: { cellWidth: 20, halign: 'right', fontStyle: 'bold' },
       4: { cellWidth: 20, halign: 'center' }
     }
   });
 
-  // --- RODAPÉ E PAGINAÇÃO EM TODAS AS PÁGINAS ---
+  // ================= RODAPÉ E PAGINAÇÃO EM TODAS AS PÁGINAS =================
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setDrawColor(210, 205, 195);
     doc.setLineWidth(0.3);
-    doc.line(14, 283, 196, 283);
+    doc.line(12, 284, 198, 284);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
-    doc.setTextColor(...MUTED_COLOR);
-    doc.text('Sistema Teotônio Vilela · Relatório Gerencial de Acompanhamento Executivo', 14, 287);
-    doc.text(`Página ${i} de ${pageCount}`, 196, 287, { align: 'right' });
+    doc.setTextColor(...MUTED_TEXT);
+    doc.text('Sistema Teotônio Vilela · Relatório Gerencial de Acompanhamento Executivo', 12, 288);
+    doc.text(`Página ${i} de ${pageCount}`, 198, 288, { align: 'right' });
   }
 
   const filename = `Relatorio_Executivo_Teotonio_${today.toISOString().slice(0, 10)}.pdf`;
