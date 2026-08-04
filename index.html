@@ -2920,16 +2920,28 @@ function contextoCarimbo(idx, coord, quando) {
   var agora = quando instanceof Date && !isNaN(quando) ? quando : new Date();
   var base = _ctxFotoPorChave[idx];
   if (!base) {
-    var s = (STATE.draft && STATE.draft.servicos && STATE.draft.servicos[idx]) || {};
-    var pac = STATE.pacotes.find(function (p) { return getCSVField(p, 'ID') === s.pacoteId; });
-    var est = [s.estacaIni, s.estacaFim].filter(Boolean);
-    base = {
-      turno: (STATE.draft && STATE.draft.turno) || '',
-      frente: s.frente || '',
-      pacote: (pac && getCSVField(pac, 'Pacote')) || '',
-      estaca: est.length ? (est.length > 1 && est[0] !== est[1] ? est[0] + ' a ' + est[1] : est[0]) : '',
-      apontador: STATE.usuarioLogado || ''
-    };
+    if (typeof idx === 'string' && idx.startsWith('o')) {
+      var realIdx = parseInt(idx.slice(1), 10);
+      var o = (STATE.draft && STATE.draft.outrosServicos && STATE.draft.outrosServicos[realIdx]) || {};
+      base = {
+        turno: (STATE.draft && STATE.draft.turno) || '',
+        frente: 'Serviço Avulso',
+        pacote: o.descricao || 'Serviço Avulso',
+        estaca: o.local || '',
+        apontador: STATE.usuarioLogado || ''
+      };
+    } else {
+      var s = (STATE.draft && STATE.draft.servicos && STATE.draft.servicos[idx]) || {};
+      var pac = STATE.pacotes.find(function (p) { return getCSVField(p, 'ID') === s.pacoteId; });
+      var est = [s.estacaIni, s.estacaFim].filter(Boolean);
+      base = {
+        turno: (STATE.draft && STATE.draft.turno) || '',
+        frente: s.frente || '',
+        pacote: (pac && getCSVField(pac, 'Pacote')) || '',
+        estaca: est.length ? (est.length > 1 && est[0] !== est[1] ? est[0] + ' a ' + est[1] : est[0]) : '',
+        apontador: STATE.usuarioLogado || ''
+      };
+    }
   }
   return Object.assign({}, base, {
     data: agora.toLocaleDateString('pt-BR'),
@@ -8995,6 +9007,7 @@ function renderServicoRow(s, idx, frentes) {
 }
 
 function renderOutroServicoRow(o, idx) {
+  const chaveFoto = 'o' + idx;
   return `
     <div class="servico-row" data-outro-idx="${idx}">
       <span class="row-num">ITEM ${idx + 1}</span>
@@ -9013,6 +9026,7 @@ function renderOutroServicoRow(o, idx) {
           <label>Local / Referência (opcional)</label>
           <input type="text" data-outro="${idx}" data-field="local" value="${escHtml(o.local||'')}" placeholder="ex: E110 a E120, canteiro, etc.">
         </div>
+        ${campoFotos(chaveFoto)}
       </div>
     </div>
   `;
@@ -9171,6 +9185,9 @@ function adicionarOutroServico() {
 
 function removerOutroServico(idx) {
   if (!STATE.draft.outrosServicos) return;
+  delete _fotosPorServico['o' + idx];
+  delete _ctxFotoPorChave['o' + idx];
+  delete _limiteFotoPorChave['o' + idx];
   STATE.draft.outrosServicos.splice(idx, 1);
   saveDraft(STATE.draft);
   transitionTo(render);
@@ -9245,6 +9262,8 @@ async function salvarRDO() {
   // Índice de cada serviço no formulário, para casar com as fotos escolhidas.
   const idxOriginal = new Map();
   d.servicos.forEach((s, i) => idxOriginal.set(s, i));
+  const outrosIdxOriginal = new Map();
+  (d.outrosServicos || []).forEach((o, i) => outrosIdxOriginal.set(o, i));
   const fotosDoLote = {};   // { '<id do serviço>': [{thumb, full}] }
 
   const batchPacotes = d.servicos
@@ -9282,24 +9301,33 @@ async function salvarRDO() {
       };
     });
 
-  const batchOutros = outrosValidos.map(o => ({
-    data: d.data,
-    turno: d.turno || 'Diurno',
-    pacote_id: 'OUTRO',
-    pacote_nome: o.descricao.trim(),
-    quantidade: 0,
-    unidade: '',
-    local_estaca: o.local ? o.local.trim() : '',
-    equipe: o.equipe ? o.equipe.trim() : '',
-    subcontratado: o.equipe ? o.equipe.trim() : '',
-    efetivo_total: 0,
-    equipamentos: '',
-    clima: '',
-    paralisado_motivo: '',
-    foto_link: '',
-    observacao: [d.observacaoGeral, 'Serviço avulso'].filter(x => x && x.trim()).join(' · '),
-    apontador: d.apontador
-  }));
+  const batchOutros = outrosValidos.map(o => {
+    const origIdx = outrosIdxOriginal.get(o);
+    const chaveFoto = 'o' + origIdx;
+    const idSvc = gerarIdServico(chaveFoto);
+    const fotosSvc = _fotosPorServico[chaveFoto] || [];
+    if (fotosSvc.length) fotosDoLote[idSvc] = fotosSvc.slice();
+
+    return {
+      id: idSvc,
+      data: d.data,
+      turno: d.turno || 'Diurno',
+      pacote_id: 'OUTRO',
+      pacote_nome: o.descricao.trim(),
+      quantidade: 0,
+      unidade: '',
+      local_estaca: o.local ? o.local.trim() : '',
+      equipe: o.equipe ? o.equipe.trim() : '',
+      subcontratado: o.equipe ? o.equipe.trim() : '',
+      efetivo_total: 0,
+      equipamentos: '',
+      clima: '',
+      paralisado_motivo: '',
+      foto_link: '',
+      observacao: [d.observacaoGeral, 'Serviço avulso'].filter(x => x && x.trim()).join(' · '),
+      apontador: d.apontador
+    };
+  });
 
   let batch = [...batchPacotes, ...batchOutros];
 

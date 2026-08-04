@@ -292,15 +292,19 @@ function nfMesclarLeitura(base, daChave, daIA) {
     por('vTotal', nfNum(d.vTotal), c('vTotal'));
     por('vBaseICMS', nfNum(d.vBaseICMS), c('vBaseICMS'));
     por('vICMS', nfNum(d.vICMS), c('vICMS'));
-    if (Array.isArray(d.itens) && d.itens.length) {
-      n.itens = d.itens.slice(0, 60).map(it => ({
+    let rawItens = d.itens;
+    if (typeof rawItens === 'string') {
+      try { rawItens = JSON.parse(rawItens); } catch (e) { rawItens = []; }
+    }
+    if (Array.isArray(rawItens) && rawItens.length) {
+      n.itens = rawItens.slice(0, 200).map(it => ({
         codigo: String(it.codigo || '').trim(),
         descricao: String(it.descricao || '').trim(),
         qtd: nfNum(it.qtd),
         un: String(it.un || 'UN').trim().toUpperCase().slice(0, 6),
         vUnit: nfNum(it.vUnit),
         vTotal: nfNum(it.vTotal) || (nfNum(it.qtd) * nfNum(it.vUnit)),
-        materialId: ''
+        materialId: String(it.materialId || '').trim()
       })).filter(it => it.descricao);
       conf.itens = c('itens');
     }
@@ -1067,9 +1071,9 @@ function nfRenderItens() {
       return `<div class="nf-item">
         <div class="row" style="gap:7px;margin-bottom:6px">
           <div class="field" style="margin:0;flex:3;min-width:150px"><input value="${esc(it.descricao)}" placeholder="Item (descrição do material)" oninput="nfItemCampo(${i},'descricao',this.value)"></div>
-          <div class="field nf-extra" style="margin:0;max-width:74px"><input class="num" inputmode="decimal" value="${it.qtd ? fmtQtd(it.qtd) : ''}" placeholder="Qtd" oninput="nfItemCampo(${i},'qtd',this.value)"></div>
-          <div class="field nf-extra" style="margin:0;max-width:78px"><input value="${esc(it.un)}" placeholder="Un" oninput="nfItemCampo(${i},'un',this.value)" style="text-transform:uppercase"></div>
-          <div class="field nf-extra" style="margin:0;max-width:96px"><input class="num" inputmode="decimal" value="${it.vUnit ? fmtNum(it.vUnit) : ''}" placeholder="V. unit." oninput="nfItemCampo(${i},'vUnit',this.value)"></div>
+          <div class="field" style="margin:0;max-width:74px"><input class="num" inputmode="decimal" value="${it.qtd ? fmtQtd(it.qtd) : ''}" placeholder="Qtd" oninput="nfItemCampo(${i},'qtd',this.value)"></div>
+          <div class="field" style="margin:0;max-width:78px"><input value="${esc(it.un)}" placeholder="Un" oninput="nfItemCampo(${i},'un',this.value)" style="text-transform:uppercase"></div>
+          <div class="field" style="margin:0;max-width:96px"><input class="num" inputmode="decimal" value="${it.vUnit ? fmtNum(it.vUnit) : ''}" placeholder="V. unit." oninput="nfItemCampo(${i},'vUnit',this.value)"></div>
           <div class="field" style="margin:0;max-width:118px"><input class="num" inputmode="decimal" value="${it.vTotal ? fmtNum(it.vTotal) : ''}" placeholder="Valor do item" oninput="nfItemCampo(${i},'vTotal',this.value)"></div>
           <button class="btn btn-sm btn-ghost" onclick="nfDelItem(${i})" title="Remover">${ic('fechar')}</button></div>
         ${mat ? `<div class="nf-vinc">${ic('vinculo')} Material <b>${esc(mat.descricao)}</b> · ${mat.notas} nota(s) <button class="btn btn-sm btn-ghost" onclick="nfItemCampo(${i},'materialId','');nfRenderItens()">desvincular</button></div>` : ''}
@@ -1760,9 +1764,24 @@ async function nfCarregar(obraId) {
 }
 function nfDoServidor(s, obraId, locais) {
   const local = locais.find(l => (l.clientId || l.id) === (s.clientId || s.id));
-  let itens = []; try { itens = JSON.parse(s.itens || '[]'); } catch (e) { itens = []; }
-  let hist = []; try { hist = JSON.parse(s.historico || '[]'); } catch (e) { hist = []; }
-  let leitura = {}; try { leitura = JSON.parse(s.leitura || '{}'); } catch (e) { leitura = {}; }
+  let itens = [];
+  try {
+    if (Array.isArray(s.itens)) itens = s.itens;
+    else if (typeof s.itens === 'string' && s.itens.trim()) itens = JSON.parse(s.itens);
+    else if (Array.isArray(s.Itens)) itens = s.Itens;
+    else if (typeof s.Itens === 'string' && s.Itens.trim()) itens = JSON.parse(s.Itens);
+  } catch (e) { itens = []; }
+  if (!Array.isArray(itens)) itens = [];
+  let hist = [];
+  try {
+    if (Array.isArray(s.historico)) hist = s.historico;
+    else if (typeof s.historico === 'string' && s.historico.trim()) hist = JSON.parse(s.historico);
+  } catch (e) { hist = []; }
+  let leitura = {};
+  try {
+    if (typeof s.leitura === 'object' && s.leitura) leitura = s.leitura;
+    else if (typeof s.leitura === 'string' && s.leitura.trim()) leitura = JSON.parse(s.leitura);
+  } catch (e) { leitura = {}; }
   return {
     id: s.id, clientId: s.clientId || s.id, obraId: obraId,
     numero: String(s.numero || ''), serie: String(s.serie || ''), chave: nfChaveNorm(s.chave),

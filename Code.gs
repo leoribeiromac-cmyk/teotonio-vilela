@@ -1702,14 +1702,14 @@ function nfSalvar(p) {
     vtotal: Number(p.vtotal || 0),
     vbaseicms: Number(p.vbaseicms || 0),
     vicms: Number(p.vicms || 0),
-    itens: p.itens || '[]',
+    itens: typeof p.itens === 'string' ? p.itens : JSON.stringify(p.itens || []),
     obs: p.obs || '',
     responsavel: p.responsavel || '',
     status: p.status || 'Recebida',
     driveid: p.driveid || '',
     drivelink: p.drivelink || '',
-    leitura: p.leitura || '{}',
-    historico: p.historico || '[]',
+    leitura: typeof p.leitura === 'string' ? p.leitura : JSON.stringify(p.leitura || {}),
+    historico: typeof p.historico === 'string' ? p.historico : JSON.stringify(p.historico || []),
     usuario: p.usuario || usuarioDoToken(p.token) || '',
     criadoem: p.criadoem || Date.now(),
     atualizadoem: Date.now()
@@ -2257,14 +2257,16 @@ function nfeAcharXML(txt) {
 function nfeFilho(el, nome) {
   if (!el) return null;
   var fs = el.getChildren();
-  for (var i = 0; i < fs.length; i++) if (fs[i].getName() === nome) return fs[i];
+  var n = String(nome).toLowerCase();
+  for (var i = 0; i < fs.length; i++) if (fs[i].getName().toLowerCase() === n) return fs[i];
   return null;
 }
 function nfeFilhos(el, nome) {
   var out = [];
   if (!el) return out;
   var fs = el.getChildren();
-  for (var i = 0; i < fs.length; i++) if (fs[i].getName() === nome) out.push(fs[i]);
+  var n = String(nome).toLowerCase();
+  for (var i = 0; i < fs.length; i++) if (fs[i].getName().toLowerCase() === n) out.push(fs[i]);
   return out;
 }
 function nfeTxt(el, nome) {
@@ -2273,7 +2275,15 @@ function nfeTxt(el, nome) {
 }
 function nfeNum(el, nome) {
   var v = nfeTxt(el, nome);
-  var n = parseFloat(v);
+  if (!v) return 0;
+  var s = String(v).trim().replace(/R\$\s*/gi, '').replace(/\s+/g, '');
+  if (s.indexOf(',') > -1 && s.indexOf('.') > -1) {
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (s.indexOf(',') > -1) {
+    s = s.replace(',', '.');
+  }
+  var n = parseFloat(s);
   return isNaN(n) ? 0 : n;
 }
 // procura infNFe em qualquer profundidade (nfeProc > NFe > infNFe, ou direto)
