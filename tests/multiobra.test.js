@@ -69,9 +69,14 @@ const CACHE = {
   remove: k => { delete _cache[k]; }
 };
 
+const ABERTURAS = { n: 0 };
+
 const ctx = {
   console, JSON, String, Number, Object, Array, Math, Date, isNaN, parseFloat, parseInt, RegExp,
-  SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: n => ABAS[n] || null, insertSheet: n => (ABAS[n] = Aba([], [])) }) },
+  SpreadsheetApp: { getActiveSpreadsheet: () => {
+    ABERTURAS.n++;   // abrir a planilha e a operacao mais cara do Apps Script
+    return { getSheetByName: n => ABAS[n] || null, insertSheet: n => (ABAS[n] = Aba([], [])) };
+  } },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   Utilities: {
     formatDate: (d, tz, f) => new Date(d).toISOString().slice(0, 10),
@@ -261,6 +266,62 @@ t('admin nunca fica restrito a uma obra', () => {
     nome: 'Leonardo', perfil: 'admin', obras: 'ranario' });
   const mapa = JSON.parse(PROPS.getProperty('USUARIOS'));
   assert.strictEqual(ctx.usuarioObrasDe(mapa.Leonardo), '*');
+});
+
+console.log('\nLOGIN FORA DO CAMINHO DA PLANILHA');
+
+// O que faz o login demorar no Apps Script e abrir a planilha. Estes testes
+// provam que ele nao abre mais, e que a trilha de auditoria NAO se perdeu:
+// ela desce depois, junto com a proxima gravacao de verdade.
+t('entrar nao abre a planilha', () => {
+  ABERTURAS.n = 0;
+  const r = ctx.loginUsuario('Leonardo', 'senha123');
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(ABERTURAS.n, 0, 'o login ainda abriu a planilha ' + ABERTURAS.n + '×');
+});
+
+t('sair tambem nao abre a planilha', () => {
+  const tk = ctx.loginUsuario('Leonardo', 'senha123').token;
+  ABERTURAS.n = 0;
+  ctx.sessaoRevogar(tk);
+  assert.strictEqual(ABERTURAS.n, 0, 'o logout ainda abriu a planilha ' + ABERTURAS.n + '×');
+});
+
+t('a trilha de LOGIN fica na fila, nao some', () => {
+  const naFila = Object.keys(PROPS.getProperties()).filter(k => k.indexOf('AUDQ_') === 0);
+  assert.ok(naFila.length >= 3, 'esperava LOGIN/LOGOUT enfileirados, achei ' + naFila.length);
+});
+
+t('a proxima gravacao de verdade desce a fila para a planilha', () => {
+  const antes = ABAS.Auditoria.dados.length;
+  const pendentes = Object.keys(PROPS.getProperties()).filter(k => k.indexOf('AUDQ_') === 0).length;
+  ctx.registrarAuditoria('Leonardo', 'admin', 'TESTE', 'teotonio', '-', '', 'gravacao normal');
+  const texto = JSON.stringify(ABAS.Auditoria.dados);
+  assert.ok(/LOGIN/.test(texto), 'o LOGIN nao chegou na planilha');
+  assert.ok(/LOGOUT/.test(texto), 'o LOGOUT nao chegou na planilha');
+  assert.strictEqual(ABAS.Auditoria.dados.length, antes + pendentes + 1,
+    'numero de linhas gravadas nao bate com a fila');
+  assert.strictEqual(
+    Object.keys(PROPS.getProperties()).filter(k => k.indexOf('AUDQ_') === 0).length, 0,
+    'a fila nao foi limpa depois de gravar');
+});
+
+t('a fila sai na ORDEM em que aconteceu', () => {
+  ctx.auditoriaEnfileirar(['2026-08-05 10:00:00', 'A', 'campo', 'LOGIN', 'teotonio', '-', '', 'primeiro']);
+  ctx.auditoriaEnfileirar(['2026-08-05 10:00:01', 'B', 'campo', 'LOGIN', 'teotonio', '-', '', 'segundo']);
+  ctx.auditoriaEnfileirar(['2026-08-05 10:00:02', 'C', 'campo', 'LOGIN', 'teotonio', '-', '', 'terceiro']);
+  ctx.auditoriaDescarregar();
+  const ult = ABAS.Auditoria.dados.slice(-3).map(l => l[7]);
+  assert.deepStrictEqual(ult, ['primeiro', 'segundo', 'terceiro'], JSON.stringify(ult));
+});
+
+t('a faxina diaria desce a fila mesmo sem ninguem lancar nada', () => {
+  ctx.loginUsuario('Leonardo', 'senha123');
+  assert.ok(Object.keys(PROPS.getProperties()).some(k => k.indexOf('AUDQ_') === 0), 'nada na fila');
+  ctx.limparSessoesAbandonadas();
+  assert.ok(!Object.keys(PROPS.getProperties()).some(k => k.indexOf('AUDQ_') === 0),
+    'a faxina nao descarregou a fila');
+  assert.ok(/LOGIN/.test(JSON.stringify(ABAS.Auditoria.dados.slice(-1))), 'o LOGIN nao chegou');
 });
 
 console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');
