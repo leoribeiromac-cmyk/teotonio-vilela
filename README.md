@@ -261,21 +261,50 @@ O backend também expõe `?action=producaoPorPacote&mes=2026-06` (JSON, deduplic
 | `js/ui/icones.js` | Conjunto de ícones do app — traço único na grade de 24, cor herdada do tema. Cobre navegação, ações e frentes de serviço (`icFrente()` escolhe pelo nome da frente) |
 | `vendor/` | Bibliotecas servidas pelo próprio site (ver abaixo) |
 
-### Bibliotecas vendorizadas
+### Bibliotecas vendorizadas, carregadas sob demanda
 
-Nada de CDN: CDN não existe no canteiro. Antes, no primeiro acesso sem sinal, o
-gráfico não desenhava e o RDO não saía em PDF nem em Excel. Servidas do próprio
-GitHub Pages, o service worker as guarda junto com o app.
+Nada de CDN: CDN não existe no canteiro. Tudo é servido pelo próprio GitHub
+Pages, e o service worker guarda junto com o app.
 
-| Pasta | Biblioteca | Para quê |
+| Pasta | Biblioteca | Quando é buscada |
 |---|---|---|
-| `vendor/chartjs/` | Chart.js 4.4.0 | Curva S, sparklines e gráficos do painel |
-| `vendor/jspdf/` | jsPDF 2.5.1 + AutoTable 3.5.31 | RDO e relatório executivo em PDF |
-| `vendor/xlsx/` | xlsx-js-style 1.2.0 | Exportação de RDO em Excel, com estilos |
-| `vendor/pdfjs/` | PDF.js (Mozilla) | Extrai o texto do PDF da DANFE |
+| `vendor/chartjs/` | Chart.js 4.4.0 | ao abrir um painel com gráfico |
+| `vendor/jspdf/` | jsPDF 2.5.1 + AutoTable 3.5.31 | ao gerar um PDF |
+| `vendor/xlsx/` | xlsx-js-style 1.2.0 | ao exportar Excel |
+| `vendor/pdfjs/` | PDF.js (Mozilla) | na leitura da DANFE e na tela de Projetos |
+| `vendor/fontes/` | Space Grotesk + JetBrains Mono | na abertura (140 KB, subconjunto latino) |
 
-Ao trocar de versão, suba também o `VERSAO` do `sw.js` — é isso que descarta o
-cache antigo nos aparelhos.
+**Nenhuma das quatro primeiras entra no `<head>`.** Somadas são 1,3 MB, e
+enquanto o navegador as baixava e compilava a tela ficava branca — 13 segundos
+no 4G de campo, medidos. Nada disso é necessário para abrir o app e lançar um
+serviço, que é o uso mais frequente.
+
+Agora cada uma é buscada na primeira vez que faz falta, por `usarLib()`:
+
+```js
+await usarLib('pdf');            // garante jsPDF + AutoTable na memória
+comLib('excel', gerarPlanilha, 'a planilha');   // idem, já com aviso de espera
+```
+
+Duas chamadas simultâneas dividem o mesmo download, e o service worker guarda
+depois da primeira vez — a segunda é instantânea e funciona sem sinal.
+
+O efeito na abertura, com cache vazio:
+
+| Rede | 1ª pintura antes | depois | App visível antes | depois |
+|---|---|---|---|---|
+| 4G bom (10 Mbps) | 13,0 s | **0,5 s** | 13,2 s | **1,7 s** |
+| 4G ruim (1,6 Mbps) | 13,1 s | **1,9 s** | 13,4 s | **6,7 s** |
+| 3G (0,4 Mbps) | 41,9 s | **6,8 s** | 53,0 s | **25,8 s** |
+
+Transferência no primeiro acesso: 2.560 KB → **1.233 KB**.
+
+As fontes saíram do Google Fonts e vieram para `vendor/fontes/`: a folha de
+estilo externa bloqueava a pintura, então com sinal ruim a tela esperava um
+servidor de fora. Era também a última dependência de terceiros do app.
+
+Ao trocar de versão de qualquer uma, suba também o `VERSAO` do `sw.js` — é
+isso que descarta o cache antigo nos aparelhos.
 
 ### Aviso de nova versão
 

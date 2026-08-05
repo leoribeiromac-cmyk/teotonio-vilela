@@ -4,15 +4,17 @@
 // Estratégia:
 //  • index.html (navegação): REDE PRIMEIRO — atualizações do app chegam
 //    na hora; o cache só entra como fallback quando estiver sem sinal.
-//  • Estáticos (vendor/, js/, ícones e as fontes do Google): CACHE PRIMEIRO
-//    com revalidação em segundo plano — abre rápido no 4G do campo.
+//  • Estáticos (vendor/, js/, fontes, ícones, pranchas): CACHE PRIMEIRO com
+//    revalidação em segundo plano — abre rápido no 4G do campo. As bibliotecas
+//    pesadas (jsPDF, xlsx, PDF.js, Chart.js) são buscadas só quando fazem
+//    falta, e a partir daí ficam aqui: a segunda vez não custa nada.
 //  • Google Sheets / Apps Script / Gemini: NUNCA intercepta — dados de
 //    produção vêm sempre da rede (a fila offline do app cuida do resto).
 // ============================================================
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v10'; // v10: tela de Projetos (pranchas do executivo)
+const VERSAO = 'teotonio-v11'; // v11: bibliotecas sob demanda + fontes vendorizadas
 const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleusercontent.com', 'generativelanguage.googleapis.com'];
 
 // O app avisa "nova versão disponível" e só troca quando o usuário mandar —
