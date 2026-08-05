@@ -30,6 +30,11 @@
 <script src="vendor/pdfjs/pdf.min.js"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
+<!-- Cadastro das obras que não têm planilha própria. Cada arquivo só escreve
+     em window.OBRAS_ARQ, sem depender de nada do app — por isso pode vir
+     aqui no topo, antes do script principal. -->
+<script src="dados/ranario.js"></script>
+<script src="dados/ruas-de-terra.js"></script>
 <script src="js/ui/icones.js"></script>
 <script src="js/nf/adaptador.js"></script>
 <script src="js/nf/notas.js"></script>
@@ -482,6 +487,23 @@ html,body{
 .btn-refresh{display:flex;align-items:center;justify-content:center;gap:7px}
 .btn-refresh .ic{width:14px;height:14px;vertical-align:0;opacity:.9}
 .btn-apresentar{margin-top:6px}
+
+/* ---- seletor de obra (topo da barra lateral) ---- */
+.obra-sel{padding:0 14px 12px;border-bottom:1px solid var(--sidebar-border);margin-bottom:10px}
+.obra-sel-lbl{
+  display:block;font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--sidebar-text);opacity:.6;margin-bottom:5px;
+}
+.obra-sel select{
+  width:100%;padding:8px 10px;border-radius:8px;cursor:pointer;
+  background:rgba(255,255,255,.07);border:1px solid var(--sidebar-border);
+  color:var(--sidebar-active);font-family:inherit;font-size:12.5px;font-weight:600;
+  outline:none;transition:all calc(.15s * var(--anim-speed));
+}
+.obra-sel select:hover{background:rgba(255,255,255,.13)}
+.obra-sel select:focus{border-color:var(--acc)}
+/* o <option> herda o fundo do sistema, não o da barra escura */
+.obra-sel select option{background:var(--sidebar-bg);color:var(--sidebar-active)}
 /* Crédito do autor, como no app "Gestor — Controle de Obras". Discreto:
    fica abaixo do seletor de tema, no fim de tudo que se opera. */
 .sidebar-credito{
@@ -1915,22 +1937,149 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 
 <script>
 // ====================================================================
-// CONFIGURAÇÃO
+// CONFIGURAÇÃO — MULTI-OBRA
+// --------------------------------------------------------------------
+// Este app nasceu para UMA obra e tinha um único CONFIG. Agora ele atende
+// várias, e o CONFIG passou a ser a configuração da obra ATIVA: o resto do
+// código continua lendo `CONFIG.csv`, `CONFIG.appsScript`, `CONFIG.ls`…
+// exatamente como antes, sem saber que existe troca de obra. Trocar de obra
+// é reapontar o CONFIG e recarregar o STATE.
+//
+// De onde vem o cadastro de cada obra (`fonte`):
+//   'csv'     — pacotes, coeficientes e cronograma vêm de planilha Google
+//               publicada. É o caso da Teotônio, que já tem a planilha
+//               montada e a medição rodando em cima dela.
+//   'arquivo' — o cadastro vem de um arquivo `dados/<id>.js` do próprio
+//               repositório. É como as obras entram no ar sem esperar
+//               alguém montar planilha: os LANÇAMENTOS continuam indo para
+//               o backend normalmente, só o cadastro é que é estático.
 // ====================================================================
-const CONFIG = {
-  csv: {
-    cronograma:    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=565093066&single=true&output=csv',
-    pacotes:       'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=386002450&single=true&output=csv',
-    coeficientes:  'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1962881430&single=true&output=csv',
-    rdoavanco:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1906961773&single=true&output=csv',
-    rdodiario:     'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=1234324544&single=true&output=csv',
-  },
-  appsScript: 'https://script.google.com/macros/s/AKfycbwfslMjc5bmKbZ3y6OpUZyi8MD2KGriocjAVBUci5FOMiI7ho0KgTXvtAioDGWkpk5I/exec',
-  estacasCB: { ini: 99, fim: 141, label: 'Centro→Bairro' },
-  estacasBC: { ini: 201, fim: 244, label: 'Bairro→Centro' },
+
+/* O que não muda de obra para obra. */
+const APP = {
   refreshMs: 5 * 60 * 1000,
-  ls: { rdoDraft: 'teotonio_rdo_draft_v1', apontador: 'teotonio_apontador_v1', sabadoUtil: 'teotonio_sabado_util_v1', oficialRDO: 'teotonio_oficial_rdo_v1', token: 'teotonio_token_v1', perfil: 'teotonio_perfil_v1', usuariosUI: 'teotonio_usuarios_ui_v1' }
+  // Chaves de acesso, que valem para a EMPRESA e não para a obra: quem
+  // entrou continua entrado ao trocar de obra.
+  lsGlobal: { token: 'teotonio_token_v1', perfil: 'teotonio_perfil_v1', usuariosUI: 'teotonio_usuarios_ui_v1' }
 };
+
+const CSV_TEOTONIO = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=';
+
+const OBRAS_CFG = {
+  teotonio: {
+    id: 'teotonio',
+    nome: 'Av. Senador Teotônio Vilela',
+    nomeCurto: 'Teotônio Vilela',
+    subtitulo: 'Duplicação viária',
+    contrato: '084/SPOBRAS/2024 · CC 182',
+    local: 'Zona Sul — São Paulo/SP',
+    valorGlobal: 22257026.47,
+    fonte: 'csv',
+    csv: {
+      cronograma:   CSV_TEOTONIO + '565093066&single=true&output=csv',
+      pacotes:      CSV_TEOTONIO + '386002450&single=true&output=csv',
+      coeficientes: CSV_TEOTONIO + '1962881430&single=true&output=csv',
+      rdoavanco:    CSV_TEOTONIO + '1906961773&single=true&output=csv',
+      rdodiario:    CSV_TEOTONIO + '1234324544&single=true&output=csv',
+    },
+    appsScript: 'https://script.google.com/macros/s/AKfycbwfslMjc5bmKbZ3y6OpUZyi8MD2KGriocjAVBUci5FOMiI7ho0KgTXvtAioDGWkpk5I/exec',
+    estacasCB: { ini: 99, fim: 141, label: 'Centro→Bairro' },
+    estacasBC: { ini: 201, fim: 244, label: 'Bairro→Centro' },
+  }
+};
+
+/* As obras cadastradas por arquivo entram aqui. Cada `dados/<id>.js` só faz
+   `window.OBRAS_ARQ['<id>'] = {…}` — não chama função nenhuma deste script,
+   justamente para poder ser carregado ANTES dele, no <head>, sem depender
+   da ordem. Ficam depois da Teotônio, que é a ordem dos cartões no portal. */
+Object.keys(window.OBRAS_ARQ || {}).forEach(function (id) {
+  const o = window.OBRAS_ARQ[id];
+  if (o && o.id) OBRAS_CFG[o.id] = o;
+});
+
+/* Ordem de exibição: a Teotônio primeiro, depois as demais como vieram. */
+function obrasOrdenadas() {
+  return Object.keys(OBRAS_CFG).map(id => OBRAS_CFG[id]);
+}
+
+const LS_OBRA = 'teotonio_obra_ativa_v1';
+
+/* Qual obra está aberta. Padrão: a Teotônio — quem já usava o app não
+   percebe que ele virou multi-obra até querer trocar. */
+function obraAtivaId() {
+  const id = localStorage.getItem(LS_OBRA);
+  return (id && OBRAS_CFG[id]) ? id : 'teotonio';
+}
+
+/* Nome de chave do localStorage por obra. A Teotônio mantém as chaves SEM
+   sufixo, exatamente as que já estão gravadas nos aparelhos do campo — se
+   eu renomeasse, todo apontador perderia o rascunho aberto e a preferência
+   dele no dia da atualização. Obra nova ganha o sufixo. */
+function lsObra(base) {
+  const id = obraAtivaId();
+  return id === 'teotonio' ? base : base + ':' + id;
+}
+
+function montarConfig(id) {
+  const o = OBRAS_CFG[id] || OBRAS_CFG.teotonio;
+  return Object.assign({}, o, {
+    // Obra cadastrada por arquivo não tem planilha PRÓPRIA, mas os
+    // lançamentos dela vão para a MESMA planilha das outras — é dali que
+    // saem, filtrados pela coluna `Obra`. Sem este padrão, `CONFIG.csv`
+    // ficava indefinido e a obra nem carregava.
+    csv: o.csv || OBRAS_CFG.teotonio.csv,
+    appsScript: o.appsScript || OBRAS_CFG.teotonio.appsScript,
+    // A faixa de estacas por SENTIDO (Centro→Bairro / Bairro→Centro) é da
+    // Teotônio, que é avenida de pista dupla. Obra que não tem isso recebe
+    // uma faixa vazia (ini > fim), e todo `for` sobre estacas simplesmente
+    // não roda. Sem esse padrão, `CONFIG.estacasCB.ini` derrubava o Painel
+    // Executivo inteiro ao abrir qualquer outra obra.
+    estacasCB: o.estacasCB || { ini: 0, fim: -1, label: '' },
+    estacasBC: o.estacasBC || { ini: 0, fim: -1, label: '' },
+    refreshMs: APP.refreshMs,
+    ls: Object.assign({
+      rdoDraft:   lsObra('teotonio_rdo_draft_v1'),
+      apontador:  lsObra('teotonio_apontador_v1'),
+      sabadoUtil: lsObra('teotonio_sabado_util_v1'),
+      oficialRDO: lsObra('teotonio_oficial_rdo_v1'),
+    }, APP.lsGlobal)
+  });
+}
+
+/* `let` e não `const`: trocar de obra reaponta este objeto. */
+let OBRA = OBRAS_CFG[obraAtivaId()];
+let CONFIG = montarConfig(obraAtivaId());
+
+/* Troca a obra aberta. Zera o que é dado de obra e recarrega — deixar
+   pacotes de uma obra com lançamentos de outra na tela, mesmo por um
+   instante, é o tipo de coisa que faz alguém medir a obra errada. */
+function trocarObra(id) {
+  if (!OBRAS_CFG[id] || id === OBRA.id) return;
+  // Rascunho aberto é da obra que está saindo; ele fica guardado na chave
+  // dela e volta quando ela for reaberta, mas não pode atravessar.
+  STATE.draft = null;
+  localStorage.setItem(LS_OBRA, id);
+  OBRA = OBRAS_CFG[id];
+  CONFIG = montarConfig(id);
+  STATE.cronograma = []; STATE.pacotes = []; STATE.coeficientes = [];
+  STATE.rdoavanco = []; STATE.rdodiario = [];
+  STATE.loaded = false;
+  STATE.filtros = { mes: '', frente: '' };
+  STATE.dashData = null;
+  if (typeof EQUIP !== 'undefined') { EQUIP.carregado = false; EQUIP.apontamentos = []; EQUIP.equipamentos = []; }
+  // Planejamento é POR OBRA e fica em cache de módulo. Sem zerar, a obra nova
+  // herdava as predecessoras, a produtividade ajustada à mão e a data-base da
+  // obra anterior — e o cronograma dela saía calculado sobre dados de outra.
+  GANTT_DADOS = null;
+  PLAN_DADOS = null;
+  STATE.currentPage = 'executivo';
+  // a barra lateral carrega o nome da obra, o seletor e os contadores:
+  // sem redesenhá-la, o menu continuaria anunciando a obra anterior
+  renderShell();
+  render();
+  carregarTudo();
+}
+window.trocarObra = trocarObra;
 
 // ====================================================================
 // UTILITIES
@@ -2421,6 +2570,14 @@ function toast(msg, type = 'info', durationMs = 3500) {
   }
 }
 
+/* A obra trabalha com estacas numeradas por sentido? Só a Teotônio, por
+   enquanto. As telas que desenham a avenida e o mapa de estacas perguntam
+   isso antes de renderizar — numa obra sem estacas elas não fazem sentido
+   e sairiam vazias. */
+function temEstacas() {
+  return listarEstacas().length > 0;
+}
+
 function listarEstacas() {
   const out = [];
   for (let i = CONFIG.estacasCB.ini; i <= CONFIG.estacasCB.fim; i++) {
@@ -2622,6 +2779,52 @@ function produtividadeDe(pid) {
     if (v > 0) return v;
   }
   return PRODUTIVIDADE_PADRAO[pid] || 0;
+}
+
+/* ------------------------------------------------------------------
+   PESO DO PACOTE — quanto ele representa do escopo
+   ------------------------------------------------------------------
+   O avanço "ponderado" da Teotônio mede o escopo em DIAS-EQUIVALENTES:
+   quantidade ÷ produtividade. Isso só existe porque a Teotônio declara a
+   produtividade de cada pacote.
+
+   Obra que ainda não declarou nenhuma não pode usar essa conta. Antes o
+   código fazia `produtividadeDe(pid) || 1`, isto é, assumia "1 unidade por
+   dia" para todo mundo — e aí um serviço de 12.000 m² passava a pesar 240
+   vezes mais que um de 50 m³, só porque metro quadrado é uma unidade
+   menor. O número saía errado e ninguém percebia.
+
+   Sem produtividade declarada, todo pacote pesa 1: o avanço vira MÉDIA
+   SIMPLES dos percentuais. É menos preciso, e é honesto — a tela diz qual
+   das duas bases está valendo (ver baseDoAvanco).
+   ------------------------------------------------------------------ */
+function obraPonderaPorProdutividade() {
+  return (STATE.pacotes || []).some(p => produtividadeDe(getCSVField(p, 'ID')) > 0);
+}
+function baseDoAvanco() {
+  return obraPonderaPorProdutividade()
+    ? { ponderado: true,  rotulo: 'Avanço Ponderado', nota: 'escopo em dias-equivalentes' }
+    : { ponderado: false, rotulo: 'Avanço Físico Médio', nota: 'média simples dos serviços — obra sem produtividade declarada' };
+}
+/* dias-equivalentes do pacote, ou 1 quando a obra não pondera */
+function diasEquivalentes(qtdEstimada, pid) {
+  const prod = produtividadeDe(pid);
+  if (prod > 0) return qtdEstimada / prod;
+  return obraPonderaPorProdutividade() ? 0 : 1;
+}
+
+/* Quanto um LANÇAMENTO representa do escopo, na mesma unidade do peso.
+   Com produtividade: quantidade ÷ produtividade. Sem ela: a fração da
+   quantidade prevista daquele pacote, multiplicada pelo peso do pacote —
+   que dá no mesmo quando há produtividade, e continua fazendo sentido
+   quando não há. Dividir a quantidade por 1, como era antes, somava metro
+   quadrado com metro cúbico como se fossem a mesma coisa. */
+function diasDoLancamento(qtd, pid) {
+  const prod = produtividadeDe(pid);
+  if (prod > 0) return qtd / prod;
+  const pac = STATE.pacotes.find(p => getCSVField(p, 'ID') === pid);
+  const prev = pac ? num(getCSVField(pac, 'Qtd Estimada')) : 0;
+  return prev > 0 ? (qtd / prev) * diasEquivalentes(prev, pid) : 0;
 }
 
 function transitionTo(actionFn) {
@@ -3736,27 +3939,94 @@ async function enviarFotosDoLote(mapaIdParaFotos, idxBase) {
 // `opts.fundo = true` marca o refresh automático (setInterval): ele não pode
 // atrapalhar quem está usando o app — nada de re-render em cima de formulário
 // aberto ou campo focado, e nada de toast de erro repetido quando o sinal cai.
+/* ------------------------------------------------------------------
+   CADASTRO VINDO DE ARQUIVO
+   ------------------------------------------------------------------
+   Obra cadastrada em `dados/<id>.js` descreve os serviços no vocabulário
+   de orçamento (frente + serviço + unidade + quantidade prevista, por rua).
+   Aqui isso vira LINHA DE PACOTE, no mesmo formato que o resto do app já
+   consome da planilha — assim nenhuma tela precisa saber de onde veio.
+
+   Uma linha por par (rua, serviço): a mesma "Base de brita" em duas ruas
+   são duas frentes de trabalho distintas, medidas e executadas em datas
+   diferentes. Somar as duas esconderia uma rua parada atrás da outra.
+   ------------------------------------------------------------------ */
+function cadastroDoArquivo(qual) {
+  const o = OBRA;
+  const frenteNome = id => {
+    const f = (o.frentes || []).find(x => x.id === id);
+    return f ? f.nome : 'Outros';
+  };
+
+  if (qual === 'pacotes') {
+    const varias = (o.ruas || []).length > 1;
+    return (o.servicos || []).map((s, i) => ({
+      'ID': o.id.slice(0, 3).toUpperCase() + '-' + String(i + 1).padStart(3, '0'),
+      'Frente': frenteNome(s.capId),
+      // com mais de uma rua, o nome da rua entra no título: sem isso a tela
+      // mostra o mesmo serviço repetido e ninguém sabe qual é qual
+      'Pacote': varias && s.rua ? s.servico + ' — ' + s.rua : s.servico,
+      'Rua': s.rua || '',
+      'Unidade Física': s.un || '',
+      'Qtd Estimada': String(s.qtdPrev == null ? '' : s.qtdPrev),
+      'Produtividade': s.produtividade == null ? '' : String(s.produtividade),
+      'Status': 'Ativo',
+      'Descricao Orcamento': s.descricaoOrig || ''
+    }));
+  }
+
+  if (qual === 'coeficientes') {
+    // Matriz item-contratual × serviço. Obra que ainda não a declarou fica
+    // sem a prévia de medição — a tela de Apoio à Medição explica o formato.
+    return (o.coeficientes || []).map(c => ({
+      'Pacote ID': c.pacoteId || '', 'Item Contratual': c.item || '',
+      'Descrição Item': c.descricao || '', 'Unid Item': c.unItem || '',
+      'Coef': String(c.coef == null ? '' : c.coef)
+    }));
+  }
+
+  // O cronograma daqui é percentual por mês e por frente, não o export do
+  // MS Project que a Teotônio publica. Fica guardado como está e quem monta
+  // a curva prevista trata os dois formatos (ver curvaPrevistaPorFrente).
+  return [];
+}
+
+/* A qual obra pertence uma linha de lançamento. Todas as obras dividem a
+   MESMA planilha e se distinguem pela coluna `Obra` — como já era o caso das
+   abas de nota fiscal e de estoque. Linha sem o campo é da Teotônio: são as
+   que já estavam lá antes do app virar multi-obra. */
+function obraDaLinha(row) {
+  return String(getCSVField(row, 'Obra') || '').trim() || 'teotonio';
+}
+function soDaObraAtiva(linhas) {
+  const id = OBRA.id;
+  return (linhas || []).filter(l => obraDaLinha(l) === id);
+}
+
 async function carregarTudo(opts = {}) {
   const fundo = opts && opts.fundo === true;
   if (!fundo) setSyncStatus('loading', 'Carregando dados…');
   try {
+    // Cadastro: da planilha (Teotônio) ou do arquivo da obra. Os LANÇAMENTOS
+    // vêm sempre da planilha, para todas as obras — o que muda é o filtro.
+    const doArquivo = CONFIG.fonte === 'arquivo';
     const [c, p, k, r, d] = await Promise.all([
-      fetchCSV(CONFIG.csv.cronograma),
-      fetchCSV(CONFIG.csv.pacotes),
-      fetchCSV(CONFIG.csv.coeficientes),
+      doArquivo ? cadastroDoArquivo('cronograma')   : fetchCSV(CONFIG.csv.cronograma),
+      doArquivo ? cadastroDoArquivo('pacotes')      : fetchCSV(CONFIG.csv.pacotes),
+      doArquivo ? cadastroDoArquivo('coeficientes') : fetchCSV(CONFIG.csv.coeficientes),
       fetchCSV(CONFIG.csv.rdoavanco),
       fetchCSV(CONFIG.csv.rdodiario).catch(() => []),
     ]);
     STATE.cronograma = c;
     STATE.pacotes = p;
     STATE.coeficientes = k;
-    STATE.rdoavanco = r;
-    STATE.rdodiario = d || [];
+    STATE.rdoavanco = soDaObraAtiva(r);
+    STATE.rdodiario = soDaObraAtiva(d || []);
     atualizarPrazoDoCronograma(); // baseline acompanha o Project publicado na aba
     STATE.loaded = true;
     STATE.lastSync = new Date();
     const hm = STATE.lastSync.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-    setSyncStatus('ok', `Sincronizado às ${hm} · ${p.length} pacotes, ${r.length} serviços`);
+    setSyncStatus('ok', `Sincronizado às ${hm} · ${STATE.pacotes.length} pacotes, ${STATE.rdoavanco.length} serviços`);
 
     // Refresh de fundo em página de formulário (ou com campo focado em qualquer
     // página): NÃO re-renderiza — derrubaria foco/teclado do apontador no meio
@@ -3886,6 +4156,23 @@ function grupoNav(titulo, itens) {
         </div>`;
 }
 
+/* Seletor de obra no topo do menu. Com uma obra só, não aparece — seria
+   um controle que não controla nada. É <select> e não lista de cartões
+   porque fica no alto da barra, onde não sobra altura: o portal de obras,
+   esse sim, mostra os cartões. */
+function seletorObra() {
+  const obras = obrasOrdenadas();
+  if (obras.length < 2) return '';
+  return `
+    <div class="obra-sel">
+      <label class="obra-sel-lbl" for="obraSel">Obra</label>
+      <select id="obraSel" onchange="trocarObra(this.value)" aria-label="Trocar de obra">
+        ${obras.map(o => `<option value="${escHtml(o.id)}" ${o.id === OBRA.id ? 'selected' : ''}>
+          ${escHtml(o.nomeCurto || o.nome)}</option>`).join('')}
+      </select>
+    </div>`;
+}
+
 function renderShell() {
   const root = document.getElementById('root');
   if (!root) return;
@@ -3895,9 +4182,10 @@ function renderShell() {
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-logo">
           <div class="badge-obra">GESTOR ENGENHARIA</div>
-          <h1>Av. Senador<br>Teotônio Vilela</h1>
-          <p>Sistema integrado<br>de planejamento</p>
+          <h1>${escHtml(OBRA.nome)}</h1>
+          <p>${escHtml(OBRA.subtitulo || 'Sistema integrado de planejamento')}</p>
         </div>
+        ${seletorObra()}
 
         <!-- só a lista de telas rola; logo e rodapé de acesso ficam presos -->
         <nav class="sidebar-nav" aria-label="Telas do sistema">
@@ -5008,8 +5296,7 @@ function calcCumulativoDia(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
     if (!d) return;
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
     if (!validPids.has(pid)) return;
-    const prod = produtividadeDe(pid) || 1;
-    const dias = num(getCSVField(r, 'Quantidade')) / (prod || 1);
+    const dias = diasDoLancamento(num(getCSVField(r, 'Quantidade')), pid);
     const contribPct = totalDiasEstimados > 0 ? dias / totalDiasEstimados : 0;
     const k = ymd(d);
     byDay[k] = (byDay[k] || 0) + contribPct;
@@ -5104,8 +5391,7 @@ function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
     if (!pac) return;
     const f = getCSVField(pac, 'Frente') || 'Outros';
     if (!por[f]) por[f] = { ult7d: 0, ultData: null, pacotes: 0, executou: false };
-    const prod = produtividadeDe(pid) || 1;
-    const dias = num(getCSVField(r, 'Quantidade')) / (prod || 1);
+    const dias = diasDoLancamento(num(getCSVField(r, 'Quantidade')), pid);
     const contrib = totalDiasEstimados > 0 ? dias / totalDiasEstimados : 0;
     if (d.getTime() >= d7) por[f].ult7d += contrib;
     if (!por[f].ultData || d > por[f].ultData) por[f].ultData = d;
@@ -5175,8 +5461,7 @@ function calcCurvaPrevista(pacotesAtivos, totalDiasEstimados) {
     const pid = getCSVField(p, 'ID');
     if (!pid) return;
     const qtd = num(getCSVField(p, 'Qtd Estimada'));
-    const prod = produtividadeDe(pid) || 1;
-    const totalDiasEquiv = qtd / (prod || 1);
+    const totalDiasEquiv = diasEquivalentes(qtd, pid);
     const contribPct = totalDiasEquiv / totalDiasEstimados;
     let dIni, dFim;
     const plan = planejadas[String(pid).toUpperCase()];
@@ -5405,6 +5690,9 @@ function calcAvancoPorEstaca(rdosAtivos, pacotesAtivos) {
 }
 
 function renderAvenida3D(rdosAtivos, pacotesAtivos) {
+  // desenho da avenida em perspectiva: só existe para obra com estacas por
+  // sentido. Nas demais, o bloco simplesmente não entra na página.
+  if (!temEstacas()) return '';
   const av = calcAvancoPorEstaca(rdosAtivos, pacotesAtivos);
   const todasEst = Object.values(av);
   const cb = todasEst.filter(e => e.sentido === 'CB').sort((a,b) => a.num - b.num);
@@ -5573,8 +5861,7 @@ function renderExecutivo() {
   
   pacotesFiltrados.forEach(a => {
     const pid = getCSVField(a.pacote, 'ID');
-    const prod = produtividadeDe(pid) || 1;
-    a.diasEstimados = prod > 0 ? a.qtdEstimada / prod : 0;
+    a.diasEstimados = diasEquivalentes(a.qtdEstimada, pid);
     a.diasExecutados = a.pct * a.diasEstimados;
   });
 
@@ -6169,8 +6456,7 @@ window.exportarRelatorioExecutivoPDF = function() {
     const f = getCSVField(a.pacote, 'Frente') || 'Outros';
     if (!porFrente[f]) porFrente[f] = { items: 0, totalDiasEstim: 0, totalDiasExec: 0 };
     const pid = getCSVField(a.pacote, 'ID');
-    const prod = produtividadeDe(pid) || 1;
-    const estim = prod > 0 ? a.qtdEstimada / prod : 0;
+    const estim = diasEquivalentes(a.qtdEstimada, pid);
     const exec = a.pct * estim;
     porFrente[f].items++;
     porFrente[f].totalDiasEstim += estim;
@@ -7012,6 +7298,12 @@ function renderAvancoFisico() {
 
 function renderHeatmap(av) {
   const estacas = listarEstacas();
+  if (!estacas.length) {
+    return `<div class="empty"><div class="empty-icon">${ic('mapa')}</div>
+      <div class="empty-title">Mapa de estacas não se aplica a esta obra</div>
+      <div class="empty-sub">O mapa é montado sobre a numeração de estacas por sentido,
+        que hoje só a Av. Teotônio Vilela tem cadastrada.</div></div>`;
+  }
   const pacotesAtivos = Object.values(av).filter(a => a.pacote && getCSVField(a.pacote, 'Status') !== 'Histórico')
     .filter(a => a.qtdExecutada > 0 || true).slice(0, 15); 
   
@@ -7076,7 +7368,7 @@ let GANTT_DADOS = null;
 function loadGanttDados() {
   if (GANTT_DADOS) return GANTT_DADOS;
   try {
-    const raw = localStorage.getItem('teotonio_gantt_v1');
+    const raw = localStorage.getItem(lsObra('teotonio_gantt_v1'));
     if (raw) GANTT_DADOS = JSON.parse(raw);
     else GANTT_DADOS = { dataInicio: getLocalISODate(new Date()), pacotes: {} };
   } catch(e) { GANTT_DADOS = { dataInicio: getLocalISODate(new Date()), pacotes: {} }; }
@@ -7084,7 +7376,7 @@ function loadGanttDados() {
 }
 
 function salvarGanttDados() {
-  try { localStorage.setItem('teotonio_gantt_v1', JSON.stringify(GANTT_DADOS)); } catch(e) {}
+  try { localStorage.setItem(lsObra('teotonio_gantt_v1'), JSON.stringify(GANTT_DADOS)); } catch(e) {}
 }
 
 function addWorkingDays(date, days) {
@@ -7115,7 +7407,10 @@ function calcularGantt() {
     const saldo = Math.max(0, qtdTotal - qtdExec);
     const pct = avP ? avP.pct : 0;
     const prodOverride = g.prod ? parseFloat(g.prod) : null;
-    const prodPadrao = produtividadeDe(pid) || 1;
+    // sem produtividade declarada o pacote fica SEM duração (0). Antes valia
+    // "1 unidade por dia", e um serviço de 12.000 m² virava 12.000 dias úteis:
+    // o recuo dia a dia de calcularDataInicioReversa travava o navegador.
+    const prodPadrao = produtividadeDe(pid);
     const prod = (prodOverride && prodOverride > 0) ? prodOverride : prodPadrao;
     const predecessores = (g.predecessores || []).filter(id => pacotesAtivos.some(p2 => getCSVField(p2, 'ID') === id));
     nodes[pid] = { pacote: p, pid, pct, saldo, duracao: prod > 0 ? Math.ceil(saldo / prod) : 0, predecessores, dataInicio: null, dataFim: null };
@@ -7196,7 +7491,7 @@ let PLAN_DADOS = null;
 function loadPlanDados() {
   if (PLAN_DADOS) return PLAN_DADOS;
   try {
-    const raw = localStorage.getItem('teotonio_plan_reverso_v1');
+    const raw = localStorage.getItem(lsObra('teotonio_plan_reverso_v1'));
     if (raw) PLAN_DADOS = JSON.parse(raw);
     else PLAN_DADOS = {};
   } catch(e) { PLAN_DADOS = {}; }
@@ -7204,7 +7499,7 @@ function loadPlanDados() {
 }
 
 function salvarPlanDados() {
-  try { localStorage.setItem('teotonio_plan_reverso_v1', JSON.stringify(PLAN_DADOS)); } catch(e) {}
+  try { localStorage.setItem(lsObra('teotonio_plan_reverso_v1'), JSON.stringify(PLAN_DADOS)); } catch(e) {}
 }
 
 window.atualizarPlan = function(pacoteId, campo, valor) {
@@ -7285,7 +7580,13 @@ function calcularDataInicioReversa(dataFimStr, diasDuracao) {
   let guard = 0;
   while (!ehDiaUtil(d) && guard++ < 60) d.setDate(d.getDate() - 1);
 
-  let restantes = Math.ceil(diasDuracao) - 1;
+  // Teto de segurança. Duração não-finita (quantidade ÷ produtividade zero)
+  // ou absurda fazia este recuo dia a dia rodar sem fim e CONGELAR a aba —
+  // o app parecia ter morrido. 20 anos de dias úteis é mais que qualquer
+  // contrato; passar disso é erro de cadastro, não planejamento.
+  const TETO_DIAS_UTEIS = 5000;
+  if (!isFinite(diasDuracao)) return null;
+  let restantes = Math.min(Math.ceil(diasDuracao), TETO_DIAS_UTEIS) - 1;
   if (restantes < 0) restantes = 0;
   while (restantes > 0) {
     d.setDate(d.getDate() - 1);
@@ -8538,7 +8839,7 @@ window.executarCriarRDOsFaltantes = async function() {
     if (btn) btn.textContent = `Criando… ${i + 1}/${dias.length}`;
     try {
       const result = await jsonp(CONFIG.appsScript, {
-        action: 'addRDODiario', data, tem_turno_noturno: 'false',
+        action: 'addRDODiario', obra: OBRA.id, data, tem_turno_noturno: 'false',
         observacoes_gerais: '', ...authParams()
       }, 0);
       if (result && result.ok) {
@@ -9596,6 +9897,10 @@ async function salvarRDO() {
       if (fotosSvc.length) fotosDoLote[idSvc] = fotosSvc.slice();
       return {
         id: idSvc,
+        // De qual obra é este lançamento. Todas gravam na MESMA planilha e se
+        // separam por esta coluna — sem ela, serviço do Ranário apareceria
+        // como se fosse da Teotônio e entraria na medição da avenida.
+        obra: OBRA.id,
         data: d.data,
         turno: d.turno || 'Diurno',
         pacote_id: s.pacoteId,
@@ -9624,6 +9929,7 @@ async function salvarRDO() {
 
     return {
       id: idSvc,
+      obra: OBRA.id,
       data: d.data,
       turno: d.turno || 'Diurno',
       pacote_id: 'OUTRO',
@@ -9915,18 +10221,18 @@ let DIARIO_TURNO_ATIVO = null;
 
 function loadDiarioV4(data) {
   try {
-    const raw = localStorage.getItem('teotonio_rdo_diario_v4_' + data);
+    const raw = localStorage.getItem(lsObra('teotonio_rdo_diario_v4_' + data));
     if (raw) return JSON.parse(raw);
   } catch(e) {}
   return null;
 }
 
 function saveDiarioV4(d) {
-  try { localStorage.setItem('teotonio_rdo_diario_v4_' + d.data, JSON.stringify(d)); } catch(e) {}
+  try { localStorage.setItem(lsObra('teotonio_rdo_diario_v4_' + d.data), JSON.stringify(d)); } catch(e) {}
 }
 
 function clearDiarioV4(data) {
-  try { localStorage.removeItem('teotonio_rdo_diario_v4_' + data); } catch(e) {}
+  try { localStorage.removeItem(lsObra('teotonio_rdo_diario_v4_' + data)); } catch(e) {}
 }
 
 function defaultDiarioV4(data) {
@@ -10413,6 +10719,7 @@ async function salvarDiarioV4() {
   
   const params = {
     action: existe ? 'updateRDODiario' : 'addRDODiario',
+    obra: OBRA.id,          // de qual obra é este diário (todas na mesma aba)
     data: d.data,
     apontador_diurno: d.diurno.apontador || '',
     apontador_noturno: d.noturno.apontador || '',
@@ -11647,8 +11954,7 @@ function apDados() {
   const lista = Object.values(avMapa).filter(a => a.pacote);
 
   lista.forEach(a => {
-    const prod = produtividadeDe(getCSVField(a.pacote, 'ID')) || 1;
-    a.diasEstimados  = prod > 0 ? a.qtdEstimada / prod : 0;
+    a.diasEstimados  = diasEquivalentes(a.qtdEstimada, getCSVField(a.pacote, 'ID'));
     a.diasExecutados = a.pct * a.diasEstimados;
   });
   const totalDias = lista.reduce((s, a) => s + a.diasEstimados, 0);

@@ -21,7 +21,22 @@ O modelo de dados central: **pacotes físicos (P01–P36)** lançados no campo �
 2. Cole o conteúdo de `Code.gs` por cima do existente e salve.
 3. **Implantar → Gerenciar implantações → ✏ editar → Nova versão → Implantar.** A URL `/exec` não muda.
 
-> ### ⚠ Nesta versão, rode `migrarAuditoriaParaMultiObra()` uma vez
+> ### ⚠ Nesta versão, rode `migrarObraNasAbasDeRDO()` uma vez
+>
+> As abas `RDO_Avanco` e `RDO_Diario` ganharam a coluna **`obra`**: o app passou
+> a atender várias obras, e todas gravam na mesma planilha. A coluna entra no
+> **fim** do cabeçalho — nenhuma coluna existente muda de posição, então
+> fórmulas, filtros e os CSVs publicados continuam valendo.
+>
+> Depois de colar o `Code.gs`, selecione `migrarObraNasAbasDeRDO` no editor e
+> clique ▶ Executar. Ela marca tudo que já existe como `teotonio`, que é de
+> onde veio. Rodar de novo é seguro: só preenche o que estiver vazio.
+>
+> Sem isso nada quebra — linha sem valor na coluna é tratada como da Teotônio —
+> mas a planilha fica com o histórico sem marcação, e qualquer filtro por obra
+> feito à mão deixa o passado de fora.
+
+> ### ⚠ Rode também `migrarAuditoriaParaMultiObra()` uma vez
 >
 > A aba `Auditoria` ganhou a coluna **`obra`**, na 5ª posição — o mesmo
 > formato do app "Gestor — Controle de Obras", que é o que permite os dois

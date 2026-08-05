@@ -1,0 +1,614 @@
+/* ------------------------------------------------------------------
+   Ruas de Terra 4 — Agrimensor & Astrogildo
+   ------------------------------------------------------------------
+   Cadastro da obra: identidade, frentes, cronograma físico por frente e
+   os serviços do orçamento (quantidade prevista, sem valores em R$).
+
+   Convertido do app "Gestor — Controle de Obras", que era onde esta obra
+   estava cadastrada. Os LANÇAMENTOS não ficam aqui — vão para a mesma
+   planilha das outras obras, distinguidos pela coluna `Obra`.
+
+   `fonte: 'arquivo'` diz ao app que o cadastro vem deste arquivo, e não
+   de planilha publicada. Para migrar esta obra para planilha um dia,
+   basta trocar para 'csv' e preencher as URLs.
+   ------------------------------------------------------------------ */
+window.OBRAS_ARQ = window.OBRAS_ARQ || {};
+window.OBRAS_ARQ['ruas-de-terra'] = {
+  "id": "ruas-de-terra",
+  "nome": "Ruas de Terra 4 — Agrimensor & Astrogildo",
+  "nomeCurto": "Ruas de Terra 4",
+  "subtitulo": "Pavimentação de ruas de terra",
+  "contrato": "Ata 079/SMSUB/COGEL",
+  "contratada": "Gestor Engenharia",
+  "local": "Distrito de Itaquera — São Paulo/SP",
+  "objeto": "Pavimentação das ruas Agrimensor Sugaya e Astrogildo Pereira",
+  "valorGlobal": 3585081.43,
+  "prazoMeses": 6,
+  "inicioISO": "2026-07-01",
+  "fonte": "arquivo",
+  "ruas": [
+    "Agrimensor Sugaya",
+    "Astrogildo Pereira"
+  ],
+  "estacas": {
+    "Agrimensor Sugaya": 12,
+    "Astrogildo Pereira": 18
+  },
+  "frentes": [
+    {
+      "id": 1,
+      "nome": "Serviços Preliminares"
+    },
+    {
+      "id": 2,
+      "nome": "Pavimentação"
+    },
+    {
+      "id": 3,
+      "nome": "Calçada"
+    },
+    {
+      "id": 4,
+      "nome": "Demolição / Remanejamento"
+    },
+    {
+      "id": 7,
+      "nome": "Drenagem"
+    },
+    {
+      "id": 8,
+      "nome": "Terraplenagem"
+    }
+  ],
+  "cronograma": [
+    {
+      "frenteId": 1,
+      "pctMes": [
+        85.97,
+        3.11,
+        3.11,
+        4.71,
+        1.55,
+        1.55
+      ]
+    },
+    {
+      "frenteId": 2,
+      "pctMes": [
+        0.0,
+        3.55,
+        12.91,
+        35.94,
+        36.19,
+        11.42
+      ]
+    },
+    {
+      "frenteId": 3,
+      "pctMes": [
+        0.0,
+        0.0,
+        13.6,
+        42.99,
+        43.41,
+        0.0
+      ]
+    },
+    {
+      "frenteId": 4,
+      "pctMes": [
+        17.1,
+        39.6,
+        33.82,
+        9.48,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "frenteId": 7,
+      "pctMes": [
+        25.21,
+        48.55,
+        5.91,
+        7.28,
+        6.53,
+        6.53
+      ]
+    },
+    {
+      "frenteId": 8,
+      "pctMes": [
+        0.0,
+        0.0,
+        46.59,
+        46.59,
+        0.0,
+        6.83
+      ]
+    }
+  ],
+  "coeficientes": [],
+  "projetos": [
+    {
+      "rua": "Agrimensor Sugaya",
+      "disciplina": "Pavimentação",
+      "cod": "CT-AS-101-1001-0F-DE",
+      "arquivo": "projetos/agrimensor/agrimensor-pavimentacao.pdf"
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "disciplina": "Drenagem",
+      "cod": "CT-AS-102-1001-0F-DE",
+      "arquivo": "projetos/agrimensor/agrimensor-drenagem.pdf"
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "disciplina": "Pavimentação",
+      "cod": "CT-AP-101-1001-0G-DE",
+      "arquivo": "projetos/astrogildo/astrogildo-pavimentacao.pdf"
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "disciplina": "Drenagem",
+      "cod": "CT-AP-102-1001-0G-DE",
+      "arquivo": "projetos/astrogildo/astrogildo-drenagem.pdf"
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "disciplina": "Terraplenagem",
+      "cod": "CT-AP-103-1001-0F-DE",
+      "arquivo": "projetos/astrogildo/astrogildo-terraplenagem.pdf"
+    }
+  ],
+  "servicos": [
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 1,
+      "servico": "Limpeza mecanizada geral",
+      "descricaoOrig": "LIMPEZA MECANIZADA GERAL, INCLUSIVE REMOÇÃO DA COBERTURA VEGETAL - TRONCOS COM DIÂMETRO ATÉ 10CM - SEM TRANSPORTE",
+      "un": "M2",
+      "qtdPrev": 1846.2
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Regularização e compactação de ruas de terra (ie-5)",
+      "descricaoOrig": "REGULARIZAÇÃO E COMPACTAÇÃO DE RUAS DE TERRA (IE-5)",
+      "un": "M2",
+      "qtdPrev": 1700.65
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Abertura de caixa até 40cm",
+      "descricaoOrig": "ABERTURA DE CAIXA ATÉ 40CM, INCLUI ESCAVAÇÃO, COMPACTAÇÃO, TRANSPORTE E PREPARO DO SUB-LEITO",
+      "un": "M2",
+      "qtdPrev": 1700.65
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Fornecimento e assentamento de guias tipo pmsp 100",
+      "descricaoOrig": "INC.27 - FORNECIMENTO E ASSENTAMENTO DE GUIAS TIPO PMSP 100, INCLUSIVE ENCOSTAMENTO DE TERRA - FCK=25,0MPA",
+      "un": "M",
+      "qtdPrev": 512.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Base de concreto fck=15,00mpa para guias, sarjetas ou sarjetões",
+      "descricaoOrig": "INC.27 - BASE DE CONCRETO FCK=15,00MPA PARA GUIAS, SARJETAS OU SARJETÕES",
+      "un": "M3",
+      "qtdPrev": 43.52
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Construção de sarjeta ou sarjetão de concreto - fck= 20,0mpa",
+      "descricaoOrig": "INC.27 - CONSTRUÇÃO DE SARJETA OU SARJETÃO DE CONCRETO - FCK= 20,0MPA",
+      "un": "M3",
+      "qtdPrev": 34.56
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Base de macadame hidráulico",
+      "descricaoOrig": "BASE DE MACADAME HIDRÁULICO",
+      "un": "M3",
+      "qtdPrev": 255.097
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Base de macadame betuminoso",
+      "descricaoOrig": "BASE DE MACADAME BETUMINOSO",
+      "un": "M3",
+      "qtdPrev": 255.097
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Reforço do sub-leito/sub-base de solo melhorado com agregado recicl…",
+      "descricaoOrig": "REFORÇO DO SUB-LEITO/SUB-BASE DE SOLO MELHORADO COM AGREGADO RECICLADO 10% EM VOLUME, COM FORNECIMENTO DE AGREGADO",
+      "un": "M3",
+      "qtdPrev": 340.13
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Imprimação betuminosa ligante",
+      "descricaoOrig": "INA.01 - IMPRIMAÇÃO BETUMINOSA LIGANTE",
+      "un": "M2",
+      "qtdPrev": 3401.3
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Imprimação betuminosa impermeabilizante",
+      "descricaoOrig": "IMPRIMAÇÃO BETUMINOSA IMPERMEABILIZANTE",
+      "un": "M2",
+      "qtdPrev": 1700.65
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 2,
+      "servico": "Revestimento de pré-misturado à quente (sem transporte)",
+      "descricaoOrig": "INA.01 - REVESTIMENTO DE PRÉ-MISTURADO À QUENTE (SEM TRANSPORTE)",
+      "un": "M3",
+      "qtdPrev": 170.065
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 3,
+      "servico": "Passeio de concreto armado, fck=25mpa",
+      "descricaoOrig": "NC.27 - PASSEIO DE CONCRETO ARMADO, FCK=25MPA, INCLUINDO PREPARO DA CAIXA E LASTRO DE BRITA",
+      "un": "M3",
+      "qtdPrev": 48.229
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 3,
+      "servico": "Acabamento de piso de concreto tipo bambolê",
+      "descricaoOrig": "ACABAMENTO DE PISO DE CONCRETO TIPO BAMBOLÊ",
+      "un": "M2",
+      "qtdPrev": 602.86
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 4,
+      "servico": "Demolição de pavimento de concreto, sarjeta ou sarjetão",
+      "descricaoOrig": "DEMOLIÇÃO DE PAVIMENTO DE CONCRETO, SARJETA OU SARJETÃO, INCLUI CARGA EM CAMINHÃO",
+      "un": "M2",
+      "qtdPrev": 1318.2
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 4,
+      "servico": "Demolição de pavimento asfáltico",
+      "descricaoOrig": "DEMOLIÇÃO DE PAVIMENTO ASFÁLTICO, INCLUSIVE CAPA, INCLUI CARGA NO CAMINHÃO",
+      "un": "M2",
+      "qtdPrev": 320.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 4,
+      "servico": "Demolição mecanizada de concreto armado",
+      "descricaoOrig": "DEMOLIÇÃO MECANIZADA DE CONCRETO ARMADO",
+      "un": "M3",
+      "qtdPrev": 86.4
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 4,
+      "servico": "Demolição de guias de concreto",
+      "descricaoOrig": "DEMOLIÇÃO DE GUIAS DE CONCRETO",
+      "un": "M",
+      "qtdPrev": 80.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 4,
+      "servico": "Demolição de sarjetas de concreto",
+      "descricaoOrig": "DEMOLIÇÃO DE SARJETAS DE CONCRETO",
+      "un": "M",
+      "qtdPrev": 80.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Fornecimento e assentamento de tubos de concreto simples - diâmetro…",
+      "descricaoOrig": "FORNECIMENTO E ASSENTAMENTO DE TUBOS DE CONCRETO SIMPLES - DIÂMETRO 50CM",
+      "un": "M",
+      "qtdPrev": 85.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Fornecimento e assentamento de tubos de concreto armado, diâmetro 6…",
+      "descricaoOrig": "FORNECIMENTO E ASSENTAMENTO DE TUBOS DE CONCRETO ARMADO, DIÂMETRO 60CM - TIPO PA-2",
+      "un": "M",
+      "qtdPrev": 222.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Escavação mecânica para fundações e valas com profundidade menor ou…",
+      "descricaoOrig": "ESCAVAÇÃO MECÂNICA PARA FUNDAÇÕES E VALAS COM PROFUNDIDADE MENOR OU IGUAL À 4,0M",
+      "un": "M3",
+      "qtdPrev": 1649.9
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Reenchimento de vala com compactação, sem fornecimento de terra",
+      "descricaoOrig": "REENCHIMENTO DE VALA COM COMPACTAÇÃO, SEM FORNECIMENTO DE TERRA",
+      "un": "M3",
+      "qtdPrev": 1072.694
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Lastro de brita e pó de pedra",
+      "descricaoOrig": "IHD.23 - LASTRO DE BRITA E PÓ DE PEDRA",
+      "un": "M3",
+      "qtdPrev": 59.395
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Escoramento descontínuo de madeira para canalização de tubos",
+      "descricaoOrig": "ESCORAMENTO DESCONTÍNUO DE MADEIRA PARA CANALIZAÇÃO DE TUBOS",
+      "un": "M2",
+      "qtdPrev": 861.62
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Poço de visita tipo 1 - 1,40 x 1,40 x 1,40m",
+      "descricaoOrig": "POÇO DE VISITA TIPO 1 - 1,40 X 1,40 X 1,40M",
+      "un": "UN",
+      "qtdPrev": 8.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Instalação de tampão para galeria de águas pluviais - articulado, e…",
+      "descricaoOrig": "INC.27 - INSTALAÇÃO DE TAMPÃO PARA GALERIA DE ÁGUAS PLUVIAIS - ARTICULADO, EXCETO FORNECIMENTO DE TAMPÃO",
+      "un": "UN",
+      "qtdPrev": 8.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Chaminé de poço de visita com alvenaria de um tijolo comum",
+      "descricaoOrig": "CHAMINÉ DE POÇO DE VISITA COM ALVENARIA DE UM TIJOLO COMUM",
+      "un": "M",
+      "qtdPrev": 16.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Fornecimento de tampão de ferro fundido dúctil classe mínima 400 (4…",
+      "descricaoOrig": "FORNECIMENTO DE TAMPÃO DE FERRO FUNDIDO DÚCTIL CLASSE MÍNIMA 400 (40T) D=600MM - NBR 10160 ARTICULADO - P/ GAL. ÁGUAS PLUV.",
+      "un": "UN",
+      "qtdPrev": 8.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 7,
+      "servico": "Boca de lobo simples",
+      "descricaoOrig": "BOCA DE LOBO SIMPLES",
+      "un": "UN",
+      "qtdPrev": 16.0
+    },
+    {
+      "rua": "Agrimensor Sugaya",
+      "capId": 8,
+      "servico": "Aterro",
+      "descricaoOrig": "ATERRO, INCLUSIVE COMPACTAÇÃO MANUAL",
+      "un": "M3",
+      "qtdPrev": 168.801
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 1,
+      "servico": "Limpeza mecanizada geral",
+      "descricaoOrig": "LIMPEZA MECANIZADA GERAL, INCLUSIVE REMOÇÃO DA COBERTURA VEGETAL - TRONCOS COM DIÂMETRO ATÉ 10CM - SEM TRANSPORTE",
+      "un": "M2",
+      "qtdPrev": 4280.4
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Regularização e compactação de ruas de terra (ie-5)",
+      "descricaoOrig": "REGULARIZAÇÃO E COMPACTAÇÃO DE RUAS DE TERRA (IE-5)",
+      "un": "M2",
+      "qtdPrev": 2984.4
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Abertura de caixa até 40cm",
+      "descricaoOrig": "ABERTURA DE CAIXA ATÉ 40CM, INCLUI ESCAVAÇÃO, COMPACTAÇÃO, TRANSPORTE E PREPARO DO SUB-LEITO",
+      "un": "M2",
+      "qtdPrev": 2984.4
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Fornecimento e assentamento de guias tipo pmsp 100",
+      "descricaoOrig": "INC.27 - FORNECIMENTO E ASSENTAMENTO DE GUIAS TIPO PMSP 100, INCLUSIVE ENCOSTAMENTO DE TERRA - FCK=25,0MPA",
+      "un": "M",
+      "qtdPrev": 720.0
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Base de concreto fck=15,00mpa para guias, sarjetas ou sarjetões",
+      "descricaoOrig": "INC.27 - BASE DE CONCRETO FCK=15,00MPA PARA GUIAS, SARJETAS OU SARJETÕES",
+      "un": "M3",
+      "qtdPrev": 62.531
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Construção de sarjeta ou sarjetão de concreto - fck= 20,0mpa",
+      "descricaoOrig": "INC.27 - CONSTRUÇÃO DE SARJETA OU SARJETÃO DE CONCRETO - FCK= 20,0MPA",
+      "un": "M3",
+      "qtdPrev": 51.262
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Base de macadame hidráulico",
+      "descricaoOrig": "BASE DE MACADAME HIDRÁULICO",
+      "un": "M3",
+      "qtdPrev": 447.66
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Base de macadame betuminoso",
+      "descricaoOrig": "BASE DE MACADAME BETUMINOSO",
+      "un": "M3",
+      "qtdPrev": 447.66
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Reforço do sub-leito/sub-base de solo melhorado com agregado recicl…",
+      "descricaoOrig": "REFORÇO DO SUB-LEITO/SUB-BASE DE SOLO MELHORADO COM AGREGADO RECICLADO 10% EM VOLUME, COM FORNECIMENTO DE AGREGADO",
+      "un": "M3",
+      "qtdPrev": 596.88
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Imprimação betuminosa ligante",
+      "descricaoOrig": "INA.01 - IMPRIMAÇÃO BETUMINOSA LIGANTE",
+      "un": "M2",
+      "qtdPrev": 5968.8
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Imprimação betuminosa impermeabilizante",
+      "descricaoOrig": "IMPRIMAÇÃO BETUMINOSA IMPERMEABILIZANTE",
+      "un": "M2",
+      "qtdPrev": 2984.4
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 2,
+      "servico": "Revestimento de pré-misturado à quente (sem transporte)",
+      "descricaoOrig": "INA.01 - REVESTIMENTO DE PRÉ-MISTURADO À QUENTE (SEM TRANSPORTE)",
+      "un": "M3",
+      "qtdPrev": 298.44
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 3,
+      "servico": "Passeio de concreto armado, fck=25mpa",
+      "descricaoOrig": "NC.27 - PASSEIO DE CONCRETO ARMADO, FCK=25MPA, INCLUINDO PREPARO DA CAIXA E LASTRO DE BRITA",
+      "un": "M3",
+      "qtdPrev": 69.026
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 3,
+      "servico": "Acabamento de piso de concreto tipo bambolê",
+      "descricaoOrig": "ACABAMENTO DE PISO DE CONCRETO TIPO BAMBOLÊ",
+      "un": "M2",
+      "qtdPrev": 862.83
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 4,
+      "servico": "Demolição de pavimento de concreto, sarjeta ou sarjetão",
+      "descricaoOrig": "DEMOLIÇÃO DE PAVIMENTO DE CONCRETO, SARJETA OU SARJETÃO, INCLUI CARGA EM CAMINHÃO",
+      "un": "M2",
+      "qtdPrev": 862.83
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 4,
+      "servico": "Demolição de pavimento asfáltico",
+      "descricaoOrig": "DEMOLIÇÃO DE PAVIMENTO ASFÁLTICO, INCLUSIVE CAPA, INCLUI CARGA NO CAMINHÃO",
+      "un": "M2",
+      "qtdPrev": 2984.4
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 4,
+      "servico": "Demolição mecanizada de concreto armado",
+      "descricaoOrig": "DEMOLIÇÃO MECANIZADA DE CONCRETO ARMADO",
+      "un": "M3",
+      "qtdPrev": 68.335
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 4,
+      "servico": "Demolição de guias de concreto",
+      "descricaoOrig": "DEMOLIÇÃO DE GUIAS DE CONCRETO",
+      "un": "M",
+      "qtdPrev": 720.0
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 4,
+      "servico": "Demolição de sarjetas de concreto",
+      "descricaoOrig": "DEMOLIÇÃO DE SARJETAS DE CONCRETO",
+      "un": "M",
+      "qtdPrev": 720.0
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 7,
+      "servico": "Lastro de brita e pó de pedra",
+      "descricaoOrig": "IHD.23 - LASTRO DE BRITA E PÓ DE PEDRA",
+      "un": "M3",
+      "qtdPrev": 86.4
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 7,
+      "servico": "Instalação de tampão para galeria de águas pluviais - articulado, e…",
+      "descricaoOrig": "INC.27 - INSTALAÇÃO DE TAMPÃO PARA GALERIA DE ÁGUAS PLUVIAIS - ARTICULADO, EXCETO FORNECIMENTO DE TAMPÃO",
+      "un": "UN",
+      "qtdPrev": 9.0
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 7,
+      "servico": "Chaminé de poço de visita com alvenaria de um tijolo comum",
+      "descricaoOrig": "CHAMINÉ DE POÇO DE VISITA COM ALVENARIA DE UM TIJOLO COMUM",
+      "un": "M",
+      "qtdPrev": 18.0
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 7,
+      "servico": "Fornecimento de tampão de ferro fundido dúctil classe mínima 400 (4…",
+      "descricaoOrig": "FORNECIMENTO DE TAMPÃO DE FERRO FUNDIDO DÚCTIL CLASSE MÍNIMA 400 (40T) D=600MM - NBR 10160 ARTICULADO - P/ GAL. ÁGUAS PLUV.",
+      "un": "UN",
+      "qtdPrev": 9.0
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 7,
+      "servico": "Boca de lobo simples",
+      "descricaoOrig": "BOCA DE LOBO SIMPLES",
+      "un": "UN",
+      "qtdPrev": 13.0
+    },
+    {
+      "rua": "Astrogildo Pereira",
+      "capId": 8,
+      "servico": "Aterro",
+      "descricaoOrig": "ATERRO, INCLUSIVE COMPACTAÇÃO MANUAL",
+      "un": "M3",
+      "qtdPrev": 86.283
+    }
+  ]
+};

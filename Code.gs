@@ -88,7 +88,7 @@ function rotear(e) {
       case 'updateRDO':       resp = updateRDO(p.payload, p.token); break;
       case 'limparDuplicados': resp = limparDuplicadosServidor(); break;
       case 'apagarPorPrefixoId': resp = apagarPorPrefixoId(p.prefixo); break;
-      case 'producaoPorPacote': resp = producaoPorPacote(p.mes); break;
+      case 'producaoPorPacote': resp = producaoPorPacote(p.mes, p.obra); break;
       case 'addRDODiario':    resp = upsertRDODiario(p, false); break;
       case 'updateRDODiario': resp = upsertRDODiario(p, true); break;
       case 'deleteRDODiario': resp = deleteRDODiario(p.id, p.data, p.token); break;
@@ -267,6 +267,32 @@ function getOrCreateAba(nome) {
    parâmetro `obra` — é o que permite este bloco ser o mesmo nos dois.
    Se a planilha ainda estiver no formato antigo (sem a coluna `obra`),
    rode UMA VEZ `migrarAuditoriaParaMultiObra()`, abaixo. */
+/* ------------------------------------------------------------------
+   MULTI-OBRA NAS ABAS DE LANÇAMENTO
+   ------------------------------------------------------------------
+   RDO_Avanco e RDO_Diario passaram a receber lançamento de mais de uma
+   obra, separados pela coluna `obra` — o mesmo desenho que NotasFiscais
+   e EstoqueSaidas já usavam.
+
+   Linha SEM valor na coluna é da Teotônio: são as que foram gravadas
+   quando este backend atendia uma obra só.
+   ------------------------------------------------------------------ */
+function normObra(v) {
+  return String(v == null ? '' : v).trim() || OBRA_ID;
+}
+
+/* Devolve o índice da coluna, criando-a no fim do cabeçalho se faltar.
+   Mesmo padrão que o addBatchRDO já usava para `clientId` e `usuario`:
+   a planilha se ajusta sozinha na primeira gravação, sem ninguém precisar
+   editar cabeçalho à mão antes de o campo poder lançar. */
+function garantirColuna(aba, nome) {
+  var cab = cabecalhoNormalizado(aba);
+  var i = idxColuna(cab, nome);
+  if (i !== -1) return i;
+  aba.getRange(1, aba.getLastColumn() + 1).setValue(nome);
+  return idxColuna(cabecalhoNormalizado(aba), nome);
+}
+
 function registrarAuditoria(usuario, perfil, acao, obra, registroId, antes, depois) {
   try {
     var a = getOrCreateAba(ABA_AUDITORIA);
@@ -316,6 +342,46 @@ function migrarAuditoriaParaMultiObra() {
   }
   Logger.log('Auditoria migrada: coluna "obra" inserida e ' + linhas +
              ' linha(s) marcadas como "' + OBRA_ID + '".');
+}
+
+/* ------------------------------------------------------------------
+   MIGRAÇÃO — coluna `obra` nas abas de LANÇAMENTO
+   ------------------------------------------------------------------
+   Rode UMA VEZ, depois de colar este arquivo. Acrescenta a coluna `obra`
+   em RDO_Avanco e RDO_Diario e marca tudo que já existe como "teotonio",
+   que é de onde vieram: até esta versão o backend atendia uma obra só.
+
+   Diferente da Auditoria, aqui a coluna entra no FIM do cabeçalho e não
+   no meio — assim nenhuma coluna existente muda de posição, e qualquer
+   fórmula, filtro ou CSV publicado que aponte para elas continua valendo.
+
+   É seguro rodar de novo: coluna que já existe é apenas preenchida onde
+   estiver vazia.
+   ------------------------------------------------------------------ */
+function migrarObraNasAbasDeRDO() {
+  [NOME_ABA, NOME_ABA_DIARIO].forEach(function (nome) {
+    var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nome);
+    if (!aba) { Logger.log('Aba "' + nome + '" não existe — pulando.'); return; }
+
+    var iObra = garantirColuna(aba, 'obra');
+    if (iObra === -1) { Logger.log('Aba "' + nome + '": não consegui criar a coluna.'); return; }
+
+    var ultima = aba.getLastRow();
+    if (ultima < 2) { Logger.log('Aba "' + nome + '": sem linhas de dados.'); return; }
+
+    var col = aba.getRange(2, iObra + 1, ultima - 1, 1);
+    var vals = col.getValues();
+    var mudou = 0;
+    for (var i = 0; i < vals.length; i++) {
+      if (String(vals[i][0] == null ? '' : vals[i][0]).trim() === '') {
+        vals[i][0] = OBRA_ID; mudou++;
+      }
+    }
+    if (mudou) col.setValues(vals);
+    Logger.log('Aba "' + nome + '": ' + mudou + ' linha(s) marcadas como "' + OBRA_ID +
+               '" (de ' + vals.length + ').');
+  });
+  Logger.log('Pronto. Rode de novo quando quiser — só preenche o que estiver vazio.');
 }
 
 // Lançar produção é de quem está na obra: campo, engenharia e admin.
@@ -442,6 +508,13 @@ function addBatchRDO(batchJson, clientId, token) {
       cab = cabecalhoNormalizado(aba);
     }
 
+    // E para 'obra': sem ela, lançamento de qualquer obra apareceria como se
+    // fosse da Teotônio e entraria na medição da avenida.
+    if (idxColuna(cab, 'obra') === -1) {
+      garantirColuna(aba, 'obra');
+      cab = cabecalhoNormalizado(aba);
+    }
+
     // Dedup por clientId: se já existe, considera salvo e sai.
     if (clientId && iClient !== -1) {
       var dados = aba.getDataRange().getValues();
@@ -459,6 +532,7 @@ function addBatchRDO(batchJson, clientId, token) {
       Object.keys(item).forEach(function (chave) { registro[chave.toLowerCase()] = item[chave]; });
       // campos gerados pelo servidor
       registro['id'] = registro['id'] || gerarId(agora, k);
+      registro['obra'] = normObra(registro['obra']);
       registro['clientid'] = clientId || '';
       registro['timestamp'] = registro['timestamp'] || agora;
       registro['data_registro'] = registro['data_registro'] || agora;
@@ -826,14 +900,19 @@ function obterFotoPrivada(fileId) {
 // Chamada: ?action=producaoPorPacote&mes=2026-05&callback=cb
 // Se 'mes' for omitido, soma o histórico inteiro.
 // ------------------------------------------------------------
-function producaoPorPacote(mes) {
+/* `obra` é opcional e vale "teotonio" quando não vier — automação externa
+   que já chamava este endpoint antes do multi-obra continua recebendo
+   exatamente o que recebia. */
+function producaoPorPacote(mes, obra) {
   var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA);
   if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA + '" não encontrada' };
 
   var dados = aba.getDataRange().getValues();
   if (dados.length <= 1) return { ok: true, mes: mes || 'tudo', pacotes: {} };
 
+  var obraAlvo = normObra(obra);
   var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iObra   = idxColuna(cab, 'obra');
   var iData   = idxColuna(cab, 'data');
   var iTurno  = idxColuna(cab, 'turno');
   var iPacId  = idxColuna(cab, 'pacote_id');
@@ -869,6 +948,7 @@ function producaoPorPacote(mes) {
 
   for (var i = 1; i < dados.length; i++) {
     var r = dados[i];
+    if (iObra !== -1 && normObra(r[iObra]) !== obraAlvo) continue;
     if (mes && mesDe(r[iData]) !== mes) continue;
     totalLinhas++;
 
@@ -1075,20 +1155,27 @@ function upsertRDODiario(p, deveExistir) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
+    garantirColuna(aba, 'obra');   // antes de ler o cabeçalho, para já vir nele
     var cab = cabecalhoNormalizado(aba);
     var iData = idxColuna(cab, 'data');
     var iTurno = idxColuna(cab, 'turno');
     var iId = idxColuna(cab, 'id');
+    var iObra = idxColuna(cab, 'obra');
     var dados = aba.getDataRange().getValues();
 
     var dataAlvo = normData(p.data);
     var turno = String(p.turno || '').trim().toLowerCase();
+    var obraAlvo = normObra(p.obra);
 
+    // A chave do diário é (obra, data, turno). Sem a obra na chave, o diário
+    // do Ranário do dia 10 SOBRESCREVERIA o da Teotônio do dia 10 — um dia
+    // inteiro de efetivo, clima e ocorrências apagado sem aviso.
     var linhaExistente = -1;
     for (var i = 1; i < dados.length; i++) {
       var mesmaData = dataAlvo !== '' && (iData !== -1) && normData(dados[i][iData]) === dataAlvo;
       var mesmoTurno = (iTurno === -1) || String(dados[i][iTurno]).trim().toLowerCase() === turno;
-      if (mesmaData && mesmoTurno) { linhaExistente = i + 1; break; }
+      var mesmaObra = (iObra === -1) || normObra(dados[i][iObra]) === obraAlvo;
+      if (mesmaData && mesmoTurno && mesmaObra) { linhaExistente = i + 1; break; }
     }
 
     var registro = {};
@@ -1097,6 +1184,7 @@ function upsertRDODiario(p, deveExistir) {
       if (chave === 'action' || chave === 'callback' || chave === 'token') return;
       registro[chave.toLowerCase()] = p[chave];
     });
+    registro['obra'] = obraAlvo;
     var sessD = sessaoDoToken(p.token);
     if (sessD && sessD.usuario) registro['usuario'] = sessD.usuario;
 
@@ -1202,6 +1290,7 @@ function criarRDOsVaziosMaio2026(incluirDiasUteis) {
       if (util && !incluirDiasUteis) { uteisSemRDO.push(iso); continue; }
 
       var registro = {};
+      registro['obra'] = OBRA_ID;   // o dia vazio é desta obra, não das outras
       registro['data'] = iso;
       if (iId !== -1) registro['id'] = gerarIdDiario(dados, iId);
       registro['tem_turno_noturno'] = 'false';
@@ -1417,9 +1506,14 @@ function registrarClimaAuto() {
     var iChuva = idxColuna(cab, 'chuva_mm_auto');
     var iFonte = idxColuna(cab, 'clima_fonte');
     var iId = idxColuna(cab, 'id');
+    var iObraC = idxColuna(cab, 'obra');
     var dados2 = aba.getDataRange().getValues();
 
+    // A chuva vem das coordenadas DESTA obra (OBRA_LAT/OBRA_LON), então só
+    // carimba o diário dela. Sem o filtro, o primeiro diário daquela data —
+    // de qualquer obra — receberia a chuva de outra cidade.
     for (var i = 1; i < dados2.length; i++) {
+      if (iObraC !== -1 && normObra(dados2[i][iObraC]) !== OBRA_ID) continue;
       if (normData(dados2[i][iData]) === iso) {
         aba.getRange(i + 1, iChuva + 1).setValue(chuva);
         aba.getRange(i + 1, iFonte + 1).setValue('Open-Meteo');
@@ -1429,7 +1523,8 @@ function registrarClimaAuto() {
 
     // Não havia RDO na data: cria linha mínima só com data + chuva,
     // para o dia ficar documentado mesmo sem apontamento.
-    var registro = {};
+    garantirColuna(aba, 'obra');
+    var registro = { obra: OBRA_ID };
     registro['data'] = iso;
     registro['chuva_mm_auto'] = chuva;
     registro['clima_fonte'] = 'Open-Meteo';
@@ -1469,13 +1564,18 @@ function criarRDOsVazios(ano, mes, incluirDiasUteis) {
   var lock = LockService.getScriptLock();
   lock.waitLock(60000);
   try {
+    garantirColuna(aba, 'obra');
     var cab = cabecalhoNormalizado(aba);
     var iData = idxColuna(cab, 'data');
     var iId = idxColuna(cab, 'id');
+    var iObraV = idxColuna(cab, 'obra');
     var dados = aba.getDataRange().getValues();
 
+    // "já existe RDO nesta data" é por OBRA: data preenchida no Ranário não
+    // pode impedir a criação do dia vazio da Teotônio.
     var existentes = {};
     for (var i = 1; i < dados.length; i++) {
+      if (iObraV !== -1 && normObra(dados[i][iObraV]) !== OBRA_ID) continue;
       var nd = normData(dados[i][iData]);
       if (nd) existentes[nd] = true;
     }
@@ -1492,6 +1592,7 @@ function criarRDOsVazios(ano, mes, incluirDiasUteis) {
       if (util && !incluirDiasUteis) { uteisSemRDO.push(iso); continue; }
 
       var registro = {};
+      registro['obra'] = OBRA_ID;   // o dia vazio é desta obra, não das outras
       registro['data'] = iso;
       if (iId !== -1) registro['id'] = gerarIdDiario(dados, iId);
       registro['tem_turno_noturno'] = 'false';
