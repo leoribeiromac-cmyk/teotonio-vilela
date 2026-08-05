@@ -8839,7 +8839,7 @@ window.executarCriarRDOsFaltantes = async function() {
     if (btn) btn.textContent = `Criando… ${i + 1}/${dias.length}`;
     try {
       const result = await jsonp(CONFIG.appsScript, {
-        action: 'addRDODiario', data, tem_turno_noturno: 'false',
+        action: 'addRDODiario', obra: OBRA.id, data, tem_turno_noturno: 'false',
         observacoes_gerais: '', ...authParams()
       }, 0);
       if (result && result.ok) {
@@ -9897,6 +9897,10 @@ async function salvarRDO() {
       if (fotosSvc.length) fotosDoLote[idSvc] = fotosSvc.slice();
       return {
         id: idSvc,
+        // De qual obra é este lançamento. Todas gravam na MESMA planilha e se
+        // separam por esta coluna — sem ela, serviço do Ranário apareceria
+        // como se fosse da Teotônio e entraria na medição da avenida.
+        obra: OBRA.id,
         data: d.data,
         turno: d.turno || 'Diurno',
         pacote_id: s.pacoteId,
@@ -9925,6 +9929,7 @@ async function salvarRDO() {
 
     return {
       id: idSvc,
+      obra: OBRA.id,
       data: d.data,
       turno: d.turno || 'Diurno',
       pacote_id: 'OUTRO',
@@ -10714,6 +10719,7 @@ async function salvarDiarioV4() {
   
   const params = {
     action: existe ? 'updateRDODiario' : 'addRDODiario',
+    obra: OBRA.id,          // de qual obra é este diário (todas na mesma aba)
     data: d.data,
     apontador_diurno: d.diurno.apontador || '',
     apontador_noturno: d.noturno.apontador || '',
