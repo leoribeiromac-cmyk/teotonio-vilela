@@ -13,34 +13,59 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14.5' fill='%231a1612'/%3E%3Cpath d='M17.4 52.5 L27.2 15.4 H36.8 L46.6 52.5 Z' fill='%23d2682f'/%3E%3Cg fill='%23fdf6ef'%3E%3Crect x='29.4' y='43.6' width='5.2' height='7.2' rx='1.4'/%3E%3Crect x='30.05' y='32.4' width='3.9' height='5.6' rx='1.1'/%3E%3Crect x='30.6' y='23.6' width='2.8' height='4.2' rx='.9'/%3E%3Crect x='31.05' y='17.2' width='1.9' height='3' rx='.7'/%3E%3C/g%3E%3C/svg%3E">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<!-- Bibliotecas VENDORIZADAS, como no app "Gestor — Controle de Obras". Antes
-     vinham de CDN, e CDN não existe no canteiro: no primeiro acesso sem sinal
-     o gráfico não desenhava e o RDO não saía em PDF/Excel. Servidas do próprio
-     GitHub Pages, o service worker as guarda junto com o app. Versões idênticas
-     às que estavam no CDN — Chart.js 4.4.0, jsPDF 2.5.1, AutoTable 3.5.31 e
-     xlsx-js-style 1.2.0 — para não mudar nada de comportamento. -->
-<script src="vendor/chartjs/chart.umd.min.js"></script>
-<script src="vendor/jspdf/jspdf.umd.min.js"></script>
-<!-- PDF.js (Mozilla) vendorizado: é ele que extrai o TEXTO do PDF da DANFE.
-     Sem ele o app cai para OCR na foto, que erra muito mais. Vendorizado e
-     não em CDN porque o app precisa abrir offline no canteiro. -->
-<script src="vendor/pdfjs/pdf.min.js"></script>
-<!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
-     "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
+<!-- Fontes servidas pelo PRÓPRIO site. Antes vinham do Google Fonts, numa
+     folha de estilo EXTERNA e bloqueante: com sinal ruim no canteiro, a tela
+     ficava em branco esperando um servidor de fora responder. Era também a
+     última dependência de terceiros que restava no app.
+     Só o subconjunto latino e os pesos realmente usados — 140 KB no total,
+     contra o ida-e-volta de DNS, TLS, CSS e depois os arquivos de fonte. -->
+<style>
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:400;font-display:swap;
+  src:url('vendor/fontes/space-grotesk-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;
+  src:url('vendor/fontes/space-grotesk-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:600;font-display:swap;
+  src:url('vendor/fontes/space-grotesk-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:700;font-display:swap;
+  src:url('vendor/fontes/space-grotesk-latin-700-normal.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:swap;
+  src:url('vendor/fontes/jetbrains-mono-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:swap;
+  src:url('vendor/fontes/jetbrains-mono-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:600;font-display:swap;
+  src:url('vendor/fontes/jetbrains-mono-latin-600-normal.woff2') format('woff2')}
+</style>
+<!-- ============================================================
+     BIBLIOTECAS PESADAS: CARREGADAS SOB DEMANDA
+     ------------------------------------------------------------
+     Todas ficam em vendor/ (nada de CDN — o app abre offline no canteiro),
+     mas NENHUMA entra aqui no <head>. Somadas são 1,3 MB de JavaScript, e
+     enquanto o navegador as baixava e compilava, a tela ficava BRANCA:
+     ~13 segundos no 4G de campo, medidos, antes de o apontador ver
+     qualquer coisa.
+
+     Nenhuma delas é necessária para abrir o app e lançar um serviço, que
+     é o uso mais frequente e o mais sensível a tempo:
+
+       Chart.js  200 KB — só quando um painel desenha gráfico
+       jsPDF     356 KB — só ao gerar PDF        (+ AutoTable 37 KB)
+       xlsx      415 KB — só ao exportar Excel
+       PDF.js    313 KB — só na leitura da DANFE e na tela de Projetos
+
+     Agora cada uma é buscada na primeira vez que faz falta, por `usarLib()`
+     (ver mais abaixo). O service worker as guarda depois disso, então a
+     segunda vez é instantânea e continua funcionando sem sinal.
+     ============================================================ -->
 <!-- Cadastro das obras que não têm planilha própria. Cada arquivo só escreve
      em window.OBRAS_ARQ, sem depender de nada do app — por isso pode vir
      aqui no topo, antes do script principal. -->
 <script src="dados/ranario.js"></script>
 <script src="dados/ruas-de-terra.js"></script>
+<!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
+     "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
 <script src="js/ui/icones.js"></script>
 <script src="js/nf/adaptador.js"></script>
 <script src="js/nf/notas.js"></script>
-<script src="vendor/jspdf/jspdf.plugin.autotable.min.js"></script>
-<!-- xlsx-js-style: fork do SheetJS 0.18.5 (mesma API de leitura) que TAMBÉM grava estilos (bordas/cores/fontes) usados na exportação de RDOs em Excel. -->
-<script src="vendor/xlsx/xlsx.bundle.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -1993,6 +2018,75 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 
 <script>
 // ====================================================================
+// CARREGAMENTO SOB DEMANDA DAS BIBLIOTECAS PESADAS
+// --------------------------------------------------------------------
+// `await usarLib('pdf')` garante que a biblioteca está na memória e só
+// então segue. Na primeira chamada baixa; nas seguintes devolve na hora.
+// Duas chamadas ao mesmo tempo compartilham o MESMO download — sem isso,
+// tocar duas vezes no botão de exportar baixaria 356 KB duas vezes.
+//
+// Falha de rede não fica muda: quem chamou recebe o erro e mostra recado.
+// ====================================================================
+const LIBS = {
+  grafico: { arquivos: ['vendor/chartjs/chart.umd.min.js'],           pronto: () => typeof Chart !== 'undefined' },
+  // AutoTable precisa do jsPDF já carregado: entra depois, na ordem.
+  pdf:     { arquivos: ['vendor/jspdf/jspdf.umd.min.js',
+                        'vendor/jspdf/jspdf.plugin.autotable.min.js'], pronto: () => !!(window.jspdf && window.jspdf.jsPDF) },
+  excel:   { arquivos: ['vendor/xlsx/xlsx.bundle.js'],                 pronto: () => typeof XLSX !== 'undefined' },
+  lerPdf:  { arquivos: ['vendor/pdfjs/pdf.min.js'],                    pronto: () => !!window.pdfjsLib,
+             depois: () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js'; } },
+};
+const _libsEmCurso = {};
+
+function _injetarScript(src) {
+  return new Promise((ok, erro) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = () => ok();
+    s.onerror = () => erro(new Error('não foi possível carregar ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+async function usarLib(nome) {
+  const lib = LIBS[nome];
+  if (!lib) throw new Error('biblioteca desconhecida: ' + nome);
+  if (lib.pronto()) return true;
+  if (_libsEmCurso[nome]) return _libsEmCurso[nome];
+
+  _libsEmCurso[nome] = (async () => {
+    // em série, não em paralelo: o AutoTable se registra no jsPDF e quebra
+    // se chegar antes dele
+    for (const arq of lib.arquivos) await _injetarScript(arq);
+    if (lib.depois) lib.depois();
+    if (!lib.pronto()) throw new Error('biblioteca ' + nome + ' carregou incompleta');
+    return true;
+  })();
+
+  try { return await _libsEmCurso[nome]; }
+  catch (e) { delete _libsEmCurso[nome]; throw e; }   // deixa tentar de novo
+}
+
+/* Embrulho para quem chama a partir de um botão: cuida do aviso de espera e
+   da mensagem de falha, para não repetir isso em cada exportação. */
+async function comLib(nome, oQueFazer, rotulo) {
+  let aviso = null;
+  try {
+    if (!LIBS[nome].pronto()) aviso = toast('Preparando ' + (rotulo || 'a exportação') + '…', 'info', 0);
+    await usarLib(nome);
+  } catch (e) {
+    toast('Não foi possível carregar o necessário para ' + (rotulo || 'esta ação') +
+          '. Verifique a conexão e tente de novo.', 'error', 6000);
+    return;
+  } finally {
+    if (aviso && aviso.remove) aviso.remove();
+  }
+  return oQueFazer();
+}
+
+window.usarLib = usarLib;   // o módulo de Notas Fiscais também usa
+
+// ====================================================================
 // CONFIGURAÇÃO — MULTI-OBRA
 // --------------------------------------------------------------------
 // Este app nasceu para UMA obra e tinha um único CONFIG. Agora ele atende
@@ -2251,7 +2345,6 @@ async function fetchCSV(url) {
    ------------------------------------------------------------------ */
 // o worker do PDF.js precisa apontar para o arquivo local, senão o pdf.js
 // tenta buscar de um CDN e falha quando o app está offline
-if (window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js';
 
 const LIMITE_URL = 6000;   // margem confortável abaixo do teto do navegador
 
@@ -2650,6 +2743,9 @@ function toast(msg, type = 'info', durationMs = 3500) {
   } else {
     setTimeout(fechar, durationMs);
   }
+  // devolve o elemento: quem mostra um aviso de espera ("Preparando…")
+  // precisa poder tirá-lo da tela assim que a espera acaba
+  return t;
 }
 
 /* A obra trabalha com estacas numeradas por sentido? Só a Teotônio, por
@@ -5010,11 +5106,16 @@ function prachaFalhou(url) {
 }
 
 /* Abre o PDF selecionado. Chamada depois que o HTML da tela já está no DOM. */
-function abrirPrancha() {
+async function abrirPrancha() {
   const box = document.getElementById('projVisor');
   if (!box || !PROJ.sel) return;
   if (PROJ.doc && PROJ.url === PROJ.sel) { desenharPrancha(); return; }
-  if (!window.pdfjsLib) { box.innerHTML = prachaFalhou(PROJ.sel); return; }
+
+  // O PDF.js (313 KB) só é buscado aqui, quando alguém abre uma prancha de
+  // verdade — e não na abertura do app.
+  try { await usarLib('lerPdf'); }
+  catch (e) { box.innerHTML = prachaFalhou(PROJ.sel); return; }
+  if (!document.getElementById('projVisor')) return;   // saiu da tela enquanto baixava
 
   // Prancha trocada no meio do carregamento: só a última vale. Sem isso, a
   // anterior terminava depois e desenhava por cima da que o usuário escolheu.
@@ -6393,11 +6494,9 @@ function renderExecutivo() {
 }
 
 window.exportarRelatorioExecutivoPDF = function() {
-  if (!window.jspdf || !window.jspdf.jsPDF) {
-    toast('Biblioteca de exportação em PDF não foi carregada no navegador.', 'error');
-    return;
-  }
-
+  return comLib('pdf', _exportarRelatorioExecutivoPDF, 'o relatório em PDF');
+};
+function _exportarRelatorioExecutivoPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const o = obra();
@@ -6827,15 +6926,21 @@ window.exportarRelatorioExecutivoPDF = function() {
   toast('Relatório Executivo PDF exportado com sucesso!', 'success');
 };
 
-function montarGraficos() {
+async function montarGraficos() {
   // Ponto único de montagem de gráfico: todo mundo que troca de tela ou de
   // tema já chama daqui, então o Tempo × Estaca entra junto sem hook novo.
   if (STATE.currentPage === 'avancofisico') { montarTempoCaminhamento(); return; }
   if (STATE.currentPage !== 'executivo') return;
   if (!STATE.dashData) return;
-  // Se a CDN do chart.js não carregou (sinal fraco no campo), o painel segue
-  // funcionando sem os gráficos em vez de quebrar o JS da página inteira.
-  if (typeof Chart === 'undefined') return;
+
+  // O Chart.js é buscado agora, não na abertura do app. Se não vier (sinal
+  // fraco no campo), o painel segue vivo com os números — só sem os gráficos,
+  // que é o mesmo comportamento de antes, e melhor que uma tela quebrada.
+  const tela = STATE.currentPage;
+  try { await usarLib('grafico'); } catch (e) { return; }
+  // esperar o download leva tempo, e nesse meio o usuário pode ter saído da
+  // tela: desenhar agora seria pintar num DOM que não existe mais
+  if (STATE.currentPage !== tela || !STATE.dashData) return;
 
   // Dispara recomendação IA (cacheada 6h) — independente do gráfico
   if (STATE.dashData.metrics) {
@@ -7319,8 +7424,10 @@ function renderTempoCaminhamento() {
 
 /* Instancia os dois gráficos. Separado do render porque o canvas só
    existe depois que o HTML entrou na página. */
-function montarTempoCaminhamento() {
-  if (typeof Chart === 'undefined') return;      // CDN não carregou: a tela segue viva
+async function montarTempoCaminhamento() {
+  var telaAntes = STATE.currentPage;
+  try { await usarLib('grafico'); } catch (e) { return; }   // sem gráfico, a tela segue viva
+  if (STATE.currentPage !== telaAntes) return;
   var dados = dadosTempoCaminhamento();
 
   ['CB', 'BC'].forEach(function (sent) {
@@ -8743,6 +8850,9 @@ function atualizarBotaoLote() {
 }
 
 function gerarPDFsEmLote() {
+  return comLib('pdf', _gerarPDFsEmLote, 'os PDFs');
+}
+function _gerarPDFsEmLote() {
   const datas = [...SELECTED_RDO_DATAS].sort();
   if (datas.length === 0) { toast('Selecione ao menos um RDO', 'error'); return; }
 
@@ -9359,6 +9469,9 @@ function wsRDOModeloPDF(d, data) {
 // Exporta os RDOs Diários para .xlsx no MODELO DO PDF (uma aba por RDO).
 // Se houver datas selecionadas, exporta só elas; senão, exporta todos.
 window.exportarRDOsXLS = function() {
+  return comLib('excel', _exportarRDOsXLS, 'a planilha');
+};
+function _exportarRDOsXLS() {
   const sel = (typeof SELECTED_RDO_DATAS !== 'undefined' && SELECTED_RDO_DATAS.size) ? SELECTED_RDO_DATAS : null;
 
   // Uma aba por DATA, usando o RDO oficial (ou o primeiro) — mesmo critério do PDF.
@@ -10988,6 +11101,9 @@ const RDO_LOGO_L2 = 'iVBORw0KGgoAAAANSUhEUgAABBkAAAJuCAYAAAD1iNqxAAAAAXNSR0IArs4
 const RDO_LOGO_L3 = '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';
 
 function gerarPDFDiario(data) {
+  return comLib('pdf', () => _gerarPDFDiario(data), 'o PDF do RDO');
+}
+function _gerarPDFDiario(data) {
   const daData = rdosDaData(data);
   const oficialId = getOficialRDO(data);
   let fromSheet = daData[0];
@@ -11481,6 +11597,9 @@ function gerarPDFInternoTurnoV4() {
 }
 
 function gerarPDFDiarioV4(data) {
+  return comLib('pdf', () => _gerarPDFDiarioV4(data), 'o PDF do RDO');
+}
+function _gerarPDFDiarioV4(data) {
   // Chama o PDF Oficial completo (gerado de gerarPDFDiario)
   if (typeof gerarPDFDiario === 'function') {
     gerarPDFDiario(data);
@@ -11594,7 +11713,10 @@ async function anexoFotosPDF(doc, itens, rodape) {
 // ====================================================================
 // PDF INTERNO — Visual, pra mandar no grupo (sem logos formais)
 // ====================================================================
-async function gerarPDFInterno(data, turnoFocus) {
+function gerarPDFInterno(data, turnoFocus) {
+  return comLib('pdf', () => _gerarPDFInterno(data, turnoFocus), 'o PDF do RDO');
+}
+async function _gerarPDFInterno(data, turnoFocus) {
   // Tornando a função à prova de falhas: se o botão não enviou o turno, ela mesma descobre qual tela está aberta
   const focus = turnoFocus || (typeof DIARIO_TURNO_ATIVO !== 'undefined' ? DIARIO_TURNO_ATIVO : null);
 

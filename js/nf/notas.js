@@ -693,6 +693,12 @@ function nfPDFdeBase64(b64) {
 }
 async function nfLerPDF(file) {
   const out = { texto: '', thumb: '', full: '', paginas: 0 };
+  // O PDF.js e pesado (313 KB) e so faz falta quando chega uma DANFE em PDF.
+  // O app carrega sob demanda; aqui pedimos e seguimos sem ele se falhar —
+  // a leitura cai para OCR na imagem, que e o plano B de sempre.
+  if (typeof window.usarLib === 'function') {
+    try { await window.usarLib('lerPdf'); } catch (e) { return out; }
+  }
   if (!window.pdfjsLib) return out;
   const buf = await file.arrayBuffer();
   const doc = await window.pdfjsLib.getDocument({ data: buf }).promise;
