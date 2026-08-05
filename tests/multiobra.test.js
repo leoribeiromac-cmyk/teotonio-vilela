@@ -50,7 +50,14 @@ const ABAS = {
   RDO_Avanco: Aba(['id', 'data', 'turno', 'pacote_id', 'quantidade', 'clientId', 'usuario'],
     [['a1', '2026-08-01', 'Diurno', 'P26', 10, 'c1', 'Wallace']]),   // linha ANTIGA, sem obra
   RDO_Diario: Aba(['id', 'data', 'turno', 'encarregado', 'observacoes_gerais'],
-    [['d1', '2026-08-01', '', 'J. Santos', 'diario da teotonio']])   // linha ANTIGA, sem obra
+    [['d1', '2026-08-01', '', 'J. Santos', 'diario da teotonio']]),  // linha ANTIGA, sem obra
+  NotasFiscais: Aba(['id', 'clientId', 'obra', 'numero', 'dataEmissao', 'dataEntrada', 'vTotal', 'usuario'],
+    [['n1', 'c-n1', 'teotonio', '1001', '2026-07-01', '2026-07-02', 500, 'Leonardo'],
+     ['n2', 'c-n2', 'ranario',  '2002', '2026-07-03', '2026-07-04', 800, 'Wallace'],
+     ['n3', 'c-n3', '',         '3003', '2026-06-01', '2026-06-02', 300, 'Leonardo']]),  // ANTIGA, sem obra
+  EstoqueSaidas: Aba(['id', 'obra', 'descricao', 'qtd', 'data', 'usuario'],
+    [['s1', 'teotonio', 'brita', 10, '2026-07-05', 'Leonardo'],
+     ['s2', 'ranario',  'areia', 20, '2026-07-06', 'Wallace']])
 };
 
 // Propriedades do script COM estado — e um cache que pode ser esvaziado a
@@ -322,6 +329,43 @@ t('a faxina diaria desce a fila mesmo sem ninguem lancar nada', () => {
   assert.ok(!Object.keys(PROPS.getProperties()).some(k => k.indexOf('AUDQ_') === 0),
     'a faxina nao descarregou a fila');
   assert.ok(/LOGIN/.test(JSON.stringify(ABAS.Auditoria.dados.slice(-1))), 'o LOGIN nao chegou');
+});
+
+console.log('\nNOTAS FISCAIS POR OBRA');
+
+// nfListar sempre PASSOU a obra, mas linhasObj ignorava o argumento: a tela
+// de Notas devolvia as notas e as saidas de todas as obras misturadas.
+t('a Teotonio ve as notas dela, mais as antigas sem obra', () => {
+  const r = ctx.nfListar('teotonio');
+  const nums = r.notas.map(n => String(n.numero)).sort().join(',');
+  assert.strictEqual(nums, '1001,3003', nums);
+});
+
+t('o Ranario ve SO a nota dele', () => {
+  const r = ctx.nfListar('ranario');
+  const nums = r.notas.map(n => String(n.numero)).join(',');
+  assert.strictEqual(nums, '2002', nums);
+});
+
+t('a nota antiga, sem obra na coluna, e da Teotonio', () => {
+  assert.ok(ctx.nfListar('teotonio').notas.some(n => String(n.numero) === '3003'));
+  assert.ok(!ctx.nfListar('ranario').notas.some(n => String(n.numero) === '3003'));
+});
+
+t('as saidas de estoque tambem separam por obra', () => {
+  assert.strictEqual(ctx.nfListar('teotonio').saidas.map(s => String(s.descricao)).join(','), 'brita');
+  assert.strictEqual(ctx.nfListar('ranario').saidas.map(s => String(s.descricao)).join(','), 'areia');
+});
+
+t('sem obra declarada, devolve tudo (nao quebra quem nao filtra)', () => {
+  assert.strictEqual(ctx.linhasObj('NotasFiscais').length, 3);
+  assert.strictEqual(ctx.linhasObj('NotasFiscais', '').length, 3);
+});
+
+t('aba SEM coluna obra segue devolvendo tudo', () => {
+  // RDO_Diario ganhou a coluna na migracao; Equipamentos nunca teve
+  const n = ctx.linhasObj('Equipamentos', 'ranario').length;
+  assert.strictEqual(n, ctx.linhasObj('Equipamentos').length);
 });
 
 console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');
