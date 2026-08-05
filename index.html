@@ -2121,7 +2121,8 @@ const APP = {
   // Chaves de acesso, que valem para a EMPRESA e não para a obra: quem
   // entrou continua entrado ao trocar de obra.
   lsGlobal: { token: 'teotonio_token_v1', perfil: 'teotonio_perfil_v1',
-              usuariosUI: 'teotonio_usuarios_ui_v1', obras: 'teotonio_obras_permitidas_v1' }
+              usuariosUI: 'teotonio_usuarios_ui_v1', usuariosUIEm: 'teotonio_usuarios_ui_em_v1',
+              obras: 'teotonio_obras_permitidas_v1' }
 };
 
 const CSV_TEOTONIO = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=';
@@ -3259,14 +3260,31 @@ let USUARIOS_UI = (function() {
   return ['Leonardo', 'Wallace', 'Guilherme'];
 })();
 
-async function carregarUsuariosNomes() {
+// A lista de nomes muda quando o admin cadastra alguém — quase nunca. Buscá-la
+// de novo a cada vez que a tela de login aparece gastava uma chamada inteira ao
+// Apps Script (com o custo de partida dele) para reescrever o que já estava
+// guardado aqui. Agora só busca se não tiver nada, se já estiver velha, ou se
+// quem chamou pedir na marra (depois de salvar/excluir usuário).
+const USUARIOS_VALIDADE = 12 * 60 * 60 * 1000;   // 12 h
+function usuariosNomesEstaoFrescos() {
+  try {
+    const q = parseInt(localStorage.getItem(CONFIG.ls.usuariosUIEm) || '0', 10);
+    return USUARIOS_UI.length > 0 && q > 0 && (Date.now() - q) < USUARIOS_VALIDADE;
+  } catch (e) { return false; }
+}
+
+async function carregarUsuariosNomes(forcar) {
+  if (!forcar && usuariosNomesEstaoFrescos()) return;
   try {
     const r = await jsonp(CONFIG.appsScript, { action: 'usuariosNomes' }, 0);
     if (r && r.ok && Array.isArray(r.usuarios) && r.usuarios.length) {
       const set = new Set(r.usuarios);
       if (STATE.usuarioLogado) set.add(STATE.usuarioLogado);
       USUARIOS_UI = [...set].sort((a,b) => a.localeCompare(b));
-      try { localStorage.setItem(CONFIG.ls.usuariosUI, JSON.stringify(USUARIOS_UI)); } catch(e){}
+      try {
+        localStorage.setItem(CONFIG.ls.usuariosUI, JSON.stringify(USUARIOS_UI));
+        localStorage.setItem(CONFIG.ls.usuariosUIEm, String(Date.now()));
+      } catch(e){}
       atualizarSelectLogin();
     }
   } catch (e) {}
@@ -3435,17 +3453,34 @@ function renderLogin() {
           <label>Senha</label>
           <input type="password" id="loginPass" placeholder="••••••••" onkeyup="if(event.key==='Enter') fazerLogin()">
         </div>
-        <button class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">${ic('entrar')} Entrar</button>
+        <button id="loginBtn" class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">${ic('entrar')} Entrar</button>
         <div class="login-nota">${ic('info')} Sem entrar, o sistema segue aberto para consulta: painel, avanço, cronograma e histórico.</div>
       </div>
     </div>
   `;
 }
+// Enquanto o servidor responde, o botão DIZ que está trabalhando. Antes ele
+// ficava igual ao estado parado: quem clicava não tinha como saber se o toque
+// pegou, clicava de novo, e o segundo clique disparava outro login — que, com
+// senha errada, ainda contava para a trava de 5 tentativas.
+let _loginEmAndamento = false;
+function loginOcupado(ocupado) {
+  _loginEmAndamento = ocupado;
+  const b = document.getElementById('loginBtn');
+  if (!b) return;
+  b.disabled = ocupado;
+  b.style.opacity = ocupado ? '.7' : '';
+  b.style.cursor = ocupado ? 'progress' : '';
+  b.innerHTML = ocupado ? `${ic('ampulheta')} Entrando…` : `${ic('entrar')} Entrar`;
+}
+
 window.fazerLogin = async function() {
+  if (_loginEmAndamento) return;
   const sel = document.getElementById('loginUserSelect') || document.getElementById('loginUser');
   const u = sel ? sel.value : '';
   const p = document.getElementById('loginPass').value;
   if (!u) { toast('Selecione um usuário', 'error'); return; }
+  loginOcupado(true);
 
   // 1) Valida no servidor — a senha correta vive nas Propriedades do Apps Script.
   try {
@@ -3471,6 +3506,10 @@ window.fazerLogin = async function() {
     }
     toast('Sem conexão. Só é possível entrar offline em um aparelho que já fez login online antes.', 'error', 6000);
     return;
+  } finally {
+    // Sempre libera: deu certo (a tela já trocou e o botão nem existe mais),
+    // deu senha errada ou caiu a rede — em nenhum caso o botão pode ficar preso.
+    loginOcupado(false);
   }
 };
 
@@ -5636,7 +5675,7 @@ window.usuarioSalvarUI = async function(nomeAntigo) {
     toast(`${nome} salvo como ${PERFIS[perfil].nome}.`, 'success');
     document.getElementById('usuarioFormWrap').innerHTML = '';
     usuariosCarregarLista();
-    carregarUsuariosNomes();
+    carregarUsuariosNomes(true);
   } catch (e) {
     toast('Sem conexão com o servidor.', 'error');
   }
@@ -5652,7 +5691,7 @@ window.usuarioExcluirUI = async function(nome) {
     atualizarSelectLogin();
     toast(`${nome} removido.`, 'success');
     usuariosCarregarLista();
-    carregarUsuariosNomes();
+    carregarUsuariosNomes(true);
   } catch (e) {
     toast('Sem conexão com o servidor.', 'error');
   }

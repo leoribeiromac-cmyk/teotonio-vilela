@@ -287,6 +287,12 @@ function sessaoRevogar(token) {
 
 /* Remove sessões abandonadas. Roda sozinha pelo gatilho diário. */
 function limparSessoesAbandonadas() {
+  // Aproveita a faxina para descer a trilha de login/logout que ainda não
+  // foi gravada — garante que ela chega à planilha nem que ninguém lance
+  // nada no dia. (Antes da limpeza: as chaves AUDQ_ não são sessões, mas
+  // ler a loja inteira duas vezes seria desperdício.)
+  auditoriaDescarregar();
+
   var props = PropertiesService.getScriptProperties();
   var todas = props.getProperties();
   var corte = Date.now() - SESSAO_ABANDONO * 86400000;
@@ -384,12 +390,95 @@ function garantirColuna(aba, nome) {
   return idxColuna(cabecalhoNormalizado(aba), nome);
 }
 
+// O fuso do script não muda no meio da execução: perguntar uma vez basta.
+var _FUSO = null;
+function fusoDoScript() {
+  if (!_FUSO) _FUSO = Session.getScriptTimeZone();
+  return _FUSO;
+}
+
+/* ------------------------------------------------------------------
+   AUDITORIA DE LOGIN — fora do caminho crítico
+   ------------------------------------------------------------------
+   Registrar o LOGIN abria a planilha e gravava uma linha DENTRO do
+   pedido de login. Abrir a planilha é a operação mais cara do Apps
+   Script, e era a ÚNICA razão de o login tocar a planilha: quem entra
+   não altera dado nenhum. Ou seja, toda vez que alguém entrava no
+   sistema, esperava alguns segundos por uma linha de log que ninguém
+   vai ler naquele instante.
+
+   Agora LOGIN e LOGOUT deixam a linha numa propriedade própria
+   (AUDQ_<carimbo>_<uuid>) — uma gravação curta — e ela desce para a
+   planilha no primeiro pedido que já for abrir a planilha de qualquer
+   jeito, ou na faxina diária. A trilha continua completa e na ordem
+   certa (o carimbo em milissegundos está no nome da chave); o que
+   mudou é que não é mais o apontador que espera por ela.
+
+   Uma chave POR LINHA, e não uma lista numa chave só, de propósito:
+   dois logins ao mesmo tempo não têm como sobrescrever um ao outro,
+   e nenhuma linha esbarra no teto de 9 KB por valor.
+   ------------------------------------------------------------------ */
+var AUDITORIA_FILA_PREFIXO = 'AUDQ_';
+var AUDITORIA_COLUNAS = 8;
+var _audSeq = 0;
+
+/* A chave carrega o instante para a fila sair na ordem certa. Milissegundo
+   sozinho não basta: duas linhas da MESMA execução caem no mesmo carimbo e
+   a ordem passaria a ser a do UUID, ou seja, sorteada. Por isso o contador. */
+function auditoriaChave() {
+  var ms = String(Date.now());
+  while (ms.length < 14) ms = '0' + ms;              // sorteia por texto: tem de ter largura fixa
+  var seq = String(_audSeq++);
+  while (seq.length < 4) seq = '0' + seq;
+  return AUDITORIA_FILA_PREFIXO + ms + '_' + seq + '_' + Utilities.getUuid();
+}
+
+function auditoriaEnfileirar(linha) {
+  try {
+    PropertiesService.getScriptProperties().setProperty(auditoriaChave(), JSON.stringify(linha));
+  } catch (e) {}
+}
+
+/* Desce para a planilha tudo que está na fila, numa gravação só.
+   Recebe a aba quando quem chamou já a tem em mãos — assim não paga
+   um segundo `getActiveSpreadsheet()`. Nunca derruba a operação. */
+function auditoriaDescarregar(aba) {
+  try {
+    var props = PropertiesService.getScriptProperties();
+    var todas = props.getProperties();
+    var chaves = Object.keys(todas).filter(function (k) {
+      return k.indexOf(AUDITORIA_FILA_PREFIXO) === 0;
+    });
+    if (!chaves.length) return 0;
+    chaves.sort();                       // AUDQ_<millis>_… ordena por tempo
+    var linhas = [];
+    chaves.forEach(function (k) {
+      var l;
+      try { l = JSON.parse(todas[k]); } catch (e) { return; }
+      if (!l || !l.length) return;
+      while (l.length < AUDITORIA_COLUNAS) l.push('');   // setValues exige retângulo
+      linhas.push(l.slice(0, AUDITORIA_COLUNAS));
+    });
+    if (linhas.length) {
+      var a = aba || getOrCreateAba(ABA_AUDITORIA);
+      a.getRange(a.getLastRow() + 1, 1, linhas.length, AUDITORIA_COLUNAS).setValues(linhas);
+    }
+    // só apaga depois de gravar: se a gravação falhar, a fila fica de pé
+    chaves.forEach(function (k) { try { props.deleteProperty(k); } catch (e) {} });
+    return linhas.length;
+  } catch (e) { return 0; }
+}
+
 function registrarAuditoria(usuario, perfil, acao, obra, registroId, antes, depois) {
+  var linha = [Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss'),
+               usuario || 'sistema', perfil || 'sistema', acao, obra || 'global',
+               registroId || '', String(antes || ''), String(depois || '')];
+  // Entrar e sair não mexem em dado: não vale abrir a planilha por isso.
+  if (acao === 'LOGIN' || acao === 'LOGOUT') { auditoriaEnfileirar(linha); return; }
   try {
     var a = getOrCreateAba(ABA_AUDITORIA);
-    var agora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-    a.appendRow([agora, usuario || 'sistema', perfil || 'sistema', acao, obra || 'global',
-                 registroId || '', String(antes || ''), String(depois || '')]);
+    auditoriaDescarregar(a);             // a planilha já está aberta: aproveita
+    a.appendRow(linha);
   } catch (e) {}
 }
 

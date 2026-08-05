@@ -14,7 +14,7 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v13'; // v13: sessão durável + obras por usuário
+const VERSAO = 'teotonio-v14'; // v14: login sem passar pela planilha
 const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleusercontent.com', 'generativelanguage.googleapis.com'];
 
 // O app avisa "nova versão disponível" e só troca quando o usuário mandar —
