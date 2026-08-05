@@ -17,6 +17,26 @@
    Este arquivo depende de funcoes do index.html (esc, toast, obra,
    postAcao, comprimirImg, abrirModal...). Ele so as chama em tempo
    de execucao, por isso pode ser carregado antes.
+
+   ------------------------------------------------------------
+   ARQUIVO COMPARTILHADO — mantenha os dois repositorios IGUAIS
+   ------------------------------------------------------------
+   O mesmo arquivo roda em `teotonio-vilela` e em `gestor-obras`.
+   No teotonio quem faz a ponte de vocabulario e `js/nf/adaptador.js`;
+   nao ha logica de negocio la dentro, entao o arquivo continua sendo
+   copia literal dos dois lados.
+
+   Ele ja divergiu: cada repo recebeu correcoes que o outro nao teve
+   (parse de itens vindos como texto, limite de itens da nota, campos
+   escondidos no modo simples). Todas foram reunidas aqui.
+
+   Regra: alterou aqui, copie o arquivo INTEIRO para o outro repo no
+   mesmo dia. Nada especifico de um app entra neste arquivo — se
+   precisar, o lugar e o adaptador.
+
+   Multi-obra: `ORDEM` e `OBRAS` so existem no gestor-obras. Onde forem
+   usados, e obrigatorio checar `typeof` antes — no teotonio, que e de
+   obra unica, o acesso direto lanca ReferenceError.
    ============================================================ */
 'use strict';
 
@@ -1071,9 +1091,9 @@ function nfRenderItens() {
       return `<div class="nf-item">
         <div class="row" style="gap:7px;margin-bottom:6px">
           <div class="field" style="margin:0;flex:3;min-width:150px"><input value="${esc(it.descricao)}" placeholder="Item (descrição do material)" oninput="nfItemCampo(${i},'descricao',this.value)"></div>
-          <div class="field" style="margin:0;max-width:74px"><input class="num" inputmode="decimal" value="${it.qtd ? fmtQtd(it.qtd) : ''}" placeholder="Qtd" oninput="nfItemCampo(${i},'qtd',this.value)"></div>
-          <div class="field" style="margin:0;max-width:78px"><input value="${esc(it.un)}" placeholder="Un" oninput="nfItemCampo(${i},'un',this.value)" style="text-transform:uppercase"></div>
-          <div class="field" style="margin:0;max-width:96px"><input class="num" inputmode="decimal" value="${it.vUnit ? fmtNum(it.vUnit) : ''}" placeholder="V. unit." oninput="nfItemCampo(${i},'vUnit',this.value)"></div>
+          <div class="field nf-extra" style="margin:0;max-width:74px"><input class="num" inputmode="decimal" value="${it.qtd ? fmtQtd(it.qtd) : ''}" placeholder="Qtd" oninput="nfItemCampo(${i},'qtd',this.value)"></div>
+          <div class="field nf-extra" style="margin:0;max-width:78px"><input value="${esc(it.un)}" placeholder="Un" oninput="nfItemCampo(${i},'un',this.value)" style="text-transform:uppercase"></div>
+          <div class="field nf-extra" style="margin:0;max-width:96px"><input class="num" inputmode="decimal" value="${it.vUnit ? fmtNum(it.vUnit) : ''}" placeholder="V. unit." oninput="nfItemCampo(${i},'vUnit',this.value)"></div>
           <div class="field" style="margin:0;max-width:118px"><input class="num" inputmode="decimal" value="${it.vTotal ? fmtNum(it.vTotal) : ''}" placeholder="Valor do item" oninput="nfItemCampo(${i},'vTotal',this.value)"></div>
           <button class="btn btn-sm btn-ghost" onclick="nfDelItem(${i})" title="Remover">${ic('fechar')}</button></div>
         ${mat ? `<div class="nf-vinc">${ic('vinculo')} Material <b>${esc(mat.descricao)}</b> · ${mat.notas} nota(s) <button class="btn btn-sm btn-ghost" onclick="nfItemCampo(${i},'materialId','');nfRenderItens()">desvincular</button></div>` : ''}
