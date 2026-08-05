@@ -218,6 +218,31 @@ O painel responde "como vai a obra"; não respondia "o que falta fazer hoje".
 Quando o RDO do dia não é preenchido, ninguém percebe — só na hora de fechar a
 medição, semanas depois, quando não dá mais para lembrar o que foi executado.
 
+## Projetos
+
+Tela **Projetos**: as pranchas do projeto executivo, **renderizadas dentro do
+app** pelo PDF.js vendorizado (o mesmo que lê a DANFE) — não pelo leitor de PDF
+do aparelho. No celular do canteiro, abrir em app externo tira o apontador do
+sistema e, sem sinal, muitas vezes nem abre. Aqui funciona offline depois da
+primeira vez, com zoom de 40% a 400% e botão de ajustar à largura.
+
+Os arquivos ficam em `projetos/<obra>/` e são listados em `projetos`, na
+configuração da obra dentro do `index.html`:
+
+```js
+projetos: [
+  { grupo: 'Urbanismo', disciplina: 'Planta — folha 101', escala: '1:250',
+    ref: 'Rua José Nicolau de Lima',          // trecho ou referência da prancha
+    cod: 'DE-VM-TV-01-5U-101 rev.H',          // número como está no carimbo
+    codObra: '1000-SI060-015-UB3-101',        // código interno SPObras
+    arquivo: 'projetos/teotonio/urbanismo-101.pdf' },
+]
+```
+
+`grupo` agrupa a lista lateral (Urbanismo, Drenagem, Pavimentação…). Todos os
+perfis enxergam a tela — inclusive Campo, que é quem mais precisa saber o que
+construir.
+
 ## Prévia de Medição
 
 Tela **Apoio Medição** → selecione o mês → **⬇ CSV p/ conferência**. O arquivo (separador `;`, decimal com vírgula) traz o consumo derivado por item contratual no período, pronto para confrontar com a coluna do mês da Planilha Geral do `.xlsm`.
