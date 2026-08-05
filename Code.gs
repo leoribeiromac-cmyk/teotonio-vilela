@@ -20,9 +20,24 @@ var ABA_APONT      = 'ApontEquip';   // apontamento diário de hora de máquina
 var ABA_NF         = 'NotasFiscais';
 var ABA_SAIDA      = 'EstoqueSaidas';
 
+// Identificador desta obra na trilha de auditoria. Este backend atende UMA
+// obra, mas o campo existe para a auditoria ter o mesmo formato do app
+// "Gestor — Controle de Obras", que atende várias: assim o mesmo bloco de
+// código roda nos dois, e uma consulta que junte as duas planilhas sabe de
+// qual obra veio cada linha. As abas NotasFiscais e EstoqueSaidas já tinham
+// a coluna `obra` desde sempre — só a Auditoria estava de fora.
+var OBRA_ID        = 'teotonio';
+
+// Pasta privada do Drive onde ficam os arquivos das notas. É o ÚNICO ponto em
+// que o bloco de Notas Fiscais difere entre os dois apps — por isso virou
+// constante, e o resto do bloco pôde ficar idêntico. NÃO altere o texto: o
+// nome é a chave de busca da pasta, e mudar aqui faz o app criar uma pasta
+// nova e perder de vista tudo o que já foi enviado.
+var NF_PASTA_RAIZ  = 'Notas Fiscais Teotônio (Privado)';
+
 // Cabeçalho das abas que este script cria quando não existem.
 var HEADERS = {
-  'Auditoria':    ['carimbo','usuario','perfil','acao','registroId','detalhesAnteriores','detalhesNovos'],
+  'Auditoria':    ['carimbo','usuario','perfil','acao','obra','registroId','detalhesAnteriores','detalhesNovos'],
   'Equipamentos': ['nome','tipo','vinculo','locadora','ativo'],
   'Locadoras':    ['nome','observacoes'],
   'ApontEquip':   ['carimbo','data','turno','equipamento','operador','inicio','fim','horas','paradas',
@@ -181,7 +196,7 @@ function loginUsuario(usuario, senha) {
   cache.remove(chaveErros);
   var token = Utilities.getUuid();
   cache.put('tok_' + token, JSON.stringify({ usuario: u, perfil: perfil }), 21600); // 6 h
-  registrarAuditoria(u, perfil, 'LOGIN', '-', '', 'Login efetuado com sucesso');
+  registrarAuditoria(u, perfil, 'LOGIN', OBRA_ID, '-', '', 'Login efetuado com sucesso');
   return { ok: true, usuario: u, perfil: perfil, token: token, expiraEmSegundos: 21600 };
 }
 
@@ -248,13 +263,59 @@ function getOrCreateAba(nome) {
   return a;
 }
 
-function registrarAuditoria(usuario, perfil, acao, registroId, antes, depois) {
+/* Assinatura IGUAL à do app "Gestor — Controle de Obras", inclusive o
+   parâmetro `obra` — é o que permite este bloco ser o mesmo nos dois.
+   Se a planilha ainda estiver no formato antigo (sem a coluna `obra`),
+   rode UMA VEZ `migrarAuditoriaParaMultiObra()`, abaixo. */
+function registrarAuditoria(usuario, perfil, acao, obra, registroId, antes, depois) {
   try {
     var a = getOrCreateAba(ABA_AUDITORIA);
     var agora = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
-    a.appendRow([agora, usuario || 'sistema', perfil || 'sistema', acao,
+    a.appendRow([agora, usuario || 'sistema', perfil || 'sistema', acao, obra || 'global',
                  registroId || '', String(antes || ''), String(depois || '')]);
   } catch (e) {}
+}
+
+/* ------------------------------------------------------------------
+   MIGRAÇÃO — insere a coluna `obra` na Auditoria já existente
+   ------------------------------------------------------------------
+   Rode UMA VEZ no editor do Apps Script, depois de colar este arquivo
+   e ANTES de usar o app. Sem isso, as linhas gravadas antes desta versão
+   ficam com `registroId`, `detalhesAnteriores` e `detalhesNovos` uma
+   coluna à esquerda das novas — a trilha continua lá, mas desalinhada,
+   que num log de auditoria é o mesmo que perdida.
+
+   É seguro rodar de novo: se a coluna já existir, não faz nada.
+   ------------------------------------------------------------------ */
+function migrarAuditoriaParaMultiObra() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var a = ss.getSheetByName(ABA_AUDITORIA);
+  if (!a) { Logger.log('Aba Auditoria ainda não existe — nada a migrar.'); return; }
+
+  var ultimaCol = a.getLastColumn();
+  if (ultimaCol < 1) { Logger.log('Auditoria vazia — nada a migrar.'); return; }
+
+  var cab = a.getRange(1, 1, 1, ultimaCol).getValues()[0].map(function (c) {
+    return String(c || '').trim().toLowerCase();
+  });
+  if (cab.indexOf('obra') > -1) {
+    Logger.log('A coluna "obra" já existe (posição ' + (cab.indexOf('obra') + 1) + '). Nada a fazer.');
+    return;
+  }
+
+  // a coluna entra em 5, logo depois de `acao` — mesma posição do outro app
+  a.insertColumnBefore(5);
+  a.getRange(1, 5).setValue('obra');
+
+  var linhas = a.getLastRow() - 1;
+  if (linhas > 0) {
+    // tudo que já estava aqui é desta obra, por definição: é um backend só dela
+    var valores = [];
+    for (var i = 0; i < linhas; i++) valores.push([OBRA_ID]);
+    a.getRange(2, 5, linhas, 1).setValues(valores);
+  }
+  Logger.log('Auditoria migrada: coluna "obra" inserida e ' + linhas +
+             ' linha(s) marcadas como "' + OBRA_ID + '".');
 }
 
 // Lançar produção é de quem está na obra: campo, engenharia e admin.
@@ -266,7 +327,7 @@ function exigirPodeLancar(token, acao) {
   if (String(exigir).toLowerCase() !== 'true') return null;
   var perfil = perfilDoToken(token);
   if (['campo', 'engenharia', 'admin', ''].indexOf(perfil) !== -1) return null;
-  registrarAuditoria(usuarioDoToken(token) || 'desconhecido', perfil, acao + ' NEGADO', '', '', 'perfil sem permissão de lançamento');
+  registrarAuditoria(usuarioDoToken(token) || 'desconhecido', perfil, acao + ' NEGADO', OBRA_ID, '', '', 'perfil sem permissão de lançamento');
   return { ok: false, error: 'SEM_PERMISSAO',
     mensagem: 'O perfil ' + perfil + ' acompanha a obra, mas não lança serviço nem RDO.' };
 }
@@ -274,7 +335,7 @@ function exigirPodeLancar(token, acao) {
 // Registra a tentativa negada — recusa silenciosa esconde abuso.
 function negarPorPermissao(token, acao, registroId, dono) {
   registrarAuditoria(usuarioDoToken(token) || 'desconhecido', perfilDoToken(token),
-    acao + ' NEGADO', registroId, 'dono: ' + (dono || '-'), '');
+    acao + ' NEGADO', OBRA_ID, registroId, 'dono: ' + (dono || '-'), '');
   return { ok: false, error: 'SEM_PERMISSAO',
     mensagem: 'Só o administrador, ou quem lançou o registro, pode apagá-lo.' };
 }
@@ -335,7 +396,7 @@ function deleteRDO(id, token) {
       if (!podeApagarLinha(token, dono)) return negarPorPermissao(token, 'deleteRDO', id, dono);
       var antes = cab.map(function (c, k) { return c + '=' + dados[i][k]; }).join(' | ');
       aba.deleteRow(i + 1); // planilha é base-1 e tem cabeçalho
-      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDO', id, antes, '');
+      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDO', OBRA_ID, id, antes, '');
       return { ok: true, deleted: id };
     }
   }
@@ -413,7 +474,7 @@ function addBatchRDO(batchJson, clientId, token) {
     });
 
     aba.getRange(aba.getLastRow() + 1, 1, linhas.length, cab.length).setValues(linhas);
-    registrarAuditoria(sess.usuario, sess.perfil, 'addBatchRDO', clientId || '', '',
+    registrarAuditoria(sess.usuario, sess.perfil, 'addBatchRDO', OBRA_ID, clientId || '', '',
       linhas.length + ' serviço(s) gravado(s)');
     return { ok: true, inserted: linhas.length };
   } finally {
@@ -588,7 +649,7 @@ function rdoFoto(p) {
     }
   } catch (e) {}
 
-  registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoFoto', p.id || '', '', fileId);
+  registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoFoto', OBRA_ID, p.id || '', '', fileId);
   return { ok: true, url: ponteiro, fileId: fileId };
 }
 
@@ -641,7 +702,7 @@ function equipCadastrar(p) {
     if (!jaTem) {
       appendObj(ABA_EQUIP, { nome: nome, tipo: p.tipo || 'Outros',
         vinculo: p.vinculo || 'Próprio', locadora: p.locadora || '', ativo: 'true' });
-      registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'equipCadastrar', nome, '',
+      registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'equipCadastrar', OBRA_ID, nome, '',
         (p.tipo || '') + ' · ' + (p.vinculo || ''));
     }
     return equipListar();
@@ -663,7 +724,7 @@ function equipDesativar(nome, token) {
       if (iA !== -1) a.getRange(i + 1, iA + 1).setValue('false');
     }
   }
-  registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'equipDesativar', nome, '', '');
+  registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'equipDesativar', OBRA_ID, nome, '', '');
   return equipListar();
 }
 
@@ -714,7 +775,7 @@ function equipApontar(p) {
       combustivel: p.combustivel || '', situacao: p.situacao || '', observacoes: p.observacoes || '',
       assinatura: assin, usuario: sess.usuario, clientId: p.clientId || ''
     });
-    registrarAuditoria(sess.usuario, sess.perfil, 'equipApontar', p.carimbo || '', '',
+    registrarAuditoria(sess.usuario, sess.perfil, 'equipApontar', OBRA_ID, p.carimbo || '', '',
       (p.equipamento || '') + ' · ' + (p.horas || '') + 'h em ' + (p.data || ''));
     return { ok: true };
   } finally { lock.releaseLock(); }
@@ -731,7 +792,7 @@ function equipApagar(carimbo, token) {
       var dono = iU !== -1 ? dados[i][iU] : '';
       if (!podeApagarLinha(token, dono)) return negarPorPermissao(token, 'equipApagar', carimbo, dono);
       a.deleteRow(i + 1);
-      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'equipApagar', carimbo,
+      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'equipApagar', OBRA_ID, carimbo,
         cab.map(function (c, k) { return c + '=' + dados[i][k]; }).join(' | '), '');
       return { ok: true, deleted: carimbo };
     }
@@ -990,7 +1051,7 @@ function updateRDO(payloadJson, token) {
           aba.getRange(i + 1, col + 1).setValue(payload[chave]);
         }
       });
-      registrarAuditoria(usuarioDoToken(token), perfil, 'updateRDO', id,
+      registrarAuditoria(usuarioDoToken(token), perfil, 'updateRDO', OBRA_ID, id,
         antes.join(' | '), JSON.stringify(payload));
       return { ok: true, updated: id };
     }
@@ -1050,7 +1111,7 @@ function upsertRDODiario(p, deveExistir) {
           aba.getRange(linhaExistente, idx + 1).setValue(registro[nomeCol]);
         }
       });
-      registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'updateRDODiario',
+      registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'updateRDODiario', OBRA_ID,
         registro['id'] || dataAlvo, 'linha ' + linhaExistente, 'data ' + dataAlvo + ' turno ' + (turno || '-'));
       return { ok: true, updated: true, id: registro['id'] || undefined };
     } else {
@@ -1062,7 +1123,7 @@ function upsertRDODiario(p, deveExistir) {
         return registro.hasOwnProperty(nomeCol) ? registro[nomeCol] : '';
       });
       aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
-      registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'addRDODiario',
+      registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'addRDODiario', OBRA_ID,
         registro['id'] || dataAlvo, '', 'data ' + dataAlvo + ' turno ' + (turno || '-'));
       return { ok: true, inserted: true, id: registro['id'] || '' };
     }
@@ -1205,7 +1266,7 @@ function deleteRDODiario(id, data, token) {
           var donoId = iDono !== -1 ? dados[i][iDono] : '';
           if (!podeApagarLinha(token, donoId)) return negarPorPermissao(token, 'deleteRDODiario', id, donoId);
           aba.deleteRow(i + 1);
-          registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDODiario', id,
+          registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDODiario', OBRA_ID, id,
             'data: ' + (iData !== -1 ? dados[i][iData] : ''), '');
           return { ok: true, deleted: id, by: 'id' };
         }
@@ -1237,7 +1298,7 @@ function deleteRDODiario(id, data, token) {
         var donoData = iDono !== -1 ? dados[matches[0]][iDono] : '';
         if (!podeApagarLinha(token, donoData)) return negarPorPermissao(token, 'deleteRDODiario', alvoData, donoData);
         aba.deleteRow(matches[0] + 1);
-        registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDODiario', id || alvoData,
+        registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDODiario', OBRA_ID, id || alvoData,
           'data: ' + alvoData, '');
         return { ok: true, deleted: id, by: 'data' };
       }
@@ -1571,7 +1632,7 @@ function usuarioSalvar(p) {
   mapa[nome] = { senha: senhaFinal, perfil: perfil };
   usuariosGravar(mapa);
 
-  registrarAuditoria(eu, 'admin', editando ? 'usuarioAlterar' : 'usuarioCriar', nome,
+  registrarAuditoria(eu, 'admin', editando ? 'usuarioAlterar' : 'usuarioCriar', OBRA_ID, nome,
     editando ? (nomeAntigo + ' · ' + perfilAnterior) : '',
     nome + ' · ' + perfil + (senha ? ' · senha trocada' : ''));
   return { ok: true, nome: nome, perfil: perfil };
@@ -1591,7 +1652,7 @@ function usuarioExcluir(p) {
 
   delete mapa[nome];
   usuariosGravar(mapa);
-  registrarAuditoria(eu, 'admin', 'usuarioExcluir', nome, '', '');
+  registrarAuditoria(eu, 'admin', 'usuarioExcluir', OBRA_ID, nome, '', '');
   return { ok: true, removido: true };
 }
 
@@ -1639,9 +1700,8 @@ function idxCol(cab, nome) { return idxColuna(cab, nome); }
 var NF_MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 function nfPastaRaiz() {
-  var nome = 'Notas Fiscais Teotônio (Privado)';
-  var it = DriveApp.getFoldersByName(nome);
-  return it.hasNext() ? it.next() : DriveApp.createFolder(nome);
+  var it = DriveApp.getFoldersByName(NF_PASTA_RAIZ);
+  return it.hasNext() ? it.next() : DriveApp.createFolder(NF_PASTA_RAIZ);
 }
 
 function nfSubpasta(pai, nome) {
@@ -1731,7 +1791,7 @@ function nfSalvar(p) {
   } else {
     a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
   }
-  registrarAuditoria(reg.usuario, 'app', achou > -1 ? 'nfAlterar' : 'nfCadastrar', clientId, '', 'NF ' + reg.numero + ' · ' + reg.status + ' · R$ ' + reg.vtotal);
+  registrarAuditoria(reg.usuario, 'app', achou > -1 ? 'nfAlterar' : 'nfCadastrar', reg.obra, clientId, '', 'NF ' + reg.numero + ' · ' + reg.status + ' · R$ ' + reg.vtotal);
   return { ok: true, id: reg.id, clientId: clientId, atualizado: achou > -1 };
 }
 
@@ -1746,11 +1806,11 @@ function nfExcluir(obra, id, token) {
     if (bate) {
       var iUsu = idxCol(cab, 'usuario');
       if (!podeApagarLinha(token, iUsu !== -1 ? dados[i][iUsu] : '')) {
-        registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'EXCLUSAO_NEGADA', id, '', 'nota fiscal');
+        registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'EXCLUSAO_NEGADA', obra, id, '', 'nota fiscal');
         return { ok: false, error: 'SEM_PERMISSAO', mensagem: 'Só quem lançou ou o administrador pode excluir esta nota.' };
       }
       a.deleteRow(i + 1);
-      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'nfExcluir', id, '', '');
+      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'nfExcluir', obra, id, '', '');
       return { ok: true, removido: true };
     }
   }
@@ -1904,7 +1964,7 @@ function nfLerIA(p) {
   }
   if (!out || !out.dados) return { ok: false, motivo: 'resposta', detalhe: 'veio JSON sem o campo "dados"' };
 
-  registrarAuditoria(usuarioDoToken(p.token), 'app', 'nfLeituraIA', String(out.dados.numero || ''), modelo,
+  registrarAuditoria(usuarioDoToken(p.token), 'app', 'nfLeituraIA', p.obra || '', String(out.dados.numero || ''), modelo,
     'confiança ' + (out.confiancaGeral == null ? '?' : out.confiancaGeral));
 
   return {
@@ -1949,7 +2009,7 @@ function saidaSalvar(p) {
   if (achou > -1) a.getRange(achou + 1, 1, 1, cab.length).setValues([linha]);
   else a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
   registrarAuditoria(reg.usuario, perfilDoToken(p.token), achou > -1 ? 'saidaAlterar' : 'saidaRegistrar',
-    reg.id, '', reg.descricao + ' - ' + reg.qtd + ' ' + reg.un);
+    reg.obra, reg.id, '', reg.descricao + ' - ' + reg.qtd + ' ' + reg.un);
   return { ok: true, id: reg.id };
 }
 
@@ -1962,11 +2022,11 @@ function saidaExcluir(obra, id, token) {
   for (var i = dados.length - 1; i >= 1; i--) {
     if (iId !== -1 && String(dados[i][iId]).trim() === String(id).trim()) {
       if (!podeApagarLinha(token, iUsu !== -1 ? dados[i][iUsu] : '')) {
-        registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'EXCLUSAO_NEGADA', id, '', 'saida de estoque');
+        registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'EXCLUSAO_NEGADA', obra, id, '', 'saida de estoque');
         return { ok: false, error: 'SEM_PERMISSAO', mensagem: 'So quem registrou a saida ou o administrador pode apagar.' };
       }
       a.deleteRow(i + 1);
-      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'saidaExcluir', id, '', '');
+      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'saidaExcluir', obra, id, '', '');
       return { ok: true, removido: true };
     }
   }
@@ -2203,7 +2263,7 @@ function nfConsultarChave(p) {
   }
   if (!dados) return { ok: false, motivo: 'xml_invalido' };
 
-  registrarAuditoria(usuarioDoToken(p.token), 'app', 'nfConsultaChave', dados.numero || '', chave, 'NF-e obtida pela chave');
+  registrarAuditoria(usuarioDoToken(p.token), 'app', 'nfConsultaChave', p.obra || '', dados.numero || '', chave, 'NF-e obtida pela chave');
   // o PDF oficial vem junto: vale mais como arquivo da nota do que a foto
   return { ok: true, fonte: 'xml', dados: dados, confiancaGeral: 1, pdf: pdf };
 }

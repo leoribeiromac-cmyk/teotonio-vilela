@@ -21,6 +21,21 @@ O modelo de dados central: **pacotes físicos (P01–P36)** lançados no campo �
 2. Cole o conteúdo de `Code.gs` por cima do existente e salve.
 3. **Implantar → Gerenciar implantações → ✏ editar → Nova versão → Implantar.** A URL `/exec` não muda.
 
+> ### ⚠ Nesta versão, rode `migrarAuditoriaParaMultiObra()` uma vez
+>
+> A aba `Auditoria` ganhou a coluna **`obra`**, na 5ª posição — o mesmo
+> formato do app "Gestor — Controle de Obras", que é o que permite os dois
+> compartilharem o bloco de Notas Fiscais do backend.
+>
+> Depois de colar o `Code.gs` e **antes de usar o app**, selecione
+> `migrarAuditoriaParaMultiObra` no editor e clique ▶ Executar. Ela insere a
+> coluna e marca as linhas já existentes como `teotonio`.
+>
+> Sem isso, as linhas antigas ficam com `registroId`, `detalhesAnteriores` e
+> `detalhesNovos` uma coluna à esquerda das novas: a trilha continua na
+> planilha, mas desalinhada — que num log de auditoria equivale a perdida.
+> Rodar duas vezes é seguro; se a coluna já existir, a função não faz nada.
+
 ## Segurança (fazer 1×, importante)
 
 As senhas antigas ficaram públicas no histórico deste repositório. Para blindar:
