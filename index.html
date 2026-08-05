@@ -569,6 +569,16 @@ html,body{
   .proj-canvas{height:68vh}
 }
 
+/* ---- obras permitidas, no cadastro de usuário ---- */
+.usr-obras{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 12px;
+  border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2)}
+.usr-obra{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;
+  min-height:32px}
+.usr-obra input{width:16px;height:16px;cursor:pointer;accent-color:var(--acc)}
+.usr-obra input:disabled{cursor:default}
+.usr-obra input:disabled + *{opacity:.45}
+.field-nota{font-size:11.5px;color:var(--muted);margin-top:6px;line-height:1.45}
+
 /* ---- seletor de obra (topo da barra lateral) ---- */
 .obra-sel{padding:0 14px 12px;border-bottom:1px solid var(--sidebar-border);margin-bottom:10px}
 .obra-sel-lbl{
@@ -2110,7 +2120,8 @@ const APP = {
   refreshMs: 5 * 60 * 1000,
   // Chaves de acesso, que valem para a EMPRESA e não para a obra: quem
   // entrou continua entrado ao trocar de obra.
-  lsGlobal: { token: 'teotonio_token_v1', perfil: 'teotonio_perfil_v1', usuariosUI: 'teotonio_usuarios_ui_v1' }
+  lsGlobal: { token: 'teotonio_token_v1', perfil: 'teotonio_perfil_v1',
+              usuariosUI: 'teotonio_usuarios_ui_v1', obras: 'teotonio_obras_permitidas_v1' }
 };
 
 const CSV_TEOTONIO = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRKuciB3Z6aSfdpRc07-MRXnemqpuMRCfbh80HVfLaO0GLihxTZhMKQz7Vlqc1TOaIhRkTX7k_RLmzl/pub?gid=';
@@ -2173,9 +2184,27 @@ Object.keys(window.OBRAS_ARQ || {}).forEach(function (id) {
   if (o && o.id) OBRAS_CFG[o.id] = o;
 });
 
+/* Quais obras este usuário enxerga. '*' (ou nada guardado) = todas — é o
+   padrão, e é o que vale para quem não fez login: o app segue aberto para
+   consulta, como sempre foi. A restrição de verdade é imposta pelo servidor;
+   isto aqui é só para não oferecer na tela o que vai ser recusado. */
+function obrasPermitidas() {
+  let raw = null;
+  try { raw = localStorage.getItem(APP.lsGlobal.obras); } catch (e) {}
+  if (!raw || raw === '*') return '*';
+  try {
+    const lista = JSON.parse(raw);
+    return (Array.isArray(lista) && lista.length) ? lista : '*';
+  } catch (e) { return '*'; }
+}
+function podeVerObra(id) {
+  const p = obrasPermitidas();
+  return p === '*' || p.indexOf(id) !== -1;
+}
+
 /* Ordem de exibição: a Teotônio primeiro, depois as demais como vieram. */
 function obrasOrdenadas() {
-  return Object.keys(OBRAS_CFG).map(id => OBRAS_CFG[id]);
+  return Object.keys(OBRAS_CFG).filter(podeVerObra).map(id => OBRAS_CFG[id]);
 }
 
 const LS_OBRA = 'teotonio_obra_ativa_v1';
@@ -2184,7 +2213,13 @@ const LS_OBRA = 'teotonio_obra_ativa_v1';
    percebe que ele virou multi-obra até querer trocar. */
 function obraAtivaId() {
   const id = localStorage.getItem(LS_OBRA);
-  return (id && OBRAS_CFG[id]) ? id : 'teotonio';
+  if (id && OBRAS_CFG[id] && podeVerObra(id)) return id;
+  // A obra guardada pode ter deixado de ser permitida (o administrador mudou
+  // o acesso). Cai na primeira que ele pode ver, em vez de abrir uma tela que
+  // o servidor vai recusar a cada gravação.
+  if (podeVerObra('teotonio')) return 'teotonio';
+  const primeira = Object.keys(OBRAS_CFG).find(podeVerObra);
+  return primeira || 'teotonio';
 }
 
 /* Nome de chave do localStorage por obra. A Teotônio mantém as chaves SEM
@@ -2231,6 +2266,10 @@ let CONFIG = montarConfig(obraAtivaId());
    instante, é o tipo de coisa que faz alguém medir a obra errada. */
 function trocarObra(id) {
   if (!OBRAS_CFG[id] || id === OBRA.id) return;
+  if (!podeVerObra(id)) {
+    toast('Seu usuário não tem acesso a esta obra.', 'error', 5000);
+    return;
+  }
   // Rascunho aberto é da obra que está saindo; ele fica guardado na chave
   // dela e volta quando ela for reaberta, mas não pode atravessar.
   STATE.draft = null;
@@ -3413,6 +3452,7 @@ window.fazerLogin = async function() {
     const r = await jsonp(CONFIG.appsScript, { action: 'login', usuario: u, senha: p }, 0);
     if (r.ok && r.token) {
       localStorage.setItem(CONFIG.ls.token, r.token);
+      guardarObrasPermitidas(r.obras);
       concluirLogin(u, r.perfil);
       return;
     }
@@ -3445,6 +3485,13 @@ function concluirLogin(u, perfil) {
   if (STATE.perfilLogado) localStorage.setItem(CONFIG.ls.perfil, STATE.perfilLogado);
   else localStorage.removeItem(CONFIG.ls.perfil);
   toast(`Acesso liberado — ${perfilNome()}`, 'success');
+  // A obra aberta pode não ser das que este usuário enxerga (o aparelho é
+  // compartilhado, ou o acesso mudou). Troca antes de desenhar, senão ele
+  // veria os dados de uma obra que o servidor vai recusar a cada gravação.
+  if (!podeVerObra(OBRA.id)) {
+    const permitida = obrasOrdenadas()[0];
+    if (permitida) { trocarObra(permitida.id); return; }
+  }
   renderShell();                 // o menu muda conforme o perfil
   atualizarBotoesTopo();
   // a tela em que estava pode não ser permitida para este perfil
@@ -3452,12 +3499,26 @@ function concluirLogin(u, perfil) {
   transitionTo(render);
 }
 
+function guardarObrasPermitidas(obras) {
+  try {
+    if (!obras || obras === '*') localStorage.setItem(APP.lsGlobal.obras, '*');
+    else localStorage.setItem(APP.lsGlobal.obras, JSON.stringify(obras));
+  } catch (e) {}
+}
+
 window.fazerLogout = function() {
+  // Revoga no SERVIDOR antes de limpar o aparelho. Sem isso o logout só
+  // esquecia o token aqui, e ele seguia aceito por quem o tivesse copiado.
+  // Não espera a resposta: sair não pode depender de haver sinal.
+  const tk = localStorage.getItem(CONFIG.ls.token);
+  if (tk) { try { jsonp(CONFIG.appsScript, { action: 'logout', token: tk }, 0).catch(() => {}); } catch (e) {} }
+
   STATE.usuarioLogado = null;
   STATE.perfilLogado = '';
   localStorage.removeItem('teotonio_user');
   localStorage.removeItem(CONFIG.ls.token);
   localStorage.removeItem(CONFIG.ls.perfil);
+  localStorage.removeItem(APP.lsGlobal.obras);
   toast('Você saiu do sistema.', 'info');
   renderShell();
   atualizarBotoesTopo();
@@ -5464,11 +5525,15 @@ async function usuariosCarregarLista() {
     alvo.innerHTML = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead><tr style="text-align:left;border-bottom:1px solid var(--border)">
         <th style="padding:10px 12px">Usuário</th><th style="padding:10px 12px">Perfil</th>
+        <th style="padding:10px 12px">Obras</th>
         <th style="padding:10px 12px">Senha</th><th style="padding:10px 12px"></th>
       </tr></thead><tbody>
       ${STATE.usuariosCache.map((u, i) => `<tr style="border-bottom:1px solid var(--border)">
         <td style="padding:10px 12px;font-weight:600">${escHtml(u.nome)}${u.nome === r.eu ? ' <span style="font-weight:400;color:var(--muted,#718096)">(você)</span>' : ''}</td>
         <td style="padding:10px 12px">${escHtml((PERFIS[u.perfil] || {}).nome || u.perfil)}</td>
+        <td style="padding:10px 12px">${(!u.obras || u.obras === '*')
+          ? '<span style="color:var(--muted,#718096)">todas</span>'
+          : escHtml(u.obras.map(id => (OBRAS_CFG[id] || {}).nomeCurto || id).join(' · '))}</td>
         <td style="padding:10px 12px">${u.formatoAntigo
           ? '<span style="color:var(--wrn,#d69e2e)" title="Senha ainda em texto puro nas Propriedades do script. Rode migrarSenhasParaHash() ou salve uma senha nova aqui.">em texto — trocar</span>'
           : '<span style="color:var(--muted,#718096)">protegida</span>'}</td>
@@ -5502,13 +5567,39 @@ window.usuarioAbrirForm = function(idx) {
           <div class="field"><label>Senha ${u ? '(opcional)' : ''}</label>
             <input type="password" id="usrSenha" placeholder="${u ? 'manter a atual' : 'mínimo 4 caracteres'}"></div>
         </div>
+        <div class="field" style="margin-top:14px">
+          <label>Obras que este usuário enxerga</label>
+          <div class="usr-obras" id="usrObras">
+            <label class="usr-obra"><input type="checkbox" id="usrObraTodas"
+              ${(!u || !u.obras || u.obras === '*') ? 'checked' : ''}
+              onchange="usuarioObrasTodas(this.checked)"> <b>Todas as obras</b></label>
+            ${Object.keys(OBRAS_CFG).map(id => `<label class="usr-obra">
+              <input type="checkbox" class="usr-obra-item" value="${escHtml(id)}"
+                ${(u && Array.isArray(u.obras) && u.obras.indexOf(id) !== -1) ? 'checked' : ''}>
+              ${escHtml(OBRAS_CFG[id].nomeCurto || OBRAS_CFG[id].nome)}</label>`).join('')}
+          </div>
+          <div class="field-nota">Administrador enxerga todas por definição — senão não teria
+            como consertar o acesso de ninguém.</div>
+        </div>
         <div style="display:flex;gap:8px;margin-top:16px">
           <button class="btn btn-primary btn-sm" onclick="usuarioSalvarUI(${u ? `'${escHtml(u.nome)}'` : 'null'})">Salvar</button>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('usuarioFormWrap').innerHTML=''">Cancelar</button>
         </div>
       </div>
     </div>`;
+  // reflete o estado inicial: com "todas" marcado, a lista nasce desabilitada
+  const todasIni = document.getElementById('usrObraTodas');
+  if (todasIni) usuarioObrasTodas(todasIni.checked);
   wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
+
+/* "Todas as obras" e a lista são excludentes: marcar uma desmarca a outra,
+   para não existir um estado que promete duas coisas ao mesmo tempo. */
+window.usuarioObrasTodas = function(marcado) {
+  document.querySelectorAll('.usr-obra-item').forEach(c => {
+    c.disabled = marcado;
+    if (marcado) c.checked = false;
+  });
 };
 
 window.usuarioSalvarUI = async function(nomeAntigo) {
@@ -5516,9 +5607,20 @@ window.usuarioSalvarUI = async function(nomeAntigo) {
   const perfil = document.getElementById('usrPerfil').value;
   const senha = document.getElementById('usrSenha').value;
   if (!nome) { toast('Informe o nome do usuário.', 'error'); return; }
+
+  // '*' = todas. Lista vazia também vira '*': "nenhuma obra" não é o que
+  // alguém quer dizer ao desmarcar tudo, e deixaria a pessoa sem sistema.
+  const todas = document.getElementById('usrObraTodas');
+  let obras = '*';
+  if (todas && !todas.checked) {
+    const marcadas = [...document.querySelectorAll('.usr-obra-item')]
+      .filter(c => c.checked).map(c => c.value);
+    if (marcadas.length) obras = marcadas.join(',');
+  }
+
   try {
     const r = await jsonp(CONFIG.appsScript, {
-      action: 'usuarioSalvar', nome, perfil, senha,
+      action: 'usuarioSalvar', nome, perfil, senha, obras,
       nomeAntigo: nomeAntigo || '', ...authParams()
     }, 0);
     if (!r.ok) { toast(r.mensagem || erroLegivel(r.error), 'error', 0); return; }
