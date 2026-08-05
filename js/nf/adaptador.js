@@ -13,27 +13,49 @@
 'use strict';
 
 /* ---------- identidade da obra ----------
-   O Gestor é multi-obra e passa o id em toda chamada. Aqui é uma obra
-   só, então o id é fixo — e as linhas continuam saindo com a coluna
-   `obra` preenchida, do mesmo jeito, o que mantém os dois backends
-   compatíveis. */
-const OBRA_TEOTONIO = {
-  id: 'teotonio',
-  nome: 'Av. Senador Teotônio Vilela',
-  contrato: '084/SPOBRAS/2024 · CC 182',
-  contratada: 'Gestor Engenharia',
-  local: 'São Paulo/SP'
-};
-function obra() { return OBRA_TEOTONIO; }
-const ORDEM = ['teotonio'];
-const OBRAS = { teotonio: OBRA_TEOTONIO };
+   O Gestor é multi-obra e passa o id em toda chamada; o módulo usa
+   `obra().id` para TUDO — a chave do armazenamento local, o nome do
+   arquivo da imagem, e o parâmetro `obra` de cada chamada ao servidor.
+
+   Aqui isto devolvia a Teotônio FIXA, de quando este app era de uma obra
+   só. Depois que ele virou multi-obra, o efeito foi silencioso e ruim:
+   nota lançada com o Ranário aberto ia para a planilha carimbada como
+   Teotônio, e a tela de Notas mostrava sempre a mesma lista,
+   independentemente da obra aberta. Agora acompanha a obra ativa. */
+function obra() {
+  const o = (typeof OBRA !== 'undefined' && OBRA) ? OBRA : null;
+  if (!o) return null;
+  return {
+    id: o.id,
+    nome: o.nome,
+    nomeCurto: o.nomeCurto || o.nome,
+    contrato: o.contrato || '',
+    contratada: 'Gestor Engenharia',
+    local: o.local || ''
+  };
+}
+
+/* O módulo checa `typeof ORDEM` antes de usar. Como o registro de obras
+   é montado depois deste arquivo e a lista permitida muda no login, os
+   dois são lidos na hora do uso, e não congelados no carregamento. */
+function obrasDoModulo() {
+  const lista = (typeof obrasOrdenadas === 'function') ? obrasOrdenadas() : [];
+  const mapa = {};
+  lista.forEach(o => { mapa[o.id] = { id: o.id, nome: o.nome, nomeCurto: o.nomeCurto || o.nome }; });
+  return { ordem: lista.map(o => o.id), obras: mapa };
+}
 
 /* ---------- estado das telas de nota ----------
    O módulo lê e escreve `estado.nfTab`, `estado.nfBusca` etc. */
 const estado = {
   nfTab: 'notas', nfBusca: '', nfStatus: 'Todos', nfMes: 'Todos', nfLimite: 24,
   get tela() { return STATE.currentPage; },
-  set tela(v) { STATE.currentPage = v; }
+  set tela(v) { STATE.currentPage = v; },
+  /* `nfCarregar` compara `estado.obraId` com a obra que acabou de chegar
+     do servidor antes de redesenhar. Sem esta propriedade a comparação
+     era `undefined === 'teotonio'`, sempre falsa, e a lista só aparecia
+     no render seguinte — parecia que a nota "não tinha subido". */
+  get obraId() { return (obra() || {}).id || ''; }
 };
 
 /* ---------- utilidades de texto e número ---------- */
@@ -116,6 +138,10 @@ if (typeof window !== 'undefined') {
   Object.assign(window, {
     obra, estado, el, esc, fmtBRL, fmtBRLc, fmtQtd, uid, hoje, isoAdd, mesLabel,
     frenteNome, isDemo, BACKEND, getToken, usuarioAtual, postAcao, outboxAdd,
-    fotoGuardarFull, fotoLerFull, abrirModal, fecharModal, ORDEM, OBRAS
+    fotoGuardarFull, fotoLerFull, abrirModal, fecharModal
   });
+  // getters: a lista de obras que o usuário enxerga muda no login e no
+  // logout, então não pode ser um valor congelado no carregamento
+  Object.defineProperty(window, 'ORDEM', { get: () => obrasDoModulo().ordem, configurable: true });
+  Object.defineProperty(window, 'OBRAS', { get: () => obrasDoModulo().obras, configurable: true });
 }

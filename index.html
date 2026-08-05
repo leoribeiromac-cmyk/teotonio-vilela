@@ -249,6 +249,21 @@
 .pill-ylw{color:var(--ylw-d);border-color:var(--ylw-d)}
 .pill-blu{color:var(--blu);border-color:var(--blu)}
 
+/* --- faixa de obra da tela de Notas (deste app, não do Gestor) --- */
+.nf-obra{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:14px;
+  padding:9px 13px;border:1px solid var(--border);border-left:3px solid var(--acc);
+  border-radius:var(--r-sm);background:var(--surface-2)}
+.nf-obra-ic{display:flex;color:var(--acc)}
+.nf-obra-ic svg{width:17px;height:17px}
+.nf-obra-txt{font-size:12.5px;color:var(--text-2);margin:0}
+.nf-obra-txt b{color:var(--text)}
+.nf-obra-sel{font-size:12.5px;font-weight:600;padding:5px 10px;border-radius:var(--r-sm);
+  border:1px solid var(--border-strong);background:var(--surface);color:var(--text);cursor:pointer}
+.nf-obra-sel:hover{border-color:var(--acc)}
+.nf-obra-sel:focus{outline:none;border-color:var(--acc)}
+.nf-obra-nota{font-size:11.5px;color:var(--muted);margin-left:auto}
+@media(max-width:640px){.nf-obra-nota{display:none}}
+
 /* --- regras próprias do módulo, copiadas do Gestor --- */
 .nf-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
 .nf-card{overflow:hidden;padding:0;display:flex;flex-direction:column;transition:all .2s cubic-bezier(.2,0,0,1)}
@@ -2265,7 +2280,7 @@ let CONFIG = montarConfig(obraAtivaId());
 /* Troca a obra aberta. Zera o que é dado de obra e recarrega — deixar
    pacotes de uma obra com lançamentos de outra na tela, mesmo por um
    instante, é o tipo de coisa que faz alguém medir a obra errada. */
-function trocarObra(id) {
+function trocarObra(id, opcoes) {
   if (!OBRAS_CFG[id] || id === OBRA.id) return;
   if (!podeVerObra(id)) {
     toast('Seu usuário não tem acesso a esta obra.', 'error', 5000);
@@ -2288,7 +2303,10 @@ function trocarObra(id) {
   // obra anterior — e o cronograma dela saía calculado sobre dados de outra.
   GANTT_DADOS = null;
   PLAN_DADOS = null;
-  STATE.currentPage = 'executivo';
+  // Trocar de obra pela barra lateral devolve ao Painel Executivo, que é o
+  // ponto de partida da obra nova. Quem troca pelo filtro de uma tela quer
+  // continuar NELA vendo a outra obra — aí a tela é mantida.
+  if (!(opcoes && opcoes.manterTela && podeVer(STATE.currentPage))) STATE.currentPage = 'executivo';
   // a barra lateral carrega o nome da obra, o seletor e os contadores:
   // sem redesenhá-la, o menu continuaria anunciando a obra anterior
   renderShell();
@@ -4576,6 +4594,32 @@ function seletorObra() {
     </div>`;
 }
 
+/* Faixa de obra da tela de Notas.
+
+   Nota fiscal é documento de UMA obra — é ela que define para qual
+   contrato o material entrou. A tela precisa dizer, sem que ninguém
+   tenha de conferir a barra lateral, de qual obra é a lista que está
+   na frente. Com mais de uma obra liberada, a faixa também troca: é o
+   filtro, e ele mantém a pessoa aqui em vez de devolvê-la ao painel.
+
+   Fica no index, e não no `js/nf/notas.js`: aquele arquivo é cópia do
+   app "Gestor" e não pode receber nada específico deste. */
+function faixaObraNotas() {
+  const lista = obrasOrdenadas();
+  const nome = escHtml(OBRA.nomeCurto || OBRA.nome);
+  if (lista.length < 2) {
+    return `<div class="nf-obra"><span class="nf-obra-ic">${ic('obra')}</span>
+      <span class="nf-obra-txt">Notas de <b>${nome}</b></span></div>`;
+  }
+  return `<div class="nf-obra"><span class="nf-obra-ic">${ic('obra')}</span>
+    <label class="nf-obra-txt" for="nfObraSel">Notas da obra</label>
+    <select id="nfObraSel" class="nf-obra-sel" onchange="trocarObra(this.value, { manterTela: true })"
+            aria-label="Filtrar as notas por obra">
+      ${lista.map(o => `<option value="${escHtml(o.id)}" ${o.id === OBRA.id ? 'selected' : ''}>${escHtml(o.nomeCurto || o.nome)}</option>`).join('')}
+    </select>
+    <span class="nf-obra-nota">Só as notas desta obra aparecem abaixo.</span></div>`;
+}
+
 function renderShell() {
   const root = document.getElementById('root');
   if (!root) return;
@@ -4848,7 +4892,7 @@ function render() {
   else if (STATE.currentPage === 'rdodiario') { pageEl.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
   else if (STATE.currentPage === 'historico') pageEl.innerHTML = renderHistorico();
   else if (STATE.currentPage === 'equip') { pageEl.innerHTML = renderEquip(); ligarEquipForm(); if (!EQUIP.carregado) carregarEquip(); }
-  else if (STATE.currentPage === 'notas') { pageEl.innerHTML = viewNotas(obra()); nfCarregar(obra().id); }
+  else if (STATE.currentPage === 'notas') { pageEl.innerHTML = faixaObraNotas() + viewNotas(obra()); nfCarregar(obra().id); }
   else if (STATE.currentPage === 'galeria') { pageEl.innerHTML = renderGaleria(); carregarImagensGaleria(); }
   else if (STATE.currentPage === 'projetos') { pageEl.innerHTML = renderProjetos(); abrirPrancha(); }
   else if (STATE.currentPage === 'usuarios') { pageEl.innerHTML = renderUsuarios(); usuariosCarregarLista(); }

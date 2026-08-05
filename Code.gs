@@ -920,13 +920,27 @@ function rdoFoto(p) {
 // locadora, então cada apontamento guarda paradas, horímetro,
 // combustível e quem lançou.
 // ------------------------------------------------------------
-function linhasObj(nomeAba) {
+/* O segundo parâmetro filtra pela coluna `obra`.
+   `nfListar` já passava a obra desde que este backend virou multi-obra —
+   mas a função ignorava o argumento, e a tela de Notas devolvia as notas
+   e as saídas de TODAS as obras misturadas. Aba que não tem a coluna
+   (Equipamentos, Locadoras) segue devolvendo tudo, como antes.
+   Linha com a coluna em branco é da Teotônio: foi gravada quando este
+   backend atendia uma obra só — a mesma regra do `normObra`. */
+function linhasObj(nomeAba, obra) {
   var a = getOrCreateAba(nomeAba);
   var dados = a.getDataRange().getValues();
   if (dados.length <= 1) return [];
   var cab = dados[0].map(function (h) { return String(h).trim(); });
+  var iObra = -1;
+  for (var k = 0; k < cab.length; k++) {
+    if (cab[k].toLowerCase() === 'obra') { iObra = k; break; }
+  }
+  var alvo = String(obra == null ? '' : obra).trim();
+  var filtrar = !!alvo && iObra !== -1;
   var out = [];
   for (var i = 1; i < dados.length; i++) {
+    if (filtrar && normObra(dados[i][iObra]) !== normObra(alvo)) continue;
     var o = {};
     for (var c = 0; c < cab.length; c++) o[cab[c]] = dados[i][c];
     out.push(o);
