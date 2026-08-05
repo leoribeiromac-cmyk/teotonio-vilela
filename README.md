@@ -105,9 +105,40 @@ na aba **Auditoria** (criada sozinha na primeira gravação), junto de quem
 lançou, alterou e apagou cada registro.
 
 **Cadastro pelo próprio app:** entrando como administrador aparece o item
-**Usuários** no menu. Ali se cria, muda o perfil, troca a senha e exclui — sem
-abrir o Apps Script e sem mexer no código. A senha é hasheada no servidor e
-nunca volta para o app. Exige `EXIGIR_TOKEN = true`.
+**Usuários** no menu. Ali se cria, muda o perfil, troca a senha, define **quais
+obras a pessoa enxerga** e exclui — sem abrir o Apps Script e sem mexer no
+código. A senha é hasheada no servidor e nunca volta para o app. Exige
+`EXIGIR_TOKEN = true`.
+
+### Obras por usuário
+
+Cada usuário pode ficar restrito a algumas obras, ou enxergar todas (padrão).
+Quem já estava cadastrado antes desta versão continua vendo todas: restringir é
+ato deliberado do administrador, nunca efeito colateral de uma atualização.
+Administrador enxerga tudo por definição — senão não teria como consertar o
+acesso de ninguém.
+
+A regra vale **no servidor**, não só na tela: esconder a obra no menu não
+impediria um pedido direto para a URL do `/exec`. Tentativa negada fica
+registrada na aba **Auditoria**.
+
+### A sessão dura até você sair
+
+O login vale **até clicar em Sair**. Não expira sozinha.
+
+Antes a sessão vivia no `CacheService` do Apps Script. Isso parecia dar 6 horas,
+mas `CacheService` é **cache, não armazenamento**: o Google descarta a entrada
+quando quer, e **toda republicação do backend limpa tudo**. Na prática as pessoas
+eram deslogadas a esmo, quase sempre no meio de lançar alguma coisa.
+
+Agora a sessão fica nas Propriedades do script, que são duráveis. Sair revoga o
+token **no servidor** — antes o logout só esquecia o token no aparelho, e ele
+seguia aceito por quem o tivesse copiado.
+
+Como sessão não expira mais sozinha, o gatilho `limparSessoesAbandonadas` (03h)
+remove o que não é usado há um ano. É o que evita a propriedade crescer sem fim;
+o Apps Script tem teto de 500 KB no total. Rode `configurarGatilhos()` de novo
+para agendá-lo.
 
 > O `RDO_Avanco` ganha a coluna `usuario` automaticamente na primeira gravação
 > após esta versão: é ela que define o dono do lançamento. Registros antigos

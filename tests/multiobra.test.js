@@ -53,16 +53,42 @@ const ABAS = {
     [['d1', '2026-08-01', '', 'J. Santos', 'diario da teotonio']])   // linha ANTIGA, sem obra
 };
 
+// Propriedades do script COM estado — e um cache que pode ser esvaziado a
+// qualquer momento, que e exatamente o que o Google faz com o CacheService.
+const _props = {};
+const PROPS = {
+  getProperty: k => (k in _props ? _props[k] : null),
+  setProperty: (k, v) => { _props[k] = String(v); },
+  deleteProperty: k => { delete _props[k]; },
+  getProperties: () => ({ ..._props })
+};
+let _cache = {};
+const CACHE = {
+  get: k => (k in _cache ? _cache[k] : null),
+  put: (k, v) => { _cache[k] = String(v); },
+  remove: k => { delete _cache[k]; }
+};
+
 const ctx = {
   console, JSON, String, Number, Object, Array, Math, Date, isNaN, parseFloat, parseInt, RegExp,
   SpreadsheetApp: { getActiveSpreadsheet: () => ({ getSheetByName: n => ABAS[n] || null, insertSheet: n => (ABAS[n] = Aba([], [])) }) },
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
-  Utilities: { formatDate: (d, tz, f) => new Date(d).toISOString().slice(0, 10), sleep() {} },
+  Utilities: {
+    formatDate: (d, tz, f) => new Date(d).toISOString().slice(0, 10),
+    sleep() {},
+    getUuid: () => require('crypto').randomUUID(),
+    DigestAlgorithm: { SHA_256: 'SHA_256' },
+    // o Apps Script devolve bytes COM SINAL (-128..127); o hashSenha conta com isso
+    computeDigest: (alg, txt) => Array.from(require('crypto')
+      .createHash('sha256').update(String(txt), 'utf8').digest())
+      .map(b => (b > 127 ? b - 256 : b))
+  },
   Session: { getScriptTimeZone: () => 'UTC' },
-  PropertiesService: { getScriptProperties: () => ({ getProperty: () => null, setProperty() {} }) },
+  PropertiesService: { getScriptProperties: () => PROPS },
   Logger: { log: () => {} },
   ContentService: { createTextOutput: () => ({ setMimeType: () => ({}) }), MimeType: {} },
-  DriveApp: {}, UrlFetchApp: {}, CacheService: {}, MailApp: {}, ScriptApp: {}, XmlService: {}
+  CacheService: { getScriptCache: () => CACHE },
+  DriveApp: {}, UrlFetchApp: {}, MailApp: {}, ScriptApp: {}, XmlService: {}
 };
 ctx.global = ctx;
 vm.createContext(ctx);
@@ -143,6 +169,98 @@ t('producaoPorPacote separa as obras', () => {
   assert.ok(!teo.pacotes['RAN-001'], 'pacote do Ranario vazou para a Teotonio');
   assert.ok(ran.pacotes['RAN-001'], 'Ranario deveria ter RAN-001');
   assert.ok(!ran.pacotes['P26'], 'pacote da Teotonio vazou para o Ranario');
+});
+
+console.log('\nSESSAO DURAVEL');
+
+PROPS.setProperty('USUARIOS', JSON.stringify({
+  Leonardo: { senha: ctx.hashSenha('senha123'), perfil: 'admin' },
+  Wallace:  { senha: ctx.hashSenha('senha123'), perfil: 'campo', obras: ['ranario'] },
+  Antigo:   { senha: ctx.hashSenha('senha123'), perfil: 'engenharia' }   // sem campo obras
+}));
+
+let tokenWallace = null, tokenAntigo = null;
+
+t('login devolve token e as obras do usuario', () => {
+  const r = ctx.loginUsuario('Wallace', 'senha123');
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.deepStrictEqual(r.obras, ['ranario']);
+  tokenWallace = r.token;
+});
+
+t('usuario antigo, sem campo obras, enxerga TODAS', () => {
+  const r = ctx.loginUsuario('Antigo', 'senha123');
+  assert.ok(r.ok);
+  assert.strictEqual(r.obras, '*');
+  tokenAntigo = r.token;
+});
+
+t('a sessao SOBREVIVE ao cache do Google evaporar', () => {
+  _cache = {};                       // e o que acontece a cada republicacao
+  const s = ctx.sessaoDoToken(tokenWallace);
+  assert.ok(s, 'a sessao morreu junto com o cache — era esse o bug');
+  assert.strictEqual(s.usuario, 'Wallace');
+  assert.deepStrictEqual(s.obras, ['ranario']);
+});
+
+t('sair revoga a sessao NO SERVIDOR', () => {
+  const r0 = ctx.loginUsuario('Antigo', 'senha123');
+  ctx.sessaoRevogar(r0.token);
+  assert.strictEqual(ctx.sessaoDoToken(r0.token), null, 'token continuou valendo depois do logout');
+});
+
+t('token do formato ANTIGO (so no cache) e promovido, nao derrubado', () => {
+  _cache['tok_velho'] = JSON.stringify({ usuario: 'Leonardo', perfil: 'admin' });
+  const s = ctx.sessaoDoToken('velho');
+  assert.ok(s, 'quem estava logado antes da atualizacao foi deslogado');
+  assert.strictEqual(s.usuario, 'Leonardo');
+  _cache = {};
+  assert.ok(ctx.sessaoDoToken('velho'), 'a promocao nao persistiu');
+});
+
+console.log('\nRESTRICAO DE OBRA');
+
+t('Wallace (so Ranario) NAO grava na Teotonio', () => {
+  const r = ctx.addBatchRDO(JSON.stringify([
+    { id: 'x1', obra: 'teotonio', data: '2026-08-05', pacote_id: 'P26', quantidade: 1 }
+  ]), 'cli-x1', tokenWallace);
+  assert.strictEqual(r.ok, false, 'gravou numa obra sem acesso');
+  assert.strictEqual(r.error, 'SEM_ACESSO_A_OBRA');
+});
+
+t('Wallace grava no Ranario, que e a obra dele', () => {
+  const r = ctx.addBatchRDO(JSON.stringify([
+    { id: 'x2', obra: 'ranario', data: '2026-08-05', pacote_id: 'RAN-009', quantidade: 1 }
+  ]), 'cli-x2', tokenWallace);
+  assert.ok(r.ok, JSON.stringify(r));
+});
+
+t('usuario sem restricao grava em qualquer obra', () => {
+  const r = ctx.addBatchRDO(JSON.stringify([
+    { id: 'x3', obra: 'teotonio', data: '2026-08-05', pacote_id: 'P26', quantidade: 1 }
+  ]), 'cli-x3', tokenAntigo);
+  assert.ok(r.ok, JSON.stringify(r));
+});
+
+t('o DIARIO tambem respeita a obra', () => {
+  const r = ctx.upsertRDODiario({ obra: 'teotonio', data: '2026-09-01',
+    token: tokenWallace, observacoes_gerais: 'nao deveria entrar' }, false);
+  assert.strictEqual(r.ok, false, 'gravou diario em obra sem acesso');
+  assert.strictEqual(r.error, 'SEM_ACESSO_A_OBRA');
+});
+
+t('a recusa fica registrada na Auditoria', () => {
+  const aud = ABAS.Auditoria;
+  assert.ok(aud, 'aba de auditoria nao foi criada');
+  const texto = JSON.stringify(aud.dados);
+  assert.ok(/NEGADO/.test(texto), 'a tentativa negada nao foi registrada');
+});
+
+t('admin nunca fica restrito a uma obra', () => {
+  ctx.usuarioSalvar({ token: ctx.loginUsuario('Leonardo', 'senha123').token,
+    nome: 'Leonardo', perfil: 'admin', obras: 'ranario' });
+  const mapa = JSON.parse(PROPS.getProperty('USUARIOS'));
+  assert.strictEqual(ctx.usuarioObrasDe(mapa.Leonardo), '*');
 });
 
 console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');

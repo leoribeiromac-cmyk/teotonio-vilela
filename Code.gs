@@ -80,9 +80,21 @@ function rotear(e) {
       var falhaPerfil = exigirPodeLancar(p.token, action);
       if (falhaPerfil) return responder(falhaPerfil, p.callback);
     }
+    // E a OBRA: quem só tem acesso ao Ranário não grava na Teotônio. A
+    // checagem fica aqui, no roteador, e não dentro de nfSalvar/saidaSalvar —
+    // essas duas são do bloco compartilhado com o app "Gestor", que precisa
+    // continuar idêntico dos dois lados.
+    var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar'];
+    if (POR_OBRA.indexOf(action) !== -1) {
+      var sessObraR = sessaoDoToken(p.token);
+      if (sessObraR && !sessaoPodeNaObra(sessObraR, p.obra)) {
+        return responder(negarPorObra(p.token, action, p.obra), p.callback);
+      }
+    }
     switch (action) {
       case 'ping':            resp = { ok: true, pong: true, abas: [NOME_ABA, NOME_ABA_DIARIO] }; break;
       case 'login':           resp = loginUsuario(p.usuario, p.senha); break;
+      case 'logout':          resp = sessaoRevogar(p.token); break;
       case 'deleteRDO':       resp = deleteRDO(p.id, p.token); break;
       case 'addBatchRDO':     resp = addBatchRDO(p.batch, p.clientId, p.token); break;
       case 'updateRDO':       resp = updateRDO(p.payload, p.token); break;
@@ -194,20 +206,99 @@ function loginUsuario(usuario, senha) {
   }
 
   cache.remove(chaveErros);
-  var token = Utilities.getUuid();
-  cache.put('tok_' + token, JSON.stringify({ usuario: u, perfil: perfil }), 21600); // 6 h
+  var token = sessaoCriar(u, perfil, usuarioObrasDe(conf));
   registrarAuditoria(u, perfil, 'LOGIN', OBRA_ID, '-', '', 'Login efetuado com sucesso');
-  return { ok: true, usuario: u, perfil: perfil, token: token, expiraEmSegundos: 21600 };
+  return { ok: true, usuario: u, perfil: perfil, token: token,
+           obras: usuarioObrasDe(conf) };
+}
+
+/* ------------------------------------------------------------------
+   SESSÃO — dura até a pessoa sair, não até o cache do Google esquecer
+   ------------------------------------------------------------------
+   A sessão ficava no CacheService. Isso parecia dar 6 horas, mas o
+   CacheService é CACHE, não armazenamento: o Google descarta a entrada
+   quando quer, e toda republicação do Apps Script limpa tudo. Na prática
+   o apontador era deslogado a esmo — no meio de lançar uma nota, quase
+   sempre sem entender por quê.
+
+   Agora a sessão vive nas Propriedades do script, que são duráveis. Ela
+   NÃO expira sozinha: sai quando a pessoa clica em Sair (revogação de
+   verdade, no servidor) ou quando a faxina remove o que está abandonado
+   há muito tempo — as Propriedades têm teto de 500 KB no total, e sessão
+   sem faxina cresceria para sempre.
+   ------------------------------------------------------------------ */
+var SESSAO_PREFIXO   = 'SES_';
+var SESSAO_ABANDONO  = 365;   // dias sem uso até a faxina levar
+
+function sessaoCriar(usuario, perfil, obras) {
+  var token = Utilities.getUuid();
+  var agora = Date.now();
+  PropertiesService.getScriptProperties().setProperty(SESSAO_PREFIXO + token,
+    JSON.stringify({ u: usuario, p: perfil, o: obras, criadoEm: agora, usoEm: agora }));
+  return token;
 }
 
 function sessaoDoToken(token) {
   if (!token) return null;
-  var cache = CacheService.getScriptCache();
-  var raw = cache.get('tok_' + String(token));
-  if (!raw) return null;
-  cache.put('tok_' + String(token), raw, 21600); // renova a validade a cada uso
-  // token antigo guardava só o nome do usuário — continua valendo até expirar
-  try { return JSON.parse(raw); } catch (e) { return { usuario: raw, perfil: 'engenharia' }; }
+  var props = PropertiesService.getScriptProperties();
+  var chave = SESSAO_PREFIXO + String(token);
+  var raw = props.getProperty(chave);
+
+  if (!raw) {
+    // Quem estava logado ANTES desta versão tem token no cache antigo.
+    // Em vez de derrubar todo mundo na atualização, a sessão é promovida
+    // para o formato novo na primeira vez que ele aparece.
+    var doCache = null;
+    try { doCache = CacheService.getScriptCache().get('tok_' + String(token)); } catch (e) {}
+    if (!doCache) return null;
+    var velha;
+    try { velha = JSON.parse(doCache); } catch (e) { velha = { usuario: doCache, perfil: 'engenharia' }; }
+    var agoraM = Date.now();
+    var promovida = { u: velha.usuario, p: velha.perfil || 'engenharia', o: '*',
+                      criadoEm: agoraM, usoEm: agoraM };
+    props.setProperty(chave, JSON.stringify(promovida));
+    return { usuario: promovida.u, perfil: promovida.p, obras: promovida.o };
+  }
+
+  var s;
+  try { s = JSON.parse(raw); } catch (e) { return null; }
+
+  // O carimbo de último uso só é regravado depois de um dia. Gravar
+  // Propriedade a cada requisição seria lento e disputaria trava à toa —
+  // e a precisão de horas não muda nada para uma faxina anual.
+  var agora = Date.now();
+  if (!s.usoEm || (agora - s.usoEm) > 86400000) {
+    s.usoEm = agora;
+    try { props.setProperty(chave, JSON.stringify(s)); } catch (e) {}
+  }
+  return { usuario: s.u, perfil: s.p, obras: (s.o === undefined ? '*' : s.o) };
+}
+
+/* Sair de verdade: o token deixa de valer no SERVIDOR. Antes o logout só
+   limpava o aparelho, e o token continuava aceito por quem o copiasse. */
+function sessaoRevogar(token) {
+  if (!token) return { ok: true };
+  var s = sessaoDoToken(token);
+  try { PropertiesService.getScriptProperties().deleteProperty(SESSAO_PREFIXO + String(token)); } catch (e) {}
+  try { CacheService.getScriptCache().remove('tok_' + String(token)); } catch (e) {}
+  if (s) registrarAuditoria(s.usuario, s.perfil, 'LOGOUT', OBRA_ID, '-', '', 'Saiu do sistema');
+  return { ok: true };
+}
+
+/* Remove sessões abandonadas. Roda sozinha pelo gatilho diário. */
+function limparSessoesAbandonadas() {
+  var props = PropertiesService.getScriptProperties();
+  var todas = props.getProperties();
+  var corte = Date.now() - SESSAO_ABANDONO * 86400000;
+  var n = 0;
+  Object.keys(todas).forEach(function (k) {
+    if (k.indexOf(SESSAO_PREFIXO) !== 0) return;
+    var s;
+    try { s = JSON.parse(todas[k]); } catch (e) { props.deleteProperty(k); n++; return; }
+    if (!s.usoEm || s.usoEm < corte) { props.deleteProperty(k); n++; }
+  });
+  Logger.log('sessões removidas por abandono: ' + n);
+  return { ok: true, removidas: n };
 }
 
 function usuarioDoToken(token) {
@@ -483,6 +574,13 @@ function addBatchRDO(batchJson, clientId, token) {
   // Quem gravou vem do token, não do que o app mandou: é isso que sustenta a
   // regra de exclusão ("o dono apaga") e a trilha de auditoria.
   var sess = sessaoDoToken(token) || { usuario: '', perfil: '' };
+
+  // O lote inteiro é de uma obra só (o app monta assim). Basta conferir a
+  // primeira linha para saber se este usuário pode gravar aqui.
+  var obraDoLote = normObra(batch[0] && (batch[0].obra || batch[0].Obra));
+  if (sessaoDoToken(token) && !sessaoPodeNaObra(sess, obraDoLote)) {
+    return negarPorObra(token, 'addBatchRDO', obraDoLote);
+  }
 
   // Trava para o lote inteiro não rodar 2x ao mesmo tempo.
   var lock = LockService.getScriptLock();
@@ -1155,7 +1253,12 @@ function upsertRDODiario(p, deveExistir) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    garantirColuna(aba, 'obra');   // antes de ler o cabeçalho, para já vir nele
+    var sessObra = sessaoDoToken(p.token);
+  if (sessObra && !sessaoPodeNaObra(sessObra, p.obra)) {
+    return negarPorObra(p.token, deveExistir ? 'updateRDODiario' : 'addRDODiario', p.obra);
+  }
+
+  garantirColuna(aba, 'obra');   // antes de ler o cabeçalho, para já vir nele
     var cab = cabecalhoNormalizado(aba);
     var iData = idxColuna(cab, 'data');
     var iTurno = idxColuna(cab, 'turno');
@@ -1420,11 +1523,15 @@ function configurarGatilhos() {
   // Remove gatilhos antigos destas funções para não duplicar.
   ScriptApp.getProjectTriggers().forEach(function (t) {
     var fn = t.getHandlerFunction();
-    if (fn === 'backupDiario' || fn === 'registrarClimaAuto') ScriptApp.deleteTrigger(t);
+    if (fn === 'backupDiario' || fn === 'registrarClimaAuto' ||
+        fn === 'limparSessoesAbandonadas') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('backupDiario').timeBased().everyDays(1).atHour(2).create();
   ScriptApp.newTrigger('registrarClimaAuto').timeBased().everyDays(1).atHour(5).create();
-  Logger.log('Gatilhos criados: backupDiario (02h) e registrarClimaAuto (05h).');
+  // Sessão não expira mais sozinha; a faxina é o que evita a propriedade
+  // crescer sem fim (o teto do Apps Script é 500 KB no total).
+  ScriptApp.newTrigger('limparSessoesAbandonadas').timeBased().everyDays(1).atHour(3).create();
+  Logger.log('Gatilhos criados: backupDiario (02h), limparSessoesAbandonadas (03h) e registrarClimaAuto (05h).');
   return { ok: true };
 }
 
@@ -1644,6 +1751,44 @@ function usuarioPerfilDe(nome, conf) {
   return String(nome).toLowerCase() === 'leonardo' ? 'admin' : 'engenharia';
 }
 
+/* ------------------------------------------------------------------
+   OBRAS QUE O USUÁRIO ENXERGA
+   ------------------------------------------------------------------
+   '*'            → todas as obras (padrão)
+   ['ranario',…]  → só as listadas
+
+   Usuário cadastrado ANTES desta versão não tem o campo, e recebe '*':
+   ninguém pode perder acesso por causa de uma atualização. Restringir é
+   ato deliberado do administrador, nunca efeito colateral.
+   ------------------------------------------------------------------ */
+function usuarioObrasDe(conf) {
+  if (!conf || typeof conf !== 'object') return '*';
+  var o = conf.obras;
+  if (o === undefined || o === null || o === '*') return '*';
+  if (!Array.isArray(o)) return '*';
+  var limpa = o.map(function (x) { return String(x || '').trim(); }).filter(Boolean);
+  return limpa.length ? limpa : '*';   // lista vazia seria "nenhuma obra": não é o que se quer dizer
+}
+
+/* A sessão pode gravar NESTA obra? Vale no servidor, não só na tela:
+   esconder a obra no menu não impede um pedido direto para a URL /exec. */
+function sessaoPodeNaObra(sess, obra) {
+  if (!sess) return true;                    // sem token, quem barra é o exigirTokenSeAtivo
+  var permitidas = sess.obras === undefined ? '*' : sess.obras;
+  if (permitidas === '*') return true;
+  if (!Array.isArray(permitidas)) return true;
+  return permitidas.indexOf(normObra(obra)) !== -1;
+}
+
+/* Recusa padronizada, com registro — tentativa negada não pode ser silenciosa. */
+function negarPorObra(token, acao, obra) {
+  var s = sessaoDoToken(token);
+  registrarAuditoria(s ? s.usuario : 'desconhecido', s ? s.perfil : '',
+    acao + ' NEGADO', normObra(obra), '', '', 'usuário sem acesso a esta obra');
+  return { ok: false, error: 'SEM_ACESSO_A_OBRA',
+    mensagem: 'Seu usuário não tem acesso a esta obra. Fale com o administrador.' };
+}
+
 function usuarioSenhaDe(conf) {
   if (conf && typeof conf === 'object') return conf.senha || '';
   return conf || '';
@@ -1678,6 +1823,7 @@ function usuariosListar(token) {
     return {
       nome: nome,
       perfil: usuarioPerfilDe(nome, mapa[nome]),
+      obras: usuarioObrasDe(mapa[nome]),
       // "formatoAntigo" = senha ainda em texto puro na propriedade
       formatoAntigo: typeof mapa[nome] !== 'object',
       temSenha: !!usuarioSenhaDe(mapa[nome])
@@ -1729,8 +1875,26 @@ function usuarioSalvar(p) {
     return { ok: false, error: 'AUTO_REBAIXA', mensagem: 'Você não pode tirar o seu próprio acesso de administrador.' };
   }
 
+  // OBRAS: chega como lista separada por vírgula, ou vazio/'*' para todas.
+  // Campo AUSENTE na chamada (backend antigo, formulário sem o campo) mantém
+  // o que já estava — nunca restringe por omissão.
+  var obrasFinal;
+  if (p.obras === undefined || p.obras === null) {
+    obrasFinal = editando ? usuarioObrasDe(mapa[nomeAntigo]) : '*';
+  } else {
+    var txt = String(p.obras).trim();
+    if (!txt || txt === '*') obrasFinal = '*';
+    else {
+      obrasFinal = txt.split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+      if (!obrasFinal.length) obrasFinal = '*';
+    }
+  }
+  // Administrador enxerga tudo por definição: restringir obra para admin
+  // criaria a situação de não poder consertar o acesso de ninguém.
+  if (perfil === 'admin') obrasFinal = '*';
+
   if (editando && nomeAntigo !== nome) delete mapa[nomeAntigo];
-  mapa[nome] = { senha: senhaFinal, perfil: perfil };
+  mapa[nome] = { senha: senhaFinal, perfil: perfil, obras: obrasFinal };
   usuariosGravar(mapa);
 
   registrarAuditoria(eu, 'admin', editando ? 'usuarioAlterar' : 'usuarioCriar', OBRA_ID, nome,
