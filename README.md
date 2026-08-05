@@ -243,6 +243,26 @@ projetos: [
 perfis enxergam a tela — inclusive Campo, que é quem mais precisa saber o que
 construir.
 
+## Fila offline
+
+Lançamento feito sem sinal espera no aparelho e sobe sozinho quando a conexão
+volta — o reenvio é seguro porque o `addBatchRDO` deduplica por `clientId` e o
+RDO Diário grava por (obra, data, turno).
+
+A fila fica em **IndexedDB**, não em `localStorage`. O motivo é concreto: as
+fotos entram nela em base64 (~160 a 400 KB cada) e o `localStorage` tem teto de
+~5 MB por site. Num teste com 40 fotos de 300 KB, o armazenamento antigo
+guardou **17** e perdeu **23 em silêncio** — o `setItem` estourava a cota e o
+erro era engolido por um `catch` vazio. O apontador registrava a foto, o app
+não reclamava, e a foto não existia. Com IndexedDB as 40 são guardadas, e
+falha de gravação vira **aviso na tela**, não silêncio.
+
+Quem já tinha itens na fila antiga não perde nada: eles são migrados na
+primeira abertura, e a chave velha só é apagada depois que tudo gravou.
+
+Sem IndexedDB disponível (navegação privada, navegador antigo), a fila volta
+para o `localStorage` — mas agora com o erro visível.
+
 ## Prévia de Medição
 
 Tela **Apoio Medição** → selecione o mês → **⬇ CSV p/ conferência**. O arquivo (separador `;`, decimal com vírgula) traz o consumo derivado por item contratual no período, pronto para confrontar com a coluna do mês da Planilha Geral do `.xlsm`.

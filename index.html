@@ -2438,28 +2438,152 @@ function ehErroDeRede(e) {
   return /rede|offline|Timeout|Falha de rede|Apps Script offline|Failed to fetch|NetworkError/i.test(m);
 }
 
-function outboxLer() {
-  try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); }
-  catch(e) { return []; }
+/* --------------------------------------------------------------------
+   ONDE A FILA MORA — IndexedDB, não localStorage
+   --------------------------------------------------------------------
+   A fila guardava tudo no localStorage, que tem teto de ~5 MB por site.
+   As fotos entram nela em base64 (~160 a 400 KB cada, já com a inflação
+   de 33% do base64), então por volta de 12 a 30 fotos o `setItem` passava
+   a estourar a cota — e o `catch (e) {}` engolia o erro.
+
+   O resultado era o pior possível em obra: o apontador registrava a foto,
+   o app não reclamava, e a foto simplesmente não existia. Justamente no
+   caso de quem está sem sinal o dia inteiro, que é o normal do Ranário.
+
+   IndexedDB não tem esse teto (a cota é fração do disco livre, na casa
+   dos GB) e é assíncrono, então gravar não trava a tela.
+
+   POR QUE NÃO UMA BIBLIOTECA (Dexie e afins): o que esta fila faz é
+   gravar, apagar e listar uma coleção só. Não há consulta, índice nem
+   migração de esquema — que é onde essas bibliotecas valem o peso. Custaria
+   ~80 KB no caminho crítico de abertura do app, que acabamos de enxugar.
+
+   O ESPELHO EM MEMÓRIA (`_fila`) existe para `outboxLer()` continuar
+   SÍNCRONO: são 13 pontos do app que o chamam, e a fila é pequena em
+   número de itens (grande em bytes). Trocar tudo por async traria mais
+   risco que benefício.
+   -------------------------------------------------------------------- */
+const FILA_DB = 'teotonio_fila_v1';
+const FILA_STORE = 'itens';
+let _fila = [];               // espelho em memória — a verdade para leitura
+let _filaDB = null;
+let _filaModo = 'indexeddb';  // cai para 'localStorage' se o IDB não abrir
+
+function _abrirFilaDB() {
+  return new Promise(resolve => {
+    if (!window.indexedDB) return resolve(null);
+    let req;
+    try { req = indexedDB.open(FILA_DB, 1); } catch (e) { return resolve(null); }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(FILA_STORE)) db.createObjectStore(FILA_STORE, { keyPath: 'id' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => resolve(null);       // navegação privada, cota zerada…
+    req.onblocked = () => resolve(null);
+  });
 }
 
+function _filaOp(modo, fn) {
+  return new Promise((ok, erro) => {
+    if (!_filaDB) return erro(new Error('fila sem banco'));
+    let tx;
+    try { tx = _filaDB.transaction(FILA_STORE, modo); } catch (e) { return erro(e); }
+    const store = tx.objectStore(FILA_STORE);
+    let resultado;
+    try { resultado = fn(store); } catch (e) { return erro(e); }
+    tx.oncomplete = () => ok(resultado && resultado.result !== undefined ? resultado.result : resultado);
+    tx.onerror = () => erro(tx.error || new Error('falha ao gravar na fila'));
+    tx.onabort = () => erro(tx.error || new Error('gravação da fila abortada'));
+  });
+}
+
+/* Abre o banco, traz o que ficou no localStorage e preenche o espelho.
+   Roda uma vez, no boot, ANTES de qualquer leitura da fila. */
+async function filaIniciar() {
+  _filaDB = await _abrirFilaDB();
+  if (!_filaDB) {
+    // Sem IndexedDB o app não pode ficar sem fila: volta ao localStorage,
+    // agora com o erro VISÍVEL em vez de engolido.
+    _filaModo = 'localStorage';
+    try { _fila = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch (e) { _fila = []; }
+    return;
+  }
+
+  try { _fila = (await _filaOp('readonly', s => s.getAll())) || []; }
+  catch (e) { _fila = []; }
+
+  // MIGRAÇÃO: o que já estava no localStorage passa para cá. Só apaga a
+  // chave antiga depois que TUDO gravou — senão um erro no meio perderia
+  // lançamento que o apontador já dava como salvo.
+  let antigos = [];
+  try { antigos = JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]'); } catch (e) { antigos = []; }
+  if (antigos.length) {
+    try {
+      const conhecidos = new Set(_fila.map(i => i.id));
+      const novos = antigos.filter(i => i && i.id && !conhecidos.has(i.id));
+      for (const it of novos) await _filaOp('readwrite', s => s.put(it));
+      _fila = _fila.concat(novos);
+      localStorage.removeItem(OUTBOX_KEY);
+      if (novos.length) console.info('fila: ' + novos.length + ' item(ns) migrados para IndexedDB');
+    } catch (e) { /* falhou: a chave antiga fica, e nada se perde */ }
+  }
+  _fila.sort((a, b) => (a.criadoEm || 0) - (b.criadoEm || 0));
+}
+
+/* Grava o espelho inteiro no destino. Usado no fallback e ao limpar. */
+function _filaPersistirTudo() {
+  if (_filaModo === 'localStorage') {
+    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(_fila)); return Promise.resolve(); }
+    catch (e) { return Promise.reject(e); }
+  }
+  return _filaOp('readwrite', s => { s.clear(); _fila.forEach(i => s.put(i)); });
+}
+
+function outboxLer() { return _fila.slice(); }
+
+/* Mantido para quem já chamava — hoje só para ESVAZIAR a fila. */
 function outboxGravar(itens) {
-  try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(itens)); } catch(e) {}
+  _fila = (itens || []).slice();
+  _filaPersistirTudo().catch(() => {});
 }
 
-function outboxAdicionar(item) {
-  const itens = outboxLer();
-  itens.push({
+async function outboxAdicionar(item) {
+  const reg = {
     id: 'o_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     criadoEm: Date.now(),
     ...item
-  });
-  outboxGravar(itens);
+  };
+  _fila.push(reg);
   atualizarIndicadorOutbox();
+  try {
+    if (_filaModo === 'localStorage') {
+      localStorage.setItem(OUTBOX_KEY, JSON.stringify(_fila));
+    } else {
+      await _filaOp('readwrite', s => s.put(reg));
+    }
+  } catch (e) {
+    // NÃO fica em silêncio: o apontador precisa saber que o registro não
+    // ficou guardado, senão vai embora do canteiro achando que ficou.
+    _fila = _fila.filter(i => i.id !== reg.id);
+    atualizarIndicadorOutbox();
+    toast('Não foi possível guardar "' + (reg.descricao || 'o lançamento') +
+          '" no aparelho — pode estar sem espaço. Envie o que está na fila e tente de novo.',
+          'error', 0);
+    console.warn('fila: falha ao guardar', e);
+    return false;   // NÃO relança: o aviso acima já é o recado, e quem chama
+                    // não trata promessa (são 5 pontos, todos disparo-e-esquece)
+  }
+  return true;
 }
 
 function outboxRemover(id) {
-  outboxGravar(outboxLer().filter(it => it.id !== id));
+  _fila = _fila.filter(it => it.id !== id);
+  if (_filaModo === 'localStorage') {
+    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(_fila)); } catch (e) {}
+  } else {
+    _filaOp('readwrite', s => s.delete(id)).catch(() => {});
+  }
   atualizarIndicadorOutbox();
 }
 
@@ -10396,19 +10520,24 @@ async function salvarRDO() {
       // As fotos vão para a mesma fila, atrás do lote: quando o RDO subir, a
       // linha já existe e a foto acha o serviço pelo id.
       let fotosNaFila = 0;
-      Object.keys(fotosEnviar).forEach(id => fotosEnviar[id].forEach((f, i) => {
-        try {
+      // `outboxAdicionar` agora é assíncrona (a fila vive no IndexedDB) e
+      // devolve false quando não consegue guardar — em vez de estourar. Só
+      // conta o que REALMENTE ficou guardado: contar a tentativa faria a
+      // mensagem prometer fotos que não existem.
+      await Promise.all(Object.keys(fotosEnviar).flatMap(id =>
+        fotosEnviar[id].map(async (f, i) => {
           // lat/lon acompanham a foto na fila. Este é o caminho de QUEM
           // ESTÁ SEM SINAL — ou seja, o caso mais comum no canteiro. Sem
           // isso a foto subia carimbada (o carimbo é queimado na imagem)
           // mas chegava na planilha sem coordenada, justamente quando o
           // apontador está em campo.
-          outboxAdicionar({ kind: 'foto', params: { action: 'rdoFoto', id, idx: i, foto: f.full,
-            lat: f.lat || '', lon: f.lon || '', prec: f.prec || '' },
+          const guardou = await outboxAdicionar({
+            kind: 'foto',
+            params: { action: 'rdoFoto', id, idx: i, foto: f.full,
+                      lat: f.lat || '', lon: f.lon || '', prec: f.prec || '' },
             descricao: 'foto do serviço ' + id });
-          fotosNaFila++;
-        } catch (err) { /* memória do aparelho cheia: a foto se perde, o RDO não */ }
-      }));
+          if (guardou) fotosNaFila++;
+        })));
       _fotosPorServico = {};
       toast('Sem internet — RDO' + (fotosNaFila ? ` e ${fotosNaFila} foto(s)` : '') +
         ' guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
@@ -12202,9 +12331,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // por cima de formulário aberto ou campo focado.
   setInterval(() => carregarTudo({ fundo: true }), CONFIG.refreshMs);
 
-  // Fila offline: mostra o que está pendente e tenta reenviar
-  atualizarIndicadorOutbox();
-  outboxFlush();
+  // Fila offline: abre o banco, traz o que ficou no armazenamento antigo e só
+  // então mostra o pendente e tenta reenviar. Tudo que lê a fila depende deste
+  // passo — por isso o indicador e o reenvio ficam DENTRO do `then`.
+  filaIniciar().then(() => {
+    atualizarIndicadorOutbox();
+    outboxFlush();
+  });
   // Reflete perda/retomada de conexão no ponto de status e na faixa flutuante.
   window.addEventListener('offline', () => {
     const dot = document.getElementById('syncDot');
