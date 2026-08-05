@@ -16,8 +16,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- Bibliotecas VENDORIZADAS, como no app "Gestor — Controle de Obras". Antes
+     vinham de CDN, e CDN não existe no canteiro: no primeiro acesso sem sinal
+     o gráfico não desenhava e o RDO não saía em PDF/Excel. Servidas do próprio
+     GitHub Pages, o service worker as guarda junto com o app. Versões idênticas
+     às que estavam no CDN — Chart.js 4.4.0, jsPDF 2.5.1, AutoTable 3.5.31 e
+     xlsx-js-style 1.2.0 — para não mudar nada de comportamento. -->
+<script src="vendor/chartjs/chart.umd.min.js"></script>
+<script src="vendor/jspdf/jspdf.umd.min.js"></script>
 <!-- PDF.js (Mozilla) vendorizado: é ele que extrai o TEXTO do PDF da DANFE.
      Sem ele o app cai para OCR na foto, que erra muito mais. Vendorizado e
      não em CDN porque o app precisa abrir offline no canteiro. -->
@@ -27,9 +33,9 @@
 <script src="js/ui/icones.js"></script>
 <script src="js/nf/adaptador.js"></script>
 <script src="js/nf/notas.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+<script src="vendor/jspdf/jspdf.plugin.autotable.min.js"></script>
 <!-- xlsx-js-style: fork do SheetJS 0.18.5 (mesma API de leitura) que TAMBÉM grava estilos (bordas/cores/fontes) usados na exportação de RDOs em Excel. -->
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="vendor/xlsx/xlsx.bundle.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -233,7 +239,9 @@
 .nf-vinc{font-size:11.5px;color:var(--muted);line-height:1.6;padding:2px 0}
 .nf-vinc b{color:var(--text-2)}
 .nf-chip-sug{cursor:pointer;padding:2px 9px;font-size:11px;margin:2px 3px 2px 0;border-style:dashed}
-.nf-chip-sug:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+/* --accent é o nome da variável no app "Gestor"; aqui o acento chama --acc.
+   Veio errado na cópia do CSS de Notas Fiscais, e o hover ficava sem cor. */
+.nf-chip-sug:hover{background:var(--acc);color:#fff;border-color:var(--acc)}
 .nf-passo{display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:13.5px}
 .nf-1linha{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nf-simples .nf-extra{display:none!important}
@@ -287,6 +295,53 @@
 }
 .filter-clear { cursor: pointer; opacity: 0.6; transition: .2s; }
 .filter-clear:hover { opacity: 1; color: var(--red); }
+
+/* ===================== CENTRAL DE CAMPO =====================
+   O resumo do dia, no topo do Painel Executivo. Cor com significado:
+   verde = registrado, âmbar = falta fazer hoje. Nada de vermelho —
+   RDO não preenchido às 9h da manhã não é erro, é dia começando. */
+.central-campo {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--r);
+  box-shadow: var(--sh); padding: 16px 18px; margin-bottom: 18px;
+}
+.cc-head { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 14px; }
+.cc-pill {
+  display: inline-block; background: var(--acc-l); color: var(--acc-d);
+  padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
+}
+.cc-title { font-size: 16px; font-weight: 700; color: var(--text); margin-top: 7px; letter-spacing: -.01em; }
+.cc-acoes { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+.cc-acoes .ic { width: 15px; height: 15px; vertical-align: -2px; margin-right: 3px; }
+.cc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.cc-box {
+  display: flex; align-items: center; gap: 11px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2);
+  border-left-width: 3px;
+}
+.cc-box .cc-ic { line-height: 0; flex-shrink: 0; }
+.cc-box .cc-ic .ic { width: 21px; height: 21px; vertical-align: 0; }
+.cc-info { display: flex; flex-direction: column; min-width: 0; }
+.cc-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.cc-val { font-size: 14px; font-weight: 600; color: var(--text); margin-top: 2px; }
+.cc-ok     { border-left-color: var(--grn); }
+.cc-ok     .cc-ic { color: var(--grn); }
+.cc-pend   { border-left-color: var(--ylw); }
+.cc-pend   .cc-ic { color: var(--ylw-d); }
+.cc-neutro { border-left-color: var(--border-strong); }
+.cc-neutro .cc-ic { color: var(--muted); }
+.cc-aviso {
+  display: flex; align-items: center; gap: 9px; margin-top: 12px;
+  padding: 10px 13px; border-radius: var(--r-sm);
+  background: var(--ylw-l); border: 1px solid var(--ylw);
+  font-size: 12.5px; font-weight: 500; color: var(--text-2);
+}
+.cc-aviso .cc-ic { line-height: 0; flex-shrink: 0; color: var(--ylw-d); }
+.cc-aviso .cc-ic .ic { width: 17px; height: 17px; vertical-align: 0; }
+@media (max-width: 700px) {
+  .cc-acoes { margin-left: 0; width: 100%; }
+  .cc-acoes .btn { flex: 1; justify-content: center; }
+}
 
 /* Interatividade nas frentes */
 .frente-row {
@@ -426,6 +481,15 @@ html,body{
 .btn-refresh:hover{background:rgba(255,255,255,.12);color:var(--sidebar-active);}
 .btn-refresh{display:flex;align-items:center;justify-content:center;gap:7px}
 .btn-refresh .ic{width:14px;height:14px;vertical-align:0;opacity:.9}
+.btn-apresentar{margin-top:6px}
+/* Crédito do autor, como no app "Gestor — Controle de Obras". Discreto:
+   fica abaixo do seletor de tema, no fim de tudo que se opera. */
+.sidebar-credito{
+  margin-top:10px;padding-top:9px;border-top:1px solid var(--sidebar-border);
+  font-size:10px;line-height:1.45;text-align:center;
+  color:var(--sidebar-text);opacity:.6;
+}
+.sidebar-credito b{color:var(--sidebar-active);opacity:.85;font-weight:600}
 
 /* ---- seletor de tema (claro / escuro / sistema) ---- */
 .tema-seletor{
@@ -727,6 +791,168 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 #outboxIndicator:active{transform:translateX(-50%) scale(.97)}
 #outboxIndicator .ob-ic{display:inline-flex;align-items:center;line-height:0;flex-shrink:0}
 #outboxIndicator .ob-ic .ic{width:16px;height:16px;vertical-align:0}
+#outboxIndicator .ob-girando .ic{animation:obGira 1.1s linear infinite}
+@keyframes obGira{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){ #outboxIndicator .ob-girando .ic{animation:none} }
+
+/* Aviso de nova versão do app. Fica no canto, acima da barra inferior do
+   celular (por isso o bottom generoso com safe-area) e nunca no meio da
+   tela: é recado, não interrupção — dá para ignorar e seguir lançando. */
+#swUpdateBanner{
+  position:fixed;right:16px;left:auto;z-index:1200;
+  bottom:calc(78px + env(safe-area-inset-bottom,0px));
+  display:flex;align-items:center;gap:10px;
+  background:var(--acc);color:#fff;padding:11px 12px 11px 16px;
+  border-radius:12px;box-shadow:0 8px 26px rgba(0,0,0,.3);
+  font-size:13px;font-weight:600;max-width:min(92vw,380px);
+  animation:slideIn .3s cubic-bezier(.2,0,0,1);
+}
+#swUpdateBanner .swu-ic{display:inline-flex;align-items:center;line-height:0;flex-shrink:0}
+#swUpdateBanner .swu-ic .ic{width:17px;height:17px;vertical-align:0}
+#swUpdateBanner .swu-txt{flex:1;min-width:0}
+#swUpdateBanner .swu-ok{
+  background:#fff;color:var(--acc);border:none;border-radius:7px;
+  padding:6px 12px;font-size:12.5px;font-weight:700;cursor:pointer;flex-shrink:0;
+  font-family:inherit;min-height:32px;
+}
+#swUpdateBanner .swu-ok:active{transform:scale(.97)}
+#swUpdateBanner .swu-x{
+  background:transparent;border:none;color:rgba(255,255,255,.75);cursor:pointer;
+  padding:2px;line-height:0;flex-shrink:0;display:inline-flex;align-items:center;
+}
+#swUpdateBanner .swu-x:hover{color:#fff}
+#swUpdateBanner .swu-x .ic{width:15px;height:15px;vertical-align:0}
+@media (min-width:861px){ #swUpdateBanner{bottom:20px} }
+
+/* ===================== MODO APRESENTAÇÃO =====================
+   Tela cheia, fundo do canteiro (o mesmo #1a1612 da sidebar) e tipografia
+   grande: isto é lido a três metros do projetor, não a 50cm do monitor.
+   Cores fixas de propósito — a apresentação não segue o tema claro/escuro
+   do usuário, porque projetor com fundo branco estoura no telão. */
+#apres{
+  position:fixed;inset:0;z-index:2000;display:flex;flex-direction:column;
+  background:radial-gradient(120% 90% at 15% 0%, #2a231c 0%, #1a1612 55%, #100d0a 100%);
+  color:#f5efe6;
+}
+#apres .ap-top{display:flex;align-items:center;gap:12px;padding:18px 28px;flex-shrink:0}
+#apres .ap-top-marca{
+  width:38px;height:38px;border-radius:10px;background:var(--acc);color:#fff;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+#apres .ap-top-marca .ic{width:22px;height:22px;vertical-align:0}
+#apres .ap-top .t{font-weight:700;font-size:14.5px}
+#apres .ap-top .s{font-size:11.5px;color:rgba(245,239,230,.55)}
+#apres .ap-prog{display:flex;gap:5px;margin-left:auto;flex-wrap:wrap;justify-content:flex-end;max-width:46%}
+#apres .ap-prog .seg{width:30px;height:4px;border-radius:3px;background:rgba(255,255,255,.16);overflow:hidden}
+#apres .ap-prog .seg>i{display:block;height:100%;width:0;background:var(--acc)}
+#apres .ap-prog .seg.done>i{width:100%}
+#apres .ap-prog .seg.cur>i{animation:apBarra var(--apdur,9s) linear forwards}
+#apres.pausado .ap-prog .seg.cur>i{animation-play-state:paused}
+@keyframes apBarra{from{width:0}to{width:100%}}
+
+/* 'safe center' e não 'center': no celular um slide mais alto que a tela
+   centralizado no eixo perde o topo, e o pedaço cortado não volta nem
+   rolando. Com 'safe' o alinhamento cai para o início quando transborda.
+   Navegador antigo ignora a segunda linha e fica com o center de sempre. */
+#apres .ap-palco{flex:1;min-height:0;display:flex;justify-content:center;
+  align-items:center;align-items:safe center;padding:1.5vh 5vw;overflow:auto}
+#apres .ap-slide{width:100%;max-width:1120px;animation:apEntra .6s cubic-bezier(.2,0,0,1)}
+#apres .ap-centro{text-align:center}
+@keyframes apEntra{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+#apres .ap-marca{
+  width:84px;height:84px;border-radius:22px;background:var(--acc);color:#fff;
+  display:flex;align-items:center;justify-content:center;margin:0 auto 22px;
+}
+#apres .ap-marca .ic{width:46px;height:46px;vertical-align:0}
+#apres .ap-kicker{
+  font:700 12px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.2em;
+  text-transform:uppercase;color:var(--acc);margin-bottom:12px;
+}
+#apres h2{font-size:clamp(26px,4.4vw,50px);font-weight:700;letter-spacing:-.03em;
+  line-height:1.06;margin-bottom:12px}
+#apres .ap-sub{font-size:clamp(14px,1.7vw,19px);color:rgba(245,239,230,.7);
+  max-width:800px;line-height:1.5}
+#apres .ap-sub-c{margin-left:auto;margin-right:auto}
+#apres .pos{color:oklch(.78 .16 150)}
+#apres .neg{color:oklch(.72 .19 30)}
+
+/* 3 colunas no telão: os KPIs desta tela vêm de 3 em 3 (ou 6), e o auto-fit
+   sozinho deixava uma linha órfã com um cartão só na ponta. */
+#apres .ap-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(196px,1fr));
+  gap:12px;margin:24px 0}
+@media (min-width:900px){ #apres .ap-kpis{grid-template-columns:repeat(3,1fr)} }
+#apres .ap-k{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);
+  border-radius:14px;padding:15px 18px}
+#apres .ap-k .l{font:700 10px 'JetBrains Mono',ui-monospace,monospace;letter-spacing:.06em;
+  text-transform:uppercase;color:rgba(245,239,230,.5)}
+#apres .ap-k .v{font:700 clamp(20px,2.3vw,28px) 'JetBrains Mono',ui-monospace,monospace;
+  letter-spacing:-.03em;margin-top:5px;line-height:1.08;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#apres .ap-k .v .de{font-size:.55em;color:rgba(245,239,230,.45)}
+#apres .ap-k .sb{font-size:11.5px;color:rgba(245,239,230,.5);margin-top:4px}
+
+#apres .ap-caps{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:11px;margin-top:24px}
+#apres .ap-cap{display:flex;gap:12px;align-items:flex-start;padding:13px 15px;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px}
+#apres .ap-cap-ic{color:var(--acc);line-height:0;flex-shrink:0}
+#apres .ap-cap-ic .ic{width:22px;height:22px;vertical-align:0}
+#apres .ap-cap b{display:block;font-size:14px;margin-bottom:2px}
+#apres .ap-cap span{display:block;font-size:12px;color:rgba(245,239,230,.6);line-height:1.42}
+
+#apres .ap-barras{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+  gap:14px 26px;margin-top:24px}
+#apres .ap-barra-top{display:flex;justify-content:space-between;align-items:baseline;
+  gap:10px;font-size:14px;margin-bottom:6px}
+#apres .ap-barra-top b{font:700 15px 'JetBrains Mono',ui-monospace,monospace}
+#apres .ap-barra-tr{height:8px;border-radius:5px;background:rgba(255,255,255,.1);overflow:hidden}
+#apres .ap-barra-tr>i{display:block;height:100%;border-radius:5px;
+  background:linear-gradient(90deg,var(--acc),oklch(.72 .15 55))}
+#apres .ap-barra-sub{font-size:11px;color:rgba(245,239,230,.45);margin-top:4px}
+
+#apres .ap-tab{width:100%;border-collapse:collapse;margin-top:22px;font-size:15px}
+#apres .ap-tab th{text-align:left;font:700 10.5px 'JetBrains Mono',ui-monospace,monospace;
+  letter-spacing:.08em;text-transform:uppercase;color:rgba(245,239,230,.5);
+  padding:0 12px 9px;border-bottom:1px solid rgba(255,255,255,.14)}
+#apres .ap-tab td{padding:11px 12px;border-bottom:1px solid rgba(255,255,255,.07)}
+#apres .ap-tab .n{text-align:right;font-family:'JetBrains Mono',ui-monospace,monospace}
+#apres .ap-tab .dim{color:rgba(245,239,230,.55)}
+
+#apres .ap-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+#apres .ap-tag{padding:6px 12px;border-radius:20px;font-size:13px;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
+#apres .ap-tag b{color:var(--acc);margin-left:3px}
+
+#apres .ap-nota{display:flex;gap:11px;align-items:flex-start;margin-top:22px;
+  padding:13px 16px;border-radius:12px;font-size:14px;line-height:1.45;
+  background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09)}
+#apres .ap-nota>span{line-height:0;flex-shrink:0;color:rgba(245,239,230,.7)}
+#apres .ap-nota>span .ic{width:19px;height:19px;vertical-align:0}
+#apres .ap-nota-alerta{background:rgba(210,104,47,.14);border-color:rgba(210,104,47,.4)}
+#apres .ap-nota-alerta>span{color:var(--acc)}
+#apres .ap-fim-marca{margin-top:28px;font:700 13px 'JetBrains Mono',ui-monospace,monospace;
+  letter-spacing:.22em;text-transform:uppercase;color:rgba(245,239,230,.45)}
+
+#apres .ap-ctrl{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;
+  padding:14px 20px calc(16px + env(safe-area-inset-bottom,0px));flex-shrink:0}
+#apres .ap-ctrl button{
+  display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:8px 16px;
+  border-radius:9px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);
+  color:#f5efe6;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;
+}
+#apres .ap-ctrl button:hover{background:rgba(255,255,255,.13)}
+#apres .ap-ctrl button .ic{width:16px;height:16px;vertical-align:0}
+@media (max-width:640px){
+  #apres .ap-top{padding:12px 16px}
+  #apres .ap-prog{max-width:100%;order:3;width:100%;justify-content:flex-start;margin-left:0}
+  #apres .ap-tab{font-size:13px}
+  #apres .ap-tab td,#apres .ap-tab th{padding-left:6px;padding-right:6px}
+}
+@media (prefers-reduced-motion:reduce){
+  #apres .ap-slide{animation:none}
+  #apres .ap-prog .seg.cur>i{animation:none;width:100%}
+}
+
 .campo-invalido{border:2px solid var(--red)!important;background:var(--red-l)!important}
 @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 
@@ -1921,6 +2147,7 @@ async function outboxFlush(manual = false) {
   // NÃO bloqueamos por navigator.onLine (dá falso "offline" e fazia o botão
   // "tentar agora" não responder). Tentamos enviar de verdade sempre.
   _flushEmAndamento = true;
+  atualizarIndicadorOutbox();   // troca o indicador para "enviando…" na hora
   if (manual) toast('Enviando ' + itens.length + ' RDO' + (itens.length>1?'s':'') + ' guardado' + (itens.length>1?'s':'') + '…', 'info', 2500);
   let enviados = 0, falhouRede = false;
   try {
@@ -1980,7 +2207,19 @@ function atualizarIndicadorOutbox() {
     document.body.appendChild(el);
   }
   el.style.display = 'flex';
-  if (n > 0) {
+  if (n > 0 && _flushEmAndamento) {
+    // Envio EM CURSO. Vindo do "Gestor — Controle de Obras": antes o indicador
+    // seguia dizendo "toque para enviar" durante o próprio envio, e o apontador
+    // tocava de novo achando que não tinha pegado. Aqui ele fica mudo e sem
+    // clique enquanto a fila escoa.
+    el.style.background = '#374151';
+    el.style.cursor = 'default';
+    el.removeAttribute('role');
+    el.setAttribute('aria-label', 'Enviando ' + n + ' lançamento(s) guardado(s).');
+    el.onclick = null;
+    el.innerHTML = `<span class="ob-ic ob-girando">${ic('syncPend')}</span>`
+      + `<span style="flex:1">Enviando ${n} lançamento${n>1?'s':''}…</span>`;
+  } else if (n > 0) {
     // Há RDOs guardados → toque reenvia a fila.
     el.style.background = '#1f2937';
     el.style.cursor = 'pointer';
@@ -3695,7 +3934,10 @@ function renderShell() {
             <div class="sync-text" id="syncText">Carregando…</div>
           </div>
           <button class="btn-refresh" onclick="carregarTudo()">${ic('atualizar')} ATUALIZAR</button>
+          ${podeVer('executivo') ? `<button class="btn-refresh btn-apresentar" onclick="abrirApresentacao()"
+            title="Mostrar a obra em tela cheia (ESC sai)">${ic('apresentar')} APRESENTAR</button>` : ''}
           ${seletorTema()}
+          <div class="sidebar-credito">Criado e desenvolvido por <b>Leonardo Maciel</b></div>
         </div>
       </aside>
 
@@ -5215,6 +5457,76 @@ function renderAvenida3D(rdosAtivos, pacotesAtivos) {
 // ====================================================================
 // VIEW: EXECUTIVO COM FILTROS E INTERATIVIDADE
 // ====================================================================
+/* ------------------------------------------------------------------
+   CENTRAL DE CAMPO — o dia de hoje, antes de qualquer indicador
+   ------------------------------------------------------------------
+   Vinda do "Gestor — Controle de Obras" (painel consolidado do home).
+   O Painel Executivo responde "como vai a obra"; ninguém encontrava ali
+   a resposta de "o que falta fazer HOJE". Quando o RDO do dia não é
+   preenchido, ninguém percebe — só na hora de fechar a medição, semanas
+   depois, quando não dá mais para lembrar o que foi executado.
+
+   Fica FORA dos filtros de mês/frente de propósito: é sempre hoje.
+   ------------------------------------------------------------------ */
+function renderCentralCampo() {
+  const hoje = getLocalISODate(new Date());
+  const servHoje   = servicosDaData(hoje);
+  const diarioHoje = rdosDaData(hoje);
+  // O módulo de equipamentos carrega sob demanda (só ao abrir a tela).
+  // Sem ele carregado não se afirma "0 apontamentos" — seria mentira.
+  const equipOk    = EQUIP && EQUIP.carregado;
+  const equipHoje  = equipOk
+    ? EQUIP.apontamentos.filter(a => normalizarDataCSV(a.data).slice(0, 10) === hoje).length
+    : null;
+
+  const dataBR = hoje.split('-').reverse().join('/');
+  const diaSem = new Date(hoje + 'T12:00:00')
+    .toLocaleDateString('pt-BR', { weekday: 'long' });
+
+  const box = (estado, icone, rotulo, valor) => `
+    <div class="cc-box cc-${estado}">
+      <span class="cc-ic">${ic(icone)}</span>
+      <div class="cc-info">
+        <span class="cc-lbl">${rotulo}</span>
+        <span class="cc-val">${valor}</span>
+      </div>
+    </div>`;
+
+  const pendencias = [];
+  if (!servHoje.length)   pendencias.push('nenhum serviço lançado hoje');
+  if (!diarioHoje.length) pendencias.push('RDO Diário de hoje não preenchido');
+
+  return `
+    <section class="central-campo stagger-item" aria-label="Central de Campo">
+      <div class="cc-head">
+        <div>
+          <span class="cc-pill">Central de Campo · ${diaSem.charAt(0).toUpperCase() + diaSem.slice(1)}, ${dataBR}</span>
+          <h2 class="cc-title">O que já foi registrado hoje</h2>
+        </div>
+        <div class="cc-acoes">
+          ${podeVer('rdo') ? `<button type="button" class="btn btn-sm btn-ghost" onclick="navigate('rdo')">${ic('lancar')} Lançar serviço</button>` : ''}
+          ${podeVer('rdodiario') ? `<button type="button" class="btn btn-sm btn-primary" onclick="navigate('rdodiario')">${ic('diario')} Abrir RDO Diário</button>` : ''}
+        </div>
+      </div>
+
+      <div class="cc-grid">
+        ${box(servHoje.length ? 'ok' : 'pend', 'lancar', 'Serviços lançados',
+              servHoje.length ? `${servHoje.length} lançamento${servHoje.length > 1 ? 's' : ''}` : 'Nada lançado ainda')}
+        ${box(diarioHoje.length ? 'ok' : 'pend', 'diario', 'RDO Diário',
+              diarioHoje.length ? 'Preenchido' : 'Pendente')}
+        ${box(equipHoje === null ? 'neutro' : (equipHoje ? 'ok' : 'pend'), 'equipamentos', 'Equipamentos',
+              equipHoje === null ? 'Abra a tela para ver'
+                                 : (equipHoje ? `${equipHoje} apontamento${equipHoje > 1 ? 's' : ''}` : 'Sem apontamento hoje'))}
+      </div>
+
+      ${pendencias.length ? `
+        <div class="cc-aviso">
+          <span class="cc-ic">${ic('sino')}</span>
+          <span>Pendente no canteiro: ${pendencias.join(' · ')}.</span>
+        </div>` : ''}
+    </section>`;
+}
+
 function renderExecutivo() {
   const todasFrentes = [...new Set(STATE.pacotes.map(p => getCSVField(p, 'Frente')).filter(Boolean))].sort();
   const todosMesesSet = new Set();
@@ -5346,6 +5658,8 @@ function renderExecutivo() {
         `<div class="filter-clear" onclick="limparFiltros()">Limpar Filtros ${ic('fechar')}</div>` : ''}
       <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto" onclick="exportarRelatorioExecutivoPDF()" title="Exportar Relatório Executivo da Obra em PDF">${ic('baixar')} Exportar PDF</button>
     </div>
+
+    ${renderCentralCampo()}
 
     <!-- ============ HERO EXECUTIVO ============ -->
     <div class="exec-hero stagger-item" style="animation-delay:.04s">
@@ -11308,11 +11622,430 @@ window.removerServico = removerServico;
 window.resetDraft = resetDraft;
 window.salvarRDO = salvarRDO;
 
+// ====================================================================
+// MODO APRESENTAÇÃO — o sistema mostrado em tela cheia
+// --------------------------------------------------------------------
+// Vindo do "Gestor — Controle de Obras". Existe porque reunião de obra
+// com a fiscalização não é lugar de navegar menu: alguém pergunta como
+// está o avanço e quem apresenta fica rolando tela e clicando filtro,
+// com o projetor mostrando tudo. Aqui a obra vira uma sequência fechada
+// de telas grandes, que passam sozinhas e leem de longe.
+//
+// NÃO é um relatório à parte: cada número sai das MESMAS funções do
+// Painel Executivo (calcExecMetrics, calcFrentesAnalise, calcCurvaPrevista).
+// Se divergisse do painel, viraria uma segunda versão da verdade.
+// ====================================================================
+const APRES = { on: false, idx: 0, slides: [], timer: null, tocando: true,
+                dur: 9000, keyH: null, rzH: null };
+
+/* Os números da obra, calculados uma vez por sessão de apresentação. */
+function apDados() {
+  const pacotesAtivos = STATE.pacotes.filter(p =>
+    getCSVField(p, 'Status') !== 'Histórico' && getCSVField(p, 'ID'));
+  const rdos = STATE.rdoavanco || [];
+  const avMapa = calcularAvancoPorPacote(rdos, pacotesAtivos);
+  const lista = Object.values(avMapa).filter(a => a.pacote);
+
+  lista.forEach(a => {
+    const prod = produtividadeDe(getCSVField(a.pacote, 'ID')) || 1;
+    a.diasEstimados  = prod > 0 ? a.qtdEstimada / prod : 0;
+    a.diasExecutados = a.pct * a.diasEstimados;
+  });
+  const totalDias = lista.reduce((s, a) => s + a.diasEstimados, 0);
+  const pctPond   = totalDias > 0
+    ? lista.reduce((s, a) => s + a.diasExecutados, 0) / totalDias : 0;
+
+  const metrics  = calcExecMetrics(rdos, pacotesAtivos, totalDias);
+  const fa       = calcFrentesAnalise(rdos, pacotesAtivos, totalDias);
+  const baseline = calcCurvaPrevista(pacotesAtivos, totalDias);
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const prevHoje = pctAteDia(baseline.cum, baseline.sortedDays, ymd(hoje));
+
+  // avanço por frente, ponderado em dias-equivalentes (igual ao painel)
+  const porFrente = {};
+  lista.forEach(a => {
+    const f = getCSVField(a.pacote, 'Frente') || 'Outros';
+    if (!porFrente[f]) porFrente[f] = { frente: f, estim: 0, exec: 0, pacotes: 0 };
+    porFrente[f].estim += a.diasEstimados;
+    porFrente[f].exec  += a.diasExecutados;
+    porFrente[f].pacotes++;
+  });
+  const frentes = Object.values(porFrente)
+    .map(f => ({ ...f, pct: f.estim > 0 ? f.exec / f.estim : 0 }))
+    .sort((a, b) => b.pct - a.pct);
+
+  return {
+    pacotesAtivos, rdos, avMapa, lista, totalDias, pctPond, metrics, fa,
+    baseline, prevHoje, gap: pctPond - prevHoje, frentes,
+    totalPac:   lista.length,
+    iniciados:  lista.filter(a => a.qtdExecutada > 0).length,
+    concluidos: lista.filter(a => a.pct >= 0.999).length,
+    fotos:      (function () { try { return fotosDaObra(); } catch (e) { return []; } })()
+  };
+}
+
+/* Quais telas entram. Slide sem dado NÃO entra: apresentação com tela
+   vazia passa a impressão de sistema vazio. */
+function apMontarSlides(d) {
+  const s = [{ tipo: 'capa' }, { tipo: 'capacidades' }];
+  if (d.rdos.length) {
+    s.push({ tipo: 'panorama' });
+    if (d.frentes.length) s.push({ tipo: 'frentes' });
+    s.push({ tipo: 'producao' });
+    if (STATE.coeficientes && STATE.coeficientes.length) s.push({ tipo: 'medicao' });
+  }
+  if ((STATE.rdodiario || []).length) s.push({ tipo: 'diario' });
+  if (EQUIP && EQUIP.carregado && EQUIP.apontamentos.length) s.push({ tipo: 'equipamentos' });
+  if (d.fotos.length) s.push({ tipo: 'registro' });
+  s.push({ tipo: 'fim' });
+  return s;
+}
+
+const apPct = v => (v * 100).toFixed(1).replace('.', ',') + '%';
+
+function apSlideHTML(sl, d) {
+  const K = (rot, val, sub) => `<div class="ap-k"><div class="l">${rot}</div>
+    <div class="v">${val}</div>${sub ? `<div class="sb">${sub}</div>` : ''}</div>`;
+
+  if (sl.tipo === 'capa') return `<div class="ap-slide ap-centro">
+    <div class="ap-marca">${ic('obra')}</div>
+    <div class="ap-kicker">Contrato 084/SPOBRAS/2024 · CC 182 · Gestor Engenharia</div>
+    <h2>Av. Senador Teotônio Vilela</h2>
+    <div class="ap-sub ap-sub-c">Duplicação — planejamento, RDO de campo, apoio à medição
+      e prestação de contas em um só sistema.</div></div>`;
+
+  if (sl.tipo === 'capacidades') {
+    const caps = [
+      ['painel',       'Painel Executivo',   'Avanço ponderado, Curva S e desvio contra o cronograma'],
+      ['lancar',       'RDO de Campo',       'Produção diária por pacote, estaca e turno, com foto'],
+      ['diario',       'RDO Diário',         'Efetivo, equipamentos, clima e ocorrências — PDF pronto'],
+      ['medicao',      'Apoio à Medição',    'Consumo por item contratual SIURB, via matriz de coeficientes'],
+      ['cronograma',   'Cronograma',         'Baseline do MS Project e planejamento reverso por pacote'],
+      ['equipamentos', 'Equipamentos',       'Horas, paradas, horímetro, combustível e assinatura'],
+      ['notas',        'Notas Fiscais',      'DANFE fotografada, dados oficiais e estoque por lote'],
+      ['galeria',      'Registro Fotográfico','Foto carimbada com data, estaca e serviço'],
+      ['ia',           'Analista IA',        'Leitura executiva e projeção de prazo sobre o lançado'],
+      ['nuvem',        'Sincronização',      'Fila offline — o campo lança sem sinal e envia depois']
+    ];
+    return `<div class="ap-slide"><div class="ap-kicker">O que o sistema entrega</div>
+      <h2>Do canteiro à gestão, sem replanilhar</h2>
+      <div class="ap-caps">${caps.map(c => `<div class="ap-cap">
+        <span class="ap-cap-ic">${ic(c[0])}</span>
+        <div><b>${escHtml(c[1])}</b><span>${escHtml(c[2])}</span></div></div>`).join('')}</div></div>`;
+  }
+
+  if (sl.tipo === 'panorama') {
+    const atras = d.gap < -0.001, frente = d.gap > 0.001;
+    const cls = atras ? 'neg' : frente ? 'pos' : '';
+    const txt = atras ? 'atrás do cronograma' : frente ? 'à frente do cronograma' : 'no prazo';
+    const prev = d.metrics.dataPrevista
+      ? d.metrics.dataPrevista.toLocaleDateString('pt-BR')
+      : '—';
+    // diasVsPrazo = previsto − fim do contrato: POSITIVO estoura o prazo,
+    // negativo sobra. Mesma convenção do Painel Executivo.
+    const dvp = d.metrics.diasVsPrazo;
+    const folga = dvp == null ? '' :
+      dvp > 0 ? `${dvp} dia${dvp > 1 ? 's' : ''} além do prazo` :
+      dvp < 0 ? `${Math.abs(dvp)} dia${Math.abs(dvp) > 1 ? 's' : ''} de folga`
+              : 'no limite do prazo';
+    return `<div class="ap-slide"><div class="ap-kicker">Situação da obra</div>
+      <h2>${apPct(d.pctPond)} de avanço ponderado</h2>
+      <div class="ap-sub">Escopo medido em dias-equivalentes: cada pacote pesa o que
+        realmente consome de obra, não o número de linhas da planilha.</div>
+      <div class="ap-kpis">
+        ${K('Contra o cronograma',
+            `<span class="${cls}">${Math.abs(d.gap * 100).toFixed(1).replace('.', ',')} p.p.</span>`, txt)}
+        ${K('Meta até hoje', apPct(d.prevHoje), 'baseline do contrato')}
+        ${K('Últimos 7 dias',  fmtPctDelta(d.metrics.delta7d))}
+        ${K('Últimos 30 dias', fmtPctDelta(d.metrics.delta30d))}
+        ${K('Pacotes', `${d.iniciados}<span class="de">/${d.totalPac}</span>`,
+            `${d.concluidos} concluído${d.concluidos === 1 ? '' : 's'}`)}
+        ${K('Término no ritmo atual', prev, folga)}
+      </div></div>`;
+  }
+
+  if (sl.tipo === 'frentes') {
+    const top = d.frentes.slice(0, 7);
+    const emAtencao = d.fa.atencao || [];
+    return `<div class="ap-slide"><div class="ap-kicker">Avanço por frente de serviço</div>
+      <h2>Onde a obra está e onde ela parou</h2>
+      <div class="ap-barras">${top.map(f => `
+        <div class="ap-barra">
+          <div class="ap-barra-top"><span>${escHtml(f.frente)}</span><b>${apPct(f.pct)}</b></div>
+          <div class="ap-barra-tr"><i style="width:${Math.max(1, Math.min(100, f.pct * 100))}%"></i></div>
+          <div class="ap-barra-sub">${f.pacotes} pacote${f.pacotes === 1 ? '' : 's'}</div>
+        </div>`).join('')}</div>
+      ${emAtencao.length ? `<div class="ap-nota ap-nota-alerta">
+        <span>${ic('alerta')}</span><div>Sem lançamento há 7 dias ou mais:
+        <b>${emAtencao.map(a => escHtml(a.frente)).join(' · ')}</b></div></div>` : `
+        <div class="ap-nota"><span>${ic('check')}</span>
+        <div>Todas as frentes com lançamento recente.</div></div>`}</div>`;
+  }
+
+  if (sl.tipo === 'producao') {
+    const recentes = d.lista.filter(a => a.qtdExecutada > 0)
+      .sort((a, b) => (b.ultimaData || 0) - (a.ultimaData || 0)).slice(0, 8);
+    return `<div class="ap-slide"><div class="ap-kicker">Produção lançada em campo</div>
+      <h2>${d.rdos.length} lançamentos de serviço</h2>
+      <div class="ap-sub">${d.metrics.rdos7d} nos últimos 7 dias · ${d.metrics.rdos30d} nos últimos 30.</div>
+      <table class="ap-tab"><thead><tr>
+        <th>Pacote</th><th>Frente</th><th class="n">Executado</th><th class="n">Previsto</th><th class="n">%</th>
+      </tr></thead><tbody>${recentes.map(a => `<tr>
+        <td>${escHtml(getCSVField(a.pacote, 'Pacote') || getCSVField(a.pacote, 'ID'))}</td>
+        <td class="dim">${escHtml(getCSVField(a.pacote, 'Frente') || '—')}</td>
+        <td class="n">${a.qtdExecutada.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}
+            <span class="dim">${escHtml(getCSVField(a.pacote, 'Unidade Física') || '')}</span></td>
+        <td class="n dim">${a.qtdEstimada.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}</td>
+        <td class="n"><b>${apPct(a.pct)}</b></td></tr>`).join('')}</tbody></table></div>`;
+  }
+
+  if (sl.tipo === 'medicao') {
+    // último mês COM lançamento — não o mês corrente, que pode estar vazio
+    const meses = [...new Set(d.rdos.map(r => normalizarDataCSV(getCSVField(r, 'Data')).slice(0, 7))
+      .filter(m => /^\d{4}-\d{2}$/.test(m)))].sort();
+    const mes = meses[meses.length - 1] || '';
+    const doMes = d.rdos.filter(r => normalizarDataCSV(getCSVField(r, 'Data')).slice(0, 7) === mes);
+    const itens = Object.values(calcularConsumoItens(
+      calcularAvancoPorPacote(doMes, d.pacotesAtivos)))
+      .sort((a, b) => b.consumido - a.consumido).slice(0, 8);
+    const rot = mes ? new Date(mes + '-01T12:00:00')
+      .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : '—';
+    return `<div class="ap-slide"><div class="ap-kicker">Apoio à medição · ${escHtml(rot)}</div>
+      <h2>Consumo por item contratual</h2>
+      <div class="ap-sub">O campo aponta o pacote físico; a matriz de coeficientes converte
+        para o item do contrato SIURB. É prévia de conferência, não medição oficial.</div>
+      ${itens.length ? `<table class="ap-tab"><thead><tr>
+        <th>Item</th><th>Descrição</th><th class="n">Consumo</th></tr></thead>
+        <tbody>${itens.map(i => `<tr>
+          <td><b>${escHtml(i.item)}</b></td>
+          <td class="dim">${escHtml(i.descricao || '—')}</td>
+          <td class="n">${i.consumido.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}
+            <span class="dim">${escHtml(i.unidadeItem || '')}</span></td></tr>`).join('')}
+        </tbody></table>`
+      : `<div class="ap-nota"><span>${ic('info')}</span>
+         <div>Nenhum item derivado no período.</div></div>`}</div>`;
+  }
+
+  if (sl.tipo === 'diario') {
+    const lista = [...(STATE.rdodiario || [])]
+      .sort((a, b) => String(normalizarDataCSV(getCSVField(b, 'Data')))
+        .localeCompare(String(normalizarDataCSV(getCSVField(a, 'Data'))))).slice(0, 6);
+    const efetivoDe = r => {
+      try {
+        const j = JSON.parse(getCSVField(r, 'Efetivo_JSON') || getCSVField(r, 'efetivo_json') || '[]');
+        return j.reduce((s, x) => s + (Number(x.qtd) || 0), 0);
+      } catch (e) { return 0; }
+    };
+    return `<div class="ap-slide"><div class="ap-kicker">Diário de obra</div>
+      <h2>${(STATE.rdodiario || []).length} RDOs diários registrados</h2>
+      <div class="ap-sub">Efetivo por função, clima por período e ocorrências do dia —
+        a base documental de qualquer pleito de prazo.</div>
+      <table class="ap-tab"><thead><tr>
+        <th>Data</th><th>Encarregado</th><th class="n">Efetivo</th><th>Clima</th>
+      </tr></thead><tbody>${lista.map(r => `<tr>
+        <td>${escHtml(normalizarDataCSV(getCSVField(r, 'Data')).split('-').reverse().join('/'))}</td>
+        <td class="dim">${escHtml(getCSVField(r, 'Encarregado') || '—')}</td>
+        <td class="n">${efetivoDe(r) || '—'}</td>
+        <td class="dim">${escHtml([getCSVField(r, 'Clima_Manha'), getCSVField(r, 'Clima_Tarde')]
+          .filter(Boolean).join(' · ') || '—')}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+
+  if (sl.tipo === 'equipamentos') {
+    const ap = EQUIP.apontamentos;
+    const horas = ap.reduce((s, a) => s + (num(a.horas) || 0), 0);
+    const porEquip = {};
+    ap.forEach(a => { porEquip[a.equipamento] = (porEquip[a.equipamento] || 0) + (num(a.horas) || 0); });
+    const top = Object.entries(porEquip).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    return `<div class="ap-slide"><div class="ap-kicker">Equipamentos</div>
+      <h2>${horas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} horas de máquina apontadas</h2>
+      <div class="ap-sub">Hora de máquina é medição: entra em relatório e em cobrança de
+        locadora. Cada apontamento guarda quem lançou.</div>
+      <div class="ap-kpis">
+        ${K('Frota', EQUIP.equipamentos.length, 'equipamentos cadastrados')}
+        ${K('Apontamentos', ap.length)}
+        ${K('Locadoras', (EQUIP.locadoras || []).length)}
+      </div>
+      <div class="ap-barras">${top.map(([nome, h]) => {
+        const max = top[0][1] || 1;
+        return `<div class="ap-barra">
+          <div class="ap-barra-top"><span>${escHtml(nome)}</span><b>${h.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} h</b></div>
+          <div class="ap-barra-tr"><i style="width:${Math.max(2, (h / max) * 100)}%"></i></div></div>`;
+      }).join('')}</div></div>`;
+  }
+
+  if (sl.tipo === 'registro') {
+    const porPacote = {};
+    d.fotos.forEach(f => { porPacote[f.pacote] = (porPacote[f.pacote] || 0) + 1; });
+    const top = Object.entries(porPacote).sort((a, b) => b[1] - a[1]).slice(0, 8);
+    const meses = new Set(d.fotos.map(f => String(f.data).slice(0, 7)).filter(Boolean));
+    return `<div class="ap-slide"><div class="ap-kicker">Registro fotográfico</div>
+      <h2>${d.fotos.length} fotos de serviço executado</h2>
+      <div class="ap-sub">Cada foto sai do aparelho carimbada com data, estaca e serviço,
+        e fica em pasta privada do Drive — foto de obra mostra placa, rosto e endereço.</div>
+      <div class="ap-kpis">
+        ${K('Fotos', d.fotos.length)}
+        ${K('Meses cobertos', meses.size)}
+        ${K('Pacotes com registro', Object.keys(porPacote).length)}
+      </div>
+      <div class="ap-tags">${top.map(([p, n]) =>
+        `<span class="ap-tag">${escHtml(p)} <b>${n}</b></span>`).join('')}</div></div>`;
+  }
+
+  // fim
+  return `<div class="ap-slide ap-centro">
+    <div class="ap-kicker">Av. Senador Teotônio Vilela</div>
+    <h2>${apPct(d.pctPond)} executados</h2>
+    <div class="ap-sub ap-sub-c">${d.rdos.length} lançamentos de serviço ·
+      ${(STATE.rdodiario || []).length} RDOs diários · ${d.fotos.length} fotos —
+      tudo rastreável até quem lançou e quando.</div>
+    <div class="ap-fim-marca">Gestor Engenharia</div></div>`;
+}
+
+function apRender() {
+  const palco = document.getElementById('apPalco');
+  if (!palco) return;
+  const sl = APRES.slides[APRES.idx];
+  let html = '';
+  // um slide que quebre não pode derrubar a apresentação no meio da reunião
+  try { html = apSlideHTML(sl, APRES.dados); }
+  catch (e) {
+    console.warn('apresentação: slide "' + (sl && sl.tipo) + '" falhou', e);
+    html = `<div class="ap-slide ap-centro"><div class="ap-sub ap-sub-c">
+      Sem dados suficientes para esta tela.</div></div>`;
+  }
+  palco.innerHTML = html;
+  document.querySelectorAll('#apres .ap-prog .seg').forEach((s, i) => {
+    s.classList.toggle('done', i < APRES.idx);
+    s.classList.toggle('cur',  i === APRES.idx);
+  });
+  apArmar();
+}
+
+function apArmar() {
+  clearTimeout(APRES.timer);
+  if (APRES.tocando) APRES.timer = setTimeout(() => apGo(1), APRES.dur);
+}
+function apGo(passo) {
+  const i = APRES.idx + passo;
+  if (i >= APRES.slides.length) { apFechar(); return; }
+  APRES.idx = Math.max(0, i);
+  apRender();
+}
+function apPlayPause() {
+  APRES.tocando = !APRES.tocando;
+  const ov = document.getElementById('apres');
+  if (ov) ov.classList.toggle('pausado', !APRES.tocando);
+  const b = document.getElementById('apPlay');
+  if (b) b.innerHTML = APRES.tocando ? ic('pausa') + ' Pausar' : ic('play') + ' Continuar';
+  if (APRES.tocando) apArmar(); else clearTimeout(APRES.timer);
+}
+
+function abrirApresentacao() {
+  if (APRES.on) return;
+  if (!STATE.loaded) { toast('Aguarde os dados carregarem para apresentar.', 'info', 3500); return; }
+
+  APRES.dados  = apDados();
+  APRES.slides = apMontarSlides(APRES.dados);
+  APRES.on = true; APRES.idx = 0; APRES.tocando = true;
+
+  const ov = document.createElement('div');
+  ov.id = 'apres';
+  ov.style.setProperty('--apdur', (APRES.dur / 1000) + 's');
+  ov.innerHTML = `
+    <div class="ap-top">
+      <div class="ap-top-marca">${ic('obra')}</div>
+      <div><div class="t">Av. Senador Teotônio Vilela</div>
+           <div class="s">Modo apresentação</div></div>
+      <div class="ap-prog">${APRES.slides.map(() => '<span class="seg"><i></i></span>').join('')}</div>
+    </div>
+    <div class="ap-palco" id="apPalco"></div>
+    <div class="ap-ctrl">
+      <button type="button" onclick="apGo(-1)">${ic('voltar')} Anterior</button>
+      <button type="button" id="apPlay" onclick="apPlayPause()">${ic('pausa')} Pausar</button>
+      <button type="button" onclick="apGo(1)">Próximo ${ic('chevronDir')}</button>
+      <button type="button" onclick="apFechar()">${ic('fechar')} Sair</button>
+    </div>`;
+  document.body.appendChild(ov);
+
+  APRES.keyH = e => {
+    if (e.key === 'Escape') apFechar();
+    else if (e.key === 'ArrowRight') apGo(1);
+    else if (e.key === 'ArrowLeft') apGo(-1);
+    else if (e.key === ' ') { e.preventDefault(); apPlayPause(); }
+  };
+  document.addEventListener('keydown', APRES.keyH);
+  try { if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {}); } catch (e) {}
+  apRender();
+}
+
+function apFechar() {
+  clearTimeout(APRES.timer);
+  APRES.on = false;
+  if (APRES.keyH) { document.removeEventListener('keydown', APRES.keyH); APRES.keyH = null; }
+  const ov = document.getElementById('apres');
+  if (ov) ov.remove();
+  try { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); } catch (e) {}
+}
+
+window.abrirApresentacao = abrirApresentacao;
+window.apGo = apGo;
+window.apPlayPause = apPlayPause;
+window.apFechar = apFechar;
+
 // PWA: instala o service worker (abre rápido no 4G e funciona como app
 // no celular do apontador; os DADOS continuam vindo sempre da rede).
+//
+// AVISO DE NOVA VERSÃO (vindo do "Gestor — Controle de Obras"). Antes o app
+// trocava de versão sozinho, no meio do uso: quem estava com um RDO na tela
+// via a página recarregar e perdia o que tinha digitado. Agora o service
+// worker novo fica ESPERANDO e o app avisa; a troca só acontece quando o
+// usuário mandar — ou na próxima vez que ele abrir o app.
+let _swReg = null;
+
+function exibirBannerNovaVersao() {
+  if (document.getElementById('swUpdateBanner')) return;
+  const b = document.createElement('div');
+  b.id = 'swUpdateBanner';
+  b.setAttribute('role', 'status');
+  b.innerHTML = `
+    <span class="swu-ic">${ic('atualizar')}</span>
+    <span class="swu-txt">Nova versão do sistema disponível</span>
+    <button type="button" class="swu-ok" onclick="aplicarNovaVersao()">Atualizar</button>
+    <button type="button" class="swu-x" onclick="this.parentNode.remove()"
+            title="Agora não" aria-label="Fechar aviso">${ic('fechar')}</button>`;
+  document.body.appendChild(b);
+}
+
+window.aplicarNovaVersao = function () {
+  // O 'controllerchange' abaixo é quem recarrega — assim a página só troca
+  // depois que o service worker novo assumiu de fato.
+  if (_swReg && _swReg.waiting) _swReg.waiting.postMessage({ action: 'skipWaiting' });
+  else location.reload();
+};
+
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    // Havia service worker no comando QUANDO a página abriu? Se não havia, esta
+    // é a primeira instalação: o 'controllerchange' que vem a seguir é só ele
+    // assumindo, e recarregar ali faria o app piscar sozinho na primeira visita.
+    const jaTinhaControlador = !!navigator.serviceWorker.controller;
+
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      _swReg = reg;
+      const vigiar = w => w && w.addEventListener('statechange', () => {
+        // 'installed' COM controller = é atualização, não primeira instalação.
+        if (w.state === 'installed' && navigator.serviceWorker.controller) exibirBannerNovaVersao();
+      });
+      if (reg.waiting && navigator.serviceWorker.controller) exibirBannerNovaVersao();
+      reg.addEventListener('updatefound', () => vigiar(reg.installing));
+    }).catch(() => {});
+
+    let recarregando = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!jaTinhaControlador || recarregando) return;
+      recarregando = true;
+      location.reload();
+    });
   });
 }
 

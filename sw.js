@@ -4,18 +4,28 @@
 // Estratégia:
 //  • index.html (navegação): REDE PRIMEIRO — atualizações do app chegam
 //    na hora; o cache só entra como fallback quando estiver sem sinal.
-//  • Estáticos e CDNs (fontes, chart.js, jspdf, xlsx): CACHE PRIMEIRO com
-//    revalidação em segundo plano — abre rápido no 4G do campo.
+//  • Estáticos (vendor/, js/, ícones e as fontes do Google): CACHE PRIMEIRO
+//    com revalidação em segundo plano — abre rápido no 4G do campo.
 //  • Google Sheets / Apps Script / Gemini: NUNCA intercepta — dados de
 //    produção vêm sempre da rede (a fila offline do app cuida do resto).
 // ============================================================
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v6'; // v6: PDF.js vendorizado (leitura do PDF da DANFE)
+const VERSAO = 'teotonio-v7'; // v7: Chart.js/jsPDF/AutoTable/xlsx vendorizados
 const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleusercontent.com', 'generativelanguage.googleapis.com'];
 
-self.addEventListener('install', () => self.skipWaiting());
+// O app avisa "nova versão disponível" e só troca quando o usuário mandar —
+// trocar sozinho no meio de um lançamento perderia o que estava na tela.
+self.addEventListener('install', () => {
+  // sem cliente controlando (primeira instalação) não há o que interromper:
+  // assume na hora, senão o app abriria a primeira vez sem service worker.
+  if (!self.clients || !self.registration.active) self.skipWaiting();
+});
+
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.action === 'skipWaiting') self.skipWaiting();
+});
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(

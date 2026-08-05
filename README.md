@@ -161,6 +161,33 @@ Sem sinal, o serviço e as fotos vão juntos para a fila do aparelho, nessa orde
 quando a conexão volta, a linha é gravada primeiro e a foto acha o serviço pelo
 `id` (que o app gera antes de enviar, justamente para isso).
 
+## Modo Apresentação
+
+Botão **APRESENTAR**, no rodapé do menu lateral. Reunião de obra com a
+fiscalização não é lugar de navegar menu: alguém pergunta como está o avanço e
+quem apresenta fica rolando tela e clicando filtro, com o projetor mostrando
+tudo. Aqui a obra vira uma sequência fechada de telas grandes, em tela cheia,
+que passam sozinhas a cada 9 segundos.
+
+Setas ← → trocam de tela, **espaço** pausa e **ESC** sai. Tela sem dado não
+entra na sequência — apresentação com tela vazia passa impressão de sistema
+vazio.
+
+Os números saem das **mesmas funções do Painel Executivo**
+(`calcExecMetrics`, `calcFrentesAnalise`, `calcCurvaPrevista`). Não é um
+relatório à parte: se divergisse do painel, viraria uma segunda versão da
+verdade.
+
+## Central de Campo
+
+Cartão no topo do Painel Executivo, fora dos filtros de mês e frente — é
+sempre **hoje**. Mostra o que já foi registrado no dia (serviços lançados, RDO
+Diário, apontamento de equipamento) e o que falta.
+
+O painel responde "como vai a obra"; não respondia "o que falta fazer hoje".
+Quando o RDO do dia não é preenchido, ninguém percebe — só na hora de fechar a
+medição, semanas depois, quando não dá mais para lembrar o que foi executado.
+
 ## Prévia de Medição
 
 Tela **Apoio Medição** → selecione o mês → **⬇ CSV p/ conferência**. O arquivo (separador `;`, decimal com vírgula) traz o consumo derivado por item contratual no período, pronto para confrontar com a coluna do mês da Planilha Geral do `.xlsm`.
@@ -177,3 +204,28 @@ O backend também expõe `?action=producaoPorPacote&mes=2026-06` (JSON, deduplic
 | `manifest.json` / `sw.js` / `icon-*.png` / `favicon.svg` | PWA — a marca é a avenida em perspectiva |
 | `pacotes.csv` | Snapshot de referência da aba Pacotes |
 | `js/ui/icones.js` | Conjunto de ícones do app — traço único na grade de 24, cor herdada do tema. Cobre navegação, ações e frentes de serviço (`icFrente()` escolhe pelo nome da frente) |
+| `vendor/` | Bibliotecas servidas pelo próprio site (ver abaixo) |
+
+### Bibliotecas vendorizadas
+
+Nada de CDN: CDN não existe no canteiro. Antes, no primeiro acesso sem sinal, o
+gráfico não desenhava e o RDO não saía em PDF nem em Excel. Servidas do próprio
+GitHub Pages, o service worker as guarda junto com o app.
+
+| Pasta | Biblioteca | Para quê |
+|---|---|---|
+| `vendor/chartjs/` | Chart.js 4.4.0 | Curva S, sparklines e gráficos do painel |
+| `vendor/jspdf/` | jsPDF 2.5.1 + AutoTable 3.5.31 | RDO e relatório executivo em PDF |
+| `vendor/xlsx/` | xlsx-js-style 1.2.0 | Exportação de RDO em Excel, com estilos |
+| `vendor/pdfjs/` | PDF.js (Mozilla) | Extrai o texto do PDF da DANFE |
+
+Ao trocar de versão, suba também o `VERSAO` do `sw.js` — é isso que descarta o
+cache antigo nos aparelhos.
+
+### Aviso de nova versão
+
+O app não troca mais de versão sozinho no meio do uso: quem estava com um RDO
+na tela via a página recarregar e perdia o que tinha digitado. Agora o service
+worker novo fica esperando, o app mostra **"Nova versão do sistema disponível ·
+Atualizar"** no canto, e a troca só acontece quando o usuário mandar — ou na
+próxima vez que ele abrir o app.
