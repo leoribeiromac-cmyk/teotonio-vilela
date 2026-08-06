@@ -2683,7 +2683,7 @@ async function outboxFlush(manual = false) {
         }
         // Erro do servidor: reenviar não vai resolver. Remove e avisa.
         outboxRemover(item.id);
-        toast('Um RDO guardado não pôde ser enviado (' + (item.descricao || '') + '): ' + erroLegivel(e.message), 'error', 0);
+        toast('Um lançamento guardado (' + descricaoDaFila([item]) + ') não pôde ser enviado: ' + erroLegivel(e.message), 'error', 0);
       }
     }
   } finally {
@@ -2714,6 +2714,29 @@ window.descartarOutbox = function(ev) {
   toast('Fila descartada. Os reenvios pararam.', 'success', 5000);
 };
 
+/* "3 lançamentos" não diz nada a quem está procurando uma nota que sumiu.
+   Este rótulo conta por tipo: "2 notas fiscais e 1 RDO". */
+function descricaoDaFila(itens) {
+  const NOMES = {
+    nf:      ['nota fiscal', 'notas fiscais'],
+    nfDel:   ['exclusão de nota', 'exclusões de nota'],
+    saida:   ['saída de estoque', 'saídas de estoque'],
+    equip:   ['apontamento de equipamento', 'apontamentos de equipamento'],
+  };
+  const cont = {};
+  (itens || []).forEach(it => {
+    const t = (it && it.tipo) || 'rdo';
+    cont[t] = (cont[t] || 0) + 1;
+  });
+  const partes = Object.keys(cont).map(t => {
+    const q = cont[t];
+    const nome = NOMES[t] || ['RDO', 'RDOs'];
+    return q + ' ' + (q > 1 ? nome[1] : nome[0]);
+  });
+  if (partes.length <= 1) return partes[0] || '0 lançamento';
+  return partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
+}
+
 // Indicador flutuante fixo na tela — visível também no celular.
 function atualizarIndicadorOutbox() {
   let el = document.getElementById('outboxIndicator');
@@ -2740,13 +2763,17 @@ function atualizarIndicadorOutbox() {
     el.innerHTML = `<span class="ob-ic ob-girando">${ic('syncPend')}</span>`
       + `<span style="flex:1">Enviando ${n} lançamento${n>1?'s':''}…</span>`;
   } else if (n > 0) {
-    // Há RDOs guardados → toque reenvia a fila.
+    // Há lançamentos guardados → toque reenvia a fila.
+    // O rótulo diz DE QUE tipo: a fila leva RDO, nota fiscal, saída de
+    // estoque e apontamento de equipamento, e chamar tudo de "RDO" fazia
+    // uma nota presa aqui virar um mistério para quem lançou.
+    const rotulo = descricaoDaFila(outboxLer());
     el.style.background = '#1f2937';
     el.style.cursor = 'pointer';
     el.setAttribute('role', 'button');
-    el.setAttribute('aria-label', n + ' RDO(s) aguardando envio. Toque para enviar agora.');
+    el.setAttribute('aria-label', rotulo + ' aguardando envio. Toque para enviar agora.');
     el.onclick = () => outboxFlush(true);
-    el.innerHTML = `<span class="ob-ic">${ic('antena')}</span><span style="flex:1">${n} RDO${n>1?'s':''} aguardando envio · toque para enviar</span>`
+    el.innerHTML = `<span class="ob-ic">${ic('antena')}</span><span style="flex:1">${rotulo} aguardando envio · toque para enviar</span>`
       + `<span onclick="descartarOutbox(event)" title="Descartar fila" aria-label="Descartar fila de envio" role="button" style="margin-left:10px;padding:3px 7px 1px;border-radius:6px;background:rgba(255,255,255,.2)">${ic('fechar')}</span>`;
   } else {
     // Offline sem nada pendente → só avisa que está sem conexão.
