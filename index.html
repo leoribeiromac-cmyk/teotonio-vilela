@@ -4709,6 +4709,15 @@ function nfQuandoSincronizou() {
       return `<span class="nf-sync erro">${ic('alerta')} ${n} nota(s) só neste aparelho — não confirmadas pelo servidor</span>`;
     }
   }
+  // Os DADOS subiram, a imagem não: no outro aparelho a nota aparece sem a
+  // DANFE. O app tenta sozinho a cada sincronização; aqui é só para a pessoa
+  // saber que falta, em vez de descobrir quando alguém reclamar.
+  if (typeof nfImagensPendentes === 'function') {
+    const im = nfImagensPendentes(OBRA.id).length;
+    if (im) {
+      return `<span class="nf-sync erro">${ic('nuvem')} imagem de ${im} nota(s) ainda não subiu — tentando sozinho</span>`;
+    }
+  }
   const s = nfSyncEstado(OBRA.id);
   if (s.erro === 'semLogin') {
     return `<span class="nf-sync erro">${ic('cadeado')} entre para ver as notas do servidor</span>`;

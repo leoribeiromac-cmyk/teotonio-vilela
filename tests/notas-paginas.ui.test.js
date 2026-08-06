@@ -353,6 +353,29 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
     !/fileId/.test(enviado), enviado);
   servidorAntigo = false;
 
+  console.log('\nDEPOIS DE REPUBLICAR, A FOLHA PRESA SOBE SOZINHA');
+  // o aviso antigo mandava "abra a nota e salve de novo" — e salvar de novo
+  // não enviava nada, porque nfEditar zera o rascunho. Agora o app retoma.
+  ok('a nota tem folha pendente e a tela avisa',
+    await p.evaluate(() => nfImagensPendentes(obra().id).length > 0));
+  await p.evaluate(() => { STATE.currentPage = 'notas'; render(); });
+  await p.waitForTimeout(600);
+  ok('a faixa mostra que a imagem não subiu',
+    /imagem de \d+ nota/.test(await p.evaluate(() => document.getElementById('page').textContent)),
+    (await p.evaluate(() => document.getElementById('page').textContent)).slice(0, 160));
+
+  // republica o Code.gs (o servidor passa a paginar) e sincroniza
+  servidorAntigo = false;
+  imagens = [];
+  await p.evaluate(() => { NF_PAGS_SERVIDOR.sabe = null; nfCarregar(obra().id); });
+  await p.waitForTimeout(4000);
+  ok('a folha presa é enviada sozinha, sem ninguém abrir a nota',
+    imagens.some(x => x.pagina === 2), JSON.stringify(imagens));
+  ok('e a capa NÃO é reenviada à toa', !imagens.some(x => x.pagina === 1),
+    JSON.stringify(imagens));
+  const limpou = await p.evaluate(() => nfImagensPendentes(obra().id).length);
+  ok('a pendência é dada por resolvida', limpou === 0, limpou + ' ainda pendente(s)');
+
   console.log('\n--- ERROS DE JS (' + err.length + ') ---');
   [...new Set(err)].slice(0, 8).forEach(e => console.log('  ' + e));
   console.log(falhas || err.length ? `\n${falhas} FALHA(S)` : '\nTudo certo.');

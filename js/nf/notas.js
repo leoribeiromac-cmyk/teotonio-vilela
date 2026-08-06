@@ -649,17 +649,76 @@ function nfSondarPaginacao() {
 
 /* Sobe as folhas na ordem certa: a capa primeiro — e a resposta dela que
    revela se o servidor pagina — e so entao as demais. */
+/* Folhas que estao no aparelho e AINDA NAO subiram: entrada em `n.paginas`
+   sem `fileId`, com a imagem guardada no IndexedDB. E o que permite reenviar
+   depois — sem isso, "abra a nota e salve de novo" era um conselho que o
+   proprio codigo nao cumpria: `nfEditar` zera `_nfPags`, entao salvar de novo
+   nao tinha o que enviar e as folhas ficavam presas para sempre. */
+async function nfFolhasPendentes(o, n) {
+  const out = [];
+  const lista = (n && n.paginas) || [];
+  for (let i = 0; i < lista.length; i++) {
+    const p = lista[i];
+    if (!p || p.fileId) continue;
+    const pag = p.pagina || (i + 2);
+    let uri = '';
+    try { uri = await fotoLerFull(nfImgChave(o.id, n.id, pag)); } catch (e) { uri = ''; }
+    if (uri) out.push({ pagina: pag, uri: uri });
+  }
+  return out;
+}
+
+/* A capa tambem pode ter ficado para tras: `nfEnviarImagem` falava direto com
+   o servidor e terminava em `catch`, sem fila nenhuma. Nota lancada sem sinal
+   — o caso normal no canteiro — sincronizava os campos e PERDIA a imagem,
+   com o aparelho de origem jurando que tinha enviado tudo. Agora a pendencia
+   fica marcada na nota e e reenviada nas sincronizacoes seguintes. */
+function nfMarcarCapaPendente(o, n, pendente) {
+  const arr = nfGet(o.id), alvo = arr.find(x => x.id === n.id);
+  if (!alvo) return;
+  if (pendente) alvo.capaPendente = true; else delete alvo.capaPendente;
+  n.capaPendente = alvo.capaPendente;
+  nfSet(o.id, arr);
+}
+
+let _nfSubindo = 0;
 async function nfSubirFolhas(o, n, capa, extras, primeiraNova) {
   if (!BACKEND || isDemo()) return;
+  _nfSubindo++;
+  try { return await nfSubirFolhasInterno(o, n, capa, extras, primeiraNova); }
+  finally { _nfSubindo--; }
+}
+async function nfSubirFolhasInterno(o, n, capa, extras, primeiraNova) {
   let imagemCapa = capa;
-  if (!imagemCapa && extras.length) {
-    // editando uma nota que ja tinha imagem: usa a capa guardada como sonda
+  // Ler a capa do aparelho tambem quando NAO ha folhas novas: e o caminho de
+  // quem so abriu a nota e salvou de novo, seguindo o aviso do app.
+  if (!imagemCapa) {
     try { imagemCapa = await fotoLerFull(nfImgChave(o.id, n.id)); } catch (e) { imagemCapa = ''; }
   }
   let respondeu = false;
-  if (imagemCapa) {
+  /* A capa so sobe quando ha razao: imagem nova, pendencia registrada, ou a
+     nota ainda sem arquivo no Drive. Antes ela era reenviada tambem so para
+     descobrir se o servidor pagina — o que fazia cada reenvio de folha
+     mandar a DANFE inteira de novo, a toa. Quem responde isso agora e o
+     `ping`, que nao toca no Drive. */
+  const precisaCapa = !!(capa || n.capaPendente || !(n.drive && n.drive.fileId));
+  if (imagemCapa && precisaCapa) {
     const r = await nfEnviarImagem(o.id, n, imagemCapa, 1);
-    if (r && r.ok) { respondeu = true; NF_PAGS_SERVIDOR.sabe = (typeof r.pagina === 'number'); }
+    if (r && r.ok) {
+      respondeu = true;
+      NF_PAGS_SERVIDOR.sabe = (typeof r.pagina === 'number');
+      if (n.capaPendente) nfMarcarCapaPendente(o, n, false);
+    } else if (capa || n.capaPendente) {
+      nfMarcarCapaPendente(o, n, true);   // a imagem existe aqui e nao subiu
+    }
+  }
+  // folhas que ficaram para tras em salvamentos anteriores entram junto
+  if (!extras.length) {
+    const presas = await nfFolhasPendentes(o, n);
+    if (presas.length) {
+      extras = presas.map(x => x.uri);
+      primeiraNova = presas[0].pagina;
+    }
   }
   if (!extras.length) return;
   // sem capa para sondar (nota editada sem imagem nova), pergunta ao servidor
@@ -674,9 +733,13 @@ async function nfSubirFolhas(o, n, capa, extras, primeiraNova) {
           → nao da para acusar o Code.gs; o certo e dizer que fica para depois.
        E o aviso e por NOTA, nao por sessao: da segunda nota em diante as
        folhas sumiam caladas. */
+    /* A promessa do aviso agora e cumprida pelo codigo: as folhas ficam
+       marcadas na nota e `nfReenviarImagensPendentes` as retoma sozinho a
+       cada sincronizacao. Antes o texto mandava "salve de novo", e salvar de
+       novo nao enviava nada — `nfEditar` zera o rascunho. */
     const msg = respondeu
-      ? 'As folhas extras ficaram guardadas neste aparelho. O Code.gs do Apps Script precisa ser republicado para elas subirem ao Drive — depois disso, abra a nota e salve de novo.'
-      : 'Não consegui enviar as folhas extras agora. Elas estão guardadas neste aparelho; abra a nota e salve de novo quando houver sinal.';
+      ? 'As folhas extras ficaram guardadas neste aparelho. Elas sobem sozinhas assim que o Code.gs do Apps Script for republicado — não precisa fazer mais nada.'
+      : 'Sem sinal para enviar as folhas extras agora. Elas estão guardadas neste aparelho e sobem sozinhas quando a conexão voltar.';
     toast(msg, 'info', 0);
     return;
   }
@@ -2173,6 +2236,36 @@ function nfSyncEstado(obraId) { return nfSync[obraId] || { em: 0, erro: '' }; }
    deveriam ter subido) e nunca voltaram do servidor. E o sinal de que alguma
    coisa recusou o envio — sem ele, a pessoa acha que lancou e ninguem mais ve
    aquela nota. */
+/* Imagens que existem SO no aparelho: capa que nao subiu, ou folha 2..N sem
+   arquivo no Drive. Sao recuperaveis — e ate subirem, quem abrir a nota em
+   outro aparelho nao ve a DANFE. */
+function nfImagensPendentes(obraId) {
+  return nfGet(obraId).filter(n =>
+    n.capaPendente || ((n.paginas || []).some(p => p && !p.fileId)));
+}
+
+/* Reenvia sozinho o que ficou para tras. Roda depois de cada sincronizacao
+   bem-sucedida — abrir a tela, o minuto do temporizador, voltar ao app —
+   entao a imagem sobe assim que houver sinal (ou assim que o Code.gs for
+   republicado), sem ninguem precisar lembrar de abrir a nota. */
+let _nfReenviando = false;
+async function nfReenviarImagensPendentes(obraId) {
+  // nunca por cima de um salvamento em curso: as duas rodadas subiriam a
+  // mesma folha e a segunda acharia que ainda estava pendente
+  if (_nfReenviando || _nfSubindo || !BACKEND || isDemo() || !getToken()) return;
+  const pendentes = nfImagensPendentes(obraId);
+  if (!pendentes.length) return;
+  _nfReenviando = true;
+  try {
+    const o = obra();
+    if (!o || o.id !== obraId) return;
+    // uma nota por rodada: a imagem e pesada e o canteiro tem 4G
+    const n = pendentes[0];
+    await nfSubirFolhas(o, n, '', [], 0);
+  } catch (e) { /* tenta de novo na proxima sincronizacao */ }
+  finally { _nfReenviando = false; }
+}
+
 function nfNaoConfirmadas(obraId) {
   let pend;
   try { pend = new Set(outboxLer().filter(it => it.tipo === 'nf').map(it => it.clientId)); }
@@ -2236,6 +2329,8 @@ async function nfCarregar(obraId, opcoes) {
     }
     if (!r || !r.ok) throw new Error((r && r.error) || 'resposta invalida');
     nfSync[obraId] = { em: Date.now(), erro: '' };
+    // aproveita que ha sinal: tenta subir a imagem que ficou para tras
+    nfReenviarImagensPendentes(obraId);
     /* Redesenha quando a lista MUDOU, e nao quando dois estados batem.
        A condicao antiga comparava `estado.obraId`, que nem existia neste
        app: dava sempre falso, a nota nova era gravada no aparelho e a tela
@@ -2279,7 +2374,12 @@ function nfDoServidor(s, obraId, locais) {
     vBaseICMS: nfNum(s.vBaseICMS), vICMS: nfNum(s.vICMS),
     itens: itens, obs: s.obs || '', responsavel: s.responsavel || '',
     status: s.status === 'Integrada ao pedido de compra' ? 'Conferida' : (NF_STATUS.indexOf(s.status) > -1 ? s.status : 'Recebida'),
-    drive: s.driveId ? { fileId: s.driveId, link: s.driveLink || '' } : null,
+    /* Sem `driveId` na resposta, MANTEM o que o aparelho ja sabia. A imagem
+       da capa e gravada na planilha por uma chamada separada (`nfImagem`);
+       entre o `nfSalvar` e ela existe uma janela em que o servidor ainda nao
+       tem o arquivo. Apagar o `drive` local nessa janela fazia o app achar
+       que a capa nunca subiu e mandar a DANFE inteira de novo. */
+    drive: s.driveId ? { fileId: s.driveId, link: s.driveLink || '' } : ((local && local.drive) || null),
     paginas: nfPaginasDoServidor(s, local),
     // veio do servidor: uma sincronizacao futura pode remove-la se ela sumir
     // de la. Nota SEM esta marca nunca foi confirmada e nao pode ser apagada.
