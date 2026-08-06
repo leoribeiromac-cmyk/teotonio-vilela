@@ -149,6 +149,10 @@ const KB = (n) => 'data:image/jpeg;base64,' + 'A'.repeat(Math.round(n * 1024 * 4
   await p.waitForTimeout(2500);
   ok('a galeria continua aparecendo', await p.evaluate(() =>
     [...document.querySelectorAll('[id^="gal-"]')].some(i => i.style.display === 'block')));
+  ok('e a tela AVISA que falta republicar o Code.gs', await p.evaluate(() => {
+    const c = document.getElementById('galAvisoServidor');
+    return !!c && c.style.display !== 'none' && /tamanho cheio/.test(c.textContent);
+  }));
   // uma que REALMENTE carregou nesta rodada
   const prim2 = await p.evaluate(() =>
     ([...document.querySelectorAll('[id^="gal-"]')].find(i => i.style.display === 'block') || {}).id.slice(4));
