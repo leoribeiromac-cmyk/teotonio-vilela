@@ -51,10 +51,13 @@ const ABAS = {
     [['a1', '2026-08-01', 'Diurno', 'P26', 10, 'c1', 'Wallace']]),   // linha ANTIGA, sem obra
   RDO_Diario: Aba(['id', 'data', 'turno', 'encarregado', 'observacoes_gerais'],
     [['d1', '2026-08-01', '', 'J. Santos', 'diario da teotonio']]),  // linha ANTIGA, sem obra
-  NotasFiscais: Aba(['id', 'clientId', 'obra', 'numero', 'dataEmissao', 'dataEntrada', 'vTotal', 'usuario'],
-    [['n1', 'c-n1', 'teotonio', '1001', '2026-07-01', '2026-07-02', 500, 'Leonardo'],
-     ['n2', 'c-n2', 'ranario',  '2002', '2026-07-03', '2026-07-04', 800, 'Wallace'],
-     ['n3', 'c-n3', '',         '3003', '2026-06-01', '2026-06-02', 300, 'Leonardo']]),  // ANTIGA, sem obra
+  // sem a coluna `paginas`: é a planilha que já está em uso, e ela tem de
+  // ganhar a coluna sozinha na primeira nota de duas folhas
+  NotasFiscais: Aba(['id', 'clientId', 'obra', 'numero', 'dataEmissao', 'dataEntrada', 'vTotal',
+                     'driveId', 'driveLink', 'usuario'],
+    [['n1', 'c-n1', 'teotonio', '1001', '2026-07-01', '2026-07-02', 500, '', '', 'Leonardo'],
+     ['n2', 'c-n2', 'ranario',  '2002', '2026-07-03', '2026-07-04', 800, '', '', 'Wallace'],
+     ['n3', 'c-n3', '',         '3003', '2026-06-01', '2026-06-02', 300, '', '', 'Leonardo']]),  // ANTIGA, sem obra
   EstoqueSaidas: Aba(['id', 'obra', 'descricao', 'qtd', 'data', 'usuario'],
     [['s1', 'teotonio', 'brita', 10, '2026-07-05', 'Leonardo'],
      ['s2', 'ranario',  'areia', 20, '2026-07-06', 'Wallace']])
@@ -78,6 +81,24 @@ const CACHE = {
 
 const ABERTURAS = { n: 0 };
 
+// Drive falso — guarda o nome de cada arquivo criado, que e como se confere
+// que a folha 2 nao sobrescreveu a folha 1.
+const ARQUIVOS = [];
+let _idArq = 0;
+function PASTA(nome) {
+  return {
+    getName: () => nome,
+    getFilesByName: () => ({ hasNext: () => false }),
+    getFoldersByName: () => ({ hasNext: () => false }),
+    createFolder: (n) => PASTA(n),
+    createFile: (blob) => {
+      const id = 'drv' + (++_idArq);
+      ARQUIVOS.push({ id, nome: blob.nome });
+      return { getId: () => id, getUrl: () => 'https://drive/' + id, setSharing() {} };
+    }
+  };
+}
+
 const ctx = {
   console, JSON, String, Number, Object, Array, Math, Date, isNaN, parseFloat, parseInt, RegExp,
   SpreadsheetApp: { getActiveSpreadsheet: () => {
@@ -89,6 +110,8 @@ const ctx = {
     formatDate: (d, tz, f) => new Date(d).toISOString().slice(0, 10),
     sleep() {},
     getUuid: () => require('crypto').randomUUID(),
+    base64Decode: (s) => Buffer.from(String(s), 'base64'),
+    newBlob: (bytes, tipo, nome) => ({ bytes, tipo, nome, getContentType: () => tipo, getBytes: () => bytes }),
     DigestAlgorithm: { SHA_256: 'SHA_256' },
     // o Apps Script devolve bytes COM SINAL (-128..127); o hashSenha conta com isso
     computeDigest: (alg, txt) => Array.from(require('crypto')
@@ -100,7 +123,13 @@ const ctx = {
   Logger: { log: () => {} },
   ContentService: { createTextOutput: () => ({ setMimeType: () => ({}) }), MimeType: {} },
   CacheService: { getScriptCache: () => CACHE },
-  DriveApp: {}, UrlFetchApp: {}, MailApp: {}, ScriptApp: {}, XmlService: {}
+  // Drive falso: guarda os arquivos criados para conferir o nome de cada folha
+  DriveApp: {
+    Access: { PRIVATE: 'PRIVATE' }, Permission: { NONE: 'NONE' },
+    getFoldersByName: () => ({ hasNext: () => false }),
+    createFolder: (n) => PASTA(n)
+  },
+  UrlFetchApp: {}, MailApp: {}, ScriptApp: {}, XmlService: {}
 };
 ctx.global = ctx;
 vm.createContext(ctx);
@@ -366,6 +395,71 @@ t('aba SEM coluna obra segue devolvendo tudo', () => {
   // RDO_Diario ganhou a coluna na migracao; Equipamentos nunca teve
   const n = ctx.linhasObj('Equipamentos', 'ranario').length;
   assert.strictEqual(n, ctx.linhasObj('Equipamentos').length);
+});
+
+console.log('\nNOTA DE MAIS DE UMA FOLHA');
+
+// A DANFE de duas paginas tinha a segunda folha descartada em silencio.
+const FOTO = 'data:image/jpeg;base64,' + Buffer.from('folha').toString('base64');
+
+t('a folha 1 vai para o Drive e preenche driveId na planilha', () => {
+  ctx.nfSalvar({ clientId: 'cp1', id: 'cp1', obra: 'teotonio', numero: '7001', vtotal: 10 });
+  ARQUIVOS.length = 0;
+  const r = ctx.nfImagem({ obra: 'teotonio', id: 'cp1', numero: '7001', competencia: '2026-08', foto: FOTO });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(r.pagina, 1);
+  const cab = ABAS.NotasFiscais.dados[0].map(c => String(c).toLowerCase());
+  const linha = ABAS.NotasFiscais.dados.find(l => String(l[cab.indexOf('clientid')]) === 'cp1');
+  assert.strictEqual(String(linha[cab.indexOf('driveid')]), r.fileId);
+});
+
+t('a folha 2 vira um arquivo SEPARADO, com sufixo no nome', () => {
+  ARQUIVOS.length = 0;
+  const r = ctx.nfImagem({ obra: 'teotonio', id: 'cp1', numero: '7001', competencia: '2026-08',
+                           foto: FOTO, pagina: 2 });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(r.pagina, 2);
+  assert.strictEqual(ARQUIVOS.length, 1);
+  assert.ok(/_p2\.jpg$/.test(ARQUIVOS[0].nome), ARQUIVOS[0].nome);
+});
+
+t('e a folha 2 NAO sobrescreve o driveId da capa', () => {
+  const cab = ABAS.NotasFiscais.dados[0].map(c => String(c).toLowerCase());
+  const linha = ABAS.NotasFiscais.dados.find(l => String(l[cab.indexOf('clientid')]) === 'cp1');
+  assert.notStrictEqual(String(linha[cab.indexOf('driveid')]), ARQUIVOS[0].id);
+});
+
+t('a coluna `paginas` nasce sozinha na primeira nota que precisa dela', () => {
+  const antes = ABAS.NotasFiscais.dados[0].map(c => String(c).toLowerCase());
+  assert.ok(antes.indexOf('paginas') === -1, 'a coluna nao deveria existir ainda');
+  ctx.nfSalvar({ clientId: 'cp1', id: 'cp1', obra: 'teotonio', numero: '7001', vtotal: 10,
+                 paginas: JSON.stringify([{ fileId: 'drvX', link: 'https://drive/drvX' }]) });
+  const cab = ABAS.NotasFiscais.dados[0].map(c => String(c).toLowerCase());
+  assert.ok(cab.indexOf('paginas') > -1, 'a coluna paginas nao foi criada');
+  const linha = ABAS.NotasFiscais.dados.find(l => String(l[cab.indexOf('clientid')]) === 'cp1');
+  assert.ok(/drvX/.test(String(linha[cab.indexOf('paginas')])), String(linha[cab.indexOf('paginas')]));
+});
+
+t('nota de UMA folha nao ganha a coluna à toa', () => {
+  // ja existe agora, mas o valor tem de sair vazio para quem nao tem paginas
+  ctx.nfSalvar({ clientId: 'cp9', id: 'cp9', obra: 'teotonio', numero: '9009', vtotal: 5 });
+  const cab = ABAS.NotasFiscais.dados[0].map(c => String(c).toLowerCase());
+  const linha = ABAS.NotasFiscais.dados.find(l => String(l[cab.indexOf('clientid')]) === 'cp9');
+  assert.strictEqual(String(linha[cab.indexOf('paginas')]), '[]');
+});
+
+t('reenviar a nota SEM as paginas nao apaga as que ja subiram', () => {
+  ctx.nfSalvar({ clientId: 'cp1', id: 'cp1', obra: 'teotonio', numero: '7001', vtotal: 12 });
+  const cab = ABAS.NotasFiscais.dados[0].map(c => String(c).toLowerCase());
+  const linha = ABAS.NotasFiscais.dados.find(l => String(l[cab.indexOf('clientid')]) === 'cp1');
+  assert.ok(/drvX/.test(String(linha[cab.indexOf('paginas')])),
+    'as paginas foram perdidas: ' + String(linha[cab.indexOf('paginas')]));
+});
+
+t('nfListar devolve as paginas junto com a nota', () => {
+  const n = ctx.nfListar('teotonio').notas.find(x => String(x.clientId) === 'cp1');
+  assert.ok(n, 'nota nao voltou');
+  assert.ok(/drvX/.test(String(n.paginas)), String(n.paginas));
 });
 
 console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');

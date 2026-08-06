@@ -2687,6 +2687,11 @@ async function outboxFlush(manual = false) {
   if (enviados > 0) {
     toast(`${enviados} RDO${enviados>1?'s':''} guardado${enviados>1?'s':''} enviado${enviados>1?'s':''} agora`, 'success', 4500);
     setTimeout(() => carregarTudo(), 1500);
+    // O que entrou na fila DURANTE este envio foi ignorado: o flush já estava
+    // rodando e o segundo pedido voltou na hora. Sem isto ele esperava o
+    // temporizador de 30 s — é o caso das páginas 2..N de uma nota, que só
+    // sabem o arquivo do Drive depois que a imagem sobe.
+    if (outboxLer().length) setTimeout(() => outboxFlush(), 400);
   } else if (manual && falhouRede) {
     toast('Ainda sem conexão com o servidor. Vou tentar sozinho de novo em instantes.', 'info', 4000);
   }

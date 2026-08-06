@@ -44,7 +44,7 @@ var HEADERS = {
                    'horimIni','horimFim','combustivel','situacao','observacoes','assinatura','usuario','clientId'],
   'NotasFiscais': ['id','clientId','obra','numero','serie','chave','dataEmissao','dataEntrada','cnpj','razaoSocial',
                    'nomeFantasia','municipio','uf','vProd','vFrete','vTotal','vBaseICMS','vICMS','itens','obs',
-                   'responsavel','status','driveId','driveLink','leitura','historico','usuario','criadoEm','atualizadoEm'],
+                   'responsavel','status','driveId','driveLink','paginas','leitura','historico','usuario','criadoEm','atualizadoEm'],
   'EstoqueSaidas':['id','obra','materialId','descricao','un','qtd','data','capid','rua','responsavel','obs','usuario','criadoEm']
 };
 
@@ -2121,6 +2121,13 @@ function nfListar(obra) {
 // upsert pelo clientId — reenviar a mesma nota nunca duplica a linha
 function nfSalvar(p) {
   var a = getOrCreate(ABA_NF);
+  // Nota de mais de uma folha guarda aqui os arquivos das páginas 2 em
+  // diante. A coluna nasce na primeira gravação que precisar dela — a
+  // planilha em uso não tem de ser editada à mão antes, e quem só lança
+  // nota de uma folha nunca ganha a coluna.
+  var pagsTxt = typeof p.paginas === 'string' ? p.paginas : JSON.stringify(p.paginas || []);
+  var temPaginas = !!pagsTxt && pagsTxt !== '[]' && pagsTxt !== 'null';
+  if (temPaginas) garantirColuna(a, 'paginas');
   var cab = cabecalho(a);
   var dados = a.getDataRange().getValues();
   var iCli = idxCol(cab, 'clientid');
@@ -2152,6 +2159,7 @@ function nfSalvar(p) {
     status: p.status || 'Recebida',
     driveid: p.driveid || '',
     drivelink: p.drivelink || '',
+    paginas: pagsTxt,
     leitura: typeof p.leitura === 'string' ? p.leitura : JSON.stringify(p.leitura || {}),
     historico: typeof p.historico === 'string' ? p.historico : JSON.stringify(p.historico || []),
     usuario: p.usuario || usuarioDoToken(p.token) || '',
@@ -2168,9 +2176,11 @@ function nfSalvar(p) {
   }
   if (achou > -1) {
     // preserva o arquivo do Drive quando o app reenvia a nota sem essa informação
-    var iDid = idxCol(cab, 'driveid'), iDlk = idxCol(cab, 'drivelink');
+    var iDid = idxCol(cab, 'driveid'), iDlk = idxCol(cab, 'drivelink'), iPag = idxCol(cab, 'paginas');
     if (iDid !== -1 && !reg.driveid) linha[iDid] = dados[achou][iDid];
     if (iDlk !== -1 && !reg.drivelink) linha[iDlk] = dados[achou][iDlk];
+    // reenvio da nota SEM a lista de páginas não pode apagar as que já subiram
+    if (iPag !== -1 && !temPaginas) linha[iPag] = dados[achou][iPag];
     a.getRange(achou + 1, 1, 1, cab.length).setValues([linha]);
   } else {
     a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
@@ -2202,10 +2212,22 @@ function nfExcluir(obra, id, token) {
 }
 
 // guarda a imagem da nota no Drive, organizada por Obra -> Ano -> Mes
+/* `pagina` (1 em diante) permite guardar a NOTA INTEIRA, e não só a primeira
+   folha. Nota fiscal de duas páginas é comum — a segunda costuma trazer a
+   continuação dos itens — e antes ela era simplesmente descartada.
+
+   A página 1 continua exatamente como era: mesmo nome de arquivo, e é ela
+   que preenche `driveId`/`driveLink` na planilha. As demais ganham sufixo
+   no nome e voltam só como `fileId`; quem monta a lista é o app, que grava
+   tudo na coluna `paginas`. Assim nota antiga, de uma folha só, não muda
+   em nada. */
 function nfImagem(p) {
   var b64 = String(p.foto || '');
   if (b64.indexOf('data:image') !== 0) return { ok: false, error: 'Imagem inválida' };
-  var nome = 'NF-' + (p.numero || p.id || Date.now()) + '_' + (p.id || '') + '.jpg';
+  var pagina = parseInt(p.pagina, 10);
+  if (!(pagina > 1)) pagina = 1;
+  var sufixo = pagina > 1 ? '_p' + pagina : '';
+  var nome = 'NF-' + (p.numero || p.id || Date.now()) + '_' + (p.id || '') + sufixo + '.jpg';
   var blob = Utilities.newBlob(Utilities.base64Decode(b64.split(',')[1]), 'image/jpeg', nome);
   var pasta = nfPastaDaNota(p.obra, p.competencia);
 
@@ -2217,8 +2239,10 @@ function nfImagem(p) {
   f.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
   var fileId = f.getId();
 
-  // grava o arquivo na linha da nota, se ela ja existir
+  // grava o arquivo na linha da nota, se ela ja existir (só a página 1:
+  // as outras vão para a coluna `paginas`, montada pelo app)
   try {
+    if (pagina > 1) throw 0;                    // pula a gravação na planilha
     var a = getOrCreate(ABA_NF);
     var dados = a.getDataRange().getValues();
     var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
@@ -2235,7 +2259,7 @@ function nfImagem(p) {
     }
   } catch (e) {}
 
-  return { ok: true, fileId: fileId, link: f.getUrl(), pasta: pasta.getName() };
+  return { ok: true, fileId: fileId, link: f.getUrl(), pasta: pasta.getName(), pagina: pagina };
 }
 
 // ------------------------------------------------------------
