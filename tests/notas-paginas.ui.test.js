@@ -21,6 +21,7 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
   let imagens = [];        // {id, pagina} de cada nfImagem
   let salvas = [];         // payload de cada nfSalvar
   const NOTAS = [];
+  let servidorAntigo = false;
   await p.route('**://script.google.com/**', (route) => {
     const req = route.request();
     const u = new URL(req.url());
@@ -41,8 +42,10 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
     else if (par.action === 'nfImagem') {
       const pag = parseInt(par.pagina, 10) || 1;
       imagens.push({ id: par.id, pagina: pag });
-      corpo = { ok: true, pagina: pag, fileId: 'drv-' + par.id + '-p' + pag,
+      corpo = { ok: true, fileId: 'drv-' + par.id + '-p' + pag,
                 link: 'https://drive/' + par.id + '/p' + pag, pasta: 'Agosto' };
+      // backend antigo nao conhece `pagina` e nao devolve o campo
+      if (!servidorAntigo) corpo.pagina = pag;
     }
     else if (par.action === 'nfSalvar') {
       salvas.push(par);
@@ -158,6 +161,42 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
   ok('e mostra uma imagem DIFERENTE da folha 1', img1 && img2 && img1 !== img2);
   ok('no fim, avançar fica desligado',
     await p.evaluate(() => (document.getElementById('nfVerProx') || {}).disabled === true));
+
+  console.log('\nBACKEND ANTIGO: A FOLHA 2 NÃO SOBE (senão apagaria a folha 1)');
+  // o Code.gs antigo ignora `pagina` e usa o MESMO nome de arquivo: ele apaga
+  // o existente antes de criar o novo. Subir a folha 2 destruiria a folha 1.
+  await p.evaluate(() => { fecharModal(); NF_PAGS_SERVIDOR.sabe = null; NF_PAGS_SERVIDOR.avisado = false; });
+  servidorAntigo = true;
+  imagens = [];
+  await p.evaluate(async () => {
+    const arq = (t, c) => new Promise(res => { const cv = document.createElement('canvas');
+      cv.width = 400; cv.height = 500; const g = cv.getContext('2d');
+      g.fillStyle = c; g.fillRect(0, 0, 400, 500); g.fillStyle = '#000'; g.font = '30px sans-serif';
+      g.fillText(t, 20, 60);
+      cv.toBlob(b => res(new File([b], t + '.jpg', { type: 'image/jpeg' })), 'image/jpeg', .9); });
+    nfAbrirNova();
+    const dt = new DataTransfer();
+    dt.items.add(await arq('A', '#fff')); dt.items.add(await arq('B', '#eee'));
+    await nfArquivoSelecionado({ files: dt.files, value: '' });
+  });
+  await p.waitForTimeout(2500);
+  await p.evaluate(() => {
+    document.getElementById('nf_razaoSocial').value = 'BACKEND ANTIGO';
+    document.getElementById('nf_vTotal').value = '99';
+    nfSalvarForm();
+  });
+  await p.waitForTimeout(3500);
+  ok('só a capa é enviada', imagens.length === 1 && imagens[0].pagina === 1, JSON.stringify(imagens));
+  ok('e o usuário é avisado do porquê',
+    /republicado/.test(await p.evaluate(() =>
+      [...document.querySelectorAll('.toast')].map(t => t.textContent).join(' '))),
+    await p.evaluate(() => [...document.querySelectorAll('.toast')].map(t => t.textContent).join(' ').slice(0, 120)));
+  const guardadas = await p.evaluate(async () => {
+    const n = nfGet(obra().id).find(x => x.razaoSocial === 'BACKEND ANTIGO');
+    return n ? !!(await fotoLer(nfImgChave(obra().id, n.id, 2))) : false;
+  });
+  ok('mas a folha 2 fica guardada no aparelho, não se perde', guardadas);
+  servidorAntigo = false;
 
   console.log('\nNOTA DE UMA FOLHA SÓ CONTINUA COMO ANTES');
   await p.evaluate(() => { fecharModal();

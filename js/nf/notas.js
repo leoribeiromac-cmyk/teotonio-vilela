@@ -586,6 +586,41 @@ function nfEnfileirarExcluir(obraId, id) {
   outboxAdd({ id: 'ob' + uid(), obra: obraId, tipo: 'nfDel', params: { action: 'nfExcluir', obra: obraId, id: id } });
   outboxFlush();
 }
+/* O servidor sabe guardar mais de uma folha?
+   Importa MUITO: o Code.gs antigo ignora o numero da pagina e usa o MESMO
+   nome de arquivo para todas — ele APAGA o arquivo existente antes de criar
+   o novo. Subir a folha 2 num backend antigo destruiria a folha 1 no Drive.
+   O Code.gs novo devolve `pagina` na resposta; o antigo nao devolve nada.
+   Enquanto nao houver certeza, as folhas extras ficam so no aparelho. */
+const NF_PAGS_SERVIDOR = { sabe: null, avisado: false };
+
+/* Sobe as folhas na ordem certa: a capa primeiro — e a resposta dela que
+   revela se o servidor pagina — e so entao as demais. */
+async function nfSubirFolhas(o, n, capa, extras) {
+  if (!BACKEND || isDemo()) return;
+  let imagemCapa = capa;
+  if (!imagemCapa && extras.length) {
+    // editando uma nota que ja tinha imagem: usa a capa guardada como sonda
+    try { imagemCapa = await fotoLerFull(nfImgChave(o.id, n.id)); } catch (e) { imagemCapa = ''; }
+  }
+  if (imagemCapa) {
+    const r = await nfEnviarImagem(o.id, n, imagemCapa, 1);
+    if (r && r.ok) NF_PAGS_SERVIDOR.sabe = (typeof r.pagina === 'number');
+  }
+  if (!extras.length) return;
+  if (NF_PAGS_SERVIDOR.sabe !== true) {
+    if (!NF_PAGS_SERVIDOR.avisado) {
+      NF_PAGS_SERVIDOR.avisado = true;
+      toast('As folhas extras ficaram guardadas neste aparelho. O Code.gs do Apps Script precisa ser republicado para elas subirem ao Drive — depois disso, basta abrir a nota e salvar de novo.', 'info', 0);
+    }
+    return;
+  }
+  n.paginas = [];
+  for (let k = 0; k < extras.length; k++) {
+    await nfEnviarImagem(o.id, n, extras[k], k + 2);
+  }
+}
+
 /* envia a imagem depois que a nota ja existe (mesma regra das fotos do RDO).
    `pagina` ausente ou 1 = a capa, que continua indo para `drive`; da 2 em
    diante o arquivo entra em `nota.paginas`, na posicao da folha. */
@@ -1279,21 +1314,15 @@ function nfSalvarForm() {
   } else if (!paraEstoque) nfDesfazerEstoque(o.id, n.id);
   nfSet(o.id, nfGet(o.id).map(x => x.id === n.id ? n : x));
 
-  // imagens em resolucao cheia: IndexedDB local + Drive em segundo plano.
-  // A folha 1 e a capa; as demais sobem com o numero da pagina, e e a
-  // resposta delas que monta `n.paginas`.
+  // imagens em resolucao cheia: IndexedDB local primeiro (nao depende de
+  // rede), Drive em segundo plano. A folha 1 e a capa.
   if (_nfFull) {
     try { fotoGuardarFull(nfImgChave(o.id, n.id), _nfFull); } catch (e) { /* segue sem a copia local */ }
-    nfEnviarImagem(o.id, n, _nfFull);
   }
-  if (_nfPags.length) {
-    n.paginas = [];
-    _nfPags.forEach((uri, k) => {
-      const pag = k + 2;
-      try { fotoGuardarFull(nfImgChave(o.id, n.id, pag), uri); } catch (e) { /* idem */ }
-      nfEnviarImagem(o.id, n, uri, pag);
-    });
-  }
+  _nfPags.forEach((uri, k) => {
+    try { fotoGuardarFull(nfImgChave(o.id, n.id, k + 2), uri); } catch (e) { /* idem */ }
+  });
+  nfSubirFolhas(o, n, _nfFull, _nfPags.slice());
   nfEnfileirar(o.id, n);
 
   _nfRascunho = null; _nfFull = ''; _nfPags = [];
