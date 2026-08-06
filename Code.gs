@@ -122,7 +122,7 @@ function rotear(e) {
       case 'saidaExcluir':      resp = saidaExcluir(p.obra, p.id, p.token); break;
       case 'clima':           resp = climaDoDia(p.data); break;
       case 'rdoFoto':         resp = rdoFoto(p); break;
-      case 'obterFoto':       resp = obterFotoPrivada(p.fileId); break;
+      case 'obterFoto':       resp = obterFotoPrivada(p.fileId, p.mini); break;
       case 'usuariosListar':  resp = usuariosListar(p.token); break;
       case 'usuarioSalvar':   resp = usuarioSalvar(p); break;
       case 'usuarioExcluir':  resp = usuarioExcluir(p); break;
@@ -1082,12 +1082,28 @@ function equipApontamentos(mes) {
   return { ok: true, apontamentos: arr };
 }
 
-function obterFotoPrivada(fileId) {
+/* `mini` devolve a MINIATURA que o Drive já mantém para o arquivo, em vez
+   da foto inteira. A galeria mostra cada foto num quadro de 170 px de
+   altura: baixar a imagem de 1280 px para isso é ordem de grandeza a mais
+   de bytes do que a tela usa, e são dezenas delas de uma vez, no 4G do
+   canteiro. A foto cheia continua vindo ao ampliar, que é quando ela
+   realmente é olhada.
+
+   Se o Drive ainda não gerou a miniatura (acontece logo depois do envio),
+   cai para a imagem cheia e AVISA no `mini`, para o app guardar no lugar
+   certo do cache e não pedir de novo. */
+function obterFotoPrivada(fileId, mini) {
   if (!fileId) return { ok: false, error: 'ID do arquivo não informado' };
   try {
     var f = DriveApp.getFileById(fileId);
-    var blob = f.getBlob();
-    return { ok: true, dataUri: 'data:' + (blob.getContentType() || 'image/jpeg') +
+    var blob = null;
+    if (String(mini) === '1' || mini === true) {
+      try { blob = f.getThumbnail(); } catch (e) { blob = null; }
+    }
+    var ehMini = !!blob;
+    if (!blob) blob = f.getBlob();
+    return { ok: true, mini: ehMini,
+      dataUri: 'data:' + (blob.getContentType() || 'image/jpeg') +
       ';base64,' + Utilities.base64Encode(blob.getBytes()) };
   } catch (e) {
     return { ok: false, error: 'Não foi possível carregar a imagem privada: ' + e.message };
