@@ -92,7 +92,11 @@ function rotear(e) {
       }
     }
     switch (action) {
-      case 'ping':            resp = { ok: true, pong: true, abas: [NOME_ABA, NOME_ABA_DIARIO] }; break;
+      // `recursos` diz ao app o que ESTA versão do backend sabe fazer. Sem
+      // isso, o app só descobria tentando — e tentar guardar a folha 2 num
+      // backend antigo apaga a folha 1, porque lá o nome do arquivo é o mesmo.
+      case 'ping':            resp = { ok: true, pong: true, abas: [NOME_ABA, NOME_ABA_DIARIO],
+                                       recursos: { paginas: true, miniatura: true, obraNaListagem: true } }; break;
       case 'login':           resp = loginUsuario(p.usuario, p.senha); break;
       case 'logout':          resp = sessaoRevogar(p.token); break;
       case 'deleteRDO':       resp = deleteRDO(p.id, p.token); break;

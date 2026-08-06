@@ -14,8 +14,20 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v18'; // v18: nota fiscal de mais de uma folha
+const VERSAO = 'teotonio-v19'; // v19: js versionado na URL (o app rodava com módulo antigo)
+// As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
+// app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
+// Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no
+// 4G do canteiro, só porque uma linha do app mudou. Suba este número apenas
+// quando trocar de fato um arquivo dentro de vendor/.
+const VERSAO_VENDOR = 'teotonio-vendor-v1';
+const BALDES = [VERSAO, VERSAO_VENDOR];
 const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleusercontent.com', 'generativelanguage.googleapis.com'];
+
+// Em qual balde este pedido mora.
+function baldeDe(url) {
+  return url.pathname.indexOf('/vendor/') !== -1 ? VERSAO_VENDOR : VERSAO;
+}
 
 // O app avisa "nova versão disponível" e só troca quando o usuário mandar —
 // trocar sozinho no meio de um lançamento perderia o que estava na tela.
@@ -32,7 +44,7 @@ self.addEventListener('message', (e) => {
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== VERSAO).map(k => caches.delete(k))))
+      .then(keys => Promise.all(keys.filter(k => BALDES.indexOf(k) === -1).map(k => caches.delete(k))))
       .then(() => self.clients.claim())
   );
 });
@@ -70,13 +82,23 @@ self.addEventListener('fetch', (e) => {
   }
 
   // Estáticos: cache primeiro + revalidação em segundo plano.
+  //
+  // Dois cuidados que faltavam, e que transformavam "um carregamento de
+  // atraso" em "nunca":
+  //  • a revalidação ia solta; o navegador pode desligar o service worker
+  //    assim que a resposta é entregue, e a gravação no cache nunca acontecia.
+  //    O `e.waitUntil` mantém o worker vivo até ela terminar.
+  //  • o `fetch` da revalidação passava pelo cache HTTP do navegador, então
+  //    muitas vezes revalidava contra a MESMA cópia velha. `cache:'no-cache'`
+  //    obriga a perguntar ao servidor.
+  const balde = baldeDe(url);
   e.respondWith(
     caches.match(e.request).then(hit => {
-      const rede = fetch(e.request)
+      const rede = fetch(hit ? new Request(e.request, { cache: 'no-cache' }) : e.request)
         .then(resp => {
           if (resp && resp.ok) {
             const clone = resp.clone();
-            caches.open(VERSAO).then(c => c.put(e.request, clone));
+            e.waitUntil(caches.open(balde).then(c => c.put(e.request, clone)));
           }
           return resp;
         })

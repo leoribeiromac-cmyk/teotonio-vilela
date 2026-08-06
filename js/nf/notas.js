@@ -66,7 +66,36 @@ function nfMigrarStatus(n) {
   if (n && n.status === 'Integrada ao pedido de compra') n.status = 'Conferida';
   return n;
 }
-function nfSet(obraId, arr) { localStorage.setItem(nfKey(obraId), JSON.stringify(arr)); }
+/* Gravar SEM tratar a cota do localStorage era um perigo: cada nota carrega a
+   miniatura em base64, e o limite (~5 MB) chega antes do que parece. Quando
+   estourava, a excecao subia no meio da sincronizacao e a nota que acabou de
+   ser lancada simplesmente nao era guardada.
+   Agora, se faltar espaco, as miniaturas mais antigas sao soltas — elas sao
+   recuperaveis do Drive, os DADOS da nota nao. */
+function nfSet(obraId, arr) {
+  try {
+    localStorage.setItem(nfKey(obraId), JSON.stringify(arr));
+    return true;
+  } catch (e) {
+    const copia = arr.map(n => Object.assign({}, n));
+    // solta as miniaturas da mais antiga para a mais nova, ate caber
+    const ordem = copia.map((n, i) => i)
+      .sort((a, b) => (copia[a].criadoEm || 0) - (copia[b].criadoEm || 0));
+    for (const i of ordem) {
+      if (!copia[i].thumb) continue;
+      copia[i].thumb = '';
+      try { localStorage.setItem(nfKey(obraId), JSON.stringify(copia)); return true; }
+      catch (e2) { /* ainda nao coube: solta a proxima */ }
+    }
+    try { localStorage.setItem(nfKey(obraId), JSON.stringify(copia)); return true; }
+    catch (e3) {
+      if (typeof toast === 'function') {
+        toast('O armazenamento do aparelho está cheio — a nota não pôde ser guardada aqui. Ela continua na fila de envio.', 'error', 0);
+      }
+      return false;
+    }
+  }
+}
 /* ENTRADAS sao derivadas: nascem da nota e podem ser recalculadas a qualquer
    momento. SAIDAS nao — ninguem consegue reconstruir um consumo depois. Por
    isso ficam em chave propria, com fila de sincronizacao e linha na planilha. */
@@ -84,8 +113,13 @@ function nfImgChave(obraId, id, pagina) {
   const p = parseInt(pagina, 10);
   return 'nf:' + obraId + ':' + id + (p > 1 ? ':p' + p : '');
 }
-/* Quantas folhas a nota tem, contando a capa. */
-function nfNumPaginas(n) { return 1 + ((n && n.paginas) || []).length; }
+/* Quantas folhas a nota tem, contando a capa. Inclui as que estao so no
+   rascunho aberto: sem isso, "Ver a nota" logo depois de anexar mostrava
+   uma folha so, como se a que acabou de entrar nao existisse. */
+function nfNumPaginas(n) {
+  const noRascunho = (_nfRascunho && n && _nfRascunho.id === n.id) ? _nfPags.length : 0;
+  return 1 + ((n && n.paginas) || []).filter(Boolean).length + noRascunho;
+}
 
 /* ---------- numeros, datas e documentos ---------- */
 function nfNum(v) {
@@ -573,8 +607,9 @@ function nfEnfileirar(obraId, nota) {
     itens: JSON.stringify(nota.itens || []), obs: nota.obs || '',
     responsavel: nota.responsavel || '', status: nota.status || 'Recebida',
     driveid: (nota.drive && nota.drive.fileId) || '', drivelink: (nota.drive && nota.drive.link) || '',
-    // folhas 2..N; nota de uma folha so manda '[]' e a coluna nem e criada
-    paginas: JSON.stringify((nota.paginas || []).filter(Boolean)),
+    // folhas 2..N que JA subiram. As que estao so no aparelho (`local`) nao
+    // vao para a planilha — senao gravariam uma referencia que nao existe.
+    paginas: JSON.stringify((nota.paginas || []).filter(x => x && x.fileId)),
     leitura: JSON.stringify(nota.leitura || {}), historico: JSON.stringify((nota.historico || []).slice(-30)),
     usuario: nota.usuario || usuarioAtual(), criadoem: nota.criadoEm || Date.now()
   };
@@ -592,32 +627,62 @@ function nfEnfileirarExcluir(obraId, id) {
    o novo. Subir a folha 2 num backend antigo destruiria a folha 1 no Drive.
    O Code.gs novo devolve `pagina` na resposta; o antigo nao devolve nada.
    Enquanto nao houver certeza, as folhas extras ficam so no aparelho. */
-const NF_PAGS_SERVIDOR = { sabe: null, avisado: false };
+const NF_PAGS_SERVIDOR = { sabe: null, avisado: false, sondando: null };
+
+/* Pergunta ao servidor o que ele sabe fazer, em vez de descobrir tentando.
+   O `ping` e barato e nao toca no Drive; o backend novo responde
+   `recursos.paginas`. Uma sondagem por sessao, e ela e refeita se der erro —
+   assim, republicar o Code.gs passa a valer sem precisar recarregar o app. */
+function nfSondarPaginacao() {
+  if (NF_PAGS_SERVIDOR.sabe !== null) return Promise.resolve(NF_PAGS_SERVIDOR.sabe);
+  if (NF_PAGS_SERVIDOR.sondando) return NF_PAGS_SERVIDOR.sondando;
+  NF_PAGS_SERVIDOR.sondando = postAcao({ action: 'ping' })
+    .then(r => {
+      if (!r || !r.ok) return null;                       // sem resposta: nao conclui nada
+      NF_PAGS_SERVIDOR.sabe = !!(r.recursos && r.recursos.paginas);
+      return NF_PAGS_SERVIDOR.sabe;
+    })
+    .catch(() => null)
+    .then(v => { NF_PAGS_SERVIDOR.sondando = null; return v; });
+  return NF_PAGS_SERVIDOR.sondando;
+}
 
 /* Sobe as folhas na ordem certa: a capa primeiro — e a resposta dela que
    revela se o servidor pagina — e so entao as demais. */
-async function nfSubirFolhas(o, n, capa, extras) {
+async function nfSubirFolhas(o, n, capa, extras, primeiraNova) {
   if (!BACKEND || isDemo()) return;
   let imagemCapa = capa;
   if (!imagemCapa && extras.length) {
     // editando uma nota que ja tinha imagem: usa a capa guardada como sonda
     try { imagemCapa = await fotoLerFull(nfImgChave(o.id, n.id)); } catch (e) { imagemCapa = ''; }
   }
+  let respondeu = false;
   if (imagemCapa) {
     const r = await nfEnviarImagem(o.id, n, imagemCapa, 1);
-    if (r && r.ok) NF_PAGS_SERVIDOR.sabe = (typeof r.pagina === 'number');
+    if (r && r.ok) { respondeu = true; NF_PAGS_SERVIDOR.sabe = (typeof r.pagina === 'number'); }
   }
   if (!extras.length) return;
+  // sem capa para sondar (nota editada sem imagem nova), pergunta ao servidor
+  if (NF_PAGS_SERVIDOR.sabe === null) {
+    const v = await nfSondarPaginacao();
+    if (v !== null) respondeu = true;
+  }
   if (NF_PAGS_SERVIDOR.sabe !== true) {
-    if (!NF_PAGS_SERVIDOR.avisado) {
-      NF_PAGS_SERVIDOR.avisado = true;
-      toast('As folhas extras ficaram guardadas neste aparelho. O Code.gs do Apps Script precisa ser republicado para elas subirem ao Drive — depois disso, basta abrir a nota e salvar de novo.', 'info', 0);
-    }
+    /* Duas situacoes DIFERENTES, que antes davam a mesma mensagem:
+        - o servidor respondeu e nao conhece paginacao  → falta republicar;
+        - nao houve resposta nenhuma (sem sinal, ou nota sem capa para sondar)
+          → nao da para acusar o Code.gs; o certo e dizer que fica para depois.
+       E o aviso e por NOTA, nao por sessao: da segunda nota em diante as
+       folhas sumiam caladas. */
+    const msg = respondeu
+      ? 'As folhas extras ficaram guardadas neste aparelho. O Code.gs do Apps Script precisa ser republicado para elas subirem ao Drive — depois disso, abra a nota e salve de novo.'
+      : 'Não consegui enviar as folhas extras agora. Elas estão guardadas neste aparelho; abra a nota e salve de novo quando houver sinal.';
+    toast(msg, 'info', 0);
     return;
   }
-  n.paginas = [];
+  const base = primeiraNova > 1 ? primeiraNova : 2;
   for (let k = 0; k < extras.length; k++) {
-    await nfEnviarImagem(o.id, n, extras[k], k + 2);
+    await nfEnviarImagem(o.id, n, extras[k], base + k);
   }
 }
 
@@ -637,10 +702,14 @@ function nfEnviarImagem(obraId, nota, dataUrl, pagina) {
           const ref = { fileId: r.fileId, link: r.link || '', pasta: r.pasta || '', enviadoEm: Date.now() };
           if (pag === 1) n.drive = ref;
           else {
+            // a folha ja tinha lugar reservado como `local`: agora ganha o
+            // arquivo do Drive, sem mudar de posicao
             n.paginas = n.paginas || [];
+            ref.pagina = pag;
             n.paginas[pag - 2] = ref;
-            // uma folha que falhou deixaria buraco no meio da lista
-            for (let i = 0; i < n.paginas.length; i++) if (!n.paginas[i]) n.paginas[i] = null;
+            for (let i = 0; i < n.paginas.length; i++) {
+              if (!n.paginas[i]) n.paginas[i] = { local: true, pagina: i + 2 };
+            }
           }
           nfSet(obraId, arr);
           nfEnfileirar(obraId, n);
@@ -699,12 +768,13 @@ function nfAbrirNova() {
       <div class="empty" style="padding:14px 6px 18px">
         ${ic('notas')}
         <div style="font-size:14px;color:var(--text-2);line-height:1.5">Fotografe a DANFE inteira, de frente e sem sombra.<br>
-        O sistema lê o código de barras, a chave de acesso e o restante dos dados sozinho.</div>
+        O sistema lê o código de barras, a chave de acesso e o restante dos dados sozinho.<br>
+        <b>Nota de duas folhas?</b> Fotografe as duas — dá para escolher mais de um arquivo.</div>
       </div>
       <label class="btn btn-pri" style="width:100%;justify-content:center;margin-bottom:9px;cursor:pointer">${ic('camera')} Fotografar a nota
-        <input type="file" accept="image/*" capture="environment" onchange="nfArquivoSelecionado(this)" style="display:none"></label>
+        <input type="file" accept="image/*" capture="environment" multiple onchange="nfArquivoSelecionado(this)" style="display:none"></label>
       <label class="btn" style="width:100%;justify-content:center;margin-bottom:4px;cursor:pointer">${ic('arquivo')} Escolher arquivo (PDF ou imagem)
-        <input type="file" accept="image/*,application/pdf,.pdf" onchange="nfArquivoSelecionado(this)" style="display:none"></label>
+        <input type="file" accept="image/*,application/pdf,.pdf" multiple onchange="nfArquivoSelecionado(this)" style="display:none"></label>
       <div class="kpi-s" style="text-align:center;margin-bottom:14px">Se você tem o <b>PDF da DANFE</b>, use-o: o texto vem direto do arquivo e a leitura sai certa.</div>
       <div class="card" style="box-shadow:none"><div class="card-b" style="padding:13px 15px">
         <label class="fl">Não tem a nota em mãos?</label>
@@ -741,6 +811,24 @@ function nfCanvasJpeg(canvas, maxLado, q) {
   x.drawImage(canvas, 0, 0, c.width, c.height);
   return c.toDataURL('image/jpeg', q);
 }
+/* Reduz uma imagem que ja esta em data-uri. Fica AQUI, e nao no app que
+   hospeda o modulo: o arquivo tem de rodar igual nos dois lados. */
+function nfReduzirUri(uri, maxLado, q) {
+  return new Promise((res) => {
+    const img = new Image();
+    img.onerror = () => res(uri);
+    img.onload = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext('2d').drawImage(img, 0, 0);
+        res(nfCanvasJpeg(c, maxLado, q));
+      } catch (e) { res(uri); }
+    };
+    img.src = uri;
+  });
+}
+
 function nfPDFdeBase64(b64) {
   const bin = atob(String(b64).replace(/\s/g, ''));
   const bytes = new Uint8Array(bin.length);
@@ -1078,20 +1166,32 @@ function nfConferir() {
   // Todos os campos ficam no formulário; o modo enxuto apenas ESCONDE os
   // acessórios. Assim alternar não perde nada do que já foi digitado.
   abrirModal((n.criadoEm && nfPorId(o.id, n.id) ? 'Editar nota fiscal' : 'Conferir nota fiscal'), `
-    ${n.thumb ? `<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:14px">
-      <img src="${esc(n.thumb)}" alt="nota fiscal" onclick="nfVerImagem('${n.id}')" style="width:88px;height:110px;object-fit:cover;object-position:top center;border-radius:8px;border:1px solid var(--border-strong);cursor:zoom-in">
+    ${(() => {
+      // O bloco inteiro dependia de `n.thumb`. Nota recebida pela
+      // sincronizacao chega SEM miniatura (ela e montada da copia local de
+      // quem lancou), e nota digitada a mao nunca teve — nesses casos o
+      // outro aparelho nao via a imagem, nao via quantas folhas a nota tem,
+      // e nao tinha como juntar a segunda folha. Agora o bloco aparece
+      // sempre; o que muda e o que vai dentro dele.
+      const temImagem = !!(n.thumb || (n.drive && n.drive.fileId) || (n.paginas || []).length);
+      const capa = n.thumb
+        ? `<img src="${esc(n.thumb)}" alt="nota fiscal" onclick="nfVerImagem('${n.id}')" style="width:88px;height:110px;object-fit:cover;object-position:top center;border-radius:8px;border:1px solid var(--border-strong);cursor:zoom-in">`
+        : `<div onclick="${temImagem ? `nfVerImagem('${n.id}')` : ''}" style="width:88px;height:110px;display:flex;align-items:center;justify-content:center;border-radius:8px;border:1px dashed var(--border-strong);color:var(--muted);${temImagem ? 'cursor:zoom-in' : ''}">${ic('notas', 26)}</div>`;
+      return `<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:14px">
+      ${capa}
       <div style="flex:1;min-width:0">
         <div class="kpi-s">${nfLeituraTxt(n)}</div>
         ${n.chave ? `<div class="mono nf-extra" style="font-size:10.5px;word-break:break-all;margin-top:6px;color:var(--text-2)">${esc(n.chave)}</div>` : ''}
         <div id="nfPagsInfo" class="kpi-s" style="margin-top:4px">${nfPaginasTxt(n)}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-          <button class="btn btn-sm btn-ghost" style="padding-left:0" onclick="nfVerImagem('${n.id}')">${ic('lupa')} Ver a nota</button>
+          ${temImagem ? `<button class="btn btn-sm btn-ghost" style="padding-left:0" onclick="nfVerImagem('${n.id}')">${ic('lupa')} Ver a nota</button>` : ''}
           <label class="btn btn-sm btn-ghost" style="cursor:pointer" title="A nota tem mais de uma folha? Junte-as aqui.">
-            ${ic('mais')} Adicionar página
+            ${ic('mais')} ${temImagem ? 'Adicionar página' : 'Anexar a imagem da nota'}
             <input type="file" accept="image/*,application/pdf,.pdf" multiple
                    onchange="nfAddPaginas(this)" style="display:none"></label>
         </div>
-      </div></div>` : ''}
+      </div></div>`;
+    })()}
     ${dup ? `<div class="nf-alerta nf-alerta-red">Já existe a nota <b>${esc(dup.numero || '—')}</b> deste fornecedor no sistema. Salvar vai criar uma segunda.</div>` : ''}
     ${difer ? `<div class="nf-alerta nf-alerta-ylw">A soma dos itens + frete (${fmtBRL(totItens + nfNum(n.vFrete))}) não bate com o valor total da nota (${fmtBRL(nfNum(n.vTotal))}).</div>` : ''}
 
@@ -1319,10 +1419,20 @@ function nfSalvarForm() {
   if (_nfFull) {
     try { fotoGuardarFull(nfImgChave(o.id, n.id), _nfFull); } catch (e) { /* segue sem a copia local */ }
   }
+  /* As folhas novas entram DEPOIS das que a nota ja tinha, nunca por cima:
+     renumerar sempre a partir de 2 fazia a terceira folha sobrescrever a
+     segunda no Drive. E cada uma e registrada na nota JA como `local`, antes
+     de qualquer rede — assim a nota sabe que tem 3 folhas mesmo que o envio
+     seja recusado, e a tela mostra as 3. */
+  n.paginas = (n.paginas || []).filter(Boolean);
+  const primeiraNova = n.paginas.length + 2;
   _nfPags.forEach((uri, k) => {
-    try { fotoGuardarFull(nfImgChave(o.id, n.id, k + 2), uri); } catch (e) { /* idem */ }
+    const pag = primeiraNova + k;
+    try { fotoGuardarFull(nfImgChave(o.id, n.id, pag), uri); } catch (e) { /* idem */ }
+    n.paginas.push({ local: true, pagina: pag });
   });
-  nfSubirFolhas(o, n, _nfFull, _nfPags.slice());
+  nfSet(o.id, nfGet(o.id).map(x => x.id === n.id ? n : x));
+  nfSubirFolhas(o, n, _nfFull, _nfPags.slice(), primeiraNova);
   nfEnfileirar(o.id, n);
 
   _nfRascunho = null; _nfFull = ''; _nfPags = [];
@@ -1330,17 +1440,73 @@ function nfSalvarForm() {
   if (estado.tela === 'notas') render();
 }
 
+/* ---------- miniatura de quem NAO lancou a nota ----------
+   `nfDoServidor` monta `thumb` a partir da copia LOCAL: quem recebeu a nota
+   pela sincronizacao fica sem miniatura nenhuma. Na pratica, quem lancou via
+   a nota com a foto e todos os OUTROS aparelhos viam um quadro cinza — como
+   se a nota tivesse sido lancada sem imagem.
+
+   Agora o quadro busca a miniatura do Drive quando entra na tela, guarda no
+   aparelho e passa a servir de `thumb` dali em diante. Uma foto por nota, so
+   quando aparece na tela: e o mesmo desenho da Galeria. */
+let _nfMiniObs = null;
+
+async function nfPintarMiniatura(id) {
+  const o = obra(); if (!o) return;
+  const n = nfPorId(o.id, id); if (!n) return;
+  const alvo = el('nfmini-' + id);
+  if (!alvo || alvo.dataset.pronta === '1') return;
+  alvo.dataset.pronta = '1';
+  const r = await nfImagemDaPagina(o, n, 1, true);
+  const img = el('nfmini-' + id), vazio = el('nfsem-' + id);
+  if (!img) return;
+  if (!r.src) { img.dataset.pronta = ''; return; }
+  img.src = r.src;
+  img.style.display = 'block';
+  if (vazio) vazio.style.display = 'none';
+  // vira a miniatura da nota: da proxima vez aparece sem ida a rede
+  const arr = nfGet(o.id), alvoNota = arr.find(x => x.id === id);
+  if (alvoNota && !alvoNota.thumb) { alvoNota.thumb = r.src; nfSet(o.id, arr); }
+}
+
+function nfMiniaturasLazy() {
+  if (_nfMiniObs) { _nfMiniObs.disconnect(); _nfMiniObs = null; }
+  const quadros = [...document.querySelectorAll('[id^="nfmini-"]')]
+    .map(i => document.getElementById('nfcard-' + i.id.slice(7))).filter(Boolean);
+  if (!quadros.length) return;
+  if (typeof IntersectionObserver === 'undefined') {
+    quadros.forEach(q => nfPintarMiniatura(q.id.slice(7)));
+    return;
+  }
+  _nfMiniObs = new IntersectionObserver((ents, obs) => {
+    ents.forEach(e => {
+      if (!e.isIntersecting) return;
+      obs.unobserve(e.target);
+      nfPintarMiniatura(e.target.id.slice(7));
+    });
+  }, { rootMargin: '300px 0px' });
+  quadros.forEach(q => _nfMiniObs.observe(q));
+}
+
 /* ---------- paginas da nota ----------
    Nota de duas folhas e comum, e a segunda costuma trazer a continuacao dos
    itens. Ate aqui o app guardava so a folha 1: a leitura do PDF ate lia o
    texto das outras, mas a imagem delas era descartada sem aviso. */
+function nfTemCapa(n) {
+  return !!(_nfFull || (n && (n.thumb || (n.drive && n.drive.fileId))));
+}
 function nfPaginasTotalRascunho(n) {
-  // no rascunho contam as folhas ja no Drive MAIS as que acabaram de entrar
-  return 1 + Math.max(((n && n.paginas) || []).filter(Boolean).length, _nfPags.length);
+  // SOMA: as folhas que a nota ja tem MAIS as que acabaram de entrar no
+  // rascunho. Com `Math.max`, juntar uma folha a uma nota que ja tinha duas
+  // continuava dizendo "2 paginas" — e a folha nova sumia da contagem.
+  const extras = ((n && n.paginas) || []).filter(Boolean).length + _nfPags.length;
+  return (nfTemCapa(n) ? 1 : 0) + extras;
 }
 function nfPaginasTxt(n) {
   const t = nfPaginasTotalRascunho(n);
-  return t > 1 ? `${ic('arquivo')} ${t} páginas guardadas` : 'Uma página. A nota tem verso ou continuação?';
+  if (!t) return 'Sem imagem da nota. Anexe a foto ou o PDF da DANFE.';
+  return t > 1 ? `${ic('arquivo')} ${t} páginas guardadas`
+               : 'Uma página. A nota tem verso ou continuação?';
 }
 
 /* Junta folhas a nota em conferencia. Aceita varias imagens de uma vez ou
@@ -1367,6 +1533,15 @@ window.nfAddPaginas = async function (inp) {
     } catch (e) { /* arquivo que nao abriu nao derruba os outros */ }
   }
   if (!entraram) { toast('Não consegui ler esse arquivo'); return; }
+  // Nota sem imagem nenhuma (digitada a mao, ou recebida sem foto): a
+  // primeira folha anexada e a CAPA, nao a pagina 2.
+  if (!nfTemCapa(_nfRascunho) && _nfPags.length) {
+    _nfFull = _nfPags.shift();
+    _nfRascunho.thumb = await nfReduzirUri(_nfFull, 320, .6);
+    nfConferir();                       // redesenha com a capa no lugar
+    toast('Imagem da nota anexada — salve para enviá-la', 'success', 5000);
+    return;
+  }
   const info = el('nfPagsInfo');
   if (info) info.innerHTML = nfPaginasTxt(_nfRascunho);
   toast(entraram === 1 ? 'Página adicionada — salve a nota para enviá-la'
@@ -1407,20 +1582,32 @@ function nfMudarStatus(id, st) {
 /* ---------- imagem da nota ---------- */
 /* Busca UMA folha: primeiro o aparelho, depois o rascunho aberto, depois o
    Drive. `pagina` e 1-based; a 1 e a capa. */
-async function nfImagemDaPagina(o, n, pagina) {
+async function nfImagemDaPagina(o, n, pagina, mini) {
   const p = pagina > 1 ? pagina : 1;
+  const chave = nfImgChave(o.id, n.id, p);
   let src = '';
-  try { src = await fotoLerFull(nfImgChave(o.id, n.id, p)); } catch (e) { src = ''; }
+  try { src = await fotoLerFull(mini ? 'mini:' + chave : chave); } catch (e) { src = ''; }
+  if (!src && mini) { try { src = await fotoLerFull(chave); } catch (e) { src = ''; } }
   if (!src && _nfRascunho && _nfRascunho.id === n.id) {
-    src = p === 1 ? (_nfFull || '') : (_nfPags[p - 2] || '');
+    if (p === 1) src = _nfFull || '';
+    else {
+      // as folhas do rascunho vem DEPOIS das que a nota ja tinha
+      const jaGravadas = ((n.paginas || []).filter(Boolean)).length;
+      src = _nfPags[p - 2 - jaGravadas] || _nfPags[p - 2] || '';
+    }
   }
   const ref = p === 1 ? n.drive : ((n.paginas || [])[p - 2]);
   if (!src && ref && ref.fileId && BACKEND && !isDemo()) {
     try {
-      const r = await postAcao({ action: 'obterFoto', fileId: ref.fileId });
+      const params = { action: 'obterFoto', fileId: ref.fileId };
+      if (mini) params.mini = '1';
+      const r = await postAcao(params);
       if (r && r.ok && r.dataUri) {
         src = r.dataUri;
-        try { fotoGuardarFull(nfImgChave(o.id, n.id, p), src); } catch (e) { /* segue sem cache */ }
+        // veio a cheia num pedido de miniatura (Code.gs antigo): serve para
+        // as duas coisas, e guardar nas duas chaves evita baixar de novo
+        const guardarEm = (mini && r.mini === true) ? 'mini:' + chave : chave;
+        try { fotoGuardarFull(guardarEm, src); } catch (e) { /* segue sem cache */ }
       }
     } catch (e) { /* fica com o que houver */ }
   }
@@ -1558,8 +1745,11 @@ function nfViewLista(o) {
   const cards = mostra.map(n => {
     const div = nfDivergencia(n);
     return `<div class="card nf-card">
-      <div class="nf-card-img" onclick="nfVerImagem('${n.id}')">
-        ${n.thumb ? `<img src="${esc(n.thumb)}" alt="nota ${esc(n.numero)}" loading="lazy">` : `<div class="nf-card-sem">${ic('notas', 40)}</div>`}
+      <div class="nf-card-img" id="nfcard-${n.id}" onclick="nfVerImagem('${n.id}')">
+        ${n.thumb
+          ? `<img src="${esc(n.thumb)}" alt="nota ${esc(n.numero)}">`
+          : `<img id="nfmini-${n.id}" alt="nota ${esc(n.numero)}" style="display:none">
+             <div id="nfsem-${n.id}" class="nf-card-sem">${ic('notas', 40)}</div>`}
         <span class="pill ${NF_STATUS_COR[n.status] || 'pill-blu'} nf-card-st">${esc(n.status)}</span></div>
       <div class="nf-card-b">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
@@ -1979,6 +2169,26 @@ const _nfCarregando = {};
 const nfSync = {};
 function nfSyncEstado(obraId) { return nfSync[obraId] || { em: 0, erro: '' }; }
 
+/* Notas que existem SO neste aparelho: nao estao mais na fila de envio (logo,
+   deveriam ter subido) e nunca voltaram do servidor. E o sinal de que alguma
+   coisa recusou o envio — sem ele, a pessoa acha que lancou e ninguem mais ve
+   aquela nota. */
+function nfNaoConfirmadas(obraId) {
+  let pend;
+  try { pend = new Set(outboxLer().filter(it => it.tipo === 'nf').map(it => it.clientId)); }
+  catch (e) { pend = new Set(); }
+  return nfGet(obraId).filter(n => !n.doServidor && !pend.has(n.clientId || n.id));
+}
+
+/* A sincronizacao de fundo NAO pode redesenhar por cima de quem esta
+   digitando: a tela e refeita inteira e o campo perde o foco e o cursor.
+   Pedido explicito (botao Atualizar) sempre redesenha. */
+function nfPodeRedesenhar(opcoes) {
+  if (!(opcoes && opcoes.fundo)) return true;
+  const a = document.activeElement;
+  return !(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName));
+}
+
 async function nfCarregar(obraId, opcoes) {
   if (!BACKEND || isDemo() || !obraId) return;
   if (_nfCarregando[obraId]) return;
@@ -1992,11 +2202,27 @@ async function nfCarregar(obraId, opcoes) {
     const r = await postAcao({ action: 'nfListar', obra: obraId });
     if (r && r.ok && Array.isArray(r.notas)) {
       const locais = nfGet(obraId);
+      /* Lista VAZIA vinda do servidor com notas aqui dentro quase nunca
+         significa "apagaram tudo": significa que a chamada voltou torta
+         (sessao recusada, obra errada, backend meio publicado). Antes isso
+         limpava o aparelho em silencio. */
+      if (!r.notas.length && locais.length) {
+        throw new Error('LISTA_VAZIA_SUSPEITA');
+      }
       const pend = new Set(outboxLer().filter(it => it.tipo === 'nf').map(it => it.clientId));
-      const naoConf = locais.filter(l => pend.has(l.clientId || l.id));
       const mapa = {};
       r.notas.forEach(s => { mapa[s.clientId || s.id] = nfDoServidor(s, obraId, locais); });
-      naoConf.forEach(l => { mapa[l.clientId || l.id] = l; });
+      /* O que fica de pe mesmo sem aparecer na resposta:
+          - o que ainda esta na fila de envio (sempre foi assim); e
+          - o que NUNCA voltou do servidor (`doServidor` ausente). Este segundo
+            caso e o que evitava perder a nota cujo envio foi recusado: a fila
+            descarta o item apos um erro definitivo, e a sincronizacao seguinte
+            apagava a nota do aparelho de quem a lancou. */
+      locais.forEach(l => {
+        const k = l.clientId || l.id;
+        if (mapa[k]) return;
+        if (pend.has(k) || !l.doServidor) mapa[k] = l;
+      });
       nfSet(obraId, Object.values(mapa).sort((a, b) => (b.dataEntrada || '').localeCompare(a.dataEntrada || '')));
     }
     if (r && r.ok && Array.isArray(r.saidas)) {
@@ -2015,11 +2241,11 @@ async function nfCarregar(obraId, opcoes) {
        app: dava sempre falso, a nota nova era gravada no aparelho e a tela
        so mostrava depois de sair e voltar. */
     const depois = JSON.stringify(nfGet(obraId).map(n => [n.id, n.status, n.atualizadoEm || 0]));
-    if (estado.tela === 'notas' && (depois !== antes || !(opcoes && opcoes.fundo))) render();
+    if (estado.tela === 'notas' && (depois !== antes || !(opcoes && opcoes.fundo)) && nfPodeRedesenhar(opcoes)) render();
   } catch (e) {
     // offline: fica com o que ja esta no aparelho, mas a tela passa a dizer isso
     nfSync[obraId] = { em: nfSyncEstado(obraId).em, erro: String((e && e.message) || 'falha') };
-    if (estado.tela === 'notas' && !(opcoes && opcoes.fundo)) render();
+    if (estado.tela === 'notas' && !(opcoes && opcoes.fundo) && nfPodeRedesenhar(opcoes)) render();
   }
   finally { delete _nfCarregando[obraId]; }
 }
@@ -2055,6 +2281,9 @@ function nfDoServidor(s, obraId, locais) {
     status: s.status === 'Integrada ao pedido de compra' ? 'Conferida' : (NF_STATUS.indexOf(s.status) > -1 ? s.status : 'Recebida'),
     drive: s.driveId ? { fileId: s.driveId, link: s.driveLink || '' } : null,
     paginas: nfPaginasDoServidor(s, local),
+    // veio do servidor: uma sincronizacao futura pode remove-la se ela sumir
+    // de la. Nota SEM esta marca nunca foi confirmada e nao pode ser apagada.
+    doServidor: true,
     thumb: (local && local.thumb) || '',
     leitura: leitura, leituraConf: (local && local.leituraConf) || {},
     historico: hist, usuario: s.usuario || '',
@@ -2071,7 +2300,12 @@ function nfPaginasDoServidor(s, local) {
   let arr = bruto;
   if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { return (local && local.paginas) || []; } }
   if (!Array.isArray(arr)) return (local && local.paginas) || [];
-  return arr.filter(x => x && x.fileId);
+  const doServidor = arr.filter(x => x && x.fileId);
+  /* As folhas que ainda NAO subiram existem so aqui. Uma celula `paginas`
+     com "[]" (nota lancada antes de o backend saber paginar) apagava todas
+     elas. As locais sao mantidas depois das confirmadas. */
+  const locais = (((local && local.paginas) || []).filter(x => x && !x.fileId));
+  return doServidor.concat(locais);
 }
 
 /* quantas notas a obra tem — usado no badge da navegação */
