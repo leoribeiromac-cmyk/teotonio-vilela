@@ -4250,9 +4250,22 @@ function idbAbrir() {
 const _fotoMemCache = new Map();
 const _fotoPendingRequests = new Map();
 
+/* O cache de memória guardava toda foto aberta na sessão, sem teto: abrir a
+   galeria com 60 fotos cheias prendia dezenas de MB de texto base64 num
+   aparelho de campo. Agora é uma janela das últimas usadas — o IndexedDB
+   continua guardando tudo, e é de lá que a foto volta sem custo de rede. */
+const FOTO_MEM_MAX = 40;
+function fotoMemPor(chave, dataUri) {
+  _fotoMemCache.delete(chave);            // reinsere no fim: o Map mantém a ordem
+  _fotoMemCache.set(chave, dataUri);
+  while (_fotoMemCache.size > FOTO_MEM_MAX) {
+    _fotoMemCache.delete(_fotoMemCache.keys().next().value);
+  }
+}
+
 async function fotoGuardar(chave, dataUri) {
   if (!chave || !dataUri) return;
-  _fotoMemCache.set(chave, dataUri);
+  fotoMemPor(chave, dataUri);
   try {
     const d = await idbAbrir();
     await new Promise((res, rej) => {
@@ -4273,7 +4286,7 @@ async function fotoLer(chave) {
       const q = t.objectStore(IDB_STORE).get(chave);
       q.onsuccess = () => res(q.result || ''); q.onerror = () => rej(q.error);
     });
-    if (val) _fotoMemCache.set(chave, val);
+    if (val) fotoMemPor(chave, val);
     return val;
   } catch (e) { return ''; }
 }
@@ -4293,31 +4306,52 @@ function fotosDaLinha(r) {
     .split(/[\s;]+/).map(s => s.trim()).filter(s => fotoFileId(s));
 }
 
-async function baixarFotoServidor(fileId) {
+/* `mini` pede a MINIATURA que o Drive já guarda, em vez da foto inteira.
+   A galeria mostra a foto num quadro de 170 px: baixar a de 1280 px para
+   isso é dezenas de vezes mais bytes do que a tela usa — e são dezenas de
+   fotos de uma vez, no 4G do canteiro. A cheia vem ao ampliar.
+
+   A miniatura fica numa chave PRÓPRIA do cache ('mini:<id>'): ampliar
+   depois continua trazendo a foto de verdade, e não a versão pequena
+   esticada. Quando o Drive ainda não tem miniatura, o servidor devolve a
+   cheia e avisa (`mini:false`) — aí ela é guardada nas DUAS chaves, e
+   ampliar aquela foto sai de graça. */
+async function baixarFotoServidor(fileId, mini) {
   if (!fileId) return '';
-  const cache = await fotoLer(fileId);
+  const chave = mini ? 'mini:' + fileId : fileId;
+  const cache = await fotoLer(chave);
   if (cache) return cache;
-  
-  if (_fotoPendingRequests.has(fileId)) {
-    return _fotoPendingRequests.get(fileId);
+  // a cheia já baixada serve de miniatura: não vale outra ida ao servidor
+  if (mini) {
+    const cheia = await fotoLer(fileId);
+    if (cheia) return cheia;
   }
-  
+
+  if (_fotoPendingRequests.has(chave)) {
+    return _fotoPendingRequests.get(chave);
+  }
+
   const promise = (async () => {
     try {
-      const r = await jsonp(CONFIG.appsScript, { action: 'obterFoto', fileId, ...authParams() }, 0);
+      const params = { action: 'obterFoto', fileId, ...authParams() };
+      if (mini) params.mini = '1';
+      const r = await jsonp(CONFIG.appsScript, params, 0);
       if (r && r.ok && r.dataUri) {
-        fotoGuardar(fileId, r.dataUri);
+        // veio a cheia (backend antigo, ou o Drive sem miniatura pronta):
+        // guarda como cheia também, senão ampliar baixaria tudo de novo
+        if (mini && r.mini !== true) fotoGuardar(fileId, r.dataUri);
+        fotoGuardar(chave, r.dataUri);
         return r.dataUri;
       }
     } catch (e) {}
     return '';
   })();
-  
-  _fotoPendingRequests.set(fileId, promise);
+
+  _fotoPendingRequests.set(chave, promise);
   try {
     return await promise;
   } finally {
-    _fotoPendingRequests.delete(fileId);
+    _fotoPendingRequests.delete(chave);
   }
 }
 
@@ -5466,9 +5500,9 @@ function renderGaleria() {
     </div></div></div>`;
 
   const cartoes = fs.map(f => `<div class="card" style="overflow:hidden;padding:0">
-    <div style="position:relative;background:var(--surface-2);cursor:zoom-in;height:170px"
+    <div id="galbox-${f.fileId}" style="position:relative;background:var(--surface-2);cursor:zoom-in;height:170px"
          onclick="ampliarFoto('${f.fileId}','${escHtml(f.pacote)}')">
-      <img id="gal-${f.fileId}" alt="${escHtml(f.pacote)}" loading="lazy"
+      <img id="gal-${f.fileId}" alt="${escHtml(f.pacote)}"
            style="width:100%;height:170px;object-fit:cover;display:none">
       <div id="galph-${f.fileId}" style="height:170px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px">
         ${STATE.usuarioLogado ? 'carregando…' : ic('cadeado') + ' entre para ver'}
@@ -5491,62 +5525,87 @@ function renderGaleria() {
     <div class="grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px">${cartoes}</div>`;
 }
 
-// Carrega do cache local em paralelo e busca do servidor em lotes concorrentes.
-async function carregarImagensGaleria() {
-  if (!STATE.usuarioLogado) return;
-  const els = [...document.querySelectorAll('[id^="gal-"]')];
-  if (!els.length) return;
-  
-  const alvos = els.map(el => el.id.slice(4)).filter(Boolean);
-  
-  // 1. Processa tudo que já está em cache (memória / IndexedDB) em paralelo de forma ultra-rápida
-  const semCache = [];
-  await Promise.all(alvos.map(async (fileId) => {
-    const cached = await fotoLer(fileId);
-    const img = document.getElementById('gal-' + fileId);
-    const ph = document.getElementById('galph-' + fileId);
-    if (!img) return;
-    if (cached) {
-      img.src = cached;
-      img.style.display = 'block';
-      if (ph) ph.style.display = 'none';
-    } else {
-      semCache.push(fileId);
-    }
-  }));
+/* A galeria carregava TODAS as fotos assim que abria — cada uma em
+   resolução cheia, cada uma numa chamada ao Apps Script. Com 60 fotos
+   isso é 60 execuções e ~20 MB, quase tudo para quadros que a pessoa
+   nem rolou até ver.
 
-  if (!semCache.length) return;
+   Agora cada quadro só busca a foto quando está entrando na tela, e busca
+   a miniatura. O que já está no aparelho aparece na hora, sem rede. */
+let _galObs = null;
 
-  // 2. Busca as fotos restantes em lotes concorrentes (4 chamadas simultâneas)
-  const CONCURRENCY = 4;
-  for (let i = 0; i < semCache.length; i += CONCURRENCY) {
-    const lote = semCache.slice(i, i + CONCURRENCY);
-    await Promise.all(lote.map(async (fileId) => {
-      const src = await baixarFotoServidor(fileId);
-      const img = document.getElementById('gal-' + fileId);
-      const ph = document.getElementById('galph-' + fileId);
-      if (!img) return;
-      if (src) {
-        img.src = src;
-        img.style.display = 'block';
-        if (ph) ph.style.display = 'none';
-      } else if (ph) {
-        ph.textContent = 'imagem indisponível';
-      }
-    }));
+async function pintarFotoGaleria(fileId) {
+  const img = document.getElementById('gal-' + fileId);
+  const ph = document.getElementById('galph-' + fileId);
+  if (!img || img.dataset.pronta === '1') return;
+  img.dataset.pronta = '1';                       // não pede duas vezes
+  const src = await baixarFotoServidor(fileId, true);
+  // a tela pode ter mudado enquanto a foto vinha
+  const img2 = document.getElementById('gal-' + fileId);
+  const ph2 = document.getElementById('galph-' + fileId);
+  if (!img2) return;
+  if (src) {
+    img2.src = src;
+    img2.style.display = 'block';
+    if (ph2) ph2.style.display = 'none';
+  } else {
+    img2.dataset.pronta = '';                     // deixa tentar de novo ao rolar
+    if (ph2) ph2.textContent = 'imagem indisponível';
   }
 }
 
+function carregarImagensGaleria() {
+  if (_galObs) { _galObs.disconnect(); _galObs = null; }
+  if (!STATE.usuarioLogado) return;
+  // Observa o QUADRO, não a <img>: ela nasce com display:none até a foto
+  // chegar, e elemento escondido não tem tamanho — nunca intersecta nada.
+  const els = [...document.querySelectorAll('[id^="galbox-"]')];
+  if (!els.length) return;
+
+  // Sem IntersectionObserver (navegador antigo), carrega tudo como antes —
+  // mais lento, mas ninguém fica sem ver foto nenhuma.
+  if (typeof IntersectionObserver === 'undefined') {
+    els.forEach(el => pintarFotoGaleria(el.id.slice(7)));
+    return;
+  }
+
+  _galObs = new IntersectionObserver((entradas, obs) => {
+    entradas.forEach(e => {
+      if (!e.isIntersecting) return;
+      obs.unobserve(e.target);
+      pintarFotoGaleria(e.target.id.slice(7));
+    });
+  }, { rootMargin: '400px 0px' });   // adianta uma tela: rola sem esperar
+
+  els.forEach(el => _galObs.observe(el));
+}
+
+/* Abre na hora com a miniatura que a galeria já tem e troca pela foto cheia
+   quando ela chega. Esperar a cheia antes de mostrar qualquer coisa fazia o
+   toque parecer não ter funcionado — a foto inteira leva segundos no 4G. */
 window.ampliarFoto = async function(fileId, legenda) {
-  const src = await baixarFotoServidor(fileId);
-  if (!src) { toast('Não foi possível abrir a imagem.', 'error'); return; }
+  const previa = await fotoLer('mini:' + fileId);
   const janela = document.createElement('div');
   janela.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;display:flex;' +
     'flex-direction:column;align-items:center;justify-content:center;padding:20px;cursor:zoom-out';
   janela.onclick = () => janela.remove();
-  janela.innerHTML = `<img src="${src}" alt="${escHtml(legenda || '')}" style="max-width:100%;max-height:82vh;border-radius:8px">
-    <div style="color:#fff;margin-top:12px;font-size:13px">${escHtml(legenda || '')} — toque para fechar</div>`;
+  janela.innerHTML = `<img id="fotoAmp" src="${previa || ''}" alt="${escHtml(legenda || '')}"
+      style="max-width:100%;max-height:82vh;border-radius:8px;${previa ? '' : 'display:none'}">
+    <div id="fotoAmpMsg" style="color:#fff;margin-top:12px;font-size:13px">
+      ${escHtml(legenda || '')}${previa ? ' — carregando a foto inteira…' : ' — carregando…'}</div>`;
   document.body.appendChild(janela);
+
+  const src = await baixarFotoServidor(fileId);
+  if (!janela.isConnected) return;                 // já fecharam
+  const img = document.getElementById('fotoAmp');
+  const msg = document.getElementById('fotoAmpMsg');
+  if (!src) {
+    if (!previa) { janela.remove(); toast('Não foi possível abrir a imagem.', 'error'); return; }
+    if (msg) msg.textContent = (legenda || '') + ' — só a miniatura está disponível';
+    return;
+  }
+  if (img) { img.src = src; img.style.display = ''; }
+  if (msg) msg.textContent = (legenda || '') + ' — toque para fechar';
 };
 
 // ====================================================================
