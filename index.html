@@ -59,13 +59,18 @@
 <!-- Cadastro das obras que não têm planilha própria. Cada arquivo só escreve
      em window.OBRAS_ARQ, sem depender de nada do app — por isso pode vir
      aqui no topo, antes do script principal. -->
-<script src="dados/ranario.js"></script>
-<script src="dados/ruas-de-terra.js"></script>
+<!-- O `?v=` NÃO é enfeite. O service worker serve estes arquivos CACHE-PRIMEIRO,
+     e o index.html vem REDE-PRIMEIRO: sem a versão na URL, o aparelho abria o
+     index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
+     tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
+     junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
+<script src="dados/ranario.js?v=19"></script>
+<script src="dados/ruas-de-terra.js?v=19"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js"></script>
-<script src="js/nf/adaptador.js"></script>
-<script src="js/nf/notas.js"></script>
+<script src="js/ui/icones.js?v=19"></script>
+<script src="js/nf/adaptador.js?v=19"></script>
+<script src="js/nf/notas.js?v=19"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -2678,7 +2683,7 @@ async function outboxFlush(manual = false) {
         }
         // Erro do servidor: reenviar não vai resolver. Remove e avisa.
         outboxRemover(item.id);
-        toast('Um RDO guardado não pôde ser enviado (' + (item.descricao || '') + '): ' + erroLegivel(e.message), 'error', 0);
+        toast('Um lançamento guardado (' + descricaoDaFila([item]) + ') não pôde ser enviado: ' + erroLegivel(e.message), 'error', 0);
       }
     }
   } finally {
@@ -2709,6 +2714,29 @@ window.descartarOutbox = function(ev) {
   toast('Fila descartada. Os reenvios pararam.', 'success', 5000);
 };
 
+/* "3 lançamentos" não diz nada a quem está procurando uma nota que sumiu.
+   Este rótulo conta por tipo: "2 notas fiscais e 1 RDO". */
+function descricaoDaFila(itens) {
+  const NOMES = {
+    nf:      ['nota fiscal', 'notas fiscais'],
+    nfDel:   ['exclusão de nota', 'exclusões de nota'],
+    saida:   ['saída de estoque', 'saídas de estoque'],
+    equip:   ['apontamento de equipamento', 'apontamentos de equipamento'],
+  };
+  const cont = {};
+  (itens || []).forEach(it => {
+    const t = (it && it.tipo) || 'rdo';
+    cont[t] = (cont[t] || 0) + 1;
+  });
+  const partes = Object.keys(cont).map(t => {
+    const q = cont[t];
+    const nome = NOMES[t] || ['RDO', 'RDOs'];
+    return q + ' ' + (q > 1 ? nome[1] : nome[0]);
+  });
+  if (partes.length <= 1) return partes[0] || '0 lançamento';
+  return partes.slice(0, -1).join(', ') + ' e ' + partes[partes.length - 1];
+}
+
 // Indicador flutuante fixo na tela — visível também no celular.
 function atualizarIndicadorOutbox() {
   let el = document.getElementById('outboxIndicator');
@@ -2735,13 +2763,17 @@ function atualizarIndicadorOutbox() {
     el.innerHTML = `<span class="ob-ic ob-girando">${ic('syncPend')}</span>`
       + `<span style="flex:1">Enviando ${n} lançamento${n>1?'s':''}…</span>`;
   } else if (n > 0) {
-    // Há RDOs guardados → toque reenvia a fila.
+    // Há lançamentos guardados → toque reenvia a fila.
+    // O rótulo diz DE QUE tipo: a fila leva RDO, nota fiscal, saída de
+    // estoque e apontamento de equipamento, e chamar tudo de "RDO" fazia
+    // uma nota presa aqui virar um mistério para quem lançou.
+    const rotulo = descricaoDaFila(outboxLer());
     el.style.background = '#1f2937';
     el.style.cursor = 'pointer';
     el.setAttribute('role', 'button');
-    el.setAttribute('aria-label', n + ' RDO(s) aguardando envio. Toque para enviar agora.');
+    el.setAttribute('aria-label', rotulo + ' aguardando envio. Toque para enviar agora.');
     el.onclick = () => outboxFlush(true);
-    el.innerHTML = `<span class="ob-ic">${ic('antena')}</span><span style="flex:1">${n} RDO${n>1?'s':''} aguardando envio · toque para enviar</span>`
+    el.innerHTML = `<span class="ob-ic">${ic('antena')}</span><span style="flex:1">${rotulo} aguardando envio · toque para enviar</span>`
       + `<span onclick="descartarOutbox(event)" title="Descartar fila" aria-label="Descartar fila de envio" role="button" style="margin-left:10px;padding:3px 7px 1px;border-radius:6px;background:rgba(255,255,255,.2)">${ic('fechar')}</span>`;
   } else {
     // Offline sem nada pendente → só avisa que está sem conexão.
@@ -4663,7 +4695,20 @@ function seletorObra() {
    aparecer no outro, sem que nada na tela dissesse que nada estava sendo
    buscado. */
 function nfQuandoSincronizou() {
-  if (typeof nfSyncEstado !== 'function') return '';
+  // Sem esta guarda o app quebrava quando o módulo era mais antigo que o
+  // index. Isso não acontece mais (as tags carregam `?v=`), mas a guarda
+  // fica: ela também cobre o módulo não ter carregado por falha de rede.
+  if (typeof nfSyncEstado !== 'function') {
+    return `<span class="nf-sync erro">${ic('alerta')} módulo de notas não carregou — recarregue o app</span>`;
+  }
+  // Nota que saiu da fila e nunca voltou do servidor: alguém recusou o envio,
+  // e só este aparelho tem essa nota. É o pior silêncio possível aqui.
+  if (typeof nfNaoConfirmadas === 'function') {
+    const n = nfNaoConfirmadas(OBRA.id).length;
+    if (n) {
+      return `<span class="nf-sync erro">${ic('alerta')} ${n} nota(s) só neste aparelho — não confirmadas pelo servidor</span>`;
+    }
+  }
   const s = nfSyncEstado(OBRA.id);
   if (s.erro === 'semLogin') {
     return `<span class="nf-sync erro">${ic('cadeado')} entre para ver as notas do servidor</span>`;
@@ -4677,10 +4722,22 @@ function nfQuandoSincronizou() {
   return `<span class="nf-sync">${ic('nuvem')} atualizado ${quando}</span>`;
 }
 
-window.nfAtualizarAgora = function () {
+/* O botão precisa VOLTAR ao normal em todo caminho. `nfCarregar` sai cedo em
+   vários casos (já tem uma carga em curso, sem sessão, obra indefinida) e nem
+   sempre redesenha a tela — sem o `finally` o botão ficava presoem
+   "Atualizando…" para sempre, e a pessoa concluía que o sistema travou. */
+window.nfAtualizarAgora = async function () {
   const b = document.getElementById('nfBtAtualizar');
   if (b) { b.disabled = true; b.innerHTML = `${ic('ampulheta')} Atualizando…`; }
-  nfCarregar(obra().id);
+  try {
+    await nfCarregar(obra().id);
+  } catch (e) {
+    // nfCarregar já trata os erros dele; aqui é só para o finally rodar
+  } finally {
+    // se a tela foi redesenhada, este botão nem existe mais — e tudo bem
+    const b2 = document.getElementById('nfBtAtualizar');
+    if (b2) { b2.disabled = false; b2.innerHTML = `${ic('atualizar')} Atualizar`; }
+  }
 };
 
 function faixaObraNotas() {
@@ -4973,7 +5030,13 @@ function render() {
   else if (STATE.currentPage === 'rdodiario') { pageEl.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
   else if (STATE.currentPage === 'historico') pageEl.innerHTML = renderHistorico();
   else if (STATE.currentPage === 'equip') { pageEl.innerHTML = renderEquip(); ligarEquipForm(); if (!EQUIP.carregado) carregarEquip(); }
-  else if (STATE.currentPage === 'notas') { pageEl.innerHTML = faixaObraNotas() + viewNotas(obra()); nfCarregar(obra().id); }
+  else if (STATE.currentPage === 'notas') {
+    pageEl.innerHTML = faixaObraNotas() + viewNotas(obra());
+    nfCarregar(obra().id);
+    // quem NÃO lançou a nota recebe ela sem miniatura: o quadro busca a
+    // imagem do Drive quando entra na tela (mesmo desenho da Galeria)
+    if (typeof nfMiniaturasLazy === 'function') nfMiniaturasLazy();
+  }
   else if (STATE.currentPage === 'galeria') { pageEl.innerHTML = renderGaleria(); carregarImagensGaleria(); }
   else if (STATE.currentPage === 'projetos') { pageEl.innerHTML = renderProjetos(); abrirPrancha(); }
   else if (STATE.currentPage === 'usuarios') { pageEl.innerHTML = renderUsuarios(); usuariosCarregarLista(); }
@@ -12652,6 +12715,10 @@ document.addEventListener('DOMContentLoaded', () => {
      temporizadores. Ao voltar à frente, ressincroniza. */
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
+    // App instalado na tela inicial fica aberto por dias e NUNCA é navegado
+    // de novo — sem isto, o aparelho podia ficar semanas numa versão antiga
+    // sem nem receber o aviso. Voltar para a frente vira o momento de olhar.
+    if (_swReg && _swReg.update) { try { _swReg.update(); } catch (e) {} }
     outboxFlush();
     carregarTudo({ fundo: true });
     if (STATE.currentPage === 'notas' && typeof nfCarregar === 'function') {

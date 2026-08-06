@@ -65,6 +65,10 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
       corpo = { ok: true, mini: false,
                 dataUri: 'data:image/jpeg;base64,' + 'A'.repeat(400) + par.fileId.length };
     }
+    else if (par.action === 'ping') {
+      corpo = servidorAntigo ? { ok: true, pong: true }
+                             : { ok: true, pong: true, recursos: { paginas: true } };
+    }
     else corpo = { ok: true };
     todas.push(par.action || '?');
     if (par.callback) return route.fulfill({ status: 200, contentType: 'application/javascript',
@@ -86,7 +90,22 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
   await p.evaluate(() => navigate('notas'));
   await p.waitForTimeout(900);
 
-  console.log('DUAS FOTOS DE UMA VEZ VIRAM DUAS FOLHAS');
+  console.log('O CAMPO DE ARQUIVO ACEITA MAIS DE UM ARQUIVO');
+  // ponto cego do teste anterior: ele chamava nfArquivoSelecionado direto e
+  // nunca olhou o <input>. Sem `multiple`, o caminho de várias folhas era
+  // código morto — o celular só deixava escolher uma foto.
+  await p.evaluate(() => nfAbrirNova());
+  await p.waitForTimeout(600);
+  const entradas = await p.evaluate(() =>
+    [...document.querySelectorAll('input[type=file]')].map(i => ({
+      accept: i.accept, multiple: i.multiple, captura: i.hasAttribute('capture') })));
+  ok('achou os dois campos de arquivo da tela de nova nota', entradas.length >= 2,
+    JSON.stringify(entradas));
+  ok('TODOS aceitam seleção múltipla', entradas.every(e => e.multiple), JSON.stringify(entradas));
+  ok('e a tela avisa que dá para mandar as duas folhas',
+    /duas folhas/i.test(await p.evaluate(() => document.body.innerText)));
+
+  console.log('\nDUAS FOTOS DE UMA VEZ VIRAM DUAS FOLHAS');
   // duas imagens diferentes, geradas no próprio navegador
   await p.evaluate(async () => {
     window.__arq = (txt, cor) => new Promise(res => {
@@ -210,6 +229,129 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
   ok('e a imagem da folha única aparece',
     await p.evaluate(() => { const i = document.getElementById('nfVerImg');
       return !!i && i.style.display !== 'none' && !!i.src; }));
+
+  console.log('\nNOTA SEM IMAGEM PODE RECEBER A FOTO DEPOIS');
+  // o bloco da imagem dependia de `n.thumb`: nota digitada à mão, ou recebida
+  // pela sincronização, não tinha nem como anexar a foto
+  await p.evaluate(() => {
+    fecharModal();
+    nfSet(obra().id, [{ id: 'semimg', clientId: 'semimg', obraId: obra().id, numero: '77',
+      status: 'Recebida', dataEntrada: '2026-08-03', itens: [], historico: [],
+      thumb: '', drive: null, paginas: [], vTotal: 50, razaoSocial: 'DIGITADA A MAO' }]);
+    nfEditar('semimg');
+  });
+  await p.waitForTimeout(700);
+  ok('o formulário mostra o bloco mesmo sem imagem',
+    await p.evaluate(() => !!document.getElementById('nfPagsInfo')));
+  ok('e diz que falta a imagem',
+    /Sem imagem da nota/.test(await p.evaluate(() =>
+      (document.getElementById('nfPagsInfo') || {}).textContent || '')),
+    await p.evaluate(() => (document.getElementById('nfPagsInfo') || {}).textContent));
+  ok('o botão convida a anexar, não a "adicionar página"',
+    /Anexar a imagem da nota/.test(await p.evaluate(() =>
+      document.querySelector('#nfPagsInfo').parentElement.textContent)));
+
+  await p.evaluate(async () => {
+    const arq = (t) => new Promise(res => { const c = document.createElement('canvas');
+      c.width = 400; c.height = 520; const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, 400, 520); g.fillStyle = '#000';
+      g.font = '28px sans-serif'; g.fillText(t, 20, 60);
+      c.toBlob(b => res(new File([b], t + '.jpg', { type: 'image/jpeg' })), 'image/jpeg', .9); });
+    const dt = new DataTransfer(); dt.items.add(await arq('CAPA'));
+    await nfAddPaginas({ files: dt.files, value: '' });
+  });
+  await p.waitForTimeout(1500);
+  const virou = await p.evaluate(() => ({ capa: !!_nfFull, thumb: !!_nfRascunho.thumb,
+                                          extras: _nfPags.length,
+                                          txt: (document.getElementById('nfPagsInfo') || {}).textContent || '' }));
+  ok('a primeira folha anexada vira a CAPA, não a página 2',
+    virou.capa && virou.extras === 0, JSON.stringify(virou));
+  ok('e a nota passa a ter miniatura', virou.thumb);
+  ok('a contagem passa a dizer uma página', /Uma página/.test(virou.txt), virou.txt);
+
+  console.log('\nTERCEIRA FOLHA NÃO SOBRESCREVE A SEGUNDA');
+  await p.evaluate(() => { NF_PAGS_SERVIDOR.sabe = null; NF_PAGS_SERVIDOR.avisado = false; });
+  // renumerar sempre a partir de 2 fazia a folha nova apagar a anterior no
+  // Drive, e a contagem com Math.max escondia isso
+  imagens = [];
+  await p.evaluate(async () => {
+    fecharModal();
+    nfSet(obra().id, [{ id: 'tres', clientId: 'tres', obraId: obra().id, numero: '300',
+      status: 'Recebida', dataEntrada: '2026-08-04', itens: [], historico: [],
+      thumb: 'data:image/jpeg;base64,AAAA', vTotal: 30, razaoSocial: 'TRES FOLHAS',
+      drive: { fileId: 'drv-tres-p1', link: 'https://drive/tres/1' },
+      paginas: [{ fileId: 'drv-tres-p2', link: 'https://drive/tres/2', pagina: 2 }] }]);
+    nfEditar('tres');
+  });
+  await p.waitForTimeout(700);
+  ok('a nota já conta 2 páginas', /2 páginas guardadas/.test(await p.evaluate(() =>
+    (document.getElementById('nfPagsInfo') || {}).textContent || '')),
+    await p.evaluate(() => (document.getElementById('nfPagsInfo') || {}).textContent));
+
+  await p.evaluate(async () => {
+    const arq = (t) => new Promise(res => { const c = document.createElement('canvas');
+      c.width = 300; c.height = 400; const g = c.getContext('2d');
+      g.fillStyle = '#fff'; g.fillRect(0, 0, 300, 400); g.fillStyle = '#000';
+      g.font = '24px sans-serif'; g.fillText(t, 15, 50);
+      c.toBlob(b => res(new File([b], t + '.jpg', { type: 'image/jpeg' })), 'image/jpeg', .9); });
+    const dt = new DataTransfer(); dt.items.add(await arq('TERCEIRA'));
+    await nfAddPaginas({ files: dt.files, value: '' });
+  });
+  await p.waitForTimeout(1200);
+  ok('agora a contagem diz 3 páginas (soma, não máximo)',
+    /3 páginas guardadas/.test(await p.evaluate(() =>
+      (document.getElementById('nfPagsInfo') || {}).textContent || '')),
+    await p.evaluate(() => (document.getElementById('nfPagsInfo') || {}).textContent));
+
+  await p.evaluate(() => {
+    document.getElementById('nf_vTotal').value = '30';
+    nfSalvarForm();
+  });
+  await p.waitForTimeout(3500);
+  const pags = imagens.filter(x => x.pagina > 1).map(x => x.pagina);
+  ok('a folha nova sobe como página 3, não como 2', pags.includes(3) && !pags.includes(2),
+    JSON.stringify(imagens));
+  ok('e a nota fica com 3 folhas registradas',
+    await p.evaluate(() => {
+      const n = nfGet(obra().id).find(x => x.id === 'tres');
+      return n && (n.paginas || []).filter(Boolean).length === 2;
+    }),
+    await p.evaluate(() => JSON.stringify((nfGet(obra().id).find(x => x.id === 'tres') || {}).paginas)));
+
+  console.log('\nFOLHA QUE NÃO SUBIU CONTINUA EXISTINDO PARA O APP');
+  servidorAntigo = true;
+  await p.evaluate(() => { NF_PAGS_SERVIDOR.sabe = null; NF_PAGS_SERVIDOR.avisado = false; });
+  await p.evaluate(async () => {
+    fecharModal();
+    nfSet(obra().id, [{ id: 'presa', clientId: 'presa', obraId: obra().id, numero: '500',
+      status: 'Recebida', dataEntrada: '2026-08-04', itens: [], historico: [],
+      thumb: 'data:image/jpeg;base64,AAAA', vTotal: 50, razaoSocial: 'FOLHA PRESA',
+      drive: { fileId: 'drv-presa-p1', link: 'https://drive/presa/1' }, paginas: [] }]);
+    nfEditar('presa');
+    const arq = () => new Promise(res => { const c = document.createElement('canvas');
+      c.width = 300; c.height = 400; c.getContext('2d').fillRect(0, 0, 300, 400);
+      c.toBlob(b => res(new File([b], 'p.jpg', { type: 'image/jpeg' })), 'image/jpeg', .9); });
+    const dt = new DataTransfer(); dt.items.add(await arq());
+    await nfAddPaginas({ files: dt.files, value: '' });
+  });
+  await p.waitForTimeout(1200);
+  await p.evaluate(() => { document.getElementById('nf_vTotal').value = '50'; nfSalvarForm(); });
+  await p.waitForTimeout(3500);
+  const presa = await p.evaluate(async () => {
+    const n = nfGet(obra().id).find(x => x.id === 'presa');
+    return { paginas: (n.paginas || []).length,
+             local: !!((n.paginas || [])[0] || {}).local,
+             noAparelho: !!(await fotoLer(nfImgChave(obra().id, 'presa', 2))),
+             total: nfNumPaginas(n) };
+  });
+  ok('a nota registra a folha mesmo sem ela ter subido', presa.paginas === 1 && presa.local,
+    JSON.stringify(presa));
+  ok('a imagem dela está no aparelho', presa.noAparelho);
+  ok('e a nota conta 2 folhas', presa.total === 2, JSON.stringify(presa));
+  const enviado = salvas.filter(s2 => /presa/.test(s2.clientId || '')).map(s2 => s2.paginas).join('');
+  ok('mas a folha local NÃO é gravada na planilha como se tivesse subido',
+    !/fileId/.test(enviado), enviado);
+  servidorAntigo = false;
 
   console.log('\n--- ERROS DE JS (' + err.length + ') ---');
   [...new Set(err)].slice(0, 8).forEach(e => console.log('  ' + e));

@@ -42,6 +42,10 @@ const nota = (num, obra) => ({
     let corpo;
     if (par.action === 'login') corpo = { ok: true, usuario: 'Leonardo', perfil: 'admin', token: 't', obras: '*' };
     else if (par.action === 'usuariosNomes') corpo = { ok: true, usuarios: ['Leonardo'] };
+    else if (par.action === 'obterFoto') {
+      corpo = { ok: true, mini: par.mini === '1',
+                dataUri: 'data:image/jpeg;base64,' + 'A'.repeat(600) };
+    }
     else if (par.action === 'nfListar') {
       listagens++;
       corpo = servidorCai ? { ok: false, error: 'FALHA_SIMULADA' }
@@ -116,6 +120,66 @@ const nota = (num, obra) => ({
   ok('diz que precisa entrar', /entre para ver as notas/.test(await texto()),
     (await texto()).slice(0, 160));
   await p.evaluate(() => localStorage.setItem(CONFIG.ls.token, 't'));
+
+  console.log('\nO SERVIDOR NÃO PODE APAGAR O QUE ESTÁ AQUI POR ENGANO');
+  // lista vazia com notas no aparelho quase nunca é "apagaram tudo": é chamada
+  // torta. Antes isso limpava o aparelho em silêncio.
+  const guardadas = await p.evaluate(() => nfGet(OBRA.id).length);
+  ok('há notas guardadas antes do teste', guardadas > 0, guardadas);
+  const backup = NOTAS.teotonio.slice();
+  NOTAS.teotonio.length = 0;
+  await p.evaluate(() => nfAtualizarAgora());
+  await p.waitForTimeout(1500);
+  ok('lista vazia do servidor NÃO apaga as notas do aparelho',
+    await p.evaluate(() => nfGet(OBRA.id).length) === guardadas,
+    await p.evaluate(() => nfGet(OBRA.id).length) + ' de ' + guardadas);
+  ok('e a tela avisa que não conseguiu atualizar',
+    /não consegui atualizar/.test(await texto()));
+  backup.forEach(n => NOTAS.teotonio.push(n));
+  await p.evaluate(() => nfAtualizarAgora());
+  await p.waitForTimeout(1500);
+
+  console.log('\nNOTA RECUSADA PELO SERVIDOR NÃO SOME DO APARELHO');
+  // a fila descarta o item depois de um erro definitivo; sem a marca
+  // `doServidor`, a sincronização seguinte apagava a nota de quem a lançou
+  await p.evaluate(() => {
+    const arr = nfGet(OBRA.id);
+    arr.unshift({ id: 'orfa', clientId: 'orfa', obraId: OBRA.id, numero: '4040',
+      razaoSocial: 'RECUSADA PELO SERVIDOR', status: 'Recebida', dataEntrada: '2026-08-05',
+      itens: [], historico: [], thumb: '', drive: null, paginas: [], vTotal: 70 });
+    nfSet(OBRA.id, arr);
+  });
+  await p.evaluate(() => nfAtualizarAgora());
+  await p.waitForTimeout(1600);
+  ok('a nota que o servidor não conhece continua aqui',
+    await p.evaluate(() => !!nfGet(OBRA.id).find(n => n.id === 'orfa')));
+  ok('e a tela diz que ela não foi confirmada',
+    /não confirmadas pelo servidor/.test(await texto()), (await texto()).slice(0, 200));
+
+  console.log('\nNOTA QUE VEIO DE OUTRO APARELHO GANHA MINIATURA');
+  // `nfDoServidor` monta `thumb` da cópia LOCAL: quem NÃO lançou a nota
+  // recebia um quadro cinza, como se ela tivesse sido lançada sem imagem.
+  NOTAS.teotonio.push(Object.assign(nota(1010, 'teotonio'),
+    { driveId: 'drv-1010', driveLink: 'https://drive/1010' }));
+  await p.evaluate(() => nfAtualizarAgora());
+  await p.waitForTimeout(1500);
+  // o servidor não guarda miniatura: ela é montada no aparelho de quem lançou
+  ok('o servidor não manda miniatura nenhuma',
+    !NOTAS.teotonio.find(x => x.numero === '1010').thumb);
+  ok('o quadro dela existe na tela, esperando a imagem',
+    await p.evaluate(() => { const n = nfGet(OBRA.id).find(x => x.numero === '1010');
+      return !!n && !!document.getElementById('nfmini-' + n.id); }));
+  await p.waitForTimeout(2000);
+  const mini = await p.evaluate(() => {
+    const n = nfGet(OBRA.id).find(x => x.numero === '1010');
+    const img = n && document.getElementById('nfmini-' + n.id);
+    return { pintou: !!(img && img.style.display === 'block' && img.src),
+             virouThumb: !!(n && n.thumb) };
+  });
+  ok('a miniatura é buscada do Drive e aparece', mini.pintou, JSON.stringify(mini));
+  ok('e passa a ser a miniatura da nota, sem baixar de novo', mini.virouThumb);
+
+  await p.evaluate(() => nfSet(OBRA.id, nfGet(OBRA.id).filter(n => n.id !== 'orfa')));
 
   console.log('\nA TRAVA DE CARGA É POR OBRA, NÃO GLOBAL');
   const trava = await p.evaluate(async () => {
