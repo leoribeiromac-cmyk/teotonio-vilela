@@ -262,7 +262,11 @@
 .nf-obra-sel:hover{border-color:var(--acc)}
 .nf-obra-sel:focus{outline:none;border-color:var(--acc)}
 .nf-obra-nota{font-size:11.5px;color:var(--muted);margin-left:auto}
-@media(max-width:640px){.nf-obra-nota{display:none}}
+.nf-sync{display:inline-flex;align-items:center;gap:5px;margin-left:auto;
+  font-size:11.5px;color:var(--muted);white-space:nowrap}
+.nf-sync svg{width:14px;height:14px}
+.nf-sync.erro{color:var(--ylw-d)}
+@media(max-width:640px){.nf-obra-nota{display:none}.nf-sync{margin-left:0}}
 
 /* --- regras próprias do módulo, copiadas do Gestor --- */
 .nf-grid{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
@@ -4249,6 +4253,10 @@ function idbAbrir() {
 
 const _fotoMemCache = new Map();
 const _fotoPendingRequests = new Map();
+/* Fica `true` quando o servidor devolve a foto INTEIRA para um pedido de
+   miniatura — ou seja, o Code.gs publicado ainda é o de antes. É a diferença
+   entre a galeria abrir com ~20 KB por foto e com ~260 KB. */
+const FOTO_SERVIDOR_ANTIGO = { sim: false, avisado: false };
 
 /* O cache de memória guardava toda foto aberta na sessão, sem teto: abrir a
    galeria com 60 fotos cheias prendia dezenas de MB de texto base64 num
@@ -4339,7 +4347,13 @@ async function baixarFotoServidor(fileId, mini) {
       if (r && r.ok && r.dataUri) {
         // veio a cheia (backend antigo, ou o Drive sem miniatura pronta):
         // guarda como cheia também, senão ampliar baixaria tudo de novo
-        if (mini && r.mini !== true) fotoGuardar(fileId, r.dataUri);
+        if (mini && r.mini !== true) {
+          fotoGuardar(fileId, r.dataUri);
+          // Payload grande demais para ser miniatura de qualquer Drive: é o
+          // Code.gs antigo, que ignora o `mini=1`. Sem esse aviso a galeria
+          // fica lenta e ninguém tem como saber que falta republicar.
+          if (r.dataUri.length > 120000) FOTO_SERVIDOR_ANTIGO.sim = true;
+        }
         fotoGuardar(chave, r.dataUri);
         return r.dataUri;
       }
@@ -4638,20 +4652,48 @@ function seletorObra() {
 
    Fica no index, e não no `js/nf/notas.js`: aquele arquivo é cópia do
    app "Gestor" e não pode receber nada específico deste. */
+/* "Atualizado agora" / "há 3 min" / "não consegui atualizar".
+   Sem isto, uma lista de ontem e a lista de agora são visualmente idênticas —
+   e foi exatamente assim que uma nota lançada num aparelho ficou horas sem
+   aparecer no outro, sem que nada na tela dissesse que nada estava sendo
+   buscado. */
+function nfQuandoSincronizou() {
+  if (typeof nfSyncEstado !== 'function') return '';
+  const s = nfSyncEstado(OBRA.id);
+  if (s.erro === 'semLogin') {
+    return `<span class="nf-sync erro">${ic('cadeado')} entre para ver as notas do servidor</span>`;
+  }
+  if (s.erro) {
+    return `<span class="nf-sync erro">${ic('alerta')} não consegui atualizar — mostrando o que está no aparelho</span>`;
+  }
+  if (!s.em) return `<span class="nf-sync">${ic('atualizar')} buscando…</span>`;
+  const min = Math.floor((Date.now() - s.em) / 60000);
+  const quando = min < 1 ? 'agora' : (min === 1 ? 'há 1 min' : 'há ' + min + ' min');
+  return `<span class="nf-sync">${ic('nuvem')} atualizado ${quando}</span>`;
+}
+
+window.nfAtualizarAgora = function () {
+  const b = document.getElementById('nfBtAtualizar');
+  if (b) { b.disabled = true; b.innerHTML = `${ic('ampulheta')} Atualizando…`; }
+  nfCarregar(obra().id);
+};
+
 function faixaObraNotas() {
   const lista = obrasOrdenadas();
   const nome = escHtml(OBRA.nomeCurto || OBRA.nome);
+  const acoes = `${nfQuandoSincronizou()}
+    <button id="nfBtAtualizar" class="btn btn-ghost btn-sm" onclick="nfAtualizarAgora()"
+            title="Buscar as notas mais recentes do servidor">${ic('atualizar')} Atualizar</button>`;
   if (lista.length < 2) {
     return `<div class="nf-obra"><span class="nf-obra-ic">${ic('obra')}</span>
-      <span class="nf-obra-txt">Notas de <b>${nome}</b></span></div>`;
+      <span class="nf-obra-txt">Notas de <b>${nome}</b></span>${acoes}</div>`;
   }
   return `<div class="nf-obra"><span class="nf-obra-ic">${ic('obra')}</span>
     <label class="nf-obra-txt" for="nfObraSel">Notas da obra</label>
     <select id="nfObraSel" class="nf-obra-sel" onchange="trocarObra(this.value, { manterTela: true })"
             aria-label="Filtrar as notas por obra">
       ${lista.map(o => `<option value="${escHtml(o.id)}" ${o.id === OBRA.id ? 'selected' : ''}>${escHtml(o.nomeCurto || o.nome)}</option>`).join('')}
-    </select>
-    <span class="nf-obra-nota">Só as notas desta obra aparecem abaixo.</span></div>`;
+    </select>${acoes}</div>`;
 }
 
 function renderShell() {
@@ -5519,6 +5561,12 @@ function renderGaleria() {
     </div></div>`).join('');
 
   return `${filtros}
+    <div id="galAvisoServidor" class="card" style="display:${FOTO_SERVIDOR_ANTIGO.avisado ? '' : 'none'};margin-bottom:14px;border-left:3px solid var(--ylw)">
+      <div class="card-body" style="padding:11px 16px;font-size:13px;line-height:1.5">
+        <b>A galeria está baixando as fotos em tamanho cheio.</b><br>
+        O <code>Code.gs</code> publicado no Apps Script ainda é o anterior — ele ignora o
+        pedido de miniatura. Republicando (Implantar → Nova versão), cada foto desta tela
+        passa de ~260 KB para ~20 KB.</div></div>
     ${STATE.usuarioLogado ? '' : `<div class="card" style="margin-bottom:14px;border-left:3px solid var(--ylw)">
       <div class="card-body" style="padding:11px 16px;font-size:13px">
         As fotos ficam <b>privadas no Drive</b>. Faça login para vê-las.</div></div>`}
@@ -5551,6 +5599,13 @@ async function pintarFotoGaleria(fileId) {
   } else {
     img2.dataset.pronta = '';                     // deixa tentar de novo ao rolar
     if (ph2) ph2.textContent = 'imagem indisponível';
+  }
+  // Descobriu, na primeira foto, que o servidor ainda manda a imagem cheia:
+  // mostra o aviso uma vez, sem redesenhar a galeria toda.
+  if (FOTO_SERVIDOR_ANTIGO.sim && !FOTO_SERVIDOR_ANTIGO.avisado) {
+    FOTO_SERVIDOR_ANTIGO.avisado = true;
+    const cx = document.getElementById('galAvisoServidor');
+    if (cx) cx.style.display = '';
   }
 }
 
@@ -12574,6 +12629,30 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auto-refresh a cada 5min — em modo "fundo": silencioso e sem re-render
   // por cima de formulário aberto ou campo focado.
   setInterval(() => carregarTudo({ fundo: true }), CONFIG.refreshMs);
+
+  /* NOTAS FISCAIS entram no ciclo de atualização.
+     Elas não vêm do CSV, e sim de uma chamada própria ao Apps Script — e
+     essa chamada só acontecia quando alguém ABRIA a tela de Notas. Quem
+     deixasse a tela aberta, ou quem tivesse aberto antes do lançamento,
+     ficava com a lista de horas atrás sem nenhum sinal disso: foi por isso
+     que uma nota lançada num aparelho passou o dia sem aparecer no outro. */
+  setInterval(() => {
+    if (STATE.currentPage === 'notas' && typeof nfCarregar === 'function') {
+      nfCarregar(obra().id, { fundo: true });
+    }
+  }, 60000);
+
+  /* Voltar para o app é o momento em que mais se olha dado velho: o celular
+     ficou no bolso, ou o navegador jogou a aba para segundo plano e parou os
+     temporizadores. Ao voltar à frente, ressincroniza. */
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    outboxFlush();
+    carregarTudo({ fundo: true });
+    if (STATE.currentPage === 'notas' && typeof nfCarregar === 'function') {
+      nfCarregar(obra().id, { fundo: true });
+    }
+  });
 
   // Fila offline: abre o banco, traz o que ficou no armazenamento antigo e só
   // então mostra o pendente e tenta reenviar. Tudo que lê a fila depende deste

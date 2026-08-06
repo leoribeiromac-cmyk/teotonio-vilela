@@ -1760,10 +1760,26 @@ function nfBarrasSVG(meses) {
 }
 
 /* ---------- carga do servidor ---------- */
-let _nfCarregando = false;
-async function nfCarregar(obraId) {
-  if (!BACKEND || isDemo() || _nfCarregando || !getToken()) return;
-  _nfCarregando = true;
+/* Uma trava POR OBRA, e nao uma so para o app inteiro: com a trava global,
+   trocar de obra no meio de uma carga fazia a obra nova voltar em silencio,
+   e a tela ficava com a lista da outra ate alguem sair e entrar. */
+const _nfCarregando = {};
+/* Quando cada obra sincronizou pela ultima vez, e por que falhou. A tela
+   mostra isso: sem esse aviso, lista velha e lista atual sao identicas na
+   aparencia — foi assim que uma nota lancada num aparelho passou o dia sem
+   aparecer no outro, sem nenhum sinal de que nada estava sendo buscado. */
+const nfSync = {};
+function nfSyncEstado(obraId) { return nfSync[obraId] || { em: 0, erro: '' }; }
+
+async function nfCarregar(obraId, opcoes) {
+  if (!BACKEND || isDemo() || !obraId) return;
+  if (_nfCarregando[obraId]) return;
+  if (!getToken()) {
+    nfSync[obraId] = { em: nfSyncEstado(obraId).em, erro: 'semLogin' };
+    return;
+  }
+  _nfCarregando[obraId] = true;
+  const antes = JSON.stringify(nfGet(obraId).map(n => [n.id, n.status, n.atualizadoEm || 0]));
   try {
     const r = await postAcao({ action: 'nfListar', obra: obraId });
     if (r && r.ok && Array.isArray(r.notas)) {
@@ -1784,9 +1800,20 @@ async function nfCarregar(obraId) {
       locaisS.forEach(x => { mapaS[x.id] = x; });
       nfSaiSet(obraId, Object.values(mapaS).sort((a, b) => (b.dataISO || '').localeCompare(a.dataISO || '')));
     }
-    if (estado.tela === 'notas' && estado.obraId === obraId) render();
-  } catch (e) { /* offline: fica com o que ja esta no aparelho */ }
-  finally { _nfCarregando = false; }
+    if (!r || !r.ok) throw new Error((r && r.error) || 'resposta invalida');
+    nfSync[obraId] = { em: Date.now(), erro: '' };
+    /* Redesenha quando a lista MUDOU, e nao quando dois estados batem.
+       A condicao antiga comparava `estado.obraId`, que nem existia neste
+       app: dava sempre falso, a nota nova era gravada no aparelho e a tela
+       so mostrava depois de sair e voltar. */
+    const depois = JSON.stringify(nfGet(obraId).map(n => [n.id, n.status, n.atualizadoEm || 0]));
+    if (estado.tela === 'notas' && (depois !== antes || !(opcoes && opcoes.fundo))) render();
+  } catch (e) {
+    // offline: fica com o que ja esta no aparelho, mas a tela passa a dizer isso
+    nfSync[obraId] = { em: nfSyncEstado(obraId).em, erro: String((e && e.message) || 'falha') };
+    if (estado.tela === 'notas' && !(opcoes && opcoes.fundo)) render();
+  }
+  finally { delete _nfCarregando[obraId]; }
 }
 function nfDoServidor(s, obraId, locais) {
   const local = locais.find(l => (l.clientId || l.id) === (s.clientId || s.id));
