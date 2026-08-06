@@ -78,7 +78,14 @@ function nfSaiSet(obraId, arr) { localStorage.setItem(nfSaiKey(obraId), JSON.str
 function nfPorId(obraId, id) { return nfGet(obraId).find(n => n.id === id) || null; }
 
 /* imagem em resolucao cheia: mesmo IndexedDB das fotos do RDO */
-function nfImgChave(obraId, id) { return 'nf:' + obraId + ':' + id; }
+/* A folha 1 mantem a chave de sempre — nota antiga continua achando a
+   imagem dela no aparelho. As folhas seguintes ganham sufixo. */
+function nfImgChave(obraId, id, pagina) {
+  const p = parseInt(pagina, 10);
+  return 'nf:' + obraId + ':' + id + (p > 1 ? ':p' + p : '');
+}
+/* Quantas folhas a nota tem, contando a capa. */
+function nfNumPaginas(n) { return 1 + ((n && n.paginas) || []).length; }
 
 /* ---------- numeros, datas e documentos ---------- */
 function nfNum(v) {
@@ -566,6 +573,8 @@ function nfEnfileirar(obraId, nota) {
     itens: JSON.stringify(nota.itens || []), obs: nota.obs || '',
     responsavel: nota.responsavel || '', status: nota.status || 'Recebida',
     driveid: (nota.drive && nota.drive.fileId) || '', drivelink: (nota.drive && nota.drive.link) || '',
+    // folhas 2..N; nota de uma folha so manda '[]' e a coluna nem e criada
+    paginas: JSON.stringify((nota.paginas || []).filter(Boolean)),
     leitura: JSON.stringify(nota.leitura || {}), historico: JSON.stringify((nota.historico || []).slice(-30)),
     usuario: nota.usuario || usuarioAtual(), criadoem: nota.criadoEm || Date.now()
   };
@@ -577,16 +586,27 @@ function nfEnfileirarExcluir(obraId, id) {
   outboxAdd({ id: 'ob' + uid(), obra: obraId, tipo: 'nfDel', params: { action: 'nfExcluir', obra: obraId, id: id } });
   outboxFlush();
 }
-/* envia a imagem depois que a nota ja existe (mesma regra das fotos do RDO) */
-function nfEnviarImagem(obraId, nota, dataUrl) {
+/* envia a imagem depois que a nota ja existe (mesma regra das fotos do RDO).
+   `pagina` ausente ou 1 = a capa, que continua indo para `drive`; da 2 em
+   diante o arquivo entra em `nota.paginas`, na posicao da folha. */
+function nfEnviarImagem(obraId, nota, dataUrl, pagina) {
   if (!BACKEND || isDemo() || !dataUrl) return Promise.resolve(null);
+  const pag = parseInt(pagina, 10) > 1 ? parseInt(pagina, 10) : 1;
   const comp = (nota.dataEntrada || nota.dataEmissao || hoje()).slice(0, 7);
-  return postAcao({ action: 'nfImagem', obra: obraId, id: nota.id, competencia: comp, numero: nota.numero || '', foto: dataUrl })
+  return postAcao({ action: 'nfImagem', obra: obraId, id: nota.id, competencia: comp,
+                    numero: nota.numero || '', pagina: pag, foto: dataUrl })
     .then(r => {
       if (r && r.ok && r.fileId) {
         const arr = nfGet(obraId), n = arr.find(x => x.id === nota.id);
         if (n) {
-          n.drive = { fileId: r.fileId, link: r.link || '', pasta: r.pasta || '', enviadoEm: Date.now() };
+          const ref = { fileId: r.fileId, link: r.link || '', pasta: r.pasta || '', enviadoEm: Date.now() };
+          if (pag === 1) n.drive = ref;
+          else {
+            n.paginas = n.paginas || [];
+            n.paginas[pag - 2] = ref;
+            // uma folha que falhou deixaria buraco no meio da lista
+            for (let i = 0; i < n.paginas.length; i++) if (!n.paginas[i]) n.paginas[i] = null;
+          }
           nfSet(obraId, arr);
           nfEnfileirar(obraId, n);
         }
@@ -620,7 +640,8 @@ function nfDiff(antes, depois) {
    ============================================================ */
 let _nfRascunho = null;    // nota em conferencia
 let _nfModoSimples = true; // formulario enxuto: so o essencial para digitar
-let _nfFull = '';          // imagem em resolucao cheia da nota em conferencia
+let _nfFull = '';          // folha 1 em resolucao cheia da nota em conferencia
+let _nfPags = [];          // folhas 2..N, na ordem (data-uris em resolucao cheia)
 
 function nfNovaVazia(obraId) {
   return {
@@ -629,7 +650,7 @@ function nfNovaVazia(obraId) {
     cnpj: '', razaoSocial: '', nomeFantasia: '', municipio: '', uf: '',
     vProd: 0, vFrete: 0, vTotal: 0, vBaseICMS: 0, vICMS: 0,
     itens: [], obs: '', responsavel: usuarioAtual() || '', status: 'Recebida',
-    drive: null, thumb: '', leitura: { metodo: 'manual', quando: Date.now() }, leituraConf: {},
+    drive: null, paginas: [], thumb: '', leitura: { metodo: 'manual', quando: Date.now() }, leituraConf: {},
     historico: [], usuario: usuarioAtual() || '', criadoEm: Date.now(), atualizadoEm: Date.now()
   };
 }
@@ -637,7 +658,7 @@ function nfNovaVazia(obraId) {
 function nfAbrirNova() {
   const o = obra(); if (!o) return;
   if (!pode('lancarNota')) { toast('Seu acesso não cadastra nota fiscal'); return; }
-  _nfRascunho = nfNovaVazia(o.id); _nfFull = '';
+  _nfRascunho = nfNovaVazia(o.id); _nfFull = ''; _nfPags = [];
   abrirModal('Nova nota fiscal', `
     <div id="nfPasso">
       <div class="empty" style="padding:14px 6px 18px">
@@ -691,8 +712,13 @@ function nfPDFdeBase64(b64) {
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return new File([bytes], 'danfe.pdf', { type: 'application/pdf' });
 }
+/* Quantas folhas o app guarda de uma nota. DANFE de duas paginas e comum
+   (a segunda traz a continuacao dos itens); o teto existe so para um PDF
+   errado de 80 folhas nao virar 80 idas ao Drive. */
+const NF_MAX_PAGINAS = 8;
+
 async function nfLerPDF(file) {
-  const out = { texto: '', thumb: '', full: '', paginas: 0 };
+  const out = { texto: '', thumb: '', full: '', paginas: 0, extras: [] };
   // O PDF.js e pesado (313 KB) e so faz falta quando chega uma DANFE em PDF.
   // O app carrega sob demanda; aqui pedimos e seguimos sem ele se falhar —
   // a leitura cai para OCR na imagem, que e o plano B de sempre.
@@ -711,25 +737,43 @@ async function nfLerPDF(file) {
     out.texto += tc.items.map(it => it.str).join(' ') + '\n';
   }
   out.texto = out.texto.replace(/[ \t]+/g, ' ').trim();
-  // primeira página vira a imagem da nota (miniatura, Drive e visualização)
-  const pg1 = await doc.getPage(1);
-  const v1 = pg1.getViewport({ scale: 1 });
-  const escala = Math.min(3, Math.max(1, NF_MAX_LADO / Math.max(v1.width, v1.height)));
-  const vp = pg1.getViewport({ scale: escala });
-  const c = document.createElement('canvas');
-  c.width = Math.round(vp.width); c.height = Math.round(vp.height);
-  const cx = c.getContext('2d');
-  cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
-  await pg1.render({ canvasContext: cx, viewport: vp }).promise;
-  out.full = nfCanvasJpeg(c, NF_MAX_LADO, .85);
-  out.thumb = nfCanvasJpeg(c, 320, .6);
+  /* TODAS as folhas viram imagem, nao so a primeira. Antes o PDF de duas
+     paginas era lido inteiro (o texto), mas so a folha 1 era guardada: a
+     comprovacao da nota ficava pela metade e ninguem era avisado disso.
+     A folha 1 segue sendo a capa (miniatura, Drive, visualizacao); as
+     demais entram em `extras`, na ordem. */
+  const paraJpeg = async (num) => {
+    const pg = await doc.getPage(num);
+    const v1 = pg.getViewport({ scale: 1 });
+    const escala = Math.min(3, Math.max(1, NF_MAX_LADO / Math.max(v1.width, v1.height)));
+    const vp = pg.getViewport({ scale: escala });
+    const c = document.createElement('canvas');
+    c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    const cx = c.getContext('2d');
+    cx.fillStyle = '#fff'; cx.fillRect(0, 0, c.width, c.height);
+    await pg.render({ canvasContext: cx, viewport: vp }).promise;
+    return c;
+  };
+  const c1 = await paraJpeg(1);
+  out.full = nfCanvasJpeg(c1, NF_MAX_LADO, .85);
+  out.thumb = nfCanvasJpeg(c1, 320, .6);
+  const ate = Math.min(doc.numPages, NF_MAX_PAGINAS);
+  for (let i = 2; i <= ate; i++) {
+    try { out.extras.push(nfCanvasJpeg(await paraJpeg(i), NF_MAX_LADO, .85)); }
+    catch (e) { break; }   // uma folha ilegivel nao pode derrubar a nota toda
+  }
   return out;
 }
 
 async function nfArquivoSelecionado(inp) {
-  const f = (inp.files || [])[0]; inp.value = '';
+  const escolhidos = [...(inp.files || [])]; inp.value = '';
+  const f = escolhidos[0];
   const ehPDF = f && (/pdf/i.test(f.type) || /\.pdf$/i.test(f.name || ''));
   if (!f || (!ehPDF && !/^image\//.test(f.type))) { toast('Escolha o PDF ou uma foto da nota'); return; }
+  // Fotografou as duas folhas de uma vez: a 1a e a capa, as outras entram
+  // como paginas. Antes o codigo pegava files[0] e descartava o resto — em
+  // silencio, o que e o pior jeito de perder a segunda folha de uma nota.
+  const outrasFotos = escolhidos.slice(1).filter(x => /^image\//.test(x.type));
   const o = obra(); if (!o) return;
   const passos = [
     { ic: 'ampulheta', t: ehPDF ? 'Abrindo o PDF…' : 'Preparando a imagem…', st: '' },
@@ -738,23 +782,34 @@ async function nfArquivoSelecionado(inp) {
   ];
   nfPassoUI(passos);
 
-  let thumb = '', full = '', textoPDF = '';
+  let thumb = '', full = '', textoPDF = '', extras = [], totalPDF = 0;
   if (ehPDF) {
     try {
       const p = await nfLerPDF(f);
       thumb = p.thumb; full = p.full; textoPDF = p.texto;
+      extras = p.extras || []; totalPDF = p.paginas || 1;
     } catch (e) { toast('Não consegui abrir esse PDF'); nfAbrirNova(); return; }
-    passos[0] = { ic: 'check', t: textoPDF.length > 200 ? 'PDF lido — texto disponível' : 'PDF aberto (parece ser digitalizado)', st: 'ok' };
+    const quantas = 1 + extras.length;
+    passos[0] = { ic: 'check', st: 'ok',
+      t: (quantas > 1 ? quantas + ' páginas guardadas — ' : '') +
+         (textoPDF.length > 200 ? 'texto lido do PDF' : 'PDF aberto (parece ser digitalizado)') };
+    if (totalPDF > quantas) {
+      toast(`O PDF tem ${totalPDF} páginas; guardei as ${quantas} primeiras.`, 'info', 6000);
+    }
   } else {
     try {
       const r = await Promise.all([comprimirImg(f, 320, .55), comprimirImg(f, NF_MAX_LADO, .88)]);
       thumb = r[0]; full = r[1];
+      for (const x of outrasFotos.slice(0, NF_MAX_PAGINAS - 1)) {
+        try { extras.push(await comprimirImg(x, NF_MAX_LADO, .88)); } catch (e) { /* pula a que nao abriu */ }
+      }
     } catch (e) { toast('Não consegui ler essa imagem'); nfAbrirNova(); return; }
-    passos[0] = { ic: 'check', t: 'Imagem pronta', st: 'ok' };
+    passos[0] = { ic: 'check', st: 'ok',
+      t: extras.length ? (1 + extras.length) + ' páginas prontas' : 'Imagem pronta' };
   }
   passos[1].ic = 'ampulheta'; nfPassoUI(passos);
 
-  _nfRascunho.thumb = thumb; _nfFull = full;
+  _nfRascunho.thumb = thumb; _nfFull = full; _nfPags = extras;
 
   // 1) chave de acesso — do texto do PDF ou do código de barras da foto.
   //    Nos dois casos o dígito verificador confirma que veio certa.
@@ -993,7 +1048,14 @@ function nfConferir() {
       <div style="flex:1;min-width:0">
         <div class="kpi-s">${nfLeituraTxt(n)}</div>
         ${n.chave ? `<div class="mono nf-extra" style="font-size:10.5px;word-break:break-all;margin-top:6px;color:var(--text-2)">${esc(n.chave)}</div>` : ''}
-        <button class="btn btn-sm btn-ghost" style="margin-top:6px;padding-left:0" onclick="nfVerImagem('${n.id}')">${ic('lupa')} Ver a nota</button>
+        <div id="nfPagsInfo" class="kpi-s" style="margin-top:4px">${nfPaginasTxt(n)}</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
+          <button class="btn btn-sm btn-ghost" style="padding-left:0" onclick="nfVerImagem('${n.id}')">${ic('lupa')} Ver a nota</button>
+          <label class="btn btn-sm btn-ghost" style="cursor:pointer" title="A nota tem mais de uma folha? Junte-as aqui.">
+            ${ic('mais')} Adicionar página
+            <input type="file" accept="image/*,application/pdf,.pdf" multiple
+                   onchange="nfAddPaginas(this)" style="display:none"></label>
+        </div>
       </div></div>` : ''}
     ${dup ? `<div class="nf-alerta nf-alerta-red">Já existe a nota <b>${esc(dup.numero || '—')}</b> deste fornecedor no sistema. Salvar vai criar uma segunda.</div>` : ''}
     ${difer ? `<div class="nf-alerta nf-alerta-ylw">A soma dos itens + frete (${fmtBRL(totItens + nfNum(n.vFrete))}) não bate com o valor total da nota (${fmtBRL(nfNum(n.vTotal))}).</div>` : ''}
@@ -1217,24 +1279,80 @@ function nfSalvarForm() {
   } else if (!paraEstoque) nfDesfazerEstoque(o.id, n.id);
   nfSet(o.id, nfGet(o.id).map(x => x.id === n.id ? n : x));
 
-  // imagem em resolucao cheia: IndexedDB local + Drive em segundo plano
+  // imagens em resolucao cheia: IndexedDB local + Drive em segundo plano.
+  // A folha 1 e a capa; as demais sobem com o numero da pagina, e e a
+  // resposta delas que monta `n.paginas`.
   if (_nfFull) {
     try { fotoGuardarFull(nfImgChave(o.id, n.id), _nfFull); } catch (e) { /* segue sem a copia local */ }
     nfEnviarImagem(o.id, n, _nfFull);
   }
+  if (_nfPags.length) {
+    n.paginas = [];
+    _nfPags.forEach((uri, k) => {
+      const pag = k + 2;
+      try { fotoGuardarFull(nfImgChave(o.id, n.id, pag), uri); } catch (e) { /* idem */ }
+      nfEnviarImagem(o.id, n, uri, pag);
+    });
+  }
   nfEnfileirar(o.id, n);
 
-  _nfRascunho = null; _nfFull = '';
+  _nfRascunho = null; _nfFull = ''; _nfPags = [];
   fecharModal(); toast(msg);
   if (estado.tela === 'notas') render();
 }
+
+/* ---------- paginas da nota ----------
+   Nota de duas folhas e comum, e a segunda costuma trazer a continuacao dos
+   itens. Ate aqui o app guardava so a folha 1: a leitura do PDF ate lia o
+   texto das outras, mas a imagem delas era descartada sem aviso. */
+function nfPaginasTotalRascunho(n) {
+  // no rascunho contam as folhas ja no Drive MAIS as que acabaram de entrar
+  return 1 + Math.max(((n && n.paginas) || []).filter(Boolean).length, _nfPags.length);
+}
+function nfPaginasTxt(n) {
+  const t = nfPaginasTotalRascunho(n);
+  return t > 1 ? `${ic('arquivo')} ${t} páginas guardadas` : 'Uma página. A nota tem verso ou continuação?';
+}
+
+/* Junta folhas a nota em conferencia. Aceita varias imagens de uma vez ou
+   um PDF — cada pagina do PDF vira uma folha. */
+window.nfAddPaginas = async function (inp) {
+  const arquivos = [...(inp.files || [])]; inp.value = '';
+  if (!arquivos.length || !_nfRascunho) return;
+  const cabem = NF_MAX_PAGINAS - nfPaginasTotalRascunho(_nfRascunho);
+  if (cabem <= 0) { toast(`A nota já está com o máximo de ${NF_MAX_PAGINAS} páginas`, 'info', 5000); return; }
+  let entraram = 0;
+  for (const f of arquivos) {
+    if (entraram >= cabem) break;
+    const ehPDF = /pdf/i.test(f.type) || /\.pdf$/i.test(f.name || '');
+    try {
+      if (ehPDF) {
+        const p = await nfLerPDF(f);
+        for (const uri of [p.full, ...(p.extras || [])]) {
+          if (!uri || entraram >= cabem) break;
+          _nfPags.push(uri); entraram++;
+        }
+      } else if (/^image\//.test(f.type)) {
+        _nfPags.push(await comprimirImg(f, NF_MAX_LADO, .88)); entraram++;
+      }
+    } catch (e) { /* arquivo que nao abriu nao derruba os outros */ }
+  }
+  if (!entraram) { toast('Não consegui ler esse arquivo'); return; }
+  const info = el('nfPagsInfo');
+  if (info) info.innerHTML = nfPaginasTxt(_nfRascunho);
+  toast(entraram === 1 ? 'Página adicionada — salve a nota para enviá-la'
+                       : entraram + ' páginas adicionadas — salve a nota para enviá-las', 'success', 5000);
+  if (arquivos.length > entraram) {
+    toast(`Só cabiam ${cabem} página(s) nesta nota.`, 'info', 5000);
+  }
+};
 
 function nfEditar(id) {
   const o = obra(); if (!o) return;
   const n = nfPorId(o.id, id); if (!n) return;
   if (!podeEditar(n)) { toast('Seu acesso não edita esta nota'); return; }
   _nfRascunho = JSON.parse(JSON.stringify(n));
-  _nfFull = '';
+  _nfFull = ''; _nfPags = [];
   const met = (n.leitura && n.leitura.metodo) || 'manual';
   _nfModoSimples = (met === 'manual');
   nfConferir();
@@ -1258,23 +1376,84 @@ function nfMudarStatus(id, st) {
 }
 
 /* ---------- imagem da nota ---------- */
+/* Busca UMA folha: primeiro o aparelho, depois o rascunho aberto, depois o
+   Drive. `pagina` e 1-based; a 1 e a capa. */
+async function nfImagemDaPagina(o, n, pagina) {
+  const p = pagina > 1 ? pagina : 1;
+  let src = '';
+  try { src = await fotoLerFull(nfImgChave(o.id, n.id, p)); } catch (e) { src = ''; }
+  if (!src && _nfRascunho && _nfRascunho.id === n.id) {
+    src = p === 1 ? (_nfFull || '') : (_nfPags[p - 2] || '');
+  }
+  const ref = p === 1 ? n.drive : ((n.paginas || [])[p - 2]);
+  if (!src && ref && ref.fileId && BACKEND && !isDemo()) {
+    try {
+      const r = await postAcao({ action: 'obterFoto', fileId: ref.fileId });
+      if (r && r.ok && r.dataUri) {
+        src = r.dataUri;
+        try { fotoGuardarFull(nfImgChave(o.id, n.id, p), src); } catch (e) { /* segue sem cache */ }
+      }
+    } catch (e) { /* fica com o que houver */ }
+  }
+  if (!src && p === 1) src = n.thumb || '';
+  return { src: src, link: (ref && ref.link) || '' };
+}
+
+let _nfVerPag = 1;
+window.nfIrPagina = async function (id, pagina) {
+  const o = obra();
+  const n = (_nfRascunho && _nfRascunho.id === id) ? _nfRascunho : nfPorId(o.id, id);
+  if (!n) return;
+  const total = nfNumPaginas(n);
+  _nfVerPag = Math.min(Math.max(1, pagina), total);
+  const img = el('nfVerImg'), lbl = el('nfVerLbl'), bx = el('nfVerBaixar'), dv = el('nfVerDrive');
+  if (lbl) lbl.textContent = `Folha ${_nfVerPag} de ${total}`;
+  if (img) { img.style.opacity = '.35'; }
+  const r = await nfImagemDaPagina(o, n, _nfVerPag);
+  if (img) {
+    img.style.opacity = '';
+    if (r.src) { img.src = r.src; img.style.display = ''; }
+    else { img.style.display = 'none'; }
+  }
+  const vazio = el('nfVerVazio');
+  if (vazio) vazio.style.display = r.src ? 'none' : '';
+  if (bx) {
+    bx.style.display = r.src ? '' : 'none';
+    bx.href = r.src || '#';
+    bx.download = 'NF-' + (n.numero || n.id) + (_nfVerPag > 1 ? '_p' + _nfVerPag : '') + '.jpg';
+  }
+  if (dv) { dv.style.display = r.link ? '' : 'none'; dv.href = r.link || '#'; }
+  const ant = el('nfVerAnt'), pro = el('nfVerProx');
+  if (ant) ant.disabled = _nfVerPag <= 1;
+  if (pro) pro.disabled = _nfVerPag >= total;
+};
+
 async function nfVerImagem(id) {
   const o = obra();
   const n = (_nfRascunho && _nfRascunho.id === id) ? _nfRascunho : nfPorId(o.id, id);
   if (!n) return;
-  let src = '';
-  try { src = await fotoLerFull(nfImgChave(o.id, id)); } catch (e) { src = ''; }
-  if (!src && _nfFull && _nfRascunho && _nfRascunho.id === id) src = _nfFull;
-  if (!src && n.drive && n.drive.fileId && BACKEND && !isDemo()) {
-    try { const r = await postAcao({ action: 'obterFoto', fileId: n.drive.fileId }); if (r && r.ok && r.dataUri) src = r.dataUri; } catch (e) { /* fica com a miniatura */ }
-  }
-  if (!src) src = n.thumb || '';
+  const total = nfNumPaginas(n);
+  _nfVerPag = 1;
+  const primeira = await nfImagemDaPagina(o, n, 1);
   abrirModal('Nota fiscal ' + esc(n.numero || ''), `
-    ${src ? `<img src="${esc(src)}" alt="nota fiscal" style="width:100%;border-radius:8px">` : `<div class="empty">${ic('notas')}Imagem não disponível neste aparelho.</div>`}
+    ${total > 1 ? `<div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+      <button id="nfVerAnt" class="btn btn-sm btn-ghost" aria-label="Folha anterior" disabled>${ic('voltar')}</button>
+      <span id="nfVerLbl" style="font-size:13px;font-weight:600">Folha 1 de ${total}</span>
+      <button id="nfVerProx" class="btn btn-sm btn-ghost" aria-label="Próxima folha">${ic('seta')}</button>
+    </div>` : ''}
+    <img id="nfVerImg" src="${esc(primeira.src)}" alt="nota fiscal"
+         style="width:100%;border-radius:8px;transition:opacity .15s;${primeira.src ? '' : 'display:none'}">
+    <div id="nfVerVazio" class="empty" style="${primeira.src ? 'display:none' : ''}">${ic('notas')}Imagem não disponível neste aparelho.</div>
     <div style="display:flex;gap:9px;margin-top:12px;flex-wrap:wrap">
-      ${n.drive && n.drive.link ? `<a class="btn" href="${esc(n.drive.link)}" target="_blank" rel="noopener">${ic('pasta')} Abrir no Google Drive</a>` : ''}
-      ${src ? `<a class="btn" href="${esc(src)}" download="NF-${esc(n.numero || n.id)}.jpg">${ic('baixar')} Baixar imagem</a>` : ''}
+      <a id="nfVerDrive" class="btn" href="${esc(primeira.link || '#')}" target="_blank" rel="noopener"
+         style="${primeira.link ? '' : 'display:none'}">${ic('pasta')} Abrir no Google Drive</a>
+      <a id="nfVerBaixar" class="btn" href="${esc(primeira.src || '#')}" download="NF-${esc(n.numero || n.id)}.jpg"
+         style="${primeira.src ? '' : 'display:none'}">${ic('baixar')} Baixar imagem</a>
       <button class="btn btn-ghost" onclick="nfEditar('${n.id}')">${ic('editar')} Editar dados</button></div>`, 720);
+  // os botoes andam a partir da folha que estiver aberta
+  const ant = el('nfVerAnt'), pro = el('nfVerProx');
+  if (ant) ant.onclick = () => nfIrPagina(n.id, _nfVerPag - 1);
+  if (pro) pro.onclick = () => nfIrPagina(n.id, _nfVerPag + 1);
 }
 function nfVerHistorico(id) {
   const o = obra();
@@ -1846,11 +2025,24 @@ function nfDoServidor(s, obraId, locais) {
     itens: itens, obs: s.obs || '', responsavel: s.responsavel || '',
     status: s.status === 'Integrada ao pedido de compra' ? 'Conferida' : (NF_STATUS.indexOf(s.status) > -1 ? s.status : 'Recebida'),
     drive: s.driveId ? { fileId: s.driveId, link: s.driveLink || '' } : null,
+    paginas: nfPaginasDoServidor(s, local),
     thumb: (local && local.thumb) || '',
     leitura: leitura, leituraConf: (local && local.leituraConf) || {},
     historico: hist, usuario: s.usuario || '',
     criadoEm: nfNum(s.criadoEm) || Date.now(), atualizadoEm: Date.now()
   };
+}
+
+/* As folhas 2..N vem da coluna `paginas`, em JSON. Backend ainda nao
+   republicado nao manda a coluna: nesse caso o que ja estava no aparelho
+   e mantido, para uma sincronizacao nao apagar paginas que existem. */
+function nfPaginasDoServidor(s, local) {
+  const bruto = s.paginas != null ? s.paginas : s.Paginas;
+  if (bruto == null || bruto === '') return (local && local.paginas) || [];
+  let arr = bruto;
+  if (typeof arr === 'string') { try { arr = JSON.parse(arr); } catch (e) { return (local && local.paginas) || []; } }
+  if (!Array.isArray(arr)) return (local && local.paginas) || [];
+  return arr.filter(x => x && x.fileId);
 }
 
 /* quantas notas a obra tem — usado no badge da navegação */
