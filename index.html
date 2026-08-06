@@ -64,13 +64,14 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=19"></script>
-<script src="dados/ruas-de-terra.js?v=19"></script>
+<script src="dados/ranario.js?v=20"></script>
+<script src="dados/ruas-de-terra.js?v=20"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=19"></script>
-<script src="js/nf/adaptador.js?v=19"></script>
-<script src="js/nf/notas.js?v=19"></script>
+<script src="js/ui/icones.js?v=20"></script>
+<script src="js/nf/adaptador.js?v=20"></script>
+<script src="js/nf/notas.js?v=20"></script>
+<script src="js/equip/equipamentos.js?v=20"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -2044,6 +2045,54 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
     opacity: 0.7; transform: scale(0.98);
   }
 }
+
+/* ---------- EQUIPAMENTOS (js/equip/equipamentos.js) ---------- */
+.eq-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap}
+.eq-topo-acoes{display:flex;gap:8px;flex-wrap:wrap}
+.eq-horas{display:flex;justify-content:space-between;align-items:center;gap:16px;
+  background:var(--surface-2,rgba(0,0,0,.03));border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 18px}
+.eq-horas-num{font-size:38px;font-weight:800;line-height:1.05;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.eq-h{font-size:.5em;color:var(--muted);margin-left:3px;font-weight:600}
+.eq-bloco{border:1px solid var(--border);border-radius:var(--r-lg);padding:14px;margin:16px 0}
+.eq-bloco-topo{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
+.eq-parada{border:1px solid var(--border);border-radius:var(--r-md,10px);padding:10px;margin-bottom:8px;
+  display:grid;grid-template-columns:1fr;gap:8px}
+.eq-parada > div{display:flex;align-items:center;gap:8px}
+.eq-parada .parada-inicio,.eq-parada .parada-fim{flex:1;min-width:0;text-align:center}
+.eq-vazio{font-size:13px;color:var(--muted);text-align:center;padding:12px 0}
+.eq-assinatura{width:100%;height:160px;border:1px dashed var(--border-strong,var(--border));border-radius:var(--r-md,10px);
+  background:var(--surface);touch-action:none;display:block}
+.eq-modal{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-start;justify-content:center;
+  background:rgba(0,0,0,.45);padding:16px;overflow-y:auto}
+.eq-modal-caixa{background:var(--surface);border-radius:var(--r-lg);width:100%;margin:auto;
+  box-shadow:var(--sh-lg);max-height:92vh;display:flex;flex-direction:column}
+.eq-modal-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
+  padding:18px 20px 12px;border-bottom:1px solid var(--border)}
+.eq-modal-corpo{padding:18px 20px 20px;overflow-y:auto}
+.eq-modal-rodape{display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
+.eq-conf{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:2px 18px}
+.eq-conf-linha{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}
+.eq-abas{display:flex;gap:8px;margin-bottom:14px}
+.eq-radios{display:flex;gap:16px;align-items:center;font-size:13px}
+.eq-radios label{display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:500}
+.eq-lista{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto}
+.eq-item{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  border:1px solid var(--border);border-radius:var(--r-md,10px);padding:10px 12px}
+.eq-item-nome{font-size:13.5px;font-weight:600}
+.eq-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px}
+.eq-kpi{border:1px solid var(--border);border-radius:var(--r-lg);padding:12px;text-align:center}
+.eq-kpi-ic{color:var(--acc)}
+.eq-kpi-num{font-size:22px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums}
+.eq-kpi-lbl{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-top:2px}
+.eq-sec-tit{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin:0 0 8px}
+.eq-sec-corpo{border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 14px;margin-bottom:18px}
+.eq-barra{height:8px;border-radius:99px;background:var(--acc);opacity:.85}
+.eq-barra-lbl{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-bottom:4px}
+@media (max-width:640px){
+  .eq-horas-num{font-size:30px}
+  .eq-horas{flex-direction:column;align-items:flex-start;gap:6px}
+  .eq-horas > .kpi-s{text-align:left!important;max-width:none!important}
+}
 </style>
 </head>
 <body>
@@ -2306,7 +2355,7 @@ function trocarObra(id, opcoes) {
   STATE.loaded = false;
   STATE.filtros = { mes: '', frente: '' };
   STATE.dashData = null;
-  if (typeof EQUIP !== 'undefined') { EQUIP.carregado = false; EQUIP.apontamentos = []; EQUIP.equipamentos = []; }
+  // Equipamentos tem motor próprio (js/equip): recarrega sozinho ao abrir a tela.
   // Planejamento é POR OBRA e fica em cache de módulo. Sem zerar, a obra nova
   // herdava as predecessoras, a produtividade ajustada à mão e a data-base da
   // obra anterior — e o cronograma dela saía calculado sobre dados de outra.
@@ -5029,7 +5078,7 @@ function render() {
   else if (STATE.currentPage === 'rdo') { pageEl.innerHTML = renderRDO(); attachRDOForm(); }
   else if (STATE.currentPage === 'rdodiario') { pageEl.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
   else if (STATE.currentPage === 'historico') pageEl.innerHTML = renderHistorico();
-  else if (STATE.currentPage === 'equip') { pageEl.innerHTML = renderEquip(); ligarEquipForm(); if (!EQUIP.carregado) carregarEquip(); }
+  else if (STATE.currentPage === 'equip') { pageEl.innerHTML = EQ.render(); EQ.boot(); }
   else if (STATE.currentPage === 'notas') {
     pageEl.innerHTML = faixaObraNotas() + viewNotas(obra());
     nfCarregar(obra().id);
@@ -5046,364 +5095,11 @@ function render() {
 
 // ====================================================================
 // VIEW: EQUIPAMENTOS
-// Hora de máquina é medição: entra em relatório e em cobrança de
-// locadora. Por isso o apontamento guarda paradas (que descontam da
-// hora trabalhada), horímetro, combustível e assinatura do operador.
+// A tela vem do módulo js/equip/equipamentos.js, portado do app que os
+// apontadores já usam em campo — mesmo cálculo de horas, mesmas paradas,
+// mesma medição mensal, e o MESMO backend, para não perder o que já foi
+// lançado. Aqui ficou só o roteamento.
 // ====================================================================
-const TIPOS_EQUIP = ['Escavadeira', 'Retroescavadeira', 'Pá carregadeira', 'Motoniveladora',
-  'Rolo compactador', 'Caminhão basculante', 'Caminhão pipa', 'Munck', 'Vibroacabadora',
-  'Fresadora', 'Trator de esteira', 'Placa vibratória', 'Compressor', 'Gerador', 'Outros'];
-const MOTIVOS_PARADA = ['Chuva', 'Manutenção corretiva', 'Manutenção preventiva', 'Abastecimento',
-  'Falta de frente de serviço', 'Falta de material', 'Interferência de concessionária',
-  'Almoço/refeição', 'Troca de turno', 'Outros'];
-const SITUACOES_EQUIP = ['Operando', 'Disponível parado', 'Em manutenção', 'Indisponível'];
-
-const EQUIP = { equipamentos: [], locadoras: [], apontamentos: [], carregado: false,
-                filtroMes: 'Todos', filtroEquip: 'Todos' };
-
-async function carregarEquip() {
-  try {
-    const [lista, apont] = await Promise.all([
-      jsonp(CONFIG.appsScript, { action: 'equipListar', ...authParams() }, 0),
-      jsonp(CONFIG.appsScript, { action: 'equipApontamentos', ...authParams() }, 0)
-    ]);
-    if (lista && lista.ok) { EQUIP.equipamentos = lista.equipamentos || []; EQUIP.locadoras = lista.locadoras || []; }
-    if (apont && apont.ok) EQUIP.apontamentos = apont.apontamentos || [];
-    EQUIP.carregado = true;
-    if (STATE.currentPage === 'equip') { document.getElementById('page').innerHTML = renderEquip(); ligarEquipForm(); }
-  } catch (e) {
-    EQUIP.carregado = true;
-    const box = document.getElementById('eqUltimos');
-    if (box) box.innerHTML = '<div style="font-size:13px;color:var(--red)">Sem conexão com o servidor.</div>';
-  }
-}
-
-function renderEquip() {
-  if (!STATE.usuarioLogado) return renderLogin();
-  const eqOpts = EQUIP.equipamentos.map(e =>
-    `<option value="${escHtml(e.nome)}">${escHtml(e.nome)}${e.tipo ? ' · ' + escHtml(e.tipo) : ''}${e.locadora ? ' · ' + escHtml(e.locadora) : ''}</option>`).join('');
-  const meses = [...new Set(EQUIP.apontamentos.map(a => normalizarDataCSV(a.data).slice(0, 7)).filter(m => /^\d{4}-\d{2}$/.test(m)))].sort().reverse();
-  const nomes = [...new Set(EQUIP.apontamentos.map(a => a.equipamento).filter(Boolean))];
-
-  return `
-  <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">
-    <span class="pill">${EQUIP.equipamentos.length} equipamento(s)${EQUIP.locadoras.length ? ' · ' + EQUIP.locadoras.length + ' locadora(s)' : ''}</span>
-    <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
-      ${pode('cadastrarEquip') || ehAdmin() ? `
-        <button class="btn btn-sm btn-outline" onclick="cadEquipModal()">+ Equipamento</button>
-        <button class="btn btn-sm btn-outline" onclick="cadLocadoraModal()">+ Locadora</button>` : ''}
-    </div>
-  </div>
-
-  <div class="grid" style="display:grid;grid-template-columns:1.3fr 1fr;gap:16px;align-items:start">
-    <div class="card">
-      <div class="card-header"><div>
-        <div class="card-title">${ic('equipamentos')} Apontamento de equipamento</div>
-        <div class="card-title-sub">produção do dia: horas, paradas, horímetro, combustível</div>
-      </div></div>
-      <div class="card-body">
-        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px">
-          <div class="field"><label>Data</label><input type="date" id="eqData" value="${getLocalISODate(new Date())}"></div>
-          <div class="field"><label>Turno</label>
-            <select id="eqTurno" onchange="eqAplicarTurno()">
-              <option value="Diurno" data-ini="07:00" data-fim="17:00">Diurno (07–17)</option>
-              <option value="Noturno" data-ini="19:00" data-fim="05:00">Noturno (19–05)</option>
-            </select></div>
-          <div class="field" style="grid-column:1/-1"><label>Equipamento</label>
-            <select id="eqEquip">${eqOpts || '<option value="">— cadastre um equipamento —</option>'}</select></div>
-          <div class="field" style="grid-column:1/-1"><label>Operador</label>
-            <input id="eqOper" placeholder="Nome do operador"></div>
-          <div class="field"><label>Início</label><input type="time" id="eqIni" value="07:00" onchange="eqCalcHoras()"></div>
-          <div class="field"><label>Fim</label><input type="time" id="eqFim" value="17:00" onchange="eqCalcHoras()"></div>
-          <div class="field"><label>Horas trabalhadas</label>
-            <input id="eqHoras" readonly value="10.00" class="t-mono" style="font-weight:700"></div>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;align-items:center;margin:14px 0 6px">
-          <label style="margin:0;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)">Paradas</label>
-          <button class="btn btn-sm btn-outline" onclick="eqAddParada()">+ Parada</button>
-        </div>
-        <div id="eqParadas"></div>
-
-        <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:10px">
-          <div class="field"><label>Horímetro inicial</label><input type="number" step="any" id="eqHi" placeholder="h ou km"></div>
-          <div class="field"><label>Horímetro final</label><input type="number" step="any" id="eqHf" placeholder="h ou km"></div>
-          <div class="field"><label>Combustível (L)</label><input type="number" step="any" id="eqComb" placeholder="litros"></div>
-          <div class="field"><label>Situação</label>
-            <select id="eqSit">${SITUACOES_EQUIP.map(s => `<option>${s}</option>`).join('')}</select></div>
-          <div class="field" style="grid-column:1/-1"><label>Observações</label>
-            <textarea id="eqObs" rows="2" placeholder="Frente atendida, ocorrências…"></textarea></div>
-          <div class="field" style="grid-column:1/-1"><label>Assinatura do operador (opcional)</label>
-            <canvas id="eqSign" width="520" height="120"
-              style="width:100%;height:110px;background:#fff;border:1px solid var(--border-strong);border-radius:var(--r-sm);touch-action:none;cursor:crosshair"></canvas>
-            <button class="btn btn-sm btn-ghost" onclick="eqLimparSign()" style="margin-top:4px">Limpar assinatura</button></div>
-        </div>
-        <button class="btn btn-primary btn-lg" style="width:100%;justify-content:center;margin-top:14px" onclick="eqEnviar()">
-          Enviar apontamento</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="card-header"><div>
-        <div class="card-title">Últimos apontamentos</div>
-        <div class="card-title-sub">${EQUIP.apontamentos.length} no total</div>
-      </div></div>
-      <div class="card-body" style="padding-top:6px">
-        <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
-          <div class="field"><label>Mês</label>
-            <select onchange="EQUIP.filtroMes=this.value;document.getElementById('eqUltimos').innerHTML=eqListaUltimos()">
-              <option value="Todos">Todos</option>
-              ${meses.map(m => `<option ${EQUIP.filtroMes === m ? 'selected' : ''}>${m}</option>`).join('')}
-            </select></div>
-          <div class="field"><label>Equipamento</label>
-            <select onchange="EQUIP.filtroEquip=this.value;document.getElementById('eqUltimos').innerHTML=eqListaUltimos()">
-              <option value="Todos">Todos</option>
-              ${nomes.map(n => `<option ${EQUIP.filtroEquip === n ? 'selected' : ''}>${escHtml(n)}</option>`).join('')}
-            </select></div>
-        </div>
-        <div id="eqUltimos">${eqListaUltimos()}</div>
-      </div>
-    </div>
-  </div>`;
-}
-
-function eqApontamentosFiltrados() {
-  return EQUIP.apontamentos.filter(a =>
-    (EQUIP.filtroMes === 'Todos' || normalizarDataCSV(a.data).slice(0, 7) === EQUIP.filtroMes) &&
-    (EQUIP.filtroEquip === 'Todos' || a.equipamento === EQUIP.filtroEquip));
-}
-
-function eqListaUltimos() {
-  if (!EQUIP.carregado) return '<div style="font-size:13px;color:var(--muted);padding:10px 0">Carregando…</div>';
-  const lista = eqApontamentosFiltrados().slice(0, 20);
-  if (!lista.length) return '<div style="font-size:13px;color:var(--muted);padding:10px 0">Nenhum apontamento no filtro.</div>';
-  const horas = eqApontamentosFiltrados().reduce((s, a) => s + horasNum(a.horas), 0);
-  return `<div style="font-size:12px;color:var(--muted);margin-bottom:8px">
-      Total no filtro: <b style="color:var(--text)">${fmtNum(horas)} h</b></div>` +
-    lista.map(a => `<div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;gap:10px">
-      <div style="flex:1;min-width:0">
-        <div style="font-weight:600;font-size:13.5px">${escHtml(a.equipamento)}
-          <span style="font-weight:400;color:var(--muted)">· ${escHtml(String(a.horas))} h</span></div>
-        <div style="font-size:11.5px;color:var(--muted)">
-          ${escHtml(normalizarDataCSV(a.data))} · ${escHtml(a.turno || '')} · ${escHtml(a.operador || '')} · ${escHtml(a.situacao || '')}</div>
-        ${a.paradas && a.paradas !== 'Sem paradas'
-          ? `<div style="font-size:11.5px;color:var(--ylw-d)">paradas: ${escHtml(a.paradas)}</div>` : ''}
-      </div>
-      ${podeExcluir(a) ? `<button class="btn btn-ghost btn-sm" onclick="eqApagar('${escHtml(String(a.carimbo))}')" title="Apagar" aria-label="Apagar apontamento">${ic('lixeira')}</button>` : ''}
-    </div>`).join('');
-}
-
-/* horas e paradas — a hora cheia menos as paradas é o que se mede */
-function hm(t) { if (!t) return 0; const p = String(t).split(':'); return (+p[0] || 0) * 60 + (+p[1] || 0); }
-
-/* As horas são gravadas com ponto decimal ("8.50", de toFixed). O num() do
-   app lê no formato pt-BR e trataria esse ponto como milhar — "8.50" viraria
-   850 e o total do mês sairia cem vezes maior. Aqui o ponto é decimal. */
-function horasNum(v) {
-  if (typeof v === 'number') return v;
-  const n = parseFloat(String(v == null ? '' : v).trim().replace(',', '.'));
-  return isNaN(n) ? 0 : n;
-}
-window.eqAplicarTurno = function() {
-  const s = document.getElementById('eqTurno');
-  const o = s.options[s.selectedIndex];
-  document.getElementById('eqIni').value = o.getAttribute('data-ini');
-  document.getElementById('eqFim').value = o.getAttribute('data-fim');
-  eqCalcHoras();
-};
-function eqParadasRows() { return [...document.querySelectorAll('#eqParadas .par-row')]; }
-window.eqAddParada = function() {
-  const box = document.getElementById('eqParadas');
-  if (!box) return;
-  const row = document.createElement('div');
-  row.className = 'par-row';
-  row.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:flex-end;flex-wrap:wrap';
-  row.innerHTML = `
-    <div class="field" style="margin:0;flex:1.4;min-width:140px">
-      <select class="par-mot">${MOTIVOS_PARADA.map(m => `<option>${m}</option>`).join('')}</select></div>
-    <div class="field" style="margin:0"><input type="time" class="par-ini" onchange="eqCalcHoras()"></div>
-    <div class="field" style="margin:0"><input type="time" class="par-fim" onchange="eqCalcHoras()"></div>
-    <button class="btn btn-ghost btn-sm" onclick="this.closest('.par-row').remove();eqCalcHoras()" title="Remover" aria-label="Remover parada">${ic('fechar')}</button>`;
-  box.appendChild(row);
-};
-function eqParadasMin() {
-  let s = 0;
-  eqParadasRows().forEach(r => {
-    const i = r.querySelector('.par-ini').value, f = r.querySelector('.par-fim').value;
-    if (i && f) { let m = hm(f) - hm(i); if (m < 0) m += 1440; s += m; }
-  });
-  return s;
-}
-function eqParadasTxt() {
-  const a = [];
-  eqParadasRows().forEach(r => {
-    const m = r.querySelector('.par-mot').value, i = r.querySelector('.par-ini').value, f = r.querySelector('.par-fim').value;
-    if (i && f) a.push(`${m} ${i}-${f}`);
-  });
-  return a.join('; ');
-}
-window.eqCalcHoras = function() {
-  const b = document.getElementById('eqHoras');
-  if (!b) return;
-  let w = hm(document.getElementById('eqFim').value) - hm(document.getElementById('eqIni').value);
-  if (w < 0) w += 1440;                       // turno noturno cruza a meia-noite
-  let t = w - eqParadasMin();
-  if (t < 0) t = 0;
-  b.value = (t / 60).toFixed(2);
-};
-
-/* assinatura no canvas — funciona com dedo e com mouse */
-function ligarEquipForm() {
-  const c = document.getElementById('eqSign');
-  if (!c || c._init) return;
-  c._init = true;
-  const ctx = c.getContext('2d');
-  ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.strokeStyle = '#111';
-  let desenhando = false, px, py;
-  const pos = e => {
-    const r = c.getBoundingClientRect();
-    const x = (e.touches ? e.touches[0].clientX : e.clientX) - r.left;
-    const y = (e.touches ? e.touches[0].clientY : e.clientY) - r.top;
-    return [x * (c.width / r.width), y * (c.height / r.height)];
-  };
-  const start = e => { desenhando = true;[px, py] = pos(e); c._tem = true; e.preventDefault(); };
-  const move = e => {
-    if (!desenhando) return;
-    const [x, y] = pos(e);
-    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(x, y); ctx.stroke();
-    px = x; py = y; e.preventDefault();
-  };
-  const end = () => { desenhando = false; };
-  c.addEventListener('mousedown', start); c.addEventListener('mousemove', move);
-  window.addEventListener('mouseup', end);
-  c.addEventListener('touchstart', start, { passive: false });
-  c.addEventListener('touchmove', move, { passive: false });
-  c.addEventListener('touchend', end);
-}
-window.eqLimparSign = function() {
-  const c = document.getElementById('eqSign');
-  if (c) { c.getContext('2d').clearRect(0, 0, c.width, c.height); c._tem = false; }
-};
-function eqAssinaturaData() {
-  const c = document.getElementById('eqSign');
-  return (c && c._tem) ? c.toDataURL('image/png') : '';
-}
-
-window.eqEnviar = async function() {
-  if (!pode('apontarEquip') && !ehAdmin()) { toast('Seu acesso não aponta equipamento.', 'error'); return; }
-  const equipamento = document.getElementById('eqEquip').value;
-  if (!equipamento) { toast('Selecione um equipamento.', 'error'); return; }
-  const horas = horasNum(document.getElementById('eqHoras').value);
-  if (!horas) { toast('Horas zeradas — confira os horários e as paradas.', 'error'); return; }
-  const hi = parseFloat(document.getElementById('eqHi').value);
-  const hf = parseFloat(document.getElementById('eqHf').value);
-  if (!isNaN(hi) && !isNaN(hf) && hf < hi) { toast('Horímetro final menor que o inicial.', 'error'); return; }
-
-  const carimbo = Date.now() + '_' + Math.floor(Math.random() * 9000 + 1000);
-  const params = {
-    action: 'equipApontar', carimbo, clientId: carimbo,
-    data: document.getElementById('eqData').value || getLocalISODate(new Date()),
-    turno: document.getElementById('eqTurno').value,
-    equipamento, operador: document.getElementById('eqOper').value.trim(),
-    inicio: document.getElementById('eqIni').value, fim: document.getElementById('eqFim').value,
-    horas: document.getElementById('eqHoras').value,
-    paradas: eqParadasTxt() || 'Sem paradas',
-    horimIni: document.getElementById('eqHi').value, horimFim: document.getElementById('eqHf').value,
-    combustivel: document.getElementById('eqComb').value,
-    situacao: document.getElementById('eqSit').value,
-    observacoes: document.getElementById('eqObs').value.trim(),
-    assinatura: eqAssinaturaData(), ...authParams()
-  };
-  try {
-    // com assinatura do operador o payload passa do limite de URL
-    const r = await enviarAcao(params, 0);
-    if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao enviar', 'error', 0); return; }
-    toast('Apontamento enviado', 'success');
-    ['eqOper', 'eqHi', 'eqHf', 'eqComb', 'eqObs'].forEach(id => { document.getElementById(id).value = ''; });
-    document.getElementById('eqParadas').innerHTML = '';
-    eqLimparSign(); eqCalcHoras();
-    carregarEquip();
-  } catch (e) {
-    if (ehErroDeRede(e)) {
-      outboxAdicionar({ kind: 'equip', params, descricao: `${equipamento} · ${params.horas}h · ${params.data}` });
-      toast('Sem internet — apontamento guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
-    } else {
-      toast('Falha ao enviar: ' + e.message, 'error', 0);
-    }
-  }
-};
-
-window.eqApagar = async function(carimbo) {
-  if (!confirm('Apagar este apontamento de equipamento?')) return;
-  try {
-    const r = await jsonp(CONFIG.appsScript, { action: 'equipApagar', carimbo, ...authParams() }, 0);
-    if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao apagar', 'error', 0); return; }
-    toast('Apontamento apagado.', 'success');
-    carregarEquip();
-  } catch (e) { toast('Sem conexão com o servidor.', 'error'); }
-};
-
-/* cadastros — formulário em modal, o mesmo do RDO */
-window.cadEquipModal = function() {
-  abrirModalRDO(`
-    <div style="font-weight:700;font-size:15px;margin-bottom:14px">Cadastrar equipamento</div>
-    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px">
-      <div class="field" style="grid-column:1/-1"><label>Nome *</label>
-        <input id="ceNome" placeholder="ex.: Escavadeira 01"></div>
-      <div class="field"><label>Tipo</label>
-        <select id="ceTipo">${TIPOS_EQUIP.map(t => `<option>${t}</option>`).join('')}</select></div>
-      <div class="field"><label>Vínculo</label>
-        <select id="ceVinc" onchange="document.getElementById('ceLocWrap').style.display=this.value==='Próprio'?'none':''">
-          <option>Próprio</option><option>Locado</option></select></div>
-      <div class="field" id="ceLocWrap" style="display:none;grid-column:1/-1"><label>Locadora</label>
-        <select id="ceLoc"><option value="">—</option>
-          ${EQUIP.locadoras.map(l => `<option>${escHtml(l.nome)}</option>`).join('')}</select></div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-primary btn-sm" onclick="cadEquipSalvar()">Cadastrar</button>
-      <button class="btn btn-ghost btn-sm" onclick="fecharModalRDO()">Cancelar</button>
-    </div>`);
-};
-window.cadEquipSalvar = async function() {
-  const nome = document.getElementById('ceNome').value.trim();
-  if (!nome) { toast('Informe o nome do equipamento.', 'error'); return; }
-  const vinculo = document.getElementById('ceVinc').value;
-  try {
-    const r = await jsonp(CONFIG.appsScript, {
-      action: 'equipCadastrar', nome, tipo: document.getElementById('ceTipo').value, vinculo,
-      locadora: vinculo === 'Próprio' ? '' : document.getElementById('ceLoc').value, ...authParams()
-    }, 0);
-    if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao cadastrar', 'error', 0); return; }
-    EQUIP.equipamentos = r.equipamentos || EQUIP.equipamentos;
-    EQUIP.locadoras = r.locadoras || EQUIP.locadoras;
-    fecharModalRDO();
-    document.getElementById('page').innerHTML = renderEquip(); ligarEquipForm();
-    toast('Equipamento cadastrado', 'success');
-  } catch (e) { toast('Sem conexão com o servidor.', 'error'); }
-};
-window.cadLocadoraModal = function() {
-  abrirModalRDO(`
-    <div style="font-weight:700;font-size:15px;margin-bottom:14px">Cadastrar locadora</div>
-    <div class="field"><label>Nome *</label><input id="clNome" placeholder="Empresa locadora"></div>
-    <div class="field"><label>Observações</label><textarea id="clObs" rows="2"></textarea></div>
-    <div style="display:flex;gap:8px;margin-top:16px">
-      <button class="btn btn-primary btn-sm" onclick="cadLocadoraSalvar()">Cadastrar</button>
-      <button class="btn btn-ghost btn-sm" onclick="fecharModalRDO()">Cancelar</button>
-    </div>`);
-};
-window.cadLocadoraSalvar = async function() {
-  const nome = document.getElementById('clNome').value.trim();
-  if (!nome) { toast('Informe o nome da locadora.', 'error'); return; }
-  try {
-    const r = await jsonp(CONFIG.appsScript, {
-      action: 'locadoraCadastrar', nome, observacoes: document.getElementById('clObs').value.trim(), ...authParams()
-    }, 0);
-    if (!r || !r.ok) { toast((r && (r.mensagem || erroLegivel(r.error))) || 'Falha ao cadastrar', 'error', 0); return; }
-    EQUIP.locadoras = r.locadoras || EQUIP.locadoras;
-    fecharModalRDO();
-    toast('Locadora cadastrada', 'success');
-  } catch (e) { toast('Sem conexão com o servidor.', 'error'); }
-};
 
 // ====================================================================
 // VIEW: GALERIA DE FOTOS
