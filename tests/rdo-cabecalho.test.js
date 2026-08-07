@@ -36,6 +36,7 @@ const literais = [
   ['órgão fiscalizador', 'SP OBRAS'],
   ['rodapé do PDF', 'Av. Senador Teotônio Vilela, São Paulo'],
   ['nome da contratada', "'Gestor Engenharia  |"],
+  ['contratada na assinatura', 'ENGENHEIRO GESTOR ENGENHARIA'],
 ];
 literais.forEach(([rotulo, txt]) => {
   const i = geradores.indexOf(txt);
