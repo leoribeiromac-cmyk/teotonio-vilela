@@ -149,6 +149,13 @@ const csvPacotes = [
   const semObjeto = paginas.map((p, i) => tem(p, 'OBJETO') && tem(p, 'PRAZO') ? null : i + 1).filter(Boolean);
   ok('toda página traz o quadro de objeto e prazo', semObjeto.length === 0, 'faltou em ' + semObjeto);
 
+  // O dia do teste é Bom de manhã, Bom à tarde e Chuva à noite. O quadro
+  // mostrava só a manhã: o RDO de um dia que parou por chuva dizia "Bom".
+  const semClima = paginas.map((p, i) =>
+    ['MANHÃ', 'TARDE', 'NOITE'].every(t => tem(p, t)) ? null : i + 1).filter(Boolean);
+  ok('o quadro de clima traz os três períodos', semClima.length === 0, 'faltou em ' + semClima);
+  ok('e o período que choveu aparece como chuva', paginas.every(p => tem(p, 'Chuva')));
+
   const marcadas = paginas.map((p, i) => tem(p, 'continuação') ? i + 1 : null).filter(Boolean);
   ok('as folhas seguintes vêm marcadas como continuação',
      marcadas.length === T - 1 && !marcadas.includes(1), 'marcadas: ' + marcadas);

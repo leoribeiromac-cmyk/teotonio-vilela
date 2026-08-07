@@ -11578,7 +11578,7 @@ function _gerarPDFDiario(data) {
   
   const JH = 5;
   const dCW = TW * 0.038, jW = TW * 0.25, cW = TW - 7 * dCW - jW;
-  const jcw = jW / 4, ccw = cW / 4;
+  const jcw = jW / 4, ccw = cW / 3;
   
   rf(ML, y, 7 * dCW, JH, LB, BD); sf(5, 'bold', NAV); tx('DIA DA SEMANA', ML + 7 * dCW / 2, y + JH * 0.72, { align: 'center' });
   rf(ML + 7 * dCW, y, jW, JH, LB, BD); sf(5, 'bold', NAV); tx('JORNADA', ML + 7 * dCW + jW / 2, y + JH * 0.72, { align: 'center' });
@@ -11594,18 +11594,21 @@ function _gerarPDFDiario(data) {
     rf(ML + 7 * dCW + i * jcw, y, jcw, JH, W, BD);
     sf(5, 'bold', NAV); tx(lbl, ML + 7 * dCW + (i + 0.5) * jcw, y + 2, { align: 'center' });
   });
-  const climaPrincipal = (d.clima_manha || 'Bom').toLowerCase();
-  let climaKey = 'bom';
-  if (climaPrincipal.includes('chuv')) climaKey = 'chu';
-  else if (climaPrincipal.includes('garoa') || climaPrincipal.includes('encober')) climaKey = 'reg';
-  ['Bom', 'Regular', 'Chuva', ''].forEach((lbl, i) => {
-    const cKey = ['bom', 'reg', 'chu', ''][i];
-    const on = cKey && cKey === climaKey;
-    rf(ML + 7 * dCW + jW + i * ccw, y, ccw, JH, on ? [235, 245, 255] : W, BD);
-    sf(5, 'bold', on ? NAV : DG);
-    tx(lbl, ML + 7 * dCW + jW + (i + 0.5) * ccw, y + 2, { align: 'center' });
-    if (on) { sf(7, 'bold', NAV); tx('✓', ML + 7 * dCW + jW + (i + 0.5) * ccw, y + JH * 0.78, { align: 'center' }); }
-  });
+  /* O apontador registra o clima de manhã, de tarde e de noite, mas o quadro
+     mostrava só o da manhã, achatado em Bom/Regular/Chuva — num dia que parou
+     por chuva à tarde, o RDO dizia "Bom". Ainda por cima imprimia o ✓ por
+     cima da palavra, e a quarta célula vinha sempre vazia. Agora os três
+     períodos aparecem com o que foi apontado, e o que choveu fica marcado. */
+  [['MANHÃ', d.clima_manha], ['TARDE', d.clima_tarde], ['NOITE', d.clima_noite]]
+    .forEach(([periodo, valor], i) => {
+      const v = String(valor || '').trim() || '—';
+      const chuva = /chuv|garoa/i.test(v);
+      const cx = ML + 7 * dCW + jW + i * ccw;
+      rf(cx, y, ccw, JH, chuva ? [222, 236, 250] : W, BD);
+      sf(4.5, 'bold', DG); tx(periodo, cx + 2, y + JH * 0.68);
+      sf(5.5, 'bold', chuva ? [25, 85, 145] : NAV);
+      tx(cabe(v, ccw - 14), cx + ccw - 2, y + JH * 0.68, { align: 'right' });
+    });
   if (continuacao) {
     sf(5.5, 'bold', DG);
     tx('continuação', ML + TW - 2, MT + 25.5, { align: 'right' });
