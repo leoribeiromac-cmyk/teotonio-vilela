@@ -11722,22 +11722,46 @@ function _gerarPDFDiario(data) {
     }
   });
 
-  if (equipamentos.length < 6) {
-    const placeholders = CATEGORIAS_EQUIP_PADRAO.filter(eq => !equipamentos.some(e => e.key === eq.key)).slice(0, 6 - equipamentos.length);
-    equipamentos = [...equipamentos, ...placeholders];
-  }
-  equipamentos = equipamentos.slice(0, 8);
+  /* Normaliza ANTES de qualquer corte. O total tem de somar a frota inteira
+     do dia — antes ele era calculado dentro do laço da lista já cortada em 8
+     linhas, então equipamento do 9º em diante sumia da tabela E do total, e o
+     PDF passava a divergir do Excel do mesmo dia. Num documento que sustenta
+     cobrança de locadora, o total é justamente o que não pode mentir. */
+  const linhasEq = equipamentos.map(eq => ({
+    label: eq.label,
+    diu: eq._customDiu !== undefined ? eq._customDiu : (parseInt(d.equipamentos_diurno[eq.key]) || 0),
+    not: eq._customNot !== undefined ? eq._customNot : (parseInt(d.equipamentos_noturno[eq.key]) || 0),
+  }));
+  const tEqDiu = linhasEq.reduce((soma, l) => soma + l.diu, 0);
+  const tEqNot = linhasEq.reduce((soma, l) => soma + l.not, 0);
 
-  let tEqDiu = 0, tEqNot = 0;
-  equipamentos.forEach((eq, i) => {
-    let diu, not;
-    if (eq._customDiu !== undefined) { diu = eq._customDiu; not = eq._customNot; }
-    else {
-      diu = parseInt(d.equipamentos_diurno[eq.key]) || 0;
-      not = parseInt(d.equipamentos_noturno[eq.key]) || 0;
+  /* A coluna comporta 8 linhas. Passando disso, a última vira o resumo do que
+     não coube: sai da lista, mas continua no total, e o leitor fica sabendo
+     que há mais — em vez de o excedente desaparecer em silêncio. */
+  const LIM_EQ = 8;
+  let visiveis;
+  if (linhasEq.length > LIM_EQ) {
+    const resto = linhasEq.slice(LIM_EQ - 1);
+    visiveis = linhasEq.slice(0, LIM_EQ - 1).concat([{
+      label: '+ ' + resto.length + ' outro(s) — ver planilha',
+      diu: resto.reduce((soma, l) => soma + l.diu, 0),
+      not: resto.reduce((soma, l) => soma + l.not, 0),
+    }]);
+  } else {
+    visiveis = linhasEq.slice();
+    // linhas em branco só para a tabela não ficar torta em dia de pouca frota
+    if (visiveis.length < 6) {
+      visiveis = visiveis.concat(
+        CATEGORIAS_EQUIP_PADRAO
+          .filter(eq => !linhasEq.some(l => l.label === eq.label))
+          .slice(0, 6 - visiveis.length)
+          .map(eq => ({ label: eq.label, diu: 0, not: 0 })));
     }
+  }
+
+  visiveis.forEach((eq, i) => {
+    const diu = eq.diu, not = eq.not;
     const tot = diu + not;
-    tEqDiu += diu; tEqNot += not;
 
     const bg = i % 2 === 0 ? W : LG;
     rf(xL, y, EqCD, EH, bg, BD); sf(6, 'normal', [0, 0, 0]); tx(eq.label, xL + 1.5, y + EH * 0.75);
