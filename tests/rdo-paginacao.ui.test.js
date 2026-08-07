@@ -11,7 +11,8 @@
 //   • toda página abre com o cabeçalho completo;
 //   • toda página traz "Página N de T", com o N certo;
 //   • nada é escrito fora da margem nem invade a coluna vizinha;
-//   • local e equipe cabem na célula (terminam em reticências quando faltam);
+//   • NADA é encurtado: nenhuma reticência, e o texto de todo serviço sai
+//     inteiro — pacote, local e equipe, do começo ao fim;
 //   • as assinaturas aparecem uma vez só, na última folha.
 //
 // Como rodar:  node tests/rdo-paginacao.ui.test.js
@@ -136,6 +137,12 @@ const csvPacotes = [
   const T = paginas.length;
   const tem = (p, txt) => p.some(it => it.t.includes(txt));
 
+  // O logo do cabeçalho estava guardado com 1049 px de largura para ser
+  // impresso em 26 mm: sozinho ele punha 2,5 MB em CADA RDO, e um arquivo
+  // desses trava o visualizador do celular — que é onde a obra abre o PDF.
+  const kb = Math.round(require('fs').statSync(destino).size / 1024);
+  ok('o arquivo não sai pesado demais para abrir no celular', kb < 600, kb + ' KB');
+
   ok('o dia grande gera mais de uma folha', T > 1, T + ' página(s)');
 
   // ---------- 1. cabeçalho em toda página ----------
@@ -160,6 +167,9 @@ const csvPacotes = [
   ok('as folhas seguintes vêm marcadas como continuação',
      marcadas.length === T - 1 && !marcadas.includes(1), 'marcadas: ' + marcadas);
 
+  // A marca de continuação ficava solta em cima do quadro do OBJETO; agora
+  // vai no rodapé, ao lado do número da página.
+
   // ---------- 2. rodapé numerado ----------
   const rodapesErrados = paginas.map((p, i) =>
     tem(p, 'Página ' + (i + 1) + ' de ' + T) ? null : i + 1).filter(Boolean);
@@ -174,51 +184,45 @@ const csvPacotes = [
   ok('nada escapa da margem da folha', forat.length === 0, forat.slice(0, 3).join(' | '));
 
   // ---------- 4. as colunas não se invadem ----------
-  // Onde a folha é dividida, a esquerda vai de 8 a 120 mm e os serviços
-  // começam em 123 mm. Cabeçalho, rodapé, fecho — e a lista de serviços
-  // quando ela toma a folha inteira — ocupam os 194 mm por direito.
-  const GUT_ESQ = pt(120), GUT_DIR = pt(123);
-  // Faixa usada pelos serviços em cada folha, lida do próprio PDF.
-  const faixaArr = [];
-  paginas.forEach((p, i) => {
-    const h = p.find(it => it.t === 'FRENTE / PACOTE');
-    faixaArr[i] = h ? (h.x < pt(20) ? pt(194) : pt(79)) : (faixaArr[i - 1] || pt(79));
-  });
-  const faixa = i => faixaArr[i];
-
+  // EFETIVO ocupa de 8 a 114 mm e EQUIPAMENTOS de 117 a 202; os serviços
+  // tomam a folha inteira, abaixo dos dois.
   const p1 = paginas[0];
-  const yEfetivo = (p1.find(it => it.t.startsWith('EFETIVO')) || {}).y;
-  const yFecho = Math.min(
-    ...p1.filter(it => it.t === 'ASSINATURAS' || it.t === 'OBS:'
-                    || (/^SERVIÇOS/.test(it.t) && it.x < pt(20))).map(it => it.y),
-    pt(297 - 24));
-  const invadem = p1.filter(it => it.y > yEfetivo && it.y < yFecho)
+  const GUT_ESQ = pt(114), GUT_DIR = pt(117);
+  const yEfetivo = (p1.find(it => it.t === 'EFETIVO') || {}).y;
+  const ySvc = Math.min(...p1.filter(it => /^SERVIÇOS/.test(it.t)).map(it => it.y), pt(297 - 13));
+  const invadem = p1.filter(it => it.y > yEfetivo && it.y < ySvc)
     .filter(it => it.x < GUT_ESQ - FOLGA && it.x + it.w > GUT_DIR + FOLGA)
     .map(it => `"${it.t}"`);
-  ok('onde a folha é dividida, nenhuma coluna invade a outra',
+  ok('EFETIVO e EQUIPAMENTOS não invadem um ao outro',
      yEfetivo !== undefined && invadem.length === 0, invadem.slice(0, 3).join(' | '));
 
-  // ---------- 5. local e equipe cabem na célula ----------
-  ok('num dia grande a lista de serviços usa a folha inteira',
-     faixaArr.every(f => f === pt(194)), faixaArr.map(f => (f / MM).toFixed(0) + 'mm').join(', '));
+  ok('os serviços usam a folha inteira',
+     paginas.every(p => p.filter(it => it.t === 'FRENTE / PACOTE').every(it => it.x < pt(20))),
+     'algum cabeçalho de serviço fora da margem esquerda');
 
   ok('a folha 1 não fica com meia página em branco',
      p1.filter(it => it.y > pt(200)).length > 5,
      p1.filter(it => it.y > pt(200)).length + ' itens abaixo de 200mm');
 
-  const CELULA = /^(Decantador|Equipe de)/;
-  const estourou = [];
-  paginas.forEach((p, i) => p.forEach(it => {
-    if (!CELULA.test(it.t)) return;
-    const permitido = faixa(i) * 0.23 - pt(2.5);
-    if (it.w > permitido + FOLGA) estourou.push(`p${i + 1} "${it.t}" (${it.w.toFixed(0)}pt > ${permitido.toFixed(0)}pt)`);
-  }));
-  ok('local e equipe cabem na célula', estourou.length === 0, estourou.slice(0, 3).join(' | '));
+  // ---------- 5. nada é encurtado ----------
+  const reticencias = paginas.flatMap((p, i) => p.filter(it => /…$/.test(it.t)).map(it => `p${i + 1} "${it.t}"`));
+  ok('nenhum texto termina em reticências', reticencias.length === 0, reticencias.slice(0, 3).join(' | '));
 
-  const cortados = paginas.flat().filter(it => CELULA.test(it.t));
-  ok('o que não coube termina em reticências, não no meio da palavra',
-     cortados.length > 0 && cortados.every(it => it.t.endsWith('…')),
-     (cortados.find(it => !it.t.endsWith('…')) || {}).t);
+  // O texto de cada célula quebra em várias linhas; juntar os itens na ordem
+  // em que foram impressos reconstrói o original. Se algum pedaço tivesse sido
+  // cortado, o FIM de cada texto não apareceria o número de vezes esperado.
+  const corrido = paginas.flat().map(it => it.t).join(' ').replace(/\s+/g, ' ');
+  const conta = (agulha) => corrido.split(agulha).length - 1;
+  ok('o nome do pacote sai inteiro em todos os serviços',
+     conta('concretagem estrutural do decantador — trecho') === N_DIU + N_NOT,
+     conta('concretagem estrutural do decantador — trecho') + ' de ' + (N_DIU + N_NOT));
+  ok('o local sai inteiro em todos os serviços',
+     conta(LOCAL) === N_DIU + N_NOT, conta(LOCAL) + ' de ' + (N_DIU + N_NOT));
+  ok('a equipe sai inteira em todos os serviços',
+     conta(EQUIPE) === N_DIU + N_NOT, conta(EQUIPE) + ' de ' + (N_DIU + N_NOT));
+  ok('o objeto do contrato sai inteiro, em todas as folhas',
+     conta('NA REGIÃO SUL DA CIDADE DE SÃO PAULO') === T,
+     conta('NA REGIÃO SUL DA CIDADE DE SÃO PAULO') + ' de ' + T);
 
   // ---------- 6. os serviços não somem ----------
   const linhasServico = paginas.flat().filter(it => it.t.startsWith('Equipe de')).length;
@@ -229,7 +233,7 @@ const csvPacotes = [
      paginas.some(p => tem(p, 'SERVIÇOS DIURNOS')) && paginas.some(p => tem(p, 'SERVIÇOS NOTURNOS')));
 
   ok('o bloco que vira a folha se reapresenta na seguinte',
-     paginas.some(p => tem(p, '(cont.)')),
+     paginas.some(p => tem(p, 'SERVIÇOS DIURNOS (continuação)')),
      'nenhum título de continuação');
 
   // ---------- 7. o fecho fica na última folha ----------
@@ -237,8 +241,11 @@ const csvPacotes = [
   ok('as assinaturas aparecem uma vez só, na última folha',
      pagsComAssinatura.length === 1 && pagsComAssinatura[0] === T, 'em ' + pagsComAssinatura);
 
+  // a ocorrência tem 137 caracteres e cabia em quatro linhas com "…" no fim
   ok('a ocorrência do dia é impressa por inteiro',
-     paginas.some(p => tem(p, 'OBS:')) && paginas.some(p => tem(p, 'Chuva forte a partir das 18h20')));
+     paginas.some(p => tem(p, 'OCORRÊNCIAS E OBSERVAÇÕES DO DIA')) &&
+     corrido.includes('a forma ficou escorada e será liberada amanhã após vistoria'),
+     'o fim da ocorrência não saiu');
 
   // ---------- 8. nada por baixo do rodapé ----------
   const noRodape = [];
