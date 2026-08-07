@@ -294,11 +294,85 @@ primeira abertura, e a chave velha só é apagada depois que tudo gravou.
 Sem IndexedDB disponível (navegação privada, navegador antigo), a fila volta
 para o `localStorage` — mas agora com o erro visível.
 
+## Muros de contenção (capítulo 10.0)
+
+O aditamento trouxe o capítulo **10.0 — MURO DE ARRIMO**: R$ 1.491.057,79 em
+20 itens (169 a 177-J), três muros a executar e um que ficou zerado. O serviço
+ainda não começou; os pacotes já estão no app.
+
+**Muro não se executa de uma vez ao longo do comprimento** — um trecho é
+escavado semanas antes de ser concretado. Se cada muro fosse um pacote só,
+lançar 40 m significaria dizer que aqueles 40 m estão prontos do rachão ao
+guarda-corpo, e o avanço só apareceria no fim. Por isso cada muro entra como
+**quatro pacotes em sequência**, todos medidos em **metro linear de muro** —
+o mesmo desenho que o pavimento rígido já usa (P30A / P30B / P30C):
+
+| | 1. Escavação e fundação | 2. Sapata | 3. Fuste (parede) | 4. Reaterro e acabamento |
+|---|---|---|---|---|
+| **Muros B e C** (42,25 m) | P37A | P37B | P37C | P37D |
+| **Muro D** (39,00 m) | P38A | P38B | P38C | P38D |
+| **Muro E** (135,00 m) | P39A | P39B | P39C | P39D |
+
+Mais o **P40 — Rampa da escola** (27,225 m², junto ao Muro C2). O **Muro A**
+não virou pacote: está no capítulo, mas com quantidade **zero** em todas as
+memórias — pacote zerado só apareceria no painel como serviço eternamente
+parado em 0%.
+
+Para o apontador, o lançamento é o de sempre: frente → pacote → quantidade.
+Ele mede metros de muro com a trena, não metros cúbicos de concreto. Quem
+converte é a matriz de coeficientes, tirada direto das memórias de cálculo:
+`coeficiente = quantidade contratual do item ÷ comprimento do muro`. Com os
+três muros a 100%, **cada um dos 20 itens cai exatamente na quantidade do
+aditamento** — `tests/muros-contencao.test.js` é a trava disso, e
+`tests/muros-medicao.ui.test.js` refaz a conta dentro do app.
+
+Duas coisas que a tela de lançamento ganhou junto:
+
+- A **observação do pacote** aparece embaixo do seletor ("Est. 129+15 a
+  136+10 — canteiro central", "Espessura 15cm"). Estava só na planilha, onde
+  ninguém no canteiro olha.
+- Aviso quando uma etapa **passa a anterior** — fuste lançado onde ainda não
+  há sapata mede serviço que não foi feito. Não bloqueia: a etapa anterior
+  pode ter sido executada antes do app, ou num mês que ninguém digitou.
+
+> **O avanço ponderado da obra CAI ao entrar com os muros, e está certo.**
+> São ~180 dias-equivalentes de escopo novo sobre ~3.140 que já existiam:
+> cerca de **5,4 pontos percentuais** de diluição. A obra não andou para trás
+> — ela ficou maior. Foi o que o aditamento fez.
+
+### Enquanto a planilha não tem os muros
+
+Os pacotes e coeficientes vêm de `dados/teotonio-muros.js`, do próprio
+repositório, e são somados ao que a planilha publicada devolve. É o que
+permitiu o serviço entrar no ar sem esperar alguém editar a planilha — quem
+edita a planilha não é quem está no canteiro.
+
+Para levá-los para a planilha, cole os dois blocos de
+**`docs/muros-planilha.csv`** nas abas `Pacotes` e `Coeficientes`. A partir
+daí **a planilha manda**: `aplicarComplemento()` só acrescenta o pacote cujo
+ID não veio de lá, e os coeficientes seguem o pacote. Colar não duplica nada,
+e o arquivo não precisa ser removido do código no mesmo instante.
+
 ## Prévia de Medição
 
 Tela **Apoio Medição** → selecione o mês → **⬇ CSV p/ conferência**. O arquivo (separador `;`, decimal com vírgula) traz o consumo derivado por item contratual no período, pronto para confrontar com a coluna do mês da Planilha Geral do `.xlsm`.
 
 O backend também expõe `?action=producaoPorPacote&mes=2026-06` (JSON, deduplicado na leitura) para automações externas.
+
+### O mesmo código em dois capítulos
+
+Cinco códigos SIURB do capítulo do muro se repetem em outros capítulos —
+`06-06-00` (lastro) também é da drenagem, `05-48-00` (BGS) e `04-11-00`
+(escavação mecânica) também são do pavimento, `05-20-00` (rachão) idem,
+`13-02-47` (podotátil) também é da via. Cada um é uma **linha diferente** da
+Planilha Geral, com a sua própria quantidade contratual: somar os dois numa
+linha só daria um número que não confere com nenhuma das duas.
+
+Por isso a matriz de coeficientes aceita a coluna opcional **`Item Planilha`**
+com o nº do item (169-A, 177-B…). Quando ela vem preenchida, a prévia separa
+as linhas e mostra o nº do item embaixo do código; o CSV ganha a coluna
+`Item_Planilha`. As 104 linhas que já existiam não têm a coluna e continuam
+agregando por código, como sempre foi.
 
 ## Arquivos
 
@@ -309,6 +383,8 @@ O backend também expõe `?action=producaoPorPacote&mes=2026-06` (JSON, deduplic
 | `limpar_duplicados.gs` | Utilitário antigo de limpeza (o `Code.gs` já cobre via `limparDuplicados`) |
 | `manifest.json` / `sw.js` / `icon-*.png` / `favicon.svg` | PWA — a marca é a avenida em perspectiva |
 | `pacotes.csv` | Snapshot de referência da aba Pacotes |
+| `dados/teotonio-muros.js` | Pacotes e coeficientes dos muros de contenção, enquanto a planilha não os tem (ver acima) |
+| `docs/muros-planilha.csv` | As mesmas linhas prontas para colar nas abas `Pacotes` e `Coeficientes` |
 | `js/ui/icones.js` | Conjunto de ícones do app — traço único na grade de 24, cor herdada do tema. Cobre navegação, ações e frentes de serviço (`icFrente()` escolhe pelo nome da frente) |
 | `vendor/` | Bibliotecas servidas pelo próprio site (ver abaixo) |
 

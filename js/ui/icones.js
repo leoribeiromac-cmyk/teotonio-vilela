@@ -245,6 +245,12 @@ var ICONES = {
     '<path d="M3.4 10.6h9.4v9.8H3.4z"/><path d="M3.4 10.6 8.1 6.4l4.7 4.2"/>' +
     '<path d="M16.4 4.2h2.8l2.4 2.4v7.2h-5.2z"/><path d="M19.2 4.2v2.6h2.4"/>' +
     '<path d="M17.8 16.6v3.8M16.2 20.4h3.2"/>',
+  // muro de contenção: a seção do muro em L (sapata + fuste), o terreno
+  // contido atrás e o barbacã que o dreno atravessa
+  fMuroContencao: '<g class="ic-fill"><path d="M8.6 4.2h3.2v13.4h7.4v2.6H8.6z"/></g>' +
+    '<path d="M8.6 4.2h3.2v13.4h7.4v2.6H8.6z"/>' +
+    '<path d="M8.6 8.2H4.4M8.6 12.2H4.4M8.6 16.2H4.4"/>' +
+    '<path d="M11.8 11.4h3.4"/>',
 
   // qualquer frente que venha nova e não case com nenhuma acima
   fGenerico: '<g class="ic-fill"><rect x="4.2" y="4.2" width="15.6" height="15.6" rx="4"/></g>' +
@@ -281,6 +287,9 @@ function icFrente(nome) {
   // Via, Vala Técnica e Desapropriações. Cinco frentes, um só desenho.
   if (/prelimin|mobiliza|canteiro|topograf|impla?nta[çc]/.test(n)) return 'fPreliminares';
   if (/desapropri|deso?bstru[çc]|imissao|indeniza/.test(n))        return 'fDesapropriacao';
+  // antes de terraplenagem: a frente do muro é escavação + estrutura, e
+  // "muro de contenção" cairia em /escava/ se viesse depois
+  if (/muro|arrimo|conten[çc]|gabi[aã]o/.test(n))                  return 'fMuroContencao';
   if (/vala|duto|conduite|multidut/.test(n))                       return 'fValaTecnica';
   if (/drenagem|galeria|boca de lobo|tubo|pluvial|pv\b|po[çc]o/.test(n)) return 'fDrenagem';
   if (/demoli|remanej|remo[çc]ao|retirada|fresa/.test(n))          return 'fDemolicao';

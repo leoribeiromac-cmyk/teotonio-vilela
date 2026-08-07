@@ -20,6 +20,18 @@ para a navegação, então a mudança chega sem precisar limpar cache.
   abrir offline no canteiro. Ao trocar uma versão, subir também o `VERSAO`
   do `sw.js`.
 - `manifest.json`, `favicon.svg`, `icon-*.png` — assets do PWA.
+- `dados/` — cadastro que não vem da planilha publicada. `<obra>.js` é a obra
+  inteira (`window.OBRAS_ARQ`); `teotonio-muros.js` é um **complemento** da
+  Teotônio (`window.OBRAS_COMPLEMENTO`), acrescentado ao que a planilha
+  devolve. Ver `aplicarComplemento()` no `index.html`.
+
+## Números de cadastro escritos em arquivo
+
+`num()` trata o ponto como separador de MILHAR — é o formato pt-BR que chega
+dos CSVs. Então **número JS nunca vai cru para o STATE**: `String(22.26)` é
+lido como 2226. Todo valor que nasce número (`Qtd Estimada`, `Produtividade`,
+`Coef`) passa por `ptNum()` antes. `tests/muros-contencao.test.js` cobre o
+ida-e-volta.
 
 ## App irmão
 
