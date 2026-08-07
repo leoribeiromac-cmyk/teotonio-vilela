@@ -1,0 +1,132 @@
+﻿MUROS DE CONTENÇÃO — LINHAS PARA COLAR NA PLANILHA "Teotônio Vilela — Sistema Master"
+
+Enquanto estas linhas não estiverem na planilha, o app as serve de
+dados/teotonio-muros.js. Depois de coladas, a PLANILHA passa a mandar e o
+arquivo deixa de ser usado sozinho — colar não duplica nada.
+
+Separador: ponto-e-vírgula. Decimal: vírgula. Codificação: UTF-8.
+
+ANTES DE COLAR, confira duas colunas:
+  • aba Pacotes precisa da coluna "Produtividade" (hoje ela não existe).
+    Sem ela o pacote fica com peso ZERO no avanço ponderado. Acrescente a
+    coluna no FIM do cabeçalho, como manda a instrução da própria planilha.
+  • aba Coeficientes precisa da coluna "Item Planilha", também no fim. É o
+    nº do item (169-A, 177-B…) que separa, na prévia de medição, os cinco
+    códigos que este capítulo divide com outros: 06-06-00, 05-48-00,
+    05-20-00, 04-11-00 e 13-02-47.
+
+==========================================================================
+ABA "Pacotes" — colar a partir da primeira linha vazia (SEM o cabeçalho)
+==========================================================================
+ID;Frente;Pacote;Unidade Física;Qtd Estimada;Produtividade;Status;Observação
+P37A;Muro de Contenção;Muros B e C — 1. Escavação e fundação;ML;42,25;7;Ativo;Est. 103+12 a 106+10 (pista esq.) · 6 trechos: B1, B2, C1 a C4 · 11,3 m³/m de escavação
+P37B;Muro de Contenção;Muros B e C — 2. Sapata (base);ML;42,25;8;Ativo;Sapata contra o solo — sem forma · 0,44 m³/m de concreto
+P37C;Muro de Contenção;Muros B e C — 3. Fuste (parede);ML;42,25;3,5;Ativo;Muros de 1,20 m a 2,90 m · 4,35 m²/m de forma · 27 barbacãs
+P37D;Muro de Contenção;Muros B e C — 4. Reaterro e acabamento;ML;42,25;5;Ativo;Reaterro 5,6 m³/m · 27,85 m de corrimão e 16,60 m de guarda-corpo
+P38A;Muro de Contenção;Muro D — 1. Escavação e fundação;ML;39;3;Ativo;Est. 212 a 215 (pista dir.) · 36,8 m³/m — a escavação mais profunda do lote
+P38B;Muro de Contenção;Muro D — 2. Sapata (base);ML;39;5;Ativo;Sapata 39,00 m · 0,79 m³/m de concreto
+P38C;Muro de Contenção;Muro D — 3. Fuste (parede);ML;39;2;Ativo;Fuste de 3,05 m · 6,15 m²/m de forma · 30 barbacãs
+P38D;Muro de Contenção;Muro D — 4. Reaterro e acabamento;ML;39;8;Ativo;Reaterro 15,1 m³/m
+P39A;Muro de Contenção;Muro E — 1. Escavação e fundação;ML;135;8;Ativo;Est. 129+15 a 136+10 / 232+4,16 a 238+19,15 — canteiro central · 9,0 m³/m
+P39B;Muro de Contenção;Muro E — 2. Sapata (base);ML;135;6;Ativo;Sapata 200×30 com dente 30×40 · 0,72 m³/m de concreto
+P39C;Muro de Contenção;Muro E — 3. Fuste (parede);ML;135;2,5;Ativo;Fuste de 2,65 m constante · 4,72 m²/m de forma · 90 barbacãs
+P39D;Muro de Contenção;Muro E — 4. Reaterro e acabamento;ML;135;20;Ativo;Reaterro 5,5 m³/m — faixa contínua no canteiro central
+P40;Muro de Contenção;Rampa da escola (junto ao Muro C2);m²;27,225;8;Ativo;Junto ao Muro C2 · piso estrutural 7 cm sobre BGS 10 cm + faixa podotátil
+
+==========================================================================
+ABA "Coeficientes" — colar a partir da primeira linha vazia (SEM o cabeçalho)
+==========================================================================
+Pacote ID;Pacote Nome;Item Contratual;Descrição Item;Unid Item;Coef;Unid Coef;Tipo;Item Planilha
+P37A;Muros B e C — 1. Escavação e fundação;04-01-00;Escavação manual p/ fundações e valas (h ≤ 1,50 m);M3;3,39366;m³/ML;Manual;169
+P37A;Muros B e C — 1. Escavação e fundação;04-11-00;Escavação mecânica, carga e remoção até 1,0 km;M3;7,91853;m³/ML;Manual;169-A
+P37A;Muros B e C — 1. Escavação e fundação;04-15-00;Carga e remoção de terra até 1,0 km;M3;11,3122;m³/ML;Manual;170
+P37A;Muros B e C — 1. Escavação e fundação;04-60-00;Remoção de terra além do 1º km;M3XKM;366,628;m³xkm/ML;Manual;171
+P37A;Muros B e C — 1. Escavação e fundação;05.09.007;Taxa de destinação de resíduo sólido em aterro;M3;7,91853;m³/ML;Manual;172
+P37A;Muros B e C — 1. Escavação e fundação;05-20-00;Fundação de rachão;M3;0,93642;m³/ML;Manual;177-B
+P37A;Muros B e C — 1. Escavação e fundação;05-48-00;Base de brita graduada;M3;0,187284;m³/ML;Manual;177-A
+P37A;Muros B e C — 1. Escavação e fundação;06-06-00;Lastro de concreto FCK = 10 MPa;M3;0,187284;m³/ML;Manual;174
+P37B;Muros B e C — 2. Sapata (base);07-10-00;Aço CA-50 — diâmetro ≥ 1/2";KG;22,4501;kg/ML;Manual;176
+P37B;Muros B e C — 2. Sapata (base);07-09-00;Aço CA-50 — diâmetro < 1/2";KG;26,3874;kg/ML;Manual;177-C
+P37B;Muros B e C — 2. Sapata (base);03-03-20;Concreto FCK = 30 MPa — usinado;M3;0,435917;m³/ML;Manual;177
+P37C;Muros B e C — 3. Fuste (parede);02-03-01;Forma comum de tábuas de pinus;M2;4,35136;m²/ML;Manual;175
+P37C;Muros B e C — 3. Fuste (parede);07-10-00;Aço CA-50 — diâmetro ≥ 1/2";KG;35,041;kg/ML;Manual;176
+P37C;Muros B e C — 3. Fuste (parede);07-09-00;Aço CA-50 — diâmetro < 1/2";KG;41,1865;kg/ML;Manual;177-C
+P37C;Muros B e C — 3. Fuste (parede);03-03-20;Concreto FCK = 30 MPa — usinado;M3;0,680396;m³/ML;Manual;177
+P37C;Muros B e C — 3. Fuste (parede);08-18-02;Cimbramento metálico de altura maior que 3,00 m;M3;1,1479;m³/ML;Manual;177-H
+P37C;Muros B e C — 3. Fuste (parede);07-19-00;Barbacãs de tubos de PVC — diâmetro 4";UN;0,639053;un/ML;Manual;177-G
+P37D;Muros B e C — 4. Reaterro e acabamento;04-08-00;Reaterro compactado de fundação;M3;5,58698;m³/ML;Manual;173
+P37D;Muros B e C — 4. Reaterro e acabamento;04-31-00;Fornecimento de terra (escavação, carga e transporte até 1,0 km);M3;2,23123;m³/ML;Manual;177-J
+P37D;Muros B e C — 4. Reaterro e acabamento;04-60-00;Remoção de terra além do 1º km;M3XKM;103,306;m³xkm/ML;Manual;171
+P37D;Muros B e C — 4. Reaterro e acabamento;17-05-24;DP.04 — corrimão em tubo galvanizado;M;0,659172;m/ML;Manual;177-D
+P37D;Muros B e C — 4. Reaterro e acabamento;17-05-25;DP.05 — corrimão em tubo galvanizado c/ guarda-corpo;M;0,392899;m/ML;Manual;177-E
+P38A;Muro D — 1. Escavação e fundação;04-01-00;Escavação manual p/ fundações e valas (h ≤ 1,50 m);M3;11,0347;m³/ML;Manual;169
+P38A;Muro D — 1. Escavação e fundação;04-11-00;Escavação mecânica, carga e remoção até 1,0 km;M3;25,7476;m³/ML;Manual;169-A
+P38A;Muro D — 1. Escavação e fundação;04-15-00;Carga e remoção de terra até 1,0 km;M3;36,7823;m³/ML;Manual;170
+P38A;Muro D — 1. Escavação e fundação;04-60-00;Remoção de terra além do 1º km;M3XKM;1192,11;m³xkm/ML;Manual;171
+P38A;Muro D — 1. Escavação e fundação;05.09.007;Taxa de destinação de resíduo sólido em aterro;M3;25,7476;m³/ML;Manual;172
+P38A;Muro D — 1. Escavação e fundação;05-20-00;Fundação de rachão;M3;0,5;m³/ML;Manual;177-B
+P38A;Muro D — 1. Escavação e fundação;05-48-00;Base de brita graduada;M3;0,1;m³/ML;Manual;177-A
+P38A;Muro D — 1. Escavação e fundação;06-06-00;Lastro de concreto FCK = 10 MPa;M3;0,29;m³/ML;Manual;174
+P38B;Muro D — 2. Sapata (base);02-03-01;Forma comum de tábuas de pinus;M2;1,68846;m²/ML;Manual;175
+P38B;Muro D — 2. Sapata (base);07-10-00;Aço CA-50 — diâmetro ≥ 1/2";KG;71,6607;kg/ML;Manual;176
+P38B;Muro D — 2. Sapata (base);07-09-00;Aço CA-50 — diâmetro < 1/2";KG;46,826;kg/ML;Manual;177-C
+P38B;Muro D — 2. Sapata (base);03-03-20;Concreto FCK = 30 MPa — usinado;M3;0,7875;m³/ML;Manual;177
+P38C;Muro D — 3. Fuste (parede);02-03-01;Forma comum de tábuas de pinus;M2;6,14846;m²/ML;Manual;175
+P38C;Muro D — 3. Fuste (parede);07-10-00;Aço CA-50 — diâmetro ≥ 1/2";KG;74,3906;kg/ML;Manual;176
+P38C;Muro D — 3. Fuste (parede);07-09-00;Aço CA-50 — diâmetro < 1/2";KG;48,6099;kg/ML;Manual;177-C
+P38C;Muro D — 3. Fuste (parede);03-03-20;Concreto FCK = 30 MPa — usinado;M3;0,8175;m³/ML;Manual;177
+P38C;Muro D — 3. Fuste (parede);08-18-02;Cimbramento metálico de altura maior que 3,00 m;M3;1,525;m³/ML;Manual;177-H
+P38C;Muro D — 3. Fuste (parede);07-19-00;Barbacãs de tubos de PVC — diâmetro 4";UN;0,769231;un/ML;Manual;177-G
+P38D;Muro D — 4. Reaterro e acabamento;04-08-00;Reaterro compactado de fundação;M3;15,089;m³/ML;Manual;173
+P38D;Muro D — 4. Reaterro e acabamento;04-31-00;Fornecimento de terra (escavação, carga e transporte até 1,0 km);M3;6,02597;m³/ML;Manual;177-J
+P38D;Muro D — 4. Reaterro e acabamento;04-60-00;Remoção de terra além do 1º km;M3XKM;279,002;m³xkm/ML;Manual;171
+P39A;Muro E — 1. Escavação e fundação;04-01-00;Escavação manual p/ fundações e valas (h ≤ 1,50 m);M3;2,71311;m³/ML;Manual;169
+P39A;Muro E — 1. Escavação e fundação;04-11-00;Escavação mecânica, carga e remoção até 1,0 km;M3;6,33059;m³/ML;Manual;169-A
+P39A;Muro E — 1. Escavação e fundação;04-15-00;Carga e remoção de terra até 1,0 km;M3;9,0437;m³/ML;Manual;170
+P39A;Muro E — 1. Escavação e fundação;04-60-00;Remoção de terra além do 1º km;M3XKM;293,106;m³xkm/ML;Manual;171
+P39A;Muro E — 1. Escavação e fundação;05.09.007;Taxa de destinação de resíduo sólido em aterro;M3;6,33059;m³/ML;Manual;172
+P39A;Muro E — 1. Escavação e fundação;05-20-00;Fundação de rachão;M3;1,3;m³/ML;Manual;177-B
+P39A;Muro E — 1. Escavação e fundação;05-48-00;Base de brita graduada;M3;0,26;m³/ML;Manual;177-A
+P39A;Muro E — 1. Escavação e fundação;06-06-00;Lastro de concreto FCK = 10 MPa;M3;0,26;m³/ML;Manual;174
+P39B;Muro E — 2. Sapata (base);02-03-01;Forma comum de tábuas de pinus;M2;0,75;m²/ML;Manual;175
+P39B;Muro E — 2. Sapata (base);07-10-00;Aço CA-50 — diâmetro ≥ 1/2";KG;70,4827;kg/ML;Manual;176
+P39B;Muro E — 2. Sapata (base);07-09-00;Aço CA-50 — diâmetro < 1/2";KG;3,84185;kg/ML;Manual;177-C
+P39B;Muro E — 2. Sapata (base);03-03-20;Concreto FCK = 30 MPa — usinado;M3;0,72;m³/ML;Manual;177
+P39C;Muro E — 3. Fuste (parede);02-03-01;Forma comum de tábuas de pinus;M2;4,7157;m²/ML;Manual;175
+P39C;Muro E — 3. Fuste (parede);07-10-00;Aço CA-50 — diâmetro ≥ 1/2";KG;76,0136;kg/ML;Manual;176
+P39C;Muro E — 3. Fuste (parede);07-09-00;Aço CA-50 — diâmetro < 1/2";KG;4,14333;kg/ML;Manual;177-C
+P39C;Muro E — 3. Fuste (parede);03-03-20;Concreto FCK = 30 MPa — usinado;M3;0,7765;m³/ML;Manual;177
+P39C;Muro E — 3. Fuste (parede);08-18-02;Cimbramento metálico de altura maior que 3,00 m;M3;1,175;m³/ML;Manual;177-H
+P39C;Muro E — 3. Fuste (parede);07-19-00;Barbacãs de tubos de PVC — diâmetro 4";UN;0,666667;un/ML;Manual;177-G
+P39D;Muro E — 4. Reaterro e acabamento;04-08-00;Reaterro compactado de fundação;M3;5,48519;m³/ML;Manual;173
+P39D;Muro E — 4. Reaterro e acabamento;04-31-00;Fornecimento de terra (escavação, carga e transporte até 1,0 km);M3;2,19058;m³/ML;Manual;177-J
+P39D;Muro E — 4. Reaterro e acabamento;04-60-00;Remoção de terra além do 1º km;M3XKM;101,424;m³xkm/ML;Manual;171
+P40;Rampa da escola (junto ao Muro C2);13.02.11;Piso estrutural em concreto armado — 7 cm;M2;1;m²/m²;Auto;177-I
+P40;Rampa da escola (junto ao Muro C2);05-48-00;Base de brita graduada;M3;0,1;m³/m²;Manual;177-A
+P40;Rampa da escola (junto ao Muro C2);13-02-47;Piso podotátil, alerta ou direcional, ladrilho hidráulico;M2;0,062443;m²/m²;Manual;177-F
+
+==========================================================================
+CONFERÊNCIA — com os três muros a 100%, cada item cai na quantidade do
+aditamento (capítulo 10.0 da Planilha Geral):
+==========================================================================
+Item;Código;Descrição;Unid;Qtd do aditamento
+169;04-01-00;Escavação manual p/ fundações e valas (h ≤ 1,50 m);M3;940,01
+169-A;04-11-00;Escavação mecânica, carga e remoção até 1,0 km;M3;2193,35
+170;04-15-00;Carga e remoção de terra até 1,0 km;M3;3133,36
+171;04-60-00;Remoção de terra além do 1º km;M3XKM;130490,07
+172;05.09.007;Taxa de destinação de resíduo sólido em aterro;M3;2193,352
+173;04-08-00;Reaterro compactado de fundação;M3;1565,02
+174;06-06-00;Lastro de concreto FCK = 10 MPa;M3;54,32275
+175;02-03-01;Forma comum de tábuas de pinus;M2;1227,355
+176;07-10-00;Aço CA-50 — diâmetro ≥ 1/2";KG;27902
+177;03-03-20;Concreto FCK = 30 MPa — usinado;M3;311,78675
+177-A;05-48-00;Base de brita graduada;M3;49,63525
+177-B;05-20-00;Fundação de rachão;M3;234,56375
+177-C;07-09-00;Aço CA-50 — diâmetro < 1/2";KG;7655
+177-D;17-05-24;DP.04 — corrimão em tubo galvanizado;M;27,85
+177-E;17-05-25;DP.05 — corrimão em tubo galvanizado c/ guarda-corpo;M;16,6
+177-F;13-02-47;Piso podotátil, alerta ou direcional, ladrilho hidráulico;M2;1,7
+177-G;07-19-00;Barbacãs de tubos de PVC — diâmetro 4";UN;147
+177-H;08-18-02;Cimbramento metálico de altura maior que 3,00 m;M3;266,59875
+177-I;13.02.11;Piso estrutural em concreto armado — 7 cm;M2;27,225
+177-J;04-31-00;Fornecimento de terra (escavação, carga e transporte até 1,0 km);M3;625,01

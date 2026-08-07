@@ -72,14 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=22"></script>
-<script src="dados/ruas-de-terra.js?v=22"></script>
+<script src="dados/ranario.js?v=23"></script>
+<script src="dados/ruas-de-terra.js?v=23"></script>
+<!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
+     de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
+     matriz de coeficientes), só que servido pelo repositório até alguém colar
+     as linhas na planilha — ver aplicarComplemento(). -->
+<script src="dados/teotonio-muros.js?v=23"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=22"></script>
-<script src="js/nf/adaptador.js?v=22"></script>
-<script src="js/nf/notas.js?v=22"></script>
-<script src="js/equip/equipamentos.js?v=22"></script>
+<script src="js/ui/icones.js?v=23"></script>
+<script src="js/nf/adaptador.js?v=23"></script>
+<script src="js/nf/notas.js?v=23"></script>
+<script src="js/equip/equipamentos.js?v=23"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -826,6 +831,7 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .f-Pav{background:#d6dbdf;color:#2c3e50}
 .f-Vala{background:#fcf3cf;color:#7d6608}
 .f-Sinaliza{background:#d5f5e3;color:#196f3d}
+.f-Muro{background:#e8e0f3;color:#4a3269}
 
 .prog-bar-wrap{width:100%;min-width:60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle}
 .prog-bar{height:100%;border-radius:3px;transition:width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1)}
@@ -2984,6 +2990,18 @@ function num(s) {
   return isNaN(v) ? parseFloat(s) || 0 : v;
 }
 
+/* O inverso de num(): número JS vira o texto que o resto do app sabe ler.
+   num() trata o ponto como separador de MILHAR, porque é assim que os CSVs
+   em pt-BR chegam da planilha. Só que cadastro escrito em arquivo nasce como
+   número JS, e `String(22.26)` é "22.26" — que num() lê como 2226. Toda
+   quantidade quebrada de obra cadastrada por arquivo estava 100× maior do
+   que o previsto, calada. Quem nasce número passa por aqui. */
+function ptNum(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v !== 'number' || !isFinite(v)) return String(v);
+  return String(v).replace('.', ',');
+}
+
 function parseISODate(s) {
   if (!s) return null;
   if (s instanceof Date) return s;
@@ -3135,6 +3153,7 @@ function frenteSlug(f) {
   if (s.startsWith('Vala')) return 'Vala';
   if (s.startsWith('Sinaliza')) return 'Sinaliza';
   if (s.startsWith('Via')) return 'Via';
+  if (s.startsWith('Muro')) return 'Muro';
   return 'default';
 }
 
@@ -3358,7 +3377,17 @@ const PRODUTIVIDADE_PADRAO = {
   'P11': 10, 'P12': 40, 'P13': 40, 'P14': 60, 'P15': 40, 'P16': 20, 'P17': 10, 'P18': 20, 'P19': 10,
   'P20': 40, 'P21': 8, 'P22': 20, 'P23': 0.33, 'P24': 0.2, 'P25': 40, 'P26': 40, 'P27': 40,
   'P28': 700, 'P29': 700, 'P30A': 30, 'P30B': 210, 'P30C': 105, 'P31': 20, 'P32': 50, 'P33': 20,
-  'P34': 0.1, 'P35': 50, 'P36': 15
+  'P34': 0.1, 'P35': 50, 'P36': 15,
+  /* Muros de contenção, em METROS DE MURO por dia (ver dados/teotonio-muros.js,
+     que traz os mesmos números). Estão repetidos aqui de propósito: a aba
+     Pacotes da planilha ainda não tem a coluna `Produtividade`, e quando as
+     linhas forem coladas lá sem ela, o pacote cairia para produtividade 0 —
+     que em `diasEquivalentes()` significa PESO ZERO. Os muros sumiriam do
+     avanço ponderado sem nada na tela dizendo isso. */
+  'P37A': 7, 'P37B': 8,  'P37C': 3.5, 'P37D': 5,     // Muros B e C — 42,25 m
+  'P38A': 3, 'P38B': 5,  'P38C': 2,   'P38D': 8,     // Muro D — 39,00 m
+  'P39A': 8, 'P39B': 6,  'P39C': 2.5, 'P39D': 20,    // Muro E — 135,00 m
+  'P40': 8                                            // Rampa da escola — m²/dia
 };
 
 // Produtividade de um pacote (unid/dia): se a aba Pacotes tiver a coluna
@@ -4671,8 +4700,8 @@ function cadastroDoArquivo(qual) {
       'Pacote': varias && s.rua ? s.servico + ' — ' + s.rua : s.servico,
       'Rua': s.rua || '',
       'Unidade Física': s.un || '',
-      'Qtd Estimada': String(s.qtdPrev == null ? '' : s.qtdPrev),
-      'Produtividade': s.produtividade == null ? '' : String(s.produtividade),
+      'Qtd Estimada': ptNum(s.qtdPrev),
+      'Produtividade': ptNum(s.produtividade),
       'Status': 'Ativo',
       'Descricao Orcamento': s.descricaoOrig || ''
     }));
@@ -4684,7 +4713,7 @@ function cadastroDoArquivo(qual) {
     return (o.coeficientes || []).map(c => ({
       'Pacote ID': c.pacoteId || '', 'Item Contratual': c.item || '',
       'Descrição Item': c.descricao || '', 'Unid Item': c.unItem || '',
-      'Coef': String(c.coef == null ? '' : c.coef)
+      'Coef': ptNum(c.coef)
     }));
   }
 
@@ -4692,6 +4721,60 @@ function cadastroDoArquivo(qual) {
   // MS Project que a Teotônio publica. Fica guardado como está e quem monta
   // a curva prevista trata os dois formatos (ver curvaPrevistaPorFrente).
   return [];
+}
+
+/* ------------------------------------------------------------------
+   COMPLEMENTO DE CADASTRO — o serviço que ainda não está na planilha
+   ------------------------------------------------------------------
+   Serviço novo entra em contrato antes de alguém editar a planilha
+   publicada. Foi o caso dos muros de contenção (capítulo 10.0): o
+   aditamento estava assinado e o apontador não tinha o pacote na tela,
+   porque quem edita a planilha não é quem está no canteiro.
+
+   O complemento fica em `dados/<obra>-<assunto>.js` e é acrescentado ao
+   que veio da planilha. A PLANILHA SEMPRE MANDA: só entra o pacote cujo
+   ID não veio de lá. E os coeficientes seguem o pacote — se ele veio da
+   planilha, os dele também vêm, nunca metade de cada lado.
+
+   É isso que torna seguro colar as linhas na planilha depois (o arquivo
+   `docs/muros-planilha.csv` é feito para isso): no dia em que forem
+   coladas, o complemento simplesmente para de ser usado. Nada duplica,
+   e nada precisa ser removido do código no mesmo instante.
+   ------------------------------------------------------------------ */
+function aplicarComplemento(pacotes, coeficientes) {
+  const c = (window.OBRAS_COMPLEMENTO || {})[OBRA.id];
+  if (!c || !(c.pacotes || []).length) return { pacotes, coeficientes };
+
+  const naPlanilha = new Set((pacotes || [])
+    .map(p => String(getCSVField(p, 'ID') || '').trim()).filter(Boolean));
+  const novos = (c.pacotes || []).filter(p => !naPlanilha.has(p.id));
+  if (!novos.length) return { pacotes, coeficientes };
+
+  const ids = new Set(novos.map(p => p.id));
+  return {
+    pacotes: (pacotes || []).concat(novos.map(p => ({
+      'ID': p.id,
+      'Frente': p.frente || 'Outros',
+      'Pacote': p.pacote || '',
+      'Unidade Física': p.un || '',
+      'Qtd Estimada': ptNum(p.qtd),
+      'Produtividade': ptNum(p.produtividade),
+      'Status': p.status || 'Ativo',
+      'Observação': p.obs || ''
+    }))),
+    coeficientes: (coeficientes || []).concat((c.coeficientes || [])
+      .filter(k => ids.has(k.pid))
+      .map(k => ({
+        'Pacote ID': k.pid,
+        'Item Contratual': k.item || '',
+        'Descrição Item': k.desc || '',
+        'Unid Item': k.unItem || '',
+        'Coef': ptNum(k.coef),
+        'Unid Coef': k.unCoef || '',
+        'Tipo': k.tipo || '',
+        'Item Planilha': k.itemPlanilha || ''
+      })))
+  };
 }
 
 /* A qual obra pertence uma linha de lançamento. Todas as obras dividem a
@@ -4721,8 +4804,10 @@ async function carregarTudo(opts = {}) {
       fetchCSV(CONFIG.csv.rdodiario).catch(() => []),
     ]);
     STATE.cronograma = c;
-    STATE.pacotes = p;
-    STATE.coeficientes = k;
+    // Pacotes que o contrato já tem e a planilha ainda não (ver aplicarComplemento).
+    const compl = aplicarComplemento(p, k);
+    STATE.pacotes = compl.pacotes;
+    STATE.coeficientes = compl.coeficientes;
     STATE.rdoavanco = soDaObraAtiva(r);
     STATE.rdodiario = soDaObraAtiva(d || []);
     atualizarPrazoDoCronograma(); // baseline acompanha o Project publicado na aba
@@ -4824,15 +4909,25 @@ function calcularConsumoItens(avanco) {
       const desc = getCSVField(c, 'Descrição Item') || '';
       const coef = num(getCSVField(c, 'Coef'));
       const consumo = a.qtdExecutada * coef;
-      if (!out[item]) {
-        out[item] = {
-          item, descricao: desc,
+      /* O mesmo CÓDIGO SIURB aparece em capítulos diferentes da Planilha
+         Geral, cada um com a sua linha e a sua quantidade contratual: o
+         04-11-00 (escavação mecânica) é o item 4 no preparo do pavimento e
+         o item 169-A no muro de contenção. Somar os dois numa linha só dava
+         um número que não confere com nenhuma das duas — e a prévia serve
+         justamente para conferir. Quando a linha da matriz traz o nº do item
+         da planilha, ele entra na chave; quando não traz (as 104 linhas que
+         já existiam), a agregação continua por código, como sempre foi. */
+      const itemPlanilha = String(getCSVField(c, 'Item Planilha') || '').trim();
+      const chave = itemPlanilha ? item + ' ' + itemPlanilha : item;
+      if (!out[chave]) {
+        out[chave] = {
+          item, itemPlanilha, descricao: desc,
           unidadeItem: getCSVField(c, 'Unid Item') || '',
           consumido: 0, pacotes: []
         };
       }
-      out[item].consumido += consumo;
-      out[item].pacotes.push(`${getCSVField(a.pacote, 'Pacote')} × ${coef}`);
+      out[chave].consumido += consumo;
+      out[chave].pacotes.push(`${getCSVField(a.pacote, 'Pacote')} × ${coef}`);
     });
   });
   return out;
@@ -8527,11 +8622,14 @@ function consumoMedicao() {
 window.exportarMedicaoCSV = function() {
   const consumo = consumoMedicao();
   const lista = Object.values(consumo).filter(x => x.consumido > 0)
-    .sort((a, b) => String(a.item).localeCompare(String(b.item), 'pt-BR', { numeric: true }));
+    // Mesmo código em capítulos diferentes: o nº do item desempata, para as
+    // duas linhas saírem sempre na mesma ordem de uma exportação à outra.
+    .sort((a, b) => String(a.item).localeCompare(String(b.item), 'pt-BR', { numeric: true })
+                 || String(a.itemPlanilha || '').localeCompare(String(b.itemPlanilha || ''), 'pt-BR', { numeric: true }));
   if (lista.length === 0) { toast('Nada a exportar neste período.', 'info'); return; }
-  const header = ['Item', 'Descricao', 'Unid', 'Qtd_Consumida', 'Periodo', 'Pacotes_Origem'];
+  const header = ['Item_Planilha', 'Codigo', 'Descricao', 'Unid', 'Qtd_Consumida', 'Periodo', 'Pacotes_Origem'];
   const rows = lista.map(x => [
-    x.item, x.descricao, x.unidadeItem,
+    x.itemPlanilha || '', x.item, x.descricao, x.unidadeItem,
     // decimal com vírgula, sem separador de milhar — cola direto no Excel pt-BR
     String((Math.round(x.consumido * 100) / 100).toFixed(2)).replace('.', ','),
     MEDICAO_MES || 'obra inteira',
@@ -8579,7 +8677,7 @@ function renderMedicao(){
     <div class="card-body flush">
       ${lista.length===0?`<div class="empty"><div class="empty-icon">${ic('medicao')}</div><div class="empty-title">Nada consumido neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade (ou mude o mês do filtro) para ver os itens contratuais derivados.</div></div>`:`
       <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">Consumido</th><th>Pacotes</th></tr></thead>
-      <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${x.item}</strong></td><td>${x.descricao}</td><td class="t-mono">${x.unidadeItem}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td></tr>`).join('')}</tbody>
+      <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${x.item}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${x.descricao}</td><td class="t-mono">${x.unidadeItem}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td></tr>`).join('')}</tbody>
       </table>`}
     </div>
   </div>`;
@@ -10265,6 +10363,18 @@ function renderRDO() {
   `;
 }
 
+/* Serviço que anda em ETAPAS usa o mesmo ID com letra no fim: o pavimento
+   rígido é P30A → P30B → P30C, cada muro de contenção é P37A → P37D. As
+   etapas são sequenciais no mesmo trecho — não se concreta o fuste onde
+   ainda não há sapata —, então o acumulado de uma etapa nunca deveria
+   passar o da etapa anterior. Devolve o ID da etapa anterior, se existir. */
+function etapaAnteriorDe(pid) {
+  const m = /^(.+?)([B-Z])$/.exec(String(pid || ''));
+  if (!m) return null;
+  const anterior = m[1] + String.fromCharCode(m[2].charCodeAt(0) - 1);
+  return STATE.pacotes.some(p => getCSVField(p, 'ID') === anterior) ? anterior : null;
+}
+
 function renderServicoRow(s, idx, frentes) {
   const pacotesDaFrente = s.frente ? 
     STATE.pacotes.filter(p => getCSVField(p, 'Frente') === s.frente && getCSVField(p, 'Status') !== 'Histórico') :
@@ -10295,6 +10405,15 @@ function renderServicoRow(s, idx, frentes) {
             <option value="">${s.frente ? '— escolher pacote —' : '↑ escolha a frente primeiro'}</option>
             ${pacotesDaFrente.map(p => `<option value="${getCSVField(p, 'ID')}" ${s.pacoteId===getCSVField(p, 'ID')?'selected':''}>${getCSVField(p, 'Pacote')} (${getCSVField(p, 'Unidade Física')||''})</option>`).join('')}
           </select>
+          ${(() => {
+            /* A observação do pacote é a única coisa no cadastro que diz o que
+               ele quer dizer na prática — "Espessura 15cm", "Est. 129+15 a
+               136+10, canteiro central". Ficava só na planilha, onde ninguém
+               no canteiro olha, e o apontador tinha de adivinhar pelo nome
+               qual dos quatro trechos de muro é o que está na frente dele. */
+            const obs = pacoteSelecionado ? String(getCSVField(pacoteSelecionado, 'Observação') || '').trim() : '';
+            return obs ? `<div style="font-size:11px;margin-top:3px;color:var(--muted)">${escHtml(obs)}</div>` : '';
+          })()}
         </div>
         <div class="field">
           <label>Sentido da via</label>
@@ -10324,11 +10443,27 @@ function renderServicoRow(s, idx, frentes) {
             // Dica de saldo: mostra quanto resta do pacote e avisa se a
             // quantidade digitada passa disso (não bloqueia o envio).
             if (!s.pacoteId) return '';
-            const a = calcularAvancoPorPacote()[s.pacoteId];
+            const av = calcularAvancoPorPacote();
+            const a = av[s.pacoteId];
             if (!a || a.qtdEstimada <= 0) return '';
             const saldo = Math.max(0, a.qtdEstimada - a.qtdExecutada);
             const estoura = num(s.quantidade) > saldo + 0.001;
-            return `<div style="font-size:11px;margin-top:3px;color:${estoura ? 'var(--red)' : 'var(--muted)'}">${estoura ? 'acima do ' : ''}saldo do pacote: ${fmtNum(saldo)} ${unidade}</div>`;
+            let dica = `<div style="font-size:11px;margin-top:3px;color:${estoura ? 'var(--red)' : 'var(--muted)'}">${estoura ? 'acima do ' : ''}saldo do pacote: ${fmtNum(saldo)} ${unidade}</div>`;
+            /* Etapa passando na frente da anterior. NÃO bloqueia: a etapa
+               anterior pode ter sido executada antes do app existir, ou num
+               mês que ninguém digitou. Mas avisar é o que impede o avanço
+               de virar ficção — fuste lançado onde não há sapata mede um
+               serviço que não foi feito. */
+            const ant = etapaAnteriorDe(s.pacoteId);
+            const aAnt = ant ? av[ant] : null;
+            if (aAnt) {
+              const depois = a.qtdExecutada + num(s.quantidade);
+              if (depois > aAnt.qtdExecutada + 0.001) {
+                const nomeAnt = getCSVField(aAnt.pacote, 'Pacote') || ant;
+                dica += `<div style="font-size:11px;margin-top:2px;color:var(--ylw)">passa a etapa anterior — ${escHtml(nomeAnt)} está em ${fmtNum(aAnt.qtdExecutada)} ${unidade}</div>`;
+              }
+            }
+            return dica;
           })()}
         </div>
         <div class="field">
