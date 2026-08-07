@@ -90,23 +90,28 @@
             const list = document.getElementById('paradasList');
             const row = document.createElement('div');
             row.className = 'parada-row eq-parada';
+            // Motivo e lixeira em cima, horário embaixo: no celular os dois
+            // campos de hora, o "até" e o botão não cabiam na mesma linha —
+            // a lixeira ficava para fora do cartão.
             row.innerHTML = `
-                <select class="parada-motivo">
-                    <option value="">Motivo da parada...</option>
-                    <option>Almoço</option>
-                    <option>Refeição</option>
-                    <option>Manutenção / Quebra</option>
-                    <option>Chuva</option>
-                    <option>Abastecimento</option>
-                    <option>Sem operador</option>
-                    <option>Sem frente de serviço</option>
-                    <option>Outro</option>
-                </select>
-                <div class="flex items-center gap-2">
-                    <input type="time" class="parada-inicio mono">
-                    <span class="kpi-s">até</span>
-                    <input type="time" class="parada-fim mono">
-                    <button type="button" class="parada-remover btn btn-sm btn-ghost" title="Remover parada">${ic('lixeira')}</button>
+                <div class="eq-parada-topo">
+                    <select class="parada-motivo" aria-label="Motivo da parada">
+                        <option value="">Motivo da parada...</option>
+                        <option>Almoço</option>
+                        <option>Refeição</option>
+                        <option>Manutenção / Quebra</option>
+                        <option>Chuva</option>
+                        <option>Abastecimento</option>
+                        <option>Sem operador</option>
+                        <option>Sem frente de serviço</option>
+                        <option>Outro</option>
+                    </select>
+                    <button type="button" class="parada-remover btn btn-ghost btn-icone" title="Remover parada" aria-label="Remover parada">${ic('lixeira')}</button>
+                </div>
+                <div class="eq-parada-horas">
+                    <input type="time" class="parada-inicio mono" aria-label="Início da parada">
+                    <span class="eq-ate">até</span>
+                    <input type="time" class="parada-fim mono" aria-label="Fim da parada">
                 </div>`;
             list.appendChild(row);
             if (motivo) row.querySelector('.parada-motivo').value = motivo;
@@ -249,11 +254,11 @@
             document.getElementById('countEquip').textContent = EQUIPAMENTOS.length;
             le.innerHTML = EQUIPAMENTOS.map(eq => `
                 <div class="eq-item">
-                    <div class="min-w-0">
+                    <div class="eq-item-txt">
                         <p class="eq-item-nome">${escapeHtml(eq.nome)}</p>
                         <p class="kpi-s">${escapeHtml(eq.tipo || 'Outros')}${eq.vinculo ? ' · ' + escapeHtml(eq.vinculo) : ''}${eq.locadora ? ' · ' + escapeHtml(eq.locadora) : ''}</p>
                     </div>
-                    <button type="button" data-nome="${escapeHtml(eq.nome)}" class="btn-desativar btn btn-sm btn-ghost" title="Remover da lista">${ic('lixeira')}</button>
+                    <button type="button" data-nome="${escapeHtml(eq.nome)}" class="btn-desativar btn btn-ghost btn-icone" title="Remover da lista" aria-label="Remover da lista">${ic('lixeira')}</button>
                 </div>`).join('') || '<p class="eq-vazio">Nenhum equipamento.</p>';
             le.querySelectorAll('.btn-desativar').forEach(b => b.addEventListener('click', () => desativarEquip(b.getAttribute('data-nome'))));
 
@@ -261,8 +266,10 @@
             document.getElementById('countLoc').textContent = LOCADORAS.length;
             ll.innerHTML = LOCADORAS.map(l => `
                 <div class="eq-item">
-                    <p class="eq-item-nome">${escapeHtml(l.nome)}</p>
-                    ${l.observacoes ? `<p class="kpi-s">${escapeHtml(l.observacoes)}</p>` : ''}
+                    <div class="eq-item-txt">
+                        <p class="eq-item-nome">${escapeHtml(l.nome)}</p>
+                        ${l.observacoes ? `<p class="kpi-s">${escapeHtml(l.observacoes)}</p>` : ''}
+                    </div>
                 </div>`).join('') || '<p class="eq-vazio">Nenhuma locadora.</p>';
         }
 
@@ -428,12 +435,15 @@
                 if (!items.length) { box.innerHTML = '<p class="eq-vazio">Nenhum apontamento ainda.</p>'; return; }
                 box.innerHTML = items.map(a => `
                     <div class="eq-item">
-                        <div class="min-w-0">
-                            <p class="eq-item-nome">${escapeHtml(a.equipamento)} <span class="kpi-s">· ${escapeHtml(String(a.horas))}h</span></p>
+                        <div class="eq-item-txt">
+                            <p class="eq-item-nome">${escapeHtml(a.equipamento)}</p>
                             <p class="kpi-s">${formatarData(a.data)} · ${escapeHtml(a.turno)} · ${escapeHtml(a.operador)} · ${rotuloStatus(a.status)}</p>
                             ${a.assinatura && String(a.assinatura).indexOf('http') === 0 ? `<a href="${escapeHtml(a.assinatura)}" target="_blank" rel="noopener" class="kpi-s"> ver assinatura</a>` : ''}
                         </div>
-                        <button type="button" data-carimbo="${a.carimbo}" class="btn-apagar-apont btn btn-sm btn-ghost" title="Apagar este apontamento">${ic('lixeira')}</button>
+                        <div class="eq-item-lado">
+                            <span class="eq-item-horas">${escapeHtml(String(a.horas))}h</span>
+                            <button type="button" data-carimbo="${a.carimbo}" class="btn-apagar-apont btn btn-ghost btn-icone" title="Apagar este apontamento" aria-label="Apagar este apontamento">${ic('lixeira')}</button>
+                        </div>
                     </div>`).join('');
                 box.querySelectorAll('.btn-apagar-apont').forEach(b => b.addEventListener('click', () => apagarApontamentoUI(b.getAttribute('data-carimbo'))));
             } catch (err) {
@@ -583,7 +593,7 @@
             </div>`;
         }
         function secaoRel(titulo, conteudo) {
-            return `<div class="mb-6">
+            return `<div class="eq-secao">
                 <h3 class="eq-sec-tit">${titulo}</h3>
                 <div class="eq-sec-corpo">${conteudo || '<p class="eq-vazio">Sem dados.</p>'}</div>
             </div>`;
@@ -601,19 +611,19 @@
             </div>`;
             const maxE = A.equips[0] ? A.equips[0].horas : 0;
             html += secaoRel('Horas por equipamento (ranking)', A.equips.map(e => `
-                <div class="py-2">
+                <div class="eq-barra-item">
                     <div class="eq-barra-lbl"><span>${escapeHtml(e.nome)}</span><span class="kpi-s">${numBR(e.horas)}h · ${Math.round(e.util * 100)}% · ${e.apont}x</span></div>
                     ${barraRel(e.horas, maxE, '')}
                 </div>`).join(''));
             const maxS = A.status[0] ? A.status[0].horas : 0;
             html += secaoRel('Por situação / status', A.status.map(s => `
-                <div class="py-2">
+                <div class="eq-barra-item">
                     <div class="eq-barra-lbl"><span>${rotuloStatus(s.nome)}</span><span class="kpi-s">${numBR(s.horas)}h · ${s.apont}x</span></div>
                     ${barraRel(s.horas, maxS, '')}
                 </div>`).join(''));
             const maxL = A.locs[0] ? A.locs[0].horas : 0;
             html += secaoRel('Por locadora', A.locs.map(l => `
-                <div class="py-2">
+                <div class="eq-barra-item">
                     <div class="eq-barra-lbl"><span>${escapeHtml(l.nome)}</span><span class="kpi-s">${numBR(l.horas)}h · ${l.apont}x</span></div>
                     ${barraRel(l.horas, maxL, '')}
                 </div>`).join(''));
@@ -1026,7 +1036,7 @@
             <div class="kpi-s">Horas apuradas</div>
             <div class="eq-horas-num"><span id="horasDisplay">0.00<span class="eq-h">h</span></span></div>
           </div>
-          <div class="kpi-s" style="text-align:right;max-width:230px">
+          <div class="kpi-s eq-horas-nota">
             Descontadas as paradas lançadas abaixo. É este número que vai para a medição.
           </div>
         </div>
@@ -1046,6 +1056,10 @@
             </select></div>
           <div class="field"><label for="operador">Operador responsável</label>
             <input type="text" id="operador" name="operador" required placeholder="Nome de quem operou"></div>
+        </div>
+        <!-- Início/Fim continuam lado a lado no celular: é um par, e separá-los
+             em duas linhas cheias só faz o apontador rolar mais. -->
+        <div class="eq-duo" style="margin-top:14px">
           <div class="field"><label for="inicio">Início</label>
             <input type="time" id="inicio" required onchange="EQ.calcularHoras()"></div>
           <div class="field"><label for="fim">Fim</label>
@@ -1064,11 +1078,13 @@
           <p id="paradasVazio" class="eq-vazio">Nenhuma parada lançada. O turno conta integral.</p>
         </div>
 
-        <div class="form-grid">
+        <div class="eq-duo">
           <div class="field"><label for="horimInicial">Horímetro / km inicial</label>
             <input type="number" step="any" inputmode="decimal" id="horimInicial" name="horimInicial" placeholder="h ou km"></div>
           <div class="field"><label for="horimFinal">Horímetro / km final</label>
             <input type="number" step="any" inputmode="decimal" id="horimFinal" name="horimFinal" placeholder="h ou km"></div>
+        </div>
+        <div class="form-grid" style="margin-top:14px">
           <div class="field"><label for="combustivel">Combustível (litros)</label>
             <input type="number" step="any" inputmode="decimal" id="combustivel" name="combustivel" placeholder="litros"></div>
           <div class="field"><label for="status">Situação ao fim do turno</label>
@@ -1095,9 +1111,13 @@
         <input type="hidden" id="observacoes" name="observacoes">
         <input type="hidden" id="assinatura" name="assinatura">
 
-        <button type="submit" id="submitBtn" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;margin-top:6px">
-          <span id="btnText">Enviar apontamento</span>
-        </button>
+        <!-- No celular o botão gruda no pé da tela: o formulário é longo e
+             ninguém devia rolar até o fim só para enviar. -->
+        <div class="eq-enviar">
+          <button type="submit" id="submitBtn" class="btn btn-primary btn-lg" style="width:100%;justify-content:center">
+            <span id="btnText">Enviar apontamento</span>
+          </button>
+        </div>
       </div>
     </form>
 
@@ -1155,12 +1175,12 @@
       '<div id="listaUltimos" class="eq-lista"></div>')}
 
     ${modal('painelModal', 'Painel de equipamentos', 'Horas, utilização e consumo no período', `
-      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
+      <div class="eq-duo">
         <div class="field"><label for="relDe">De</label><input type="date" id="relDe"></div>
         <div class="field"><label for="relAte">Até</label><input type="date" id="relAte"></div>
-        <div class="field"><label for="relEquip">Equipamento</label>
-          <select id="relEquip" onchange="EQ.aplicarFiltroEquip()"><option value="">Todos os equipamentos</option></select></div>
       </div>
+      <div class="field" style="margin:12px 0"><label for="relEquip">Equipamento</label>
+        <select id="relEquip" onchange="EQ.aplicarFiltroEquip()"><option value="">Todos os equipamentos</option></select></div>
       <div class="eq-topo-acoes" style="margin-bottom:12px">
         <button type="button" class="btn btn-sm btn-primary" onclick="EQ.carregarRelatorio()">Aplicar</button>
         <button type="button" class="btn btn-sm btn-outline" onclick="EQ.periodoMes()">Este mês</button>
@@ -1174,7 +1194,7 @@
             <div class="card-title-sub">Resumo geral da frota e uma aba por equipamento</div>
           </div>
         </div>
-        <div class="form-grid" style="grid-template-columns:1fr auto;align-items:end">
+        <div class="eq-med-linha">
           <div class="field"><label for="medMes">Mês de referência</label><input type="month" id="medMes"></div>
           <button type="button" id="btnMedicao" class="btn btn-primary" onclick="EQ.gerarMedicaoMensal()">${ic('planilha')} Gerar medição</button>
         </div>
@@ -1192,6 +1212,8 @@
   window.EQUIP = window.EQUIP || { carregado: false, apontamentos: [] };
 
   function boot() {
+    // modais que abrir() mudou para o body numa montagem anterior da tela
+    document.querySelectorAll('body > .eq-modal').forEach(m => m.remove());
     form = document.getElementById('apontamentoForm');
     submitBtn = document.getElementById('submitBtn');
     btnText = document.getElementById('btnText');
@@ -1215,7 +1237,17 @@
     carregarListas();
   }
 
-  function abrir(id) { const e = document.getElementById(id); if (e) e.style.display = 'flex'; }
+  /* O `.page` roda uma animação de entrada com transform, e transform cria
+     contexto de empilhamento: dentro dele nenhum z-index vence a barra de
+     navegação do celular, que é fixa e ficava POR CIMA do modal — comendo o
+     pé de Cadastros e do Painel. Movido para o body, o modal volta a mandar
+     na tela. Os que sobram de uma montagem anterior são limpos no boot(). */
+  function abrir(id) {
+    const e = document.getElementById(id);
+    if (!e) return;
+    if (e.parentElement !== document.body) document.body.appendChild(e);
+    e.style.display = 'flex';
+  }
   function fechar(id) { const e = document.getElementById(id); if (e) e.style.display = 'none'; }
 
   window.EQ = {

@@ -64,14 +64,14 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=20"></script>
-<script src="dados/ruas-de-terra.js?v=20"></script>
+<script src="dados/ranario.js?v=21"></script>
+<script src="dados/ruas-de-terra.js?v=21"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=20"></script>
-<script src="js/nf/adaptador.js?v=20"></script>
-<script src="js/nf/notas.js?v=20"></script>
-<script src="js/equip/equipamentos.js?v=20"></script>
+<script src="js/ui/icones.js?v=21"></script>
+<script src="js/nf/adaptador.js?v=21"></script>
+<script src="js/nf/notas.js?v=21"></script>
+<script src="js/equip/equipamentos.js?v=21"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -2052,17 +2052,33 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 .eq-horas{display:flex;justify-content:space-between;align-items:center;gap:16px;
   background:var(--surface-2,rgba(0,0,0,.03));border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 18px}
 .eq-horas-num{font-size:38px;font-weight:800;line-height:1.05;letter-spacing:-1px;font-variant-numeric:tabular-nums}
+.eq-horas-nota{text-align:right;max-width:230px}
 .eq-h{font-size:.5em;color:var(--muted);margin-left:3px;font-weight:600}
+/* Par de campos que continua lado a lado no celular (Início/Fim,
+   horímetro inicial/final): separá-los em duas linhas cheias não deixa
+   nada mais legível, só faz rolar mais. */
+.eq-duo{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.eq-duo > .field{min-width:0}
+.eq-duo input,.eq-duo select{min-width:0;width:100%}
 .eq-bloco{border:1px solid var(--border);border-radius:var(--r-lg);padding:14px;margin:16px 0}
 .eq-bloco-topo{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;flex-wrap:wrap}
 .eq-parada{border:1px solid var(--border);border-radius:var(--r-md,10px);padding:10px;margin-bottom:8px;
   display:grid;grid-template-columns:1fr;gap:8px}
-.eq-parada > div{display:flex;align-items:center;gap:8px}
-.eq-parada .parada-inicio,.eq-parada .parada-fim{flex:1;min-width:0;text-align:center}
+.eq-parada-topo{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px}
+.eq-parada-topo > select{min-width:0}
+.eq-parada-horas{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:10px}
+.eq-parada-horas input{min-width:0;width:100%;text-align:center}
+.eq-ate{font-size:12px;color:var(--muted);white-space:nowrap}
+.eq-med-linha{display:grid;grid-template-columns:1fr auto;align-items:end;gap:12px}
+.eq-med-linha > .field{min-width:0}
+.eq-barra-item{padding:7px 0}
 .eq-vazio{font-size:13px;color:var(--muted);text-align:center;padding:12px 0}
 .eq-assinatura{width:100%;height:160px;border:1px dashed var(--border-strong,var(--border));border-radius:var(--r-md,10px);
   background:var(--surface);touch-action:none;display:block}
-.eq-modal{position:fixed;inset:0;z-index:80;display:flex;align-items:flex-start;justify-content:center;
+/* Acima da barra de navegação do celular (999): a barra ficava POR CIMA do
+   modal e comia o pé de Cadastros e do Painel. Abaixo do toast (1100) e das
+   confirmações do app (9999), que precisam aparecer sobre ele. */
+.eq-modal{position:fixed;inset:0;z-index:1050;display:flex;align-items:flex-start;justify-content:center;
   background:rgba(0,0,0,.45);padding:16px;overflow-y:auto}
 .eq-modal-caixa{background:var(--surface);border-radius:var(--r-lg);width:100%;margin:auto;
   box-shadow:var(--sh-lg);max-height:92vh;display:flex;flex-direction:column}
@@ -2078,7 +2094,11 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 .eq-lista{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto}
 .eq-item{display:flex;justify-content:space-between;align-items:center;gap:12px;
   border:1px solid var(--border);border-radius:var(--r-md,10px);padding:10px 12px}
+.eq-item-txt{min-width:0;flex:1}
+.eq-item-lado{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.eq-item-horas{font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
 .eq-item-nome{font-size:13.5px;font-weight:600}
+.eq-secao{margin-bottom:18px}
 .eq-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:18px}
 .eq-kpi{border:1px solid var(--border);border-radius:var(--r-lg);padding:12px;text-align:center}
 .eq-kpi-ic{color:var(--acc)}
@@ -2088,10 +2108,62 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 .eq-sec-corpo{border:1px solid var(--border);border-radius:var(--r-lg);padding:10px 14px;margin-bottom:18px}
 .eq-barra{height:8px;border-radius:99px;background:var(--acc);opacity:.85}
 .eq-barra-lbl{display:flex;justify-content:space-between;gap:10px;font-size:13px;margin-bottom:4px}
-@media (max-width:640px){
-  .eq-horas-num{font-size:30px}
-  .eq-horas{flex-direction:column;align-items:flex-start;gap:6px}
-  .eq-horas > .kpi-s{text-align:left!important;max-width:none!important}
+.eq-barra-lbl > span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.eq-barra-lbl > span:last-child{flex-shrink:0}
+.eq-enviar{margin-top:6px}
+
+/* ---------- EQUIPAMENTOS no celular ----------
+   A tela é preenchida em pé, com uma mão, no canteiro. Três coisas
+   mudam: o total de horas fica sempre visível (é o número que a tela
+   existe para produzir), o botão de enviar não exige rolar o formulário
+   inteiro, e os modais viram tela cheia em vez de caixinha com margem. */
+@media (max-width:768px){
+  /* .card recorta o que passa da borda (overflow:hidden), e isso desliga o
+     position:sticky de dentro dele. O cartão do apontamento não tem nada
+     para recortar, então aqui ele solta. */
+  #apontamentoForm.card{overflow:visible}
+
+  .eq-horas{position:sticky;top:56px;z-index:4;background:var(--surface);
+    flex-direction:row;align-items:center;gap:12px;padding:10px 14px;
+    box-shadow:0 6px 14px -12px rgba(0,0,0,.5)}
+  .eq-horas-num{font-size:28px}
+  .eq-horas-nota{text-align:right;max-width:190px;font-size:11px;line-height:1.3}
+  .eq-topo-acoes{width:100%}
+  .eq-topo-acoes .btn{flex:1;justify-content:center}
+
+  /* 58 px é a barra de navegação de baixo: a faixa do botão encosta nela,
+     senão sobra uma fresta com meia linha do formulário passando por trás. */
+  .eq-enviar{position:sticky;bottom:calc(58px + env(safe-area-inset-bottom,0px));
+    z-index:4;padding:12px 0 0;margin-top:10px;background:var(--surface)}
+  .eq-enviar .btn{margin-bottom:10px}
+  /* e sem isto o campo que passa por trás do botão sai cortado ao meio */
+  .eq-enviar::before{content:'';position:absolute;left:0;right:0;bottom:100%;height:26px;
+    background:linear-gradient(to top,var(--surface),transparent);pointer-events:none}
+
+  /* alvo de dedo: nada abaixo de 42 px numa tela que se usa em pé */
+  #apontamentoForm .btn,.eq-topo-acoes .btn,.eq-abas .btn,
+  .eq-modal-corpo .btn,.eq-modal-topo .btn{min-height:42px}
+  .parada-remover,.btn-desativar,.btn-apagar-apont{min-height:42px;min-width:42px;justify-content:center}
+  .eq-abas .btn{flex:1;justify-content:center}
+
+  .eq-modal{padding:0;align-items:stretch;overflow:hidden}
+  /* o `margin:auto` da versão de mesa centraliza a caixa e a deixa do
+     tamanho do conteúdo; no celular ela toma a tela toda */
+  .eq-modal-caixa{max-width:none!important;max-height:100%;height:100%;border-radius:0;margin:0}
+  .eq-modal-corpo{padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+  .eq-modal-rodape .btn{flex:1;justify-content:center}
+  .eq-lista{max-height:none}
+  .eq-med-linha{grid-template-columns:1fr}
+  .eq-med-linha .btn{justify-content:center}
+  .eq-kpis{grid-template-columns:1fr 1fr;gap:8px}
+  .eq-kpi{padding:10px 8px}
+  .eq-kpi-num{font-size:19px}
+}
+@media (max-width:400px){
+  .eq-bloco{padding:12px 10px}
+  .eq-parada{padding:10px 8px}
+  .eq-parada-horas{gap:6px}
+  .eq-duo{gap:10px}
 }
 </style>
 </head>
