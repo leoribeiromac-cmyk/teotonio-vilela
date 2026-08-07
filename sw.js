@@ -11,33 +11,45 @@
 // Estratégia:
 //  • index.html (navegação): REDE PRIMEIRO — atualizações do app chegam
 //    na hora; o cache só entra como fallback quando estiver sem sinal.
-//  • Estáticos (vendor/, js/, fontes, ícones, pranchas): CACHE PRIMEIRO com
+//  • Estáticos (vendor/, js/, fontes, ícones): CACHE PRIMEIRO com
 //    revalidação em segundo plano — abre rápido no 4G do campo. As bibliotecas
 //    pesadas (jsPDF, xlsx, PDF.js, Chart.js) são buscadas só quando fazem
 //    falta, e a partir daí ficam aqui: a segunda vez não custa nada.
+//  • Quadrados das pranchas (projetos/…/N/L_C.webp): CACHE PRIMEIRO e PONTO —
+//    sem revalidar. São arquivos imutáveis, e cada arrastada na prancha toca
+//    dezenas deles; revalidar todos em segundo plano só gastaria o 4G do
+//    canteiro para receber de novo, byte por byte, o mesmo desenho.
 //  • Google Sheets / Apps Script / Gemini: NUNCA intercepta — dados de
 //    produção vêm sempre da rede (a fila offline do app cuida do resto).
 // ============================================================
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v24'; // v24: ordem da galeria — descarta o index.html velho do cache
+const VERSAO = 'teotonio-v25'; // v25: prancha do plano de ataque em pirâmide de quadrados
 // As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
 // app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
 // Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no
 // 4G do canteiro, só porque uma linha do app mudou. Suba este número apenas
 // quando trocar de fato um arquivo dentro de vendor/.
 const VERSAO_VENDOR = 'teotonio-vendor-v1';
-const BALDES = [VERSAO, VERSAO_VENDOR];
+// As pranchas também têm balde próprio, pela mesma razão e com mais motivo: a
+// pirâmide da Teotônio tem 835 quadrados / ~13 MB. Se ela morasse no balde do
+// app, cada correção de uma linha de código mandaria o celular baixar tudo de
+// novo. Suba este número quando REFATIAR uma prancha — é o que descarta os
+// quadrados antigos, já que o nome do arquivo não muda.
+const VERSAO_PRANCHAS = 'teotonio-pranchas-v1';
+const BALDES = [VERSAO, VERSAO_VENDOR, VERSAO_PRANCHAS];
+// Quadrado de prancha: o conteúdo de cada URL nunca muda dentro de uma versão.
+const IMUTAVEL = /\/projetos\/.+\/\d+\/\d+_\d+\.webp$/;
 const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleusercontent.com', 'generativelanguage.googleapis.com'];
 
 // Em qual balde este pedido mora.
 function baldeDe(url) {
-  return url.pathname.indexOf('/vendor/') !== -1 ? VERSAO_VENDOR : VERSAO;
+  if (url.pathname.indexOf('/vendor/') !== -1) return VERSAO_VENDOR;
+  if (url.pathname.indexOf('/projetos/') !== -1) return VERSAO_PRANCHAS;
+  return VERSAO;
 }
 
-// O app avisa "nova versão disponível" e só troca quando o usuário mandar —
-// trocar sozinho no meio de um lançamento perderia o que estava na tela.
 self.addEventListener('install', () => {
   // sem cliente controlando (primeira instalação) não há o que interromper:
   // assume na hora, senão o app abriria a primeira vez sem service worker.
@@ -99,6 +111,21 @@ self.addEventListener('fetch', (e) => {
   //    muitas vezes revalidava contra a MESMA cópia velha. `cache:'no-cache'`
   //    obriga a perguntar ao servidor.
   const balde = baldeDe(url);
+
+  // Quadrado de prancha já guardado: entrega e acabou. Nada de revalidar.
+  if (IMUTAVEL.test(url.pathname)) {
+    e.respondWith(
+      caches.match(e.request).then(hit => hit || fetch(e.request).then(resp => {
+        if (resp && resp.ok) {
+          const clone = resp.clone();
+          e.waitUntil(caches.open(balde).then(c => c.put(e.request, clone)));
+        }
+        return resp;
+      }))
+    );
+    return;
+  }
+
   e.respondWith(
     caches.match(e.request).then(hit => {
       const rede = fetch(hit ? new Request(e.request, { cache: 'no-cache' }) : e.request)
