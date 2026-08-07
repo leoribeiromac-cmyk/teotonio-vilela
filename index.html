@@ -11500,6 +11500,35 @@ function _gerarPDFDiario(data) {
   const df = fmtData(data);
   const diaSemanaIdx = [6, 0, 1, 2, 3, 4, 5][dd.getDay()];
   
+  /* ------------------------------------------------------------------
+     PAGINAÇÃO
+     O RDO era desenhado como se sempre coubesse numa folha. Quando não
+     cabia, o excedente ia para uma página SEM cabeçalho: quem recebia a
+     folha 2 não sabia de que obra nem de que dia ela era. E as duas
+     colunas escreviam sempre na página ATUAL do documento, então a
+     coluna da direita podia cair em cima da continuação da esquerda.
+
+     Agora o cabeçalho é uma função, toda página começa por ele, e cada
+     coluna guarda em que página está.
+     ------------------------------------------------------------------ */
+  const LIMITE = PH - 24;          // piso do conteúdo; abaixo disso é rodapé
+  let totalPaginas = 1;
+  const comCabecalho = new Set();
+
+  /* Texto que não cabe na célula era cortado no meio da palavra, sem
+     aviso nenhum. Encurtar com reticências deixa visível que falta
+     pedaço — e é o que evita "serviço", "equipe" e "local" estourando. */
+  function cabe(texto, largura) {
+    const t = String(texto == null ? '' : texto).trim();
+    if (!t || doc.getTextWidth(t) <= largura) return t;
+    let corte = t;
+    while (corte.length > 1 && doc.getTextWidth(corte + '…') > largura) corte = corte.slice(0, -1);
+    return corte.replace(/[\s·\-–]+$/, '') + '…';
+  }
+
+  const nrRDO = (d.sheetId) ? String(d.sheetId).replace(/^D0*/, '') || '1' : '—';
+
+  function desenharCabecalho(continuacao) {
   let y = MT;
   
   rf(ML, y, TW, 22, W, NAV, 0.5);
@@ -11534,7 +11563,6 @@ function _gerarPDFDiario(data) {
   doc.text(objL.slice(0, 2), ML + 2, y + 6.5);
   y += 10;
   
-  const nrRDO = (d.sheetId) ? String(d.sheetId).replace(/^D0*/, '') || '1' : '—';
   const H3 = 6;
   rf(ML, y, TW * 0.55, H3, LB, BD); sf(5, 'bold', NAV); tx('LOCAL', ML + 2, y + H3 * 0.72);
   rf(ML + TW * 0.55, y, TW * 0.22, H3, LB, BD); sf(5, 'bold', NAV); tx('DATA', ML + TW * 0.55 + TW * 0.11, y + H3 * 0.72, { align: 'center' });
@@ -11550,7 +11578,7 @@ function _gerarPDFDiario(data) {
   
   const JH = 5;
   const dCW = TW * 0.038, jW = TW * 0.25, cW = TW - 7 * dCW - jW;
-  const jcw = jW / 4, ccw = cW / 4;
+  const jcw = jW / 4, ccw = cW / 3;
   
   rf(ML, y, 7 * dCW, JH, LB, BD); sf(5, 'bold', NAV); tx('DIA DA SEMANA', ML + 7 * dCW / 2, y + JH * 0.72, { align: 'center' });
   rf(ML + 7 * dCW, y, jW, JH, LB, BD); sf(5, 'bold', NAV); tx('JORNADA', ML + 7 * dCW + jW / 2, y + JH * 0.72, { align: 'center' });
@@ -11566,24 +11594,62 @@ function _gerarPDFDiario(data) {
     rf(ML + 7 * dCW + i * jcw, y, jcw, JH, W, BD);
     sf(5, 'bold', NAV); tx(lbl, ML + 7 * dCW + (i + 0.5) * jcw, y + 2, { align: 'center' });
   });
-  const climaPrincipal = (d.clima_manha || 'Bom').toLowerCase();
-  let climaKey = 'bom';
-  if (climaPrincipal.includes('chuv')) climaKey = 'chu';
-  else if (climaPrincipal.includes('garoa') || climaPrincipal.includes('encober')) climaKey = 'reg';
-  ['Bom', 'Regular', 'Chuva', ''].forEach((lbl, i) => {
-    const cKey = ['bom', 'reg', 'chu', ''][i];
-    const on = cKey && cKey === climaKey;
-    rf(ML + 7 * dCW + jW + i * ccw, y, ccw, JH, on ? [235, 245, 255] : W, BD);
-    sf(5, 'bold', on ? NAV : DG);
-    tx(lbl, ML + 7 * dCW + jW + (i + 0.5) * ccw, y + 2, { align: 'center' });
-    if (on) { sf(7, 'bold', NAV); tx('✓', ML + 7 * dCW + jW + (i + 0.5) * ccw, y + JH * 0.78, { align: 'center' }); }
-  });
+  /* O apontador registra o clima de manhã, de tarde e de noite, mas o quadro
+     mostrava só o da manhã, achatado em Bom/Regular/Chuva — num dia que parou
+     por chuva à tarde, o RDO dizia "Bom". Ainda por cima imprimia o ✓ por
+     cima da palavra, e a quarta célula vinha sempre vazia. Agora os três
+     períodos aparecem com o que foi apontado, e o que choveu fica marcado. */
+  [['MANHÃ', d.clima_manha], ['TARDE', d.clima_tarde], ['NOITE', d.clima_noite]]
+    .forEach(([periodo, valor], i) => {
+      const v = String(valor || '').trim() || '—';
+      const chuva = /chuv|garoa/i.test(v);
+      const cx = ML + 7 * dCW + jW + i * ccw;
+      rf(cx, y, ccw, JH, chuva ? [222, 236, 250] : W, BD);
+      sf(4.5, 'bold', DG); tx(periodo, cx + 2, y + JH * 0.68);
+      sf(5.5, 'bold', chuva ? [25, 85, 145] : NAV);
+      tx(cabe(v, ccw - 14), cx + ccw - 2, y + JH * 0.68, { align: 'right' });
+    });
+  if (continuacao) {
+    sf(5.5, 'bold', DG);
+    tx('continuação', ML + TW - 2, MT + 25.5, { align: 'right' });
+  }
   y += JH + 2;
-  
+  return y;
+  }
+
+  const yTop = desenharCabecalho(false);
+  comCabecalho.add(1);
+  let y = yTop;
+
+  /* Vai para a página n, criando-a se ainda não existir, e garante que
+     ela já tenha o cabeçalho. */
+  function irParaPagina(n) {
+    while (totalPaginas < n) { doc.addPage(); totalPaginas++; }
+    doc.setPage(n);
+    if (!comCabecalho.has(n)) { comCabecalho.add(n); desenharCabecalho(true); }
+  }
+
   // Layout em duas colunas: esq = efetivo + equip, dir = serviços
-  const yTop = y;
+  let pagEsq = 1, pagDir = 1;
   const LW = 112, GAP = 3, RW = TW - LW - GAP;  // 112 + 3 + 79 = 194mm
   const xL = ML, xR = ML + LW + GAP;
+
+  /* ------------------------------------------------------------------
+     DOIS ARRANJOS, ESCOLHIDOS PELO TAMANHO DO DIA
+     Dia comum: efetivo e equipamentos empilhados à esquerda, serviços na
+     tira de 79 mm à direita — é o RDO compacto de sempre.
+     Dia grande: a lista não cabe na tira. Insistir nela deixava metade da
+     folha 1 em branco embaixo do efetivo e espremia LOCAL e EQUIPE em
+     15 mm, onde tudo virava "Decantador…". Então EQUIPAMENTOS sobe para o
+     lado do EFETIVO e os serviços tomam a folha inteira: enche a página e
+     dobra a largura das colunas apertadas.
+     ------------------------------------------------------------------ */
+  const SH = 5;                                   // altura da linha de serviço
+  const alturaServicos = [servicosDiurnos, servicosNoturnos]
+    .reduce((s, l) => s + 6 + SH + Math.max(l.length, 1) * SH + 3, 0);
+  const largo = alturaServicos > (LIMITE - yTop);
+  const eqX = largo ? xR : xL;
+  const eqW = largo ? RW : LW;
 
   // ════════════════════════════
   // COLUNA ESQUERDA — EFETIVO
@@ -11592,6 +11658,7 @@ function _gerarPDFDiario(data) {
 
   const CN = 12, CT = 16, CD = LW - 4 * CN - CT;  // CD = 112-48-16 = 48mm
   const EH = 4.0;
+  function cabEfetivo() {
   rf(xL, y, CD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('FUNÇÃO', xL + 2, y + EH * 1.1);
   rf(xL + CD, y, CN * 2, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', xL + CD + CN, y + EH * 1.1, { align: 'center' });
   rf(xL + CD + CN * 2, y, CN * 2, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', xL + CD + CN * 3, y + EH * 1.1, { align: 'center' });
@@ -11605,6 +11672,16 @@ function _gerarPDFDiario(data) {
   });
   rf(xL + CD + 4 * CN, y, CT, EH, LB, BD);
   y += EH;
+  }
+  cabEfetivo();
+
+  /* Quebra de página da coluna esquerda: leva o cabeçalho da tabela junto,
+     senão a folha 2 abre com números sem nome de coluna. */
+  function espacoEsq(altura, cabecalhoDaTabela) {
+    if (y + altura <= LIMITE) { doc.setPage(pagEsq); return; }
+    pagEsq++; irParaPagina(pagEsq); y = yTop;
+    if (cabecalhoDaTabela) cabecalhoDaTabela();
+  }
 
   const todasCats = [
     ...CATEGORIAS_INDIRETO.map(c => ({...c, tipo: 'indireto'})),
@@ -11670,7 +11747,9 @@ function _gerarPDFDiario(data) {
     tcd += cd; tci += ci; ttd += td; tti += ti;
 
     const bg = i % 2 === 0 ? W : LG;
-    rf(xL, y, CD, EH, bg, BD); sf(6, 'normal', [0, 0, 0]); tx(cat.label, xL + 1.5, y + EH * 0.75);
+    espacoEsq(EH, cabEfetivo);
+    rf(xL, y, CD, EH, bg, BD); sf(6, 'normal', [0, 0, 0]);
+    tx(cabe(cat.label, CD - 3), xL + 1.5, y + EH * 0.75);
     [cd, ci, td, ti].forEach((v, j) => {
       rf(xL + CD + j * CN, y, CN, EH, bg, BD);
       if (v > 0) { sf(6.5, 'bold', NAV); tx(String(v), xL + CD + (j + 0.5) * CN, y + EH * 0.75, { align: 'center' }); }
@@ -11682,6 +11761,7 @@ function _gerarPDFDiario(data) {
 
   const gtV = tcd + tci + ttd + tti;
   const TEH = 5;
+  espacoEsq(TEH, cabEfetivo);
   rf(xL, y, CD, TEH, NAV); sf(6.5, 'bold', W); tx('TOTAL EFETIVO', xL + 2, y + TEH * 0.7);
   [tcd, tci, ttd, tti].forEach((v, j) => {
     rf(xL + CD + j * CN, y, CN, TEH, NAV); sf(7, 'bold', W);
@@ -11692,16 +11772,24 @@ function _gerarPDFDiario(data) {
   y += TEH + 2;
 
   // ════════════════════════════
-  // COLUNA ESQUERDA — EQUIPAMENTOS
+  // EQUIPAMENTOS — abaixo do efetivo, ou ao lado dele no arranjo largo
   // ════════════════════════════
-  rf(xL, y, LW, 6, NAV); sf(7.5, 'bold', W); tx('EQUIPAMENTOS', xL + 2, y + 4); y += 6;
+  const yDepoisEfetivo = y, pagEfetivoFim = pagEsq;
+  if (largo) { pagEsq = 1; irParaPagina(1); y = yTop; }
 
-  const EqCN = 20, EqCT = 20, EqCD = LW - EqCN * 2 - EqCT;  // EqCD = 112-40-20 = 52mm
-  rf(xL, y, EqCD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('EQUIPAMENTO', xL + 2, y + EH * 1.1);
-  rf(xL + EqCD, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', xL + EqCD + EqCN/2, y + EH * 1.1, { align: 'center' });
-  rf(xL + EqCD + EqCN, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', xL + EqCD + EqCN + EqCN/2, y + EH * 1.1, { align: 'center' });
-  rf(xL + EqCD + EqCN*2, y, EqCT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOT.', xL + EqCD + EqCN*2 + EqCT/2, y + EH * 1.1, { align: 'center' });
+  espacoEsq(6 + EH * 4);   // título + cabeçalho + ao menos duas linhas
+  rf(eqX, y, eqW, 6, NAV); sf(7.5, 'bold', W); tx('EQUIPAMENTOS', eqX + 2, y + 4); y += 6;
+
+  const EqCN = largo ? 15 : 20, EqCT = largo ? 15 : 20;
+  const EqCD = eqW - EqCN * 2 - EqCT;   // 52 mm empilhado, 34 mm ao lado
+  function cabEquip() {
+  rf(eqX, y, EqCD, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('EQUIPAMENTO', eqX + 2, y + EH * 1.1);
+  rf(eqX + EqCD, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('DIURNO', eqX + EqCD + EqCN/2, y + EH * 1.1, { align: 'center' });
+  rf(eqX + EqCD + EqCN, y, EqCN, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('NOTURNO', eqX + EqCD + EqCN + EqCN/2, y + EH * 1.1, { align: 'center' });
+  rf(eqX + EqCD + EqCN*2, y, EqCT, EH * 1.5, LB, BD); sf(6.5, 'bold', NAV); tx('TOT.', eqX + EqCD + EqCN*2 + EqCT/2, y + EH * 1.1, { align: 'center' });
   y += EH * 1.5;
+  }
+  cabEquip();
 
   let equipamentos = CATEGORIAS_EQUIP_PADRAO.filter(eq => {
     const diu = parseInt(d.equipamentos_diurno[eq.key]) || 0;
@@ -11764,67 +11852,129 @@ function _gerarPDFDiario(data) {
     const tot = diu + not;
 
     const bg = i % 2 === 0 ? W : LG;
-    rf(xL, y, EqCD, EH, bg, BD); sf(6, 'normal', [0, 0, 0]); tx(eq.label, xL + 1.5, y + EH * 0.75);
-    rf(xL + EqCD, y, EqCN, EH, bg, BD);
-    if (diu > 0) { sf(6.5, 'bold', NAV); tx(String(diu), xL + EqCD + EqCN/2, y + EH * 0.75, { align: 'center' }); }
-    rf(xL + EqCD + EqCN, y, EqCN, EH, bg, BD);
-    if (not > 0) { sf(6.5, 'bold', NAV); tx(String(not), xL + EqCD + EqCN + EqCN/2, y + EH * 0.75, { align: 'center' }); }
-    rf(xL + EqCD + EqCN*2, y, EqCT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
-    if (tot > 0) { sf(7, 'bold', NAV); tx(String(tot), xL + EqCD + EqCN*2 + EqCT/2, y + EH * 0.75, { align: 'center' }); }
+    espacoEsq(EH, cabEquip);
+    rf(eqX, y, EqCD, EH, bg, BD); sf(6, 'normal', [0, 0, 0]);
+    tx(cabe(eq.label, EqCD - 3), eqX + 1.5, y + EH * 0.75);
+    rf(eqX + EqCD, y, EqCN, EH, bg, BD);
+    if (diu > 0) { sf(6.5, 'bold', NAV); tx(String(diu), eqX + EqCD + EqCN/2, y + EH * 0.75, { align: 'center' }); }
+    rf(eqX + EqCD + EqCN, y, EqCN, EH, bg, BD);
+    if (not > 0) { sf(6.5, 'bold', NAV); tx(String(not), eqX + EqCD + EqCN + EqCN/2, y + EH * 0.75, { align: 'center' }); }
+    rf(eqX + EqCD + EqCN*2, y, EqCT, EH, tot > 0 ? [220, 235, 255] : bg, BD);
+    if (tot > 0) { sf(7, 'bold', NAV); tx(String(tot), eqX + EqCD + EqCN*2 + EqCT/2, y + EH * 0.75, { align: 'center' }); }
     y += EH;
   });
 
   const tEqTotal = tEqDiu + tEqNot;
-  rf(xL, y, EqCD, TEH, NAV); sf(6.5, 'bold', W); tx('TOTAL EQUIPAMENTOS', xL + 2, y + TEH * 0.7);
-  rf(xL + EqCD, y, EqCN, TEH, NAV); sf(7, 'bold', W); tx(String(tEqDiu), xL + EqCD + EqCN/2, y + TEH * 0.7, { align: 'center' });
-  rf(xL + EqCD + EqCN, y, EqCN, TEH, NAV); sf(7, 'bold', W); tx(String(tEqNot), xL + EqCD + EqCN + EqCN/2, y + TEH * 0.7, { align: 'center' });
-  rf(xL + EqCD + EqCN*2, y, EqCT, TEH, RED); sf(8, 'bold', W); tx(String(tEqTotal), xL + EqCD + EqCN*2 + EqCT/2, y + TEH * 0.7, { align: 'center' });
+  espacoEsq(TEH, cabEquip);
+  rf(eqX, y, EqCD, TEH, NAV); sf(6.5, 'bold', W);
+  tx(cabe('TOTAL EQUIPAMENTOS', EqCD - 3), eqX + 2, y + TEH * 0.7);
+  rf(eqX + EqCD, y, EqCN, TEH, NAV); sf(7, 'bold', W); tx(String(tEqDiu), eqX + EqCD + EqCN/2, y + TEH * 0.7, { align: 'center' });
+  rf(eqX + EqCD + EqCN, y, EqCN, TEH, NAV); sf(7, 'bold', W); tx(String(tEqNot), eqX + EqCD + EqCN + EqCN/2, y + TEH * 0.7, { align: 'center' });
+  rf(eqX + EqCD + EqCN*2, y, EqCT, TEH, RED); sf(8, 'bold', W); tx(String(tEqTotal), eqX + EqCD + EqCN*2 + EqCT/2, y + TEH * 0.7, { align: 'center' });
   y += TEH + 2;
 
-  const yLeft = y;  // fim da coluna esquerda
+  /* No arranjo largo as duas tabelas correram lado a lado; o que vem depois
+     começa abaixo da mais comprida das duas. */
+  if (largo) {
+    const pagEqFim = pagEsq;
+    pagEsq = Math.max(pagEfetivoFim, pagEqFim);
+    y = Math.max(pagEfetivoFim === pagEsq ? yDepoisEfetivo : yTop,
+                 pagEqFim === pagEsq ? y : yTop);
+  }
+
+  const yLeft = y;              // fim da coluna esquerda
+  const pagEsqFim = pagEsq;     // última página que a coluna esquerda ocupa
 
   // ════════════════════════════════════
   // COLUNA DIREITA — SERVIÇOS (desde yTop)
   // ════════════════════════════════════
-  let yR = yTop;
+  /* No arranjo compacto a lista recomeça na página 1, ao lado do efetivo:
+     antes ela escrevia na página CORRENTE do documento, então se o efetivo
+     tivesse transbordado os serviços caíam por cima da continuação dele.
+     No arranjo largo ela começa logo abaixo das duas tabelas. */
+  pagDir = largo ? pagEsqFim : 1;
+  irParaPagina(pagDir);
+  let yR = largo ? yLeft : yTop;
+
+  function espacoDir(altura, cabecalhoDaTabela) {
+    if (yR + altura <= LIMITE) { doc.setPage(pagDir); return; }
+    pagDir++; irParaPagina(pagDir); yR = yTop;
+    if (cabecalhoDaTabela) cabecalhoDaTabela();
+  }
+
+  /* Passada a última página da coluna esquerda não há mais nada à esquerda:
+     a lista de serviços abre para a folha inteira, em vez de seguir numa tira
+     de 79 mm com meia página em branco ao lado. É o que faz caber mais
+     serviço por folha — e é o que tira o aperto do nome do pacote. */
+  function faixaDir() {
+    return (largo || pagDir > pagEsqFim) ? { x: ML, w: TW } : { x: xR, w: RW };
+  }
+
+  /* Quebra para os blocos de fecho, que ocupam a largura toda. */
+  function novaPaginaSimples() {
+    const n = Math.max(pagEsq, pagDir) + 1;
+    pagEsq = pagDir = n;
+    irParaPagina(n);
+    return yTop;
+  }
 
   function renderServicosBlock(titulo, lista, corBlock) {
-    const SH = 5;
-    const wPac = RW * 0.60, wLoc = RW * 0.20, wEq = RW - wPac - wLoc;
-    const xPac = xR, xLoc = xPac + wPac, xEq = xLoc + wLoc;
+    // A largura muda quando a lista passa para uma folha só dela, então a
+    // geometria é medida de novo a cada quebra em vez de fixada uma vez.
+    let x0, larg, wPac, wLoc, wEq, xPac, xLoc, xEq;
+    function medir() {
+      const f = faixaDir();
+      x0 = f.x; larg = f.w;
+      wPac = larg * 0.54; wLoc = larg * 0.23; wEq = larg - wPac - wLoc;
+      xPac = x0; xLoc = xPac + wPac; xEq = xLoc + wLoc;
+    }
 
-    if (yR + 6 + SH * 3 > PH - 18) { doc.addPage(); yR = MT; }
-    rf(xR, yR, RW, 6, corBlock); sf(7, 'bold', W); tx(titulo, xR + 2, yR + 4); yR += 6;
-
+    function tituloBloco(sufixo) {
+      medir();
+      rf(x0, yR, larg, 6, corBlock); sf(7, 'bold', W);
+      tx(titulo + (sufixo || ''), x0 + 2, yR + 4); yR += 6;
+    }
     function cabServicos() {
+      medir();
       rf(xPac, yR, wPac, SH, LB, BD); sf(5.5, 'bold', NAV); tx('FRENTE / PACOTE', xPac + 2, yR + SH * 0.75);
       rf(xLoc, yR, wLoc, SH, LB, BD); sf(5.5, 'bold', NAV); tx('LOCAL', xLoc + 2, yR + SH * 0.75);
       rf(xEq, yR, wEq, SH, LB, BD); sf(5.5, 'bold', NAV); tx('EQUIPE', xEq + 2, yR + SH * 0.75);
       yR += SH;
     }
+    /* Na virada de folha o bloco se reapresenta: sem o título, quem pega a
+       folha 2 não sabe se aquelas linhas são do turno diurno ou do noturno. */
+    function reabrir() { tituloBloco(' (cont.)'); cabServicos(); }
+
+    espacoDir(6 + SH * 3);   // título + cabeçalho + ao menos uma linha
+    tituloBloco();
     cabServicos();
 
     if (lista.length === 0) {
-      rf(xPac, yR, RW, SH, [253, 246, 230], BD);
+      rf(x0, yR, larg, SH, [253, 246, 230], BD);
       sf(6, 'italic', [140, 90, 30]);
-      tx('— sem serviços —', xPac + RW / 2, yR + SH * 0.75, { align: 'center' });
+      tx('— sem serviços —', x0 + larg / 2, yR + SH * 0.75, { align: 'center' });
       yR += SH;
     } else {
       lista.forEach((s, i) => {
-        if (yR + SH > PH - 18) { doc.addPage(); yR = MT; cabServicos(); }
+        espacoDir(SH, reabrir);
         const bg = i % 2 === 0 ? W : LG;
         const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
         const frente = pacote ? (pacote['Frente'] || '') : '';
         rf(xPac, yR, wPac, SH, bg, BD); sf(6, 'normal', [0, 0, 0]);
         const txtPacote = (frente ? frente + ' · ' : '') + (s['Pacote_Nome'] || '');
         const linhasPac = doc.splitTextToSize(txtPacote, wPac - 3);
-        if (linhasPac.length === 1) tx(linhasPac[0], xPac + 2, yR + SH * 0.75);
-        else { sf(5, 'normal', [0, 0, 0]); tx(linhasPac[0], xPac + 2, yR + SH * 0.45); tx(linhasPac[1] || '', xPac + 2, yR + SH * 0.85); }
-        rf(xLoc, yR, wLoc, SH, bg, BD); sf(5.5, 'normal', [40, 40, 40]); tx(String(s['Local_Estaca'] || ''), xLoc + 2, yR + SH * 0.75);
+        if (linhasPac.length === 1) tx(linhasPac[0], xPac + 2, yR + SH * 0.45 + SH * 0.3);
+        else {
+          sf(5, 'normal', [0, 0, 0]);
+          tx(linhasPac[0], xPac + 2, yR + SH * 0.45);
+          // da terceira linha em diante não há espaço: fecha com reticências
+          const resto = linhasPac.slice(1).join(' ');
+          tx(cabe(resto, wPac - 3), xPac + 2, yR + SH * 0.85);
+        }
+        rf(xLoc, yR, wLoc, SH, bg, BD); sf(5.5, 'normal', [40, 40, 40]);
+        tx(cabe(s['Local_Estaca'], wLoc - 3), xLoc + 2, yR + SH * 0.75);
         rf(xEq, yR, wEq, SH, bg, BD); sf(5.5, 'normal', [0, 0, 0]);
-        const txtEq = String(s['Equipe'] || s['Subcontratado'] || '');
-        const linhasEq = doc.splitTextToSize(txtEq, wEq - 3);
-        tx(linhasEq[0] || '', xEq + 2, yR + SH * 0.75);
+        tx(cabe(s['Equipe'] || s['Subcontratado'], wEq - 3), xEq + 2, yR + SH * 0.75);
         yR += SH;
       });
     }
@@ -11834,26 +11984,35 @@ function _gerarPDFDiario(data) {
   renderServicosBlock('SERVIÇOS DIURNOS', servicosDiurnos, ORANGE);
   renderServicosBlock('SERVIÇOS NOTURNOS', servicosNoturnos, BLUE);
 
-  // Unifica y das duas colunas
-  y = Math.max(yLeft, yR) + 2;
+  /* O fecho vai na ÚLTIMA página usada, abaixo da coluna que desceu mais.
+     Antes ele era desenhado na página corrente, na altura da maior das duas
+     colunas — o que, com transbordo, punha a assinatura no meio da tabela. */
+  const ultimaPag = Math.max(pagEsq, pagDir);
+  irParaPagina(ultimaPag);
+  y = 2 + Math.max(pagEsq === ultimaPag ? yLeft : yTop,
+                   pagDir === ultimaPag ? yR : yTop);
 
-  // Observações compactas (1 linha se existirem)
+  /* Ocorrência e observação são texto de gente: cabiam numa linha só e o
+     resto virava reticência. Agora o quadro cresce até 4 linhas. */
   const obsCVTV = [d.observacoes_gerais, d.ocorrencias].filter(x => x && x.trim()).join(' · ');
   if (obsCVTV) {
-    if (y + 8 > PH - 40) { doc.addPage(); y = MT; }
-    rf(ML, y, TW, 6, [255, 255, 210], [180, 150, 0]);
-    sf(6, 'bold', NAV); tx('OBS: ', ML + 2, y + 4);
-    const obsL = doc.splitTextToSize(obsCVTV, TW - 14);
-    sf(6, 'normal', [0, 0, 0]); tx(obsL[0] + (obsL.length > 1 ? '…' : ''), ML + 12, y + 4);
-    y += 7;
+    sf(6, 'normal', [0, 0, 0]);
+    const obsL = doc.splitTextToSize(obsCVTV, TW - 16).slice(0, 4);
+    const hObs = Math.max(6, 2.5 + obsL.length * 2.6);
+    if (y + hObs > LIMITE) { y = novaPaginaSimples(); }
+    rf(ML, y, TW, hObs, [255, 255, 210], [180, 150, 0]);
+    sf(6, 'bold', NAV); tx('OBS:', ML + 2, y + 4);
+    sf(6, 'normal', [0, 0, 0]);
+    obsL.forEach((linha, i) => tx(linha, ML + 14, y + 4 + i * 2.6));
+    y += hObs + 1;
   }
 
-  // Assinaturas
-  if (y + 21 > PH - 14) { doc.addPage(); y = MT; }
+  // Assinaturas — não se separa o título do quadro
+  if (y + 21 > LIMITE) { y = novaPaginaSimples(); }
   rf(ML, y, TW, 5, NAV); sf(7, 'bold', W); tx('ASSINATURAS', ML + 2, y + 3.4); y += 5;
   const sw = (TW - 4) / 2;
   rf(ML, y, sw, 16, W, BD);
-  sf(6, 'bold', DG); tx('ENGENHEIRO GESTOR ENGENHARIA', ML + 2, y + 5);
+  sf(6, 'bold', DG); tx(rdoTituloEngenheiro(), ML + 2, y + 5);
   ln(ML + 3, y + 12, ML + sw - 3, y + 12, [120, 120, 120], 0.3);
   sf(6, 'normal', DG); tx(df, ML + sw / 2, y + 14.5, { align: 'center' });
   rf(ML + sw + 4, y, sw, 16, W, BD);
@@ -11862,12 +12021,21 @@ function _gerarPDFDiario(data) {
   sf(6, 'normal', DG); tx(df, ML + sw + 4 + sw / 2, y + 14.5, { align: 'center' });
   y += 16;
 
-  // Rodapé
+  /* Rodapé em TODAS as páginas. Era desenhado uma vez só, na última —
+     folha solta sem identificação não serve para documento de obra. */
   const fy = PH - 8;
-  ln(ML, fy - 1, ML + TW, fy - 1, NAV, 0.4);
-  sf(5.5, 'normal', DG);
-  tx([rdoInfo().contratada, 'RDO Nº ' + nrRDO, 'Data: ' + df].filter(Boolean).join('  |  '), PW / 2, fy + 2, { align: 'center' });
-  tx(rdoInfo().rodape, PW / 2, fy + 5.5, { align: 'center' });
+  for (let pg = 1; pg <= totalPaginas; pg++) {
+    doc.setPage(pg);
+    ln(ML, fy - 1, ML + TW, fy - 1, NAV, 0.4);
+    sf(5.5, 'normal', DG);
+    tx([rdoInfo().contratada, 'RDO Nº ' + nrRDO, 'Data: ' + df].filter(Boolean).join('  |  '),
+       PW / 2, fy + 2, { align: 'center' });
+    tx(rdoInfo().rodape, PW / 2, fy + 5.5, { align: 'center' });
+    if (totalPaginas > 1) {
+      sf(5.5, 'bold', NAV);
+      tx('Página ' + pg + ' de ' + totalPaginas, ML + TW, fy + 5.5, { align: 'right' });
+    }
+  }
   
   const fname = 'RDO_' + data.replace(/-/g, '_') + '.pdf';
   doc.save(fname);
