@@ -1,3 +1,10 @@
+/*
+ * Sistema de controle de obra — Av. Senador Teotônio Vilela
+ * Copyright © 2026 Leonardo Maciel. Todos os direitos reservados.
+ *
+ * Software proprietário. O código estar visível não autoriza uso, cópia
+ * nem obra derivada — ver LICENSE, na raiz do repositório.
+ */
 /* ====================================================================
    EQUIPAMENTOS — apontamento de hora de máquina
    --------------------------------------------------------------------

@@ -1,0 +1,74 @@
+Copyright © 2026 Leonardo Maciel. Todos os direitos reservados.
+
+SOFTWARE PROPRIETÁRIO — LICENÇA DE USO RESTRITA
+
+Este é o código-fonte do sistema de controle de obra da Av. Senador
+Teotônio Vilela. O código está visível para consulta e auditoria, mas isso
+NÃO faz dele software livre nem de código aberto: estar publicado não
+concede direito nenhum a quem o lê.
+
+Protegido pela Lei nº 9.609/1998 (proteção da propriedade intelectual de
+programa de computador) e pela Lei nº 9.610/1998 (direitos autorais).
+
+
+1. O QUE NÃO É PERMITIDO
+
+Sem autorização escrita e prévia do titular, é vedado a qualquer pessoa:
+
+  a) usar o software, no todo ou em parte, para qualquer finalidade;
+  b) copiar, reproduzir, publicar, hospedar ou redistribuir o código;
+  c) modificar, adaptar, traduzir ou criar obra derivada;
+  d) sublicenciar, vender, alugar, emprestar ou ceder a terceiros;
+  e) empregar o código, ou trechos dele, em outro produto ou serviço;
+  f) remover ou alterar os avisos de autoria e de direitos autorais.
+
+Toda aplicação web entrega o seu código ao navegador de quem a abre — é
+assim que ela funciona. Esse acesso é técnico, não é licença: ler o código
+pelo navegador, ou por este repositório, não autoriza nenhum dos usos
+listados acima.
+
+
+2. USO PELOS CLIENTES
+
+O direito de uso é concedido por CONTRATO, na forma de LICENÇA DE USO, e
+não de cessão de propriedade. A titularidade do software, do seu código e
+da sua documentação permanece integralmente com o autor. Encerrado o
+contrato, cessa o direito de uso.
+
+Os DADOS lançados pelo cliente — relatórios diários, medições, fotos,
+notas fiscais e o que mais ele registrar — são do cliente, ficam nas
+planilhas dele e continuam com ele em qualquer hipótese.
+
+
+3. COMPONENTES DE TERCEIROS
+
+O diretório `vendor/` contém bibliotecas de terceiros. Elas NÃO são
+abrangidas por esta licença e permanecem sob as suas próprias:
+
+  Chart.js .......................  MIT
+  jsPDF ..........................  MIT         © James Hall
+  jsPDF-AutoTable ................  MIT         © Simon Bengtsson
+  PDF.js .........................  Apache-2.0  © Mozilla Foundation
+  xlsx-js-style (sobre SheetJS) ..  Apache-2.0
+  Space Grotesk ..................  SIL Open Font License 1.1
+  JetBrains Mono .................  SIL Open Font License 1.1
+
+Cada arquivo conserva o seu aviso de licença original, e assim deve
+permanecer.
+
+
+4. SEM GARANTIA
+
+O software é fornecido "no estado em que se encontra". Fora do que estiver
+expressamente previsto em contrato de suporte, o autor não presta garantia
+de adequação a uma finalidade específica nem de funcionamento
+ininterrupto ou livre de erros.
+
+
+5. PARA LICENCIAR
+
+Quem quiser usar este software — em outra obra, em outra empresa ou em
+outro produto — deve procurar o titular antes:
+
+  Leonardo Maciel
+  https://github.com/leoribeiromac-cmyk

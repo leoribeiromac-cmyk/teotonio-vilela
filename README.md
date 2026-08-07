@@ -364,3 +364,16 @@ na tela via a página recarregar e perdia o que tinha digitado. Agora o service
 worker novo fica esperando, o app mostra **"Nova versão do sistema disponível ·
 Atualizar"** no canto, e a troca só acontece quando o usuário mandar — ou na
 próxima vez que ele abrir o app.
+
+## Licença
+
+Copyright © 2026 Leonardo Maciel. **Todos os direitos reservados.**
+
+Software **proprietário**. O código estar visível aqui não o torna livre nem de
+código aberto, e não autoriza uso, cópia, modificação ou obra derivada — ver
+[LICENSE](LICENSE). O direito de uso pelos clientes vem por contrato, na forma
+de licença de uso, e não de cessão de propriedade; os dados lançados pelo
+cliente são dele.
+
+As bibliotecas em `vendor/` são de terceiros e mantêm as suas próprias licenças
+(MIT, Apache-2.0, OFL), listadas no `LICENSE`.
