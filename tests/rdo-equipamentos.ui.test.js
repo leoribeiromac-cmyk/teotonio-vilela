@@ -1,11 +1,12 @@
-// O bloco EQUIPAMENTOS do RDO cabe em 8 linhas na folha. O corte era cego:
-// `equipamentos.slice(0, 8)` acontecia ANTES do laço que soma os totais, então
-// equipamento do 9º em diante sumia da tabela E do total — e o PDF passava a
-// divergir do Excel do mesmo dia. Num documento que sustenta cobrança de
-// locadora, o total é justamente o que não pode mentir.
+// O bloco EQUIPAMENTOS do RDO parava na oitava linha. Primeiro o corte era
+// cego — `equipamentos.slice(0, 8)` acontecia ANTES do laço que soma, então
+// equipamento do 9º em diante sumia da tabela E do total, e o PDF divergia do
+// Excel do mesmo dia. Depois o total passou a fechar, mas o excedente virava
+// "+ N outro(s) — ver planilha": quem lia o RDO não sabia QUAIS máquinas eram.
 //
-// Este teste monta um dia com MAIS equipamentos do que cabe, gera o PDF e a
-// planilha pelo app de verdade, e cobra que os dois somem a frota inteira.
+// Agora sai a frota inteira, uma linha por equipamento. Este teste monta um dia
+// com mais equipamentos do que cabia na régua antiga, gera o PDF e a planilha
+// pelo app de verdade, e cobra que os dois listem e somem tudo.
 //
 // Como rodar:  node tests/rdo-equipamentos.ui.test.js
 //   (sobe o próprio servidor numa porta separada; não depende do 8099)
@@ -92,6 +93,11 @@ const csvPacotes = 'ID,Frente,Pacote,Unidade Física,Qtd Estimada,Status,Observa
      doExcel.totais[0] === ESPERADO.diu && doExcel.totais[1] === ESPERADO.not,
      JSON.stringify(doExcel.totais));
 
+  // os rótulos dos 13 tipos do dia, lidos do cadastro do próprio app
+  const ROTULOS = await pg.evaluate((chaves) =>
+    CATEGORIAS_EQUIP_PADRAO.filter(e => chaves.includes(e.key)).map(e => e.label),
+    [...new Set([...Object.keys(EQ_DIURNO), ...Object.keys(EQ_NOTURNO)])]);
+
   // ---------- o que o PDF imprime ----------
   const espera = pg.waitForEvent('download', { timeout: 60000 });
   await pg.evaluate((dia) => gerarPDFDiario(dia), DIA);
@@ -100,15 +106,22 @@ const csvPacotes = 'ID,Frente,Pacote,Unidade Física,Qtd Estimada,Status,Observa
   await arq.saveAs(destino);
 
   await pg.addScriptTag({ url: '/vendor/pdfjs/pdf.min.js' });
-  const doPdf = await pg.evaluate(async (b64) => {
+  const doPdf = await pg.evaluate(async ({ b64, rotulosEsperados }) => {
     const lib = window.pdfjsLib;
     lib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.min.js';
     const doc = await lib.getDocument({ data: Uint8Array.from(atob(b64), c => c.charCodeAt(0)) }).promise;
     const itens = (await (await doc.getPage(1)).getTextContent()).items
       .map(x => x.str.trim()).filter(Boolean);
     const i = itens.findIndex(t => t.startsWith('TOTAL EQUIPAMENTOS'));
-    return { linha: itens.slice(i + 1, i + 4), resumo: itens.filter(t => /^\+ \d+ outro/.test(t)) };
-  }, require('fs').readFileSync(destino).toString('base64'));
+    // o rótulo longo quebra em duas linhas dentro da célula; juntar os itens
+    // na ordem em que foram impressos reconstrói o texto original.
+    const corrido = itens.join(' ').replace(/\s+/g, ' ');
+    return {
+      linha: itens.slice(i + 1, i + 4),
+      resumo: itens.filter(t => /^\+ \d+ outro/.test(t)),
+      faltando: rotulosEsperados.filter(r => !corrido.includes(r)),
+    };
+  }, { b64: require('fs').readFileSync(destino).toString('base64'), rotulosEsperados: ROTULOS });
 
   ok('PDF soma a frota inteira, e não só o que coube na folha',
      doPdf.linha[0] === String(ESPERADO.diu) &&
@@ -117,8 +130,11 @@ const csvPacotes = 'ID,Frente,Pacote,Unidade Física,Qtd Estimada,Status,Observa
      'imprimiu ' + JSON.stringify(doPdf.linha) + ', esperado ' +
      JSON.stringify([ESPERADO.diu, ESPERADO.not, ESPERADO.total].map(String)));
 
-  ok('PDF avisa quantos equipamentos não couberam', doPdf.resumo.length === 1,
-     doPdf.resumo.length ? doPdf.resumo[0] : 'nenhuma linha de excedente');
+  ok('PDF não esconde equipamento atrás de um resumo', doPdf.resumo.length === 0,
+     doPdf.resumo[0]);
+
+  ok('PDF lista a frota inteira, uma linha por equipamento',
+     doPdf.faltando.length === 0, 'faltou: ' + doPdf.faltando.join(', '));
 
   ok('PDF e Excel fecham no mesmo número',
      doPdf.linha[2] === String(doExcel.totais[2]),
