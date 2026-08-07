@@ -1,0 +1,14 @@
+ID;Frente;Pacote;Unidade Física;Qtd Estimada;Produtividade;Status;Observação
+P37A;Muro de Contenção;Muros B e C — 1. Escavação e fundação;ML;42,25;7;Ativo;Est. 103+12 a 106+10 (pista esq.) · 6 trechos: B1, B2, C1 a C4 · 11,3 m³/m de escavação
+P37B;Muro de Contenção;Muros B e C — 2. Sapata (base);ML;42,25;8;Ativo;Sapata contra o solo — sem forma · 0,44 m³/m de concreto
+P37C;Muro de Contenção;Muros B e C — 3. Fuste (parede);ML;42,25;3,5;Ativo;Muros de 1,20 m a 2,90 m · 4,35 m²/m de forma · 27 barbacãs
+P37D;Muro de Contenção;Muros B e C — 4. Reaterro e acabamento;ML;42,25;5;Ativo;Reaterro 5,6 m³/m · 27,85 m de corrimão e 16,60 m de guarda-corpo
+P38A;Muro de Contenção;Muro D — 1. Escavação e fundação;ML;39;3;Ativo;Est. 212 a 215 (pista dir.) · 36,8 m³/m — a escavação mais profunda do lote
+P38B;Muro de Contenção;Muro D — 2. Sapata (base);ML;39;5;Ativo;Sapata 39,00 m · 0,79 m³/m de concreto
+P38C;Muro de Contenção;Muro D — 3. Fuste (parede);ML;39;2;Ativo;Fuste de 3,05 m · 6,15 m²/m de forma · 30 barbacãs
+P38D;Muro de Contenção;Muro D — 4. Reaterro e acabamento;ML;39;8;Ativo;Reaterro 15,1 m³/m
+P39A;Muro de Contenção;Muro E — 1. Escavação e fundação;ML;135;8;Ativo;Est. 129+15 a 136+10 / 232+4,16 a 238+19,15 — canteiro central · 9,0 m³/m
+P39B;Muro de Contenção;Muro E — 2. Sapata (base);ML;135;6;Ativo;Sapata 200×30 com dente 30×40 · 0,72 m³/m de concreto
+P39C;Muro de Contenção;Muro E — 3. Fuste (parede);ML;135;2,5;Ativo;Fuste de 2,65 m constante · 4,72 m²/m de forma · 90 barbacãs
+P39D;Muro de Contenção;Muro E — 4. Reaterro e acabamento;ML;135;20;Ativo;Reaterro 5,5 m³/m — faixa contínua no canteiro central
+P40;Muro de Contenção;Rampa da escola (junto ao Muro C2);m²;27,225;8;Ativo;Junto ao Muro C2 · piso estrutural 7 cm sobre BGS 10 cm + faixa podotátil
