@@ -5358,6 +5358,7 @@ function fotosDaObra() {
     const data = normalizarDataCSV(getCSVField(r, 'Data'));
     ponteiros.forEach((ponteiro, i) => out.push({
       fileId: fotoFileId(ponteiro), idx: i, data,
+      id: getCSVField(r, 'ID') || '',
       pacote: getCSVField(r, 'Pacote_Nome') || getCSVField(r, 'Pacote_ID') || 'Serviço',
       pacoteId: getCSVField(r, 'Pacote_ID') || '',
       estaca: getCSVField(r, 'Local_Estaca') || '',
@@ -5367,7 +5368,27 @@ function fotosDaObra() {
       qtd: getCSVField(r, 'Quantidade') || '', un: getCSVField(r, 'Unidade') || ''
     }));
   });
-  return out.sort((a, b) => String(b.data).localeCompare(String(a.data)));
+  /* Dia mais novo primeiro — mas DENTRO do dia a ordem é a do relógio da
+     obra: Diurno antes de Noturno. Antes só a data ordenava, e o que
+     desempatava era a ordem em que a linha caiu na planilha; a foto do
+     turno da noite acabava aparecendo antes da manhã do mesmo dia, que é
+     o dia lido ao contrário.
+     A planilha não guarda a hora do serviço, então o turno é o único
+     horário que existe. Depois dele desempata o ID do lançamento
+     (`yyyyMMddHHmmss_...`, crescente = quem lançou antes vem antes) e,
+     por último, `idx`, que mantém as fotos de um mesmo serviço juntas e
+     na ordem em que foram anexadas. */
+  return out.sort((a, b) =>
+    String(b.data).localeCompare(String(a.data)) ||
+    ordemTurno(a.turno) - ordemTurno(b.turno) ||
+    String(a.id).localeCompare(String(b.id)) ||
+    a.idx - b.idx);
+}
+
+// Noturno é o fim do dia; qualquer outra coisa (inclusive vazio) conta
+// como Diurno, que é o padrão do lançamento.
+function ordemTurno(t) {
+  return /^not/i.test(String(t || '').trim()) ? 1 : 0;
 }
 
 // A data do CSV vem em formatos diferentes conforme quem gravou a linha.
