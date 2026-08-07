@@ -2208,6 +2208,22 @@ const OBRAS_CFG = {
     subtitulo: 'Duplicação viária',
     contrato: '084/SPOBRAS/2024 · CC 182',
     local: 'Zona Sul — São Paulo/SP',
+    contratada: 'Gestor Engenharia',
+    /* Cabeçalho e rodapé do RDO — em PDF e em Excel. Isto é do CONTRATO,
+       não do código: obra nova preenche aqui e o relatório sai com os
+       dados dela. O que faltar cai para os campos gerais da obra
+       (ver rdoInfo()), e nunca para o texto de outra obra. */
+    rdo: {
+      objeto: 'CONTRATAÇÃO DE EMPRESA OU CONSÓRCIO DE EMPRESAS ESPECIALIZADAS EM ENGENHARIA PARA A EXECUÇÃO DE OBRAS E SERVIÇOS DE DUPLICAÇÃO VIÁRIA DA AVENIDA SENADOR TEOTÔNIO VILELA, NO TRECHO COM INÍCIO PRÓXIMO A RUA JOSÉ NICOLAU DE LIMA ATÉ AS PROXIMIDADES DA RUA SATÉLITE ARIEL, NA REGIÃO SUL DA CIDADE DE SÃO PAULO',
+      local: 'Av. Sen. Teotônio Vilela (Rua José Nicolau — Rua Satélite Ariel)',
+      subtitulo: 'Duplicação Viária — Av. Sen. Teotônio Vilela, SP',
+      inicio: '09/05/2024',
+      prazoDias: 669,
+      responsaveis: 'Roberto V. França (2620250486954) / Paulo E. Façanha (2620250483859) / Adriano L. Pedroso (2620251795809)',
+      responsaveisCurto: 'Roberto V. França / Paulo E. Façanha / Adriano L. Pedroso',
+      fiscalizacao: 'SP OBRAS',
+      rodape: 'Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária',
+    },
     valorGlobal: 22257026.47,
     fonte: 'csv',
     csv: {
@@ -3725,9 +3741,10 @@ const CARIMBO_PADRAO = {
     frente: true, pacote: true, apontador: true, turno: false,
     obra: false, contrato: false, livre: false
   },
-  // texto literal, não a constante RDO_LOCAL_TXT: ela só é declarada lá
-  // embaixo e um const em zona morta aqui derrubaria o script inteiro
-  obra: 'Av. Sen. Teotônio Vilela',
+  // Vazio de propósito: o nome sai da obra ABERTA na hora de carimbar
+  // (ver carimboCfg). Fixar aqui carimbava foto de uma obra com o nome
+  // de outra.
+  obra: '',
   contrato: '',
   livre: ''
 };
@@ -3735,9 +3752,14 @@ const CARIMBO_PADRAO = {
 function carimboCfg() {
   try {
     var g = JSON.parse(localStorage.getItem(LS_CARIMBO) || '{}');
-    return Object.assign({}, CARIMBO_PADRAO, g,
+    const padrao = Object.assign({}, CARIMBO_PADRAO,
+      { obra: (typeof OBRA !== 'undefined' && OBRA) ? (OBRA.nomeCurto || OBRA.nome || '') : '' });
+    return Object.assign({}, padrao, g,
       { campos: Object.assign({}, CARIMBO_PADRAO.campos, g.campos || {}) });
-  } catch (e) { return Object.assign({}, CARIMBO_PADRAO); }
+  } catch (e) {
+    return Object.assign({}, CARIMBO_PADRAO,
+      { obra: (typeof OBRA !== 'undefined' && OBRA) ? (OBRA.nomeCurto || OBRA.nome || '') : '' });
+  }
 }
 function carimboSalvar(cfg) { localStorage.setItem(LS_CARIMBO, JSON.stringify(cfg)); }
 
@@ -9409,10 +9431,61 @@ function efetivoTotaisRDO(r) {
   return { diurno, noturno, total: diurno + noturno };
 }
 
+/* ====================================================================
+   IDENTIFICAÇÃO DO RDO — de onde vêm objeto, local, prazo e responsáveis
+   --------------------------------------------------------------------
+   Estes textos são do CONTRATO. Ficavam escritos no código, então o RDO
+   de qualquer obra saía com o objeto da Teotônio no cabeçalho — o que num
+   documento que a fiscalização assina é erro grave.
+
+   Agora vêm do cadastro da obra (`OBRA.rdo`). O que a obra não declarar
+   cai para os campos gerais que ela já tem (objeto, local, contratada,
+   início, prazo) e, na falta deles, para vazio — nunca para o texto de
+   outra obra.
+   ==================================================================== */
+function rdoInfo() {
+  const o = (typeof OBRA !== 'undefined' && OBRA) ? OBRA : {};
+  const r = o.rdo || {};
+  const subtitulo = r.subtitulo ||
+    [o.subtitulo, o.nomeCurto].filter(Boolean).join(' — ');
+  const contratada = r.contratada || o.contratada || '';
+  const inicio = r.inicio || (o.inicioISO ? o.inicioISO.split('-').reverse().join('/') : '');
+  const prazo = (r.prazoDias != null) ? r.prazoDias
+              : (o.prazoMeses ? Math.round(o.prazoMeses * 30.44) : '');
+  return {
+    contratada, subtitulo, inicio, prazoDias: prazo,
+    cabecalho: [contratada, subtitulo].filter(Boolean).join('  |  '),
+    objeto: r.objeto || o.objeto || subtitulo || o.nome || '',
+    local: r.local || o.local || o.nome || '',
+    responsaveis: r.responsaveis || '',
+    responsaveisCurto: r.responsaveisCurto || r.responsaveis || '',
+    fiscalizacao: r.fiscalizacao || '',
+    rodape: r.rodape || [o.local, o.subtitulo].filter(Boolean).join('  |  '),
+  };
+}
+
+/* "Início: … | Prazo: … dias | Resp: …" sem deixar rótulo órfão quando a
+   obra não declarou algum dos três. */
+function rdoLinhaResp(curto) {
+  const i = rdoInfo();
+  const resp = curto ? i.responsaveisCurto : i.responsaveis;
+  return [
+    i.inicio ? 'Início: ' + i.inicio : '',
+    i.prazoDias !== '' && i.prazoDias != null ? 'Prazo: ' + i.prazoDias + ' dias' : '',
+    resp ? 'Resp: ' + resp : '',
+  ].filter(Boolean).join('  |  ');
+}
+
+function rdoTituloEngenheiro() {
+  const c = rdoInfo().contratada;
+  return ('ENGENHEIRO ' + c).trim().toUpperCase();
+}
+function rdoTituloCliente() {
+  const f = rdoInfo().fiscalizacao;
+  return 'CLIENTE / FISCALIZAÇÃO' + (f ? ' (' + f + ')' : '');
+}
+
 // ── Exportação Excel no MESMO MODELO do PDF (uma aba por RDO) ──────────────
-// Textos fixos do cabeçalho do RDO (espelham o PDF oficial).
-const RDO_OBJETO_TXT = 'CONTRATAÇÃO DE EMPRESA OU CONSÓRCIO DE EMPRESAS ESPECIALIZADAS EM ENGENHARIA PARA A EXECUÇÃO DE OBRAS E SERVIÇOS DE DUPLICAÇÃO VIÁRIA DA AVENIDA SENADOR TEOTÔNIO VILELA, NO TRECHO COM INÍCIO PRÓXIMO A RUA JOSÉ NICOLAU DE LIMA ATÉ AS PROXIMIDADES DA RUA SATÉLITE ARIEL, NA REGIÃO SUL DA CIDADE DE SÃO PAULO';
-const RDO_LOCAL_TXT = 'Av. Sen. Teotônio Vilela (Rua José Nicolau — Rua Satélite Ariel)';
 
 // Lê um registro de RDO da planilha para o objeto usado na exportação (mesmos
 // campos do PDF, caminho "fromSheet").
@@ -9569,18 +9642,18 @@ function wsRDOModeloPDF(d, data) {
 
   // Cabeçalho
   r = push(['RELATÓRIO DIÁRIO DE OBRA']); mrg(r, 0, 5); styRange(r, 0, 5, ST.title); setH(r, 22);
-  r = push(['Gestor Engenharia  |  Duplicação Viária — Av. Sen. Teotônio Vilela, SP']); mrg(r, 0, 5); styRange(r, 0, 5, ST.sub);
-  r = push(['Início: 09/05/2024  |  Prazo: 669 dias  |  Resp: Roberto V. França / Paulo E. Façanha / Adriano L. Pedroso']); mrg(r, 0, 5); styRange(r, 0, 5, ST.sub);
+  r = push([rdoInfo().cabecalho]); mrg(r, 0, 5); styRange(r, 0, 5, ST.sub);
+  r = push([rdoLinhaResp(true)]); mrg(r, 0, 5); styRange(r, 0, 5, ST.sub);
   push([]);
 
   // Objeto
   rSection('OBJETO');
-  r = push([RDO_OBJETO_TXT]); mrg(r, 0, 5); styRange(r, 0, 5, ST.objeto); setH(r, 30);
+  r = push([rdoInfo().objeto]); mrg(r, 0, 5); styRange(r, 0, 5, ST.objeto); setH(r, 30);
   push([]);
 
   // Local / Data / Número / Prazo / Dia da semana / Clima
-  r = push(['LOCAL', RDO_LOCAL_TXT]); mrg(r, 1, 5); sty(r, 0, ST.kLabel); styRange(r, 1, 5, ST.kVal);
-  r = push(['DATA', df, 'NÚMERO', nrRDO, 'PRAZO (dias)', '669']);
+  r = push(['LOCAL', rdoInfo().local]); mrg(r, 1, 5); sty(r, 0, ST.kLabel); styRange(r, 1, 5, ST.kVal);
+  r = push(['DATA', df, 'NÚMERO', nrRDO, 'PRAZO (dias)', String(rdoInfo().prazoDias || '—')]);
   sty(r, 0, ST.kLabel); sty(r, 1, ST.kValC); sty(r, 2, ST.kLabel); sty(r, 3, ST.kValC); sty(r, 4, ST.kLabel); sty(r, 5, ST.kValC);
   r = push(['DIA DA SEMANA', diaSemana, 'CLIMA Manhã', d.clima_manha || '', 'CLIMA Tarde', d.clima_tarde || '']);
   sty(r, 0, ST.kLabel); sty(r, 1, ST.kValC); sty(r, 2, ST.kLabel); sty(r, 3, ST.kValC); sty(r, 4, ST.kLabel); sty(r, 5, ST.kValC);
@@ -9634,7 +9707,7 @@ function wsRDOModeloPDF(d, data) {
 
   // Assinaturas
   rSection('ASSINATURAS');
-  r = push(['ENGENHEIRO GESTOR ENGENHARIA', '', '', 'CLIENTE / FISCALIZAÇÃO (SP OBRAS)', '', '']); sty(r, 0, ST.sign); sty(r, 3, ST.sign);
+  r = push([rdoTituloEngenheiro(), '', '', rdoTituloCliente(), '', '']); sty(r, 0, ST.sign); sty(r, 3, ST.sign);
   r = push(['__________________________', '', '', '__________________________', '', '']); sty(r, 0, ST.signC); sty(r, 3, ST.signC);
   r = push([df, '', '', df, '', '']); sty(r, 0, ST.signC); sty(r, 3, ST.signC);
 
@@ -11446,9 +11519,9 @@ function _gerarPDFDiario(data) {
   sf(9.5, 'bold', NAV);
   tx('RELATÓRIO DIÁRIO DE OBRA', cxMid, y + 7.5, { align: 'center' });
   sf(6.5, 'normal', DG);
-  tx('Gestor Engenharia  |  Duplicação Viária — Av. Sen. Teotônio Vilela, SP', cxMid, y + 13, { align: 'center' });
+  tx(rdoInfo().cabecalho, cxMid, y + 13, { align: 'center' });
   sf(4.5, 'normal', DG);
-  const respTx = 'Início: 09/05/2024  |  Prazo: 669 dias  |  Resp: Roberto V. França (2620250486954) / Paulo E. Façanha (2620250483859) / Adriano L. Pedroso (2620251795809)';
+  const respTx = rdoLinhaResp(false);
   const respLines = doc.splitTextToSize(respTx, cxW - 2);
   doc.text(respLines.slice(0, 2), cxMid, y + 17.5, { align: 'center' });
   y += 22;
@@ -11456,7 +11529,7 @@ function _gerarPDFDiario(data) {
   rf(ML, y, TW, 10, LB, BD);
   sf(5, 'bold', NAV); tx('OBJETO', ML + 2, y + 3.5);
   sf(5, 'normal', [0, 0, 0]);
-  const obj = 'CONTRATAÇÃO DE EMPRESA OU CONSÓRCIO DE EMPRESAS ESPECIALIZADAS EM ENGENHARIA PARA A EXECUÇÃO DE OBRAS E SERVIÇOS DE DUPLICAÇÃO VIÁRIA DA AVENIDA SENADOR TEOTÔNIO VILELA, NO TRECHO COM INÍCIO PRÓXIMO A RUA JOSÉ NICOLAU DE LIMA ATÉ AS PROXIMIDADES DA RUA SATÉLITE ARIEL, NA REGIÃO SUL DA CIDADE DE SÃO PAULO';
+  const obj = rdoInfo().objeto;
   const objL = doc.splitTextToSize(obj, TW - 4);
   doc.text(objL.slice(0, 2), ML + 2, y + 6.5);
   y += 10;
@@ -11469,10 +11542,10 @@ function _gerarPDFDiario(data) {
   rf(ML + TW * 0.89, y, TW * 0.11, H3, LB, BD); sf(5, 'bold', NAV); tx('PRAZO(dias)', ML + TW * 0.89 + TW * 0.055, y + H3 * 0.72, { align: 'center' });
   y += H3;
   rf(ML, y, TW * 0.55, H3, W, BD); sf(5.5, 'normal', [0, 0, 0]);
-  tx('Av. Sen. Teotônio Vilela (Rua José Nicolau — Rua Satélite Ariel)', ML + 2, y + H3 * 0.72);
+  tx(rdoInfo().local, ML + 2, y + H3 * 0.72);
   rf(ML + TW * 0.55, y, TW * 0.22, H3, W, BD); sf(7, 'bold', NAV); tx(df, ML + TW * 0.55 + TW * 0.11, y + H3 * 0.72, { align: 'center' });
   rf(ML + TW * 0.77, y, TW * 0.12, H3, W, BD); sf(7, 'bold', NAV); tx(nrRDO, ML + TW * 0.77 + TW * 0.06, y + H3 * 0.72, { align: 'center' });
-  rf(ML + TW * 0.89, y, TW * 0.11, H3, W, BD); sf(6, 'bold', NAV); tx('669', ML + TW * 0.89 + TW * 0.055, y + H3 * 0.72, { align: 'center' });
+  rf(ML + TW * 0.89, y, TW * 0.11, H3, W, BD); sf(6, 'bold', NAV); tx(String(rdoInfo().prazoDias || '—'), ML + TW * 0.89 + TW * 0.055, y + H3 * 0.72, { align: 'center' });
   y += H3;
   
   const JH = 5;
@@ -11760,7 +11833,7 @@ function _gerarPDFDiario(data) {
   ln(ML + 3, y + 12, ML + sw - 3, y + 12, [120, 120, 120], 0.3);
   sf(6, 'normal', DG); tx(df, ML + sw / 2, y + 14.5, { align: 'center' });
   rf(ML + sw + 4, y, sw, 16, W, BD);
-  sf(6, 'bold', DG); tx('CLIENTE / FISCALIZAÇÃO (SP OBRAS)', ML + sw + 6, y + 5);
+  sf(6, 'bold', DG); tx(rdoTituloCliente(), ML + sw + 6, y + 5);
   ln(ML + sw + 7, y + 12, ML + 2 * sw + 1, y + 12, [120, 120, 120], 0.3);
   sf(6, 'normal', DG); tx(df, ML + sw + 4 + sw / 2, y + 14.5, { align: 'center' });
   y += 16;
@@ -11769,8 +11842,8 @@ function _gerarPDFDiario(data) {
   const fy = PH - 8;
   ln(ML, fy - 1, ML + TW, fy - 1, NAV, 0.4);
   sf(5.5, 'normal', DG);
-  tx('Gestor Engenharia  |  RDO Nº ' + nrRDO + '  |  Data: ' + df, PW / 2, fy + 2, { align: 'center' });
-  tx('Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária', PW / 2, fy + 5.5, { align: 'center' });
+  tx([rdoInfo().contratada, 'RDO Nº ' + nrRDO, 'Data: ' + df].filter(Boolean).join('  |  '), PW / 2, fy + 2, { align: 'center' });
+  tx(rdoInfo().rodape, PW / 2, fy + 5.5, { align: 'center' });
   
   const fname = 'RDO_' + data.replace(/-/g, '_') + '.pdf';
   doc.save(fname);
