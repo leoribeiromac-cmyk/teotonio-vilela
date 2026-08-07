@@ -2165,6 +2165,51 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .eq-parada-horas{gap:6px}
   .eq-duo{gap:10px}
 }
+
+/* ---------- HISTÓRICO no celular ----------
+   As duas listas do Histórico são tabelas de nove colunas. Num aparelho de
+   390 px elas ficavam com 1268 px de largura e o que passava da quarta
+   coluna era CORTADO — sem rolagem, sem nada: quantidade, estaca, equipe,
+   apontador e os botões de editar, apagar, visualizar e gerar PDF
+   simplesmente não existiam para quem usa o app no canteiro.
+
+   No celular cada linha vira um cartão: o que identifica o registro em
+   cima, os campos em pares rótulo/valor, e os botões numa faixa no pé. */
+.so-mob{display:none}
+@media (max-width:768px){
+  /* a regra geral de tabela no celular é rolar de lado (table.t{min-width:520px}
+     e nowrap nas células); o cartão precisa desfazer as duas */
+  table.t.t-cartoes{min-width:0}
+  table.t.t-cartoes thead{display:none}
+  table.t.t-cartoes,.t-cartoes tbody,.t-cartoes tr,.t-cartoes td{display:block;width:auto}
+  .t-cartoes tr{border:1px solid var(--border);border-radius:12px;background:var(--surface);
+    margin:0 12px 10px;padding:10px 12px}
+  .t-cartoes tr:last-child{margin-bottom:14px}
+  table.t.t-cartoes td{border:none;padding:3.5px 0;font-size:12.5px;text-align:right;
+    white-space:normal;overflow-wrap:anywhere;
+    display:flex;gap:12px;align-items:baseline;justify-content:space-between}
+  .t-cartoes td[data-rot]::before{content:attr(data-rot);flex:0 0 auto;text-align:left;
+    font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+  /* o que identifica o registro abre o cartão, sem rótulo */
+  table.t.t-cartoes td.celula-titulo{display:block;text-align:left;font-size:14px;font-weight:700;
+    padding:0 0 7px;margin-bottom:5px;border-bottom:1px solid var(--border)}
+  .t-cartoes .celula-titulo::before{content:none}
+  table.t.t-cartoes td.celula-acoes{justify-content:flex-end;flex-wrap:wrap;gap:8px;
+    padding-top:9px;margin-top:7px;border-top:1px solid var(--border)}
+  .t-cartoes .celula-acoes::before{content:none}
+  .t-cartoes .celula-acoes .btn,.t-cartoes .celula-acoes .gantt-edit-btn{
+    min-height:40px;margin-left:0!important}
+  /* a linha de edição e os avisos ocupam o cartão inteiro */
+  table.t.t-cartoes td.celula-larga{display:block;text-align:left;padding:0}
+  .t-cartoes .celula-larga::before{content:none}
+  .t-cartoes .celula-check{padding-bottom:6px}
+  .so-mob{display:inline}
+
+  .hist-resumo{display:grid!important;grid-template-columns:1fr 1fr;gap:12px 16px!important}
+  .hist-resumo > span:last-child{grid-column:1/-1;margin-left:0!important}
+  .hist-acoes{width:100%}
+  .hist-acoes > .btn,.hist-acoes > select{flex:1 1 45%;justify-content:center;min-height:42px}
+}
 </style>
 </head>
 <body>
@@ -2294,6 +2339,7 @@ const OBRAS_CFG = {
       responsaveis: 'Roberto V. França (2620250486954) / Paulo E. Façanha (2620250483859) / Adriano L. Pedroso (2620251795809)',
       responsaveisCurto: 'Roberto V. França / Paulo E. Façanha / Adriano L. Pedroso',
       fiscalizacao: 'SP OBRAS',
+      jornada: { diurno: ['07:00', '17:00'], noturno: ['19:00', '05:00'] },
       rodape: 'Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária',
     },
     valorGlobal: 22257026.47,
@@ -8685,21 +8731,21 @@ function renderHistoricoServicos() {
 
       return `
         <tr>
-          <td class="t-mono">${id}</td>
-          <td style="font-size:12px">${fmtData(dataVal)}</td>
-          <td><span class="pill ${turno==='Noturno'?'pill-blu':'pill-ylw'}">${turno}</span></td>
-          <td><strong>${getCSVField(r,'Pacote_Nome')||''}</strong></td>
-          <td class="t-num">${fmtNum(num(qtd))} ${getCSVField(r,'Unidade')||''}</td>
-          <td class="t-mono" style="font-size:11px">${localEstaca}</td>
-          <td style="font-size:12px">${equipe}</td>
-          <td style="font-size:12px">${apontador}</td>
-          <td style="text-align:center;white-space:nowrap">
-            ${podeEditar(r) ? `<button class="gantt-edit-btn" id="hedit-toggle-${idx}" onclick="histEditarServico(${idx})" title="Editar este lançamento" aria-label="Editar lançamento">${ic('editar')}</button>` : ''}
-            ${podeExcluir(r) ? `<button class="gantt-edit-btn" onclick="histDeletarServico(${idx})" title="Apagar este lançamento" aria-label="Apagar lançamento" style="color:var(--err,#e53e3e);margin-left:2px">${ic('lixeira')}</button>` : ''}
+          <td class="celula-titulo"><strong>${getCSVField(r,'Pacote_Nome')||'—'}</strong></td>
+          <td class="t-mono" data-rot="ID">${id}</td>
+          <td style="font-size:12px" data-rot="Data">${fmtData(dataVal)}</td>
+          <td data-rot="Turno"><span class="pill ${turno==='Noturno'?'pill-blu':'pill-ylw'}">${turno}</span></td>
+          <td class="t-num" data-rot="Quantidade">${fmtNum(num(qtd))} ${getCSVField(r,'Unidade')||''}</td>
+          <td class="t-mono" style="font-size:11px" data-rot="Estaca">${localEstaca||'—'}</td>
+          <td style="font-size:12px" data-rot="Equipe">${equipe||'—'}</td>
+          <td style="font-size:12px" data-rot="Apontador">${apontador||'—'}</td>
+          <td class="celula-acoes" style="text-align:center;white-space:nowrap">
+            ${podeEditar(r) ? `<button class="gantt-edit-btn" id="hedit-toggle-${idx}" onclick="histEditarServico(${idx})" title="Editar este lançamento" aria-label="Editar lançamento">${ic('editar')} <span class="so-mob">Editar</span></button>` : ''}
+            ${podeExcluir(r) ? `<button class="gantt-edit-btn" onclick="histDeletarServico(${idx})" title="Apagar este lançamento" aria-label="Apagar lançamento" style="color:var(--err,#e53e3e);margin-left:2px">${ic('lixeira')} <span class="so-mob">Apagar</span></button>` : ''}
           </td>
         </tr>
         <tr id="hist-edit-row-${idx}" style="display:none">
-          <td colspan="9" style="padding:0">
+          <td class="celula-larga" colspan="9" style="padding:0">
             <div style="padding:12px 16px;background:var(--bg-2);border-left:3px solid var(--primary)">
               <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
                 <div>
@@ -8782,12 +8828,12 @@ function renderHistoricoServicos() {
         </tr>`;
     }).join('');
 
-    const moreText = visiveis.length > 100 ? `<tr><td colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${visiveis.length}${filtroAtivo?' (filtrados)':''}</td></tr>` : '';
+    const moreText = visiveis.length > 100 ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${visiveis.length}${filtroAtivo?' (filtrados)':''}</td></tr>` : '';
 
     bodyContent = `
-      <table class="t">
+      <table class="t t-cartoes">
         <thead><tr>
-          <th>ID</th><th>Data</th><th>Turno</th><th>Pacote</th>
+          <th>Pacote</th><th>ID</th><th>Data</th><th>Turno</th>
           <th class="t-num" style="text-align:right">Qtd</th>
           <th>Estaca</th><th>Equipe</th><th>Apontador</th><th></th>
         </tr></thead>
@@ -8806,7 +8852,7 @@ function renderHistoricoServicos() {
           <div class="card-title">Serviços lançados</div>
           <div class="card-title-sub">Cada linha = 1 pacote executado · alimenta avanço físico e medição</div>
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <div class="hist-acoes" style="display:flex;gap:6px;flex-wrap:wrap">
           ${rdos.length > 0 ? `<button class="btn btn-outline btn-sm" onclick="exportarHistoricoCSV()">${ic('baixar')} CSV</button>` : ''}
           ${ehAdmin() && rdos.length > 0 ? `<button class="btn btn-sm" style="background:var(--err,#e53e3e);color:#fff;border:none;padding:5px 12px;border-radius:var(--r);cursor:pointer;font-size:12px;font-weight:600" onclick="apagarDuplicatasRDO()">${ic('lixeira')} Apagar duplicatas</button>` : ''}
         </div>
@@ -9532,6 +9578,9 @@ function rdoInfo() {
     responsaveis: r.responsaveis || '',
     responsaveisCurto: r.responsaveisCurto || r.responsaveis || '',
     fiscalizacao: r.fiscalizacao || '',
+    // A jornada saía em branco no RDO. É o mesmo horário todo dia; quem
+    // trabalha fora dele anota na ocorrência.
+    jornada: r.jornada || { diurno: ['07:00', '17:00'], noturno: ['19:00', '05:00'] },
     rodape: r.rodape || [o.local, o.subtitulo].filter(Boolean).join('  |  '),
   };
 }
@@ -9962,19 +10011,19 @@ function renderHistoricoDiarios() {
 
       return `
         <tr${dup ? ' style="background:var(--red-l)"' : ''}>
-          <td style="width:32px;text-align:center"><input type="checkbox" class="rdo-check" data-data="${dStr}" onchange="toggleRDOSelect('${dStr}', this)" aria-label="Selecionar RDO de ${fmtData(dStr)}" style="width:16px;height:16px;cursor:pointer"></td>
-          <td class="t-mono">${rid}</td>
-          <td>${fmtData(getCSVField(r, 'Data'))}${dup ? ` <span class="pill pill-red" title="Há ${contagemPorData[dStr]} RDOs nesta data — resolva qual é o oficial">${ic('alerta')} ${contagemPorData[dStr]}×</span>` : ''}${ehOficial ? `<span class="pill pill-grn" title="RDO oficial desta data">${ic('estrela')} oficial</span>` : ''}</td>
-          <td style="font-size:12px">${getCSVField(r, 'Encarregado')||''}</td>
-          <td style="font-size:12px">${getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || ''}</td>
-          <td style="font-size:11px;color:var(--muted)">${climaResumo}</td>
-          <td class="t-num">${total}</td>
-          <td>${hasNoturno ?'<span class="pill pill-blu">Sim</span>':'<span class="pill pill-ylw">Não</span>'}</td>
-          <td style="white-space:nowrap">
-            <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${rid}')" title="Visualizar (não baixa arquivo)" aria-label="Visualizar RDO de ${fmtData(dStr)}">${ic('olho')}</button>
-            <button class="btn btn-sm btn-outline" onclick="editarRDODiario('${dStr}')" title="Editar este RDO" aria-label="Editar RDO de ${fmtData(dStr)}" style="margin-left:2px">${ic('editar')}</button>
-            ${dup ? `<button class="btn btn-sm" onclick="resolverDuplicata('${dStr}')" title="Resolver duplicata" aria-label="Resolver duplicata de ${fmtData(dStr)}" style="margin-left:2px;background:var(--red);color:#fff;border:none">${ic('balanca')}</button>` : ''}
-            <button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')" title="Gerar PDF (baixa arquivo)" aria-label="Gerar PDF do RDO de ${fmtData(dStr)}" style="margin-left:2px">${ic('pdf')}</button>
+          <td class="celula-check" data-rot="Selecionar para o lote" style="width:32px;text-align:center"><input type="checkbox" class="rdo-check" data-data="${dStr}" onchange="toggleRDOSelect('${dStr}', this)" aria-label="Selecionar RDO de ${fmtData(dStr)}" style="width:16px;height:16px;cursor:pointer"></td>
+          <td class="celula-titulo">${fmtData(getCSVField(r, 'Data'))}${dup ? ` <span class="pill pill-red" title="Há ${contagemPorData[dStr]} RDOs nesta data — resolva qual é o oficial">${ic('alerta')} ${contagemPorData[dStr]}×</span>` : ''}${ehOficial ? `<span class="pill pill-grn" title="RDO oficial desta data">${ic('estrela')} oficial</span>` : ''}</td>
+          <td class="t-mono" data-rot="ID">${rid}</td>
+          <td style="font-size:12px" data-rot="Encarregado">${getCSVField(r, 'Encarregado')||'—'}</td>
+          <td style="font-size:12px" data-rot="Apontador">${getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || '—'}</td>
+          <td style="font-size:11px;color:var(--muted)" data-rot="Clima">${climaResumo||'—'}</td>
+          <td class="t-num" data-rot="Efetivo">${total}</td>
+          <td data-rot="Noturno">${hasNoturno ?'<span class="pill pill-blu">Sim</span>':'<span class="pill pill-ylw">Não</span>'}</td>
+          <td class="celula-acoes" style="white-space:nowrap">
+            <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${rid}')" title="Visualizar (não baixa arquivo)" aria-label="Visualizar RDO de ${fmtData(dStr)}">${ic('olho')} <span class="so-mob">Ver</span></button>
+            <button class="btn btn-sm btn-outline" onclick="editarRDODiario('${dStr}')" title="Editar este RDO" aria-label="Editar RDO de ${fmtData(dStr)}" style="margin-left:2px">${ic('editar')} <span class="so-mob">Editar</span></button>
+            ${dup ? `<button class="btn btn-sm" onclick="resolverDuplicata('${dStr}')" title="Resolver duplicata" aria-label="Resolver duplicata de ${fmtData(dStr)}" style="margin-left:2px;background:var(--red);color:#fff;border:none">${ic('balanca')} <span class="so-mob">Duplicata</span></button>` : ''}
+            <button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')" title="Gerar PDF (baixa arquivo)" aria-label="Gerar PDF do RDO de ${fmtData(dStr)}" style="margin-left:2px">${ic('pdf')} <span class="so-mob">PDF</span></button>
           </td>
         </tr>
       `;
@@ -9990,7 +10039,7 @@ function renderHistoricoDiarios() {
     const chip = (rot, val) => `<div style="display:flex;flex-direction:column;gap:2px;min-width:96px"><span style="font-size:18px;font-weight:700;line-height:1">${val}</span><span style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">${rot}</span></div>`;
     const escopo = HIST_DIARIO_FILTRO.mes ? labelMesDiario(HIST_DIARIO_FILTRO.mes) : 'todos os meses';
     const resumoHtml = `
-      <div style="display:flex;gap:22px;flex-wrap:wrap;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg-2)" aria-label="Resumo dos RDOs de ${escopo}">
+      <div class="hist-resumo" style="display:flex;gap:22px;flex-wrap:wrap;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--bg-2)" aria-label="Resumo dos RDOs de ${escopo}">
         ${chip('RDOs', diarios.length)}
         ${chip('Efetivo total', fmtNum(somaEfetivo, 0))}
         ${chip('Média/dia', mediaEfetivo)}
@@ -9999,7 +10048,7 @@ function renderHistoricoDiarios() {
       </div>`;
 
     bodyContent = resumoHtml + `
-      <table class="t">
+      <table class="t t-cartoes">
         <thead><tr>
           <th style="width:32px;text-align:center"><input type="checkbox" id="cbTodos" onchange="toggleTodosRDOs(this)" title="Selecionar todos" aria-label="Selecionar todos os RDOs" style="width:16px;height:16px;cursor:pointer"></th>
           <th>ID</th><th>Data</th><th>Encarregado</th><th>Apontador</th>
@@ -10022,7 +10071,7 @@ function renderHistoricoDiarios() {
           <div class="card-title">RDOs Diários</div>
           <div class="card-title-sub">${ic('olho')} visualiza sem baixar · ${ic('pdf')} gera o PDF · selecione vários para lote · ${ic('baixar')} exporta Excel</div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="hist-acoes" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
           <select onchange="setHistDiarioFiltro('mes', this.value)" title="Filtrar RDOs por mês" style="white-space:nowrap">
             <option value="">Todos os meses</option>
             ${mesesDiario.map(m => `<option value="${m}" ${HIST_DIARIO_FILTRO.mes===m?'selected':''}>${labelMesDiario(m)}</option>`).join('')}
@@ -11657,8 +11706,8 @@ function _gerarPDFDiario(data) {
   y += H3;
   
   const JH = 5;
-  const dCW = TW * 0.038, jW = TW * 0.25, cW = TW - 7 * dCW - jW;
-  const jcw = jW / 4, ccw = cW / 3;
+  const dCW = TW * 0.038, jW = TW * 0.28, cW = TW - 7 * dCW - jW;
+  const jcw = jW / 2, ccw = cW / 3;
   
   rf(ML, y, 7 * dCW, JH, LB, BD); sf(5, 'bold', NAV); tx('DIA DA SEMANA', ML + 7 * dCW / 2, y + JH * 0.72, { align: 'center' });
   rf(ML + 7 * dCW, y, jW, JH, LB, BD); sf(5, 'bold', NAV); tx('JORNADA', ML + 7 * dCW + jW / 2, y + JH * 0.72, { align: 'center' });
@@ -11670,10 +11719,18 @@ function _gerarPDFDiario(data) {
     sf(6, on ? 'bold' : 'normal', on ? W : [0, 0, 0]);
     tx(dl, ML + (i + 0.5) * dCW, y + JH * 0.72, { align: 'center' });
   });
-  ['Início', '', 'Térm.', ''].forEach((lbl, i) => {
-    rf(ML + 7 * dCW + i * jcw, y, jcw, JH, W, BD);
-    sf(5, 'bold', NAV); tx(lbl, ML + 7 * dCW + (i + 0.5) * jcw, y + 2, { align: 'center' });
-  });
+  /* As duas células da jornada vinham vazias, com os rótulos "Início" e
+     "Térm." e nada embaixo. O horário é o mesmo todo dia e vem do cadastro
+     da obra — quem trabalhou fora dele registra na ocorrência. */
+  [['DIURNO', rdoInfo().jornada.diurno], ['NOTURNO', rdoInfo().jornada.noturno]]
+    .forEach(([turno, faixa], i) => {
+      const jx = ML + 7 * dCW + i * jcw;
+      const horario = (faixa && faixa[0] ? faixa[0] : '—') + ' – ' + (faixa && faixa[1] ? faixa[1] : '—');
+      rf(jx, y, jcw, JH, W, BD);
+      sf(4.5, 'bold', DG); tx(turno, jx + 2, y + JH * 0.68);
+      sf(corpoQueCabe(horario, jcw - 13, 5.5, 4, 'bold'), 'bold', NAV);
+      tx(horario, jx + jcw - 2, y + JH * 0.68, { align: 'right' });
+    });
   /* O apontador registra o clima de manhã, de tarde e de noite, mas o quadro
      mostrava só o da manhã, achatado em Bom/Regular/Chuva — num dia que parou
      por chuva à tarde, o RDO dizia "Bom". Ainda por cima imprimia o ✓ por
