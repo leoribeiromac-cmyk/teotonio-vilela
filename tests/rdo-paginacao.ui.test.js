@@ -163,6 +163,12 @@ const csvPacotes = [
   ok('o quadro de clima traz os três períodos', semClima.length === 0, 'faltou em ' + semClima);
   ok('e o período que choveu aparece como chuva', paginas.every(p => tem(p, 'Chuva')));
 
+  // A jornada saía com os rótulos "Início" e "Térm." e nada embaixo.
+  const semJornada = paginas.map((p, i) =>
+    tem(p, '07:00 – 17:00') && tem(p, '19:00 – 05:00') ? null : i + 1).filter(Boolean);
+  ok('o quadro de jornada traz o horário dos dois turnos', semJornada.length === 0,
+     'faltou em ' + semJornada);
+
   const marcadas = paginas.map((p, i) => tem(p, 'continuação') ? i + 1 : null).filter(Boolean);
   ok('as folhas seguintes vêm marcadas como continuação',
      marcadas.length === T - 1 && !marcadas.includes(1), 'marcadas: ' + marcadas);

@@ -49,7 +49,7 @@ ok('prazo não é literal no gerador', !/tx\('669'|'PRAZO \(dias\)', '669'/.test
 
 // O cadastro da Teotônio continua declarando tudo — senão o RDO dela sai vazio.
 const cadastro = html.slice(0, iHelper);
-['objeto:', 'local:', 'inicio:', 'prazoDias:', 'responsaveis:', 'fiscalizacao:', 'rodape:']
+['objeto:', 'local:', 'inicio:', 'prazoDias:', 'responsaveis:', 'fiscalizacao:', 'jornada:', 'rodape:']
   .forEach(campo => ok('cadastro da obra declara ' + campo, cadastro.includes(campo)));
 
 // O carimbo da foto também não pode fixar o nome de uma obra.
