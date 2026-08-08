@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=25"></script>
-<script src="dados/ruas-de-terra.js?v=25"></script>
+<script src="dados/ranario.js?v=26"></script>
+<script src="dados/ruas-de-terra.js?v=26"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=25"></script>
+<script src="dados/teotonio-muros.js?v=26"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=25"></script>
-<script src="js/nf/adaptador.js?v=25"></script>
-<script src="js/nf/notas.js?v=25"></script>
-<script src="js/equip/equipamentos.js?v=25"></script>
+<script src="js/ui/icones.js?v=26"></script>
+<script src="js/nf/adaptador.js?v=26"></script>
+<script src="js/nf/notas.js?v=26"></script>
+<script src="js/equip/equipamentos.js?v=26"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -2540,6 +2540,10 @@ function trocarObra(id, opcoes) {
   // obra anterior — e o cronograma dela saía calculado sobre dados de outra.
   GANTT_DADOS = null;
   PLAN_DADOS = null;
+  // A janela do contrato (PROJETO_INICIO/PROJETO_FIM) também é da obra: sem
+  // repor aqui, a obra nova era medida contra o prazo da anterior até a
+  // primeira carga terminar.
+  reporJanelaDoContrato();
   // Trocar de obra pela barra lateral devolve ao Painel Executivo, que é o
   // ponto de partida da obra nova. Quem troca pelo filtro de uma tela quer
   // continuar NELA vendo a outra obra — aí a tela é mantida.
@@ -2872,6 +2876,43 @@ async function outboxAdicionar(item) {
   return true;
 }
 
+/* -------------------------------------------------------------------
+   ERRO TERMINAL — o único caso em que reenviar não adianta
+   -------------------------------------------------------------------
+   O flush tratava TUDO que não fosse erro de rede como veredicto final e
+   APAGAVA o lançamento da fila. Só que a maior parte do que o Apps Script
+   devolve de ruim é passageiro e não tem cara de rede: cota diária estourada
+   ("Serviço invocado muitas vezes num dia"), 429/500/502/503 do /exec, a
+   página de erro HTML do Google, e o "Servidor ocupado" que a trava nova
+   devolve. Nesses casos o lançamento do apontador ia para o lixo, com um
+   toast, e não voltava mais.
+
+   Aqui a lógica se inverte: o item SÓ sai da fila quando o servidor disser
+   que ele é inválido — o que reenviar não conserta. Qualquer outra coisa
+   fica na fila e tenta de novo.
+   ------------------------------------------------------------------- */
+const ERROS_TERMINAIS = [
+  'batch inválido', 'payload inválido', 'Ação desconhecida',
+  'SEM_PERMISSAO', 'PERFIL_INVALIDO', 'prefixo não informado',
+  'ID não informado', 'Coluna ID não encontrada',
+];
+function ehErroTerminal(e) {
+  const m = String((e && e.message) || e || '');
+  return ERROS_TERMINAIS.some(t => m.indexOf(t) !== -1);
+}
+
+/* Guarda de volta um item que mudou (contador de tentativas). */
+function outboxAtualizar(item) {
+  const i = _fila.findIndex(it => it.id === item.id);
+  if (i === -1) return;
+  _fila[i] = item;
+  if (_filaModo === 'localStorage') {
+    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(_fila)); } catch (e) {}
+  } else {
+    _filaOp('readwrite', s => s.put(item)).catch(() => {});
+  }
+}
+
 function outboxRemover(id) {
   _fila = _fila.filter(it => it.id !== id);
   if (_filaModo === 'localStorage') {
@@ -2909,9 +2950,27 @@ async function outboxFlush(manual = false) {
           toast('Sessão expirada — saia e faça login de novo. Os RDOs guardados serão reenviados em seguida.', 'error', 0);
           break;
         }
-        // Erro do servidor: reenviar não vai resolver. Remove e avisa.
-        outboxRemover(item.id);
-        toast('Um lançamento guardado (' + descricaoDaFila([item]) + ') não pôde ser enviado: ' + erroLegivel(e.message), 'error', 0);
+        if (ehErroTerminal(e)) {
+          // O servidor recusou o CONTEÚDO. Reenviar não conserta — mas o
+          // apontador precisa saber o que perdeu, com o dado à vista para
+          // poder redigitar.
+          outboxRemover(item.id);
+          console.warn('fila: descartado como inválido', item, e);
+          toast('Um lançamento guardado (' + descricaoDaFila([item]) + ') foi recusado pelo servidor e NÃO foi gravado: ' +
+                erroLegivel(e.message) + '. Lance de novo pela tela.', 'error', 0);
+          continue;
+        }
+        // Qualquer outra coisa é passageira até prova em contrário (cota do
+        // dia, 500/502/503, servidor ocupado). O item FICA na fila.
+        item.tentativas = (item.tentativas || 0) + 1;
+        item.ultimoErro = String((e && e.message) || e || '').slice(0, 200);
+        outboxAtualizar(item);
+        falhouRede = true;   // pausa a rodada; o temporizador de 30 s tenta de novo
+        if (item.tentativas === 1 || item.tentativas % 10 === 0) {
+          toast('O servidor recusou um envio agora (' + erroLegivel(e.message) +
+                '). O lançamento continua guardado no aparelho e vai ser reenviado sozinho.', 'error', 6000);
+        }
+        break;
       }
     }
   } finally {
@@ -3109,11 +3168,33 @@ const FERIADOS_NACIONAIS = new Set([
   '2026-01-01','2026-01-25','2026-02-16','2026-02-17','2026-04-03','2026-04-21','2026-05-01',
   '2026-06-04','2026-07-09','2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25',
   // 2027 (até o horizonte do cronograma)
-  '2027-01-01','2027-01-25','2027-02-08','2027-02-09','2027-03-26','2027-04-21'
+  '2027-01-01','2027-01-25','2027-02-08','2027-02-09','2027-03-26','2027-04-21',
+  '2027-05-01','2027-05-27','2027-07-09','2027-09-07','2027-10-12','2027-11-02',
+  '2027-11-15','2027-11-20','2027-12-25',
+  // 2028 — o contrato já foi aditado uma vez; a tabela não pode acabar antes da obra
+  '2028-01-01','2028-01-25','2028-02-28','2028-02-29','2028-04-14','2028-04-21',
+  '2028-05-01','2028-06-15','2028-07-09','2028-09-07','2028-10-12','2028-11-02',
+  '2028-11-15','2028-11-20','2028-12-25'
 ]);
 
+/* O último ano que a tabela acima cobre. Passar disso não é erro de cálculo —
+   é a tabela que acabou —, mas o silêncio era: todo feriado virava dia útil e
+   a lista de "dias úteis sem RDO" passava a cobrar dias em que ninguém
+   trabalhou, no meio de um pleito de prazo. */
+const FERIADOS_ATE = 2028;
+let _avisouFeriados = false;
 function ehFeriadoNacional(d) {
-  return (d && !isNaN(d)) ? FERIADOS_NACIONAIS.has(getLocalISODate(d)) : false;
+  if (!d || isNaN(d)) return false;
+  if (d.getFullYear() > FERIADOS_ATE && !_avisouFeriados) {
+    _avisouFeriados = true;
+    console.warn('FERIADOS_NACIONAIS vai só até ' + FERIADOS_ATE +
+      '; a partir de ' + (FERIADOS_ATE + 1) + ' os feriados contam como dia útil. Atualize a tabela.');
+    try {
+      toast('A tabela de feriados vai até ' + FERIADOS_ATE + '. Datas depois disso contam feriado como dia útil — ' +
+            'atualize a tabela antes de usar esses números numa medição.', 'error', 9000);
+    } catch (e) {}
+  }
+  return FERIADOS_NACIONAIS.has(getLocalISODate(d));
 }
 
 // Sábado conta como dia útil? (obra que trabalha aos sábados). Padrão: não.
@@ -4860,8 +4941,19 @@ function soDaObraAtiva(linhas) {
   return (linhas || []).filter(l => obraDaLinha(l) === id);
 }
 
+/* Época da carga. Seis gatilhos chamam carregarTudo() — o temporizador de
+   5 min, o visibilitychange, o evento `online`, o pós-gravação, o botão de
+   tentar de novo e a troca de obra — e nada impedia duas em voo ao mesmo
+   tempo. A que terminava por último vencia, mesmo sendo a mais VELHA: o
+   serviço recém-lançado sumia da tela e o apontador o lançava de novo.
+   Cada chamada leva um número; ao voltar, quem não é a mais recente
+   descarta o que trouxe em vez de gravar por cima. */
+let _epocaCarga = 0;
+
 async function carregarTudo(opts = {}) {
   const fundo = opts && opts.fundo === true;
+  const minhaEpoca = ++_epocaCarga;
+  const minhaObra = OBRA.id;
   if (!fundo) setSyncStatus('loading', 'Carregando dados…');
   try {
     // Cadastro: da planilha (Teotônio) ou do arquivo da obra. Os LANÇAMENTOS
@@ -4874,6 +4966,10 @@ async function carregarTudo(opts = {}) {
       fetchCSV(CONFIG.csv.rdoavanco),
       fetchCSV(CONFIG.csv.rdodiario).catch(() => []),
     ]);
+    // Chegou atrasada, ou a obra mudou enquanto os CSVs vinham: joga fora.
+    // Gravar aqui seria sobrescrever dado mais novo com dado mais velho — ou
+    // encher o STATE de uma obra com os lançamentos de outra.
+    if (minhaEpoca !== _epocaCarga || minhaObra !== OBRA.id) return;
     STATE.cronograma = c;
     // Pacotes que o contrato já tem e a planilha ainda não (ver aplicarComplemento).
     const compl = aplicarComplemento(p, k);
@@ -4907,6 +5003,9 @@ async function carregarTudo(opts = {}) {
     }
     render();
   } catch(e) {
+    // Carga velha que falhou não pode apagar o status de uma nova que já
+    // deu certo depois dela.
+    if (minhaEpoca !== _epocaCarga) return;
     // Mantém STATE.loaded como está: se já houve uma carga boa, os dados velhos
     // continuam navegáveis (antes, uma falha de fundo deixava toda navegação em
     // branco até a próxima sincronização bem-sucedida).
@@ -6703,13 +6802,50 @@ window.runAIAnalysis = async function() {
 let PROJETO_INICIO = new Date(2025, 6, 1);  // 01/07/2025
 let PROJETO_FIM    = new Date(2026, 11, 31); // 31/12/2026 (fallback)
 
+/* --------------------------------------------------------------------
+   A JANELA DO CONTRATO É DA OBRA, não do arquivo.
+   --------------------------------------------------------------------
+   PROJETO_INICIO era um `let` de módulo que nunca era reatribuído em lugar
+   nenhum — constante de fato, com a data de UMA obra. Trocar de obra pela
+   barra lateral mantinha a janela da anterior, e o Ranário (início 06/05/2026,
+   7 meses) era medido contra 01/07/2025–31/12/2026. A curva prevista, o
+   "status vs cronograma" e o planejamento reverso saíam todos da obra errada.
+
+   Agora os dois saem do cadastro da obra — `rdo.inicio` + `rdo.prazoDias`, ou
+   `inicioISO` + `prazoMeses`, que é o que as obras de arquivo trazem — e a
+   linha-raiz do Cronograma continua mandando no término quando existir.
+   -------------------------------------------------------------------- */
+function janelaDoContrato() {
+  const o = OBRA || {};
+  const r = o.rdo || {};
+  let ini = null;
+  if (r.inicio) ini = parseISODate(r.inicio);
+  if ((!ini || isNaN(ini)) && o.inicioISO) ini = parseISODate(o.inicioISO);
+  if (!ini || isNaN(ini)) ini = new Date(2025, 6, 1);
+
+  let fim = null;
+  if (r.prazoDias > 0) fim = new Date(ini.getTime() + r.prazoDias * 86400000);
+  else if (o.prazoMeses > 0) { fim = new Date(ini.getTime()); fim.setMonth(fim.getMonth() + o.prazoMeses); }
+  if (!fim || isNaN(fim) || fim <= ini) fim = new Date(2026, 11, 31);
+  return { inicio: ini, fim: fim };
+}
+
+/* Repõe a janela a partir da obra ativa. Chamado ao trocar de obra e a cada
+   carga — antes de `atualizarPrazoDoCronograma`, que refina o término. */
+function reporJanelaDoContrato() {
+  const j = janelaDoContrato();
+  PROJETO_INICIO = j.inicio;
+  PROJETO_FIM = j.fim;
+}
+
 function atualizarPrazoDoCronograma() {
+  reporJanelaDoContrato();
   try {
     const raiz = (STATE.cronograma || []).find(r => String(getCSVField(r, 'Nivel')).trim() === '0');
     if (!raiz) return;
     const fim = parseISODate(getCSVField(raiz, 'Termino'));
     if (fim && !isNaN(fim) && fim > PROJETO_INICIO) PROJETO_FIM = fim;
-  } catch (e) { /* mantém o fallback */ }
+  } catch (e) { /* mantém a janela do cadastro da obra */ }
 }
 
 // Datas planejadas por pacote, vindas da aba Cronograma: linhas com a coluna
@@ -6929,7 +7065,18 @@ function calcCurvaPrevista(pacotesAtivos, totalDiasEstimados) {
       dIni = new Date(PROJETO_INICIO.getTime());
       dFim = new Date(PROJETO_FIM.getTime());
     }
-    if (dFim < PROJETO_INICIO || dIni > PROJETO_FIM) return;
+    /* Pacote fora da janela do projeto NÃO pode ser descartado.
+       O peso dele (contribPct) já entrou no DENOMINADOR lá em cima, calculado
+       sobre TODOS os pacotes — sair daqui com `return` tirava a contribuição
+       do numerador e deixava o peso no divisor. O efeito: a curva prevista
+       nunca chegava a 100%, e o painel comparava o avanço real contra uma
+       meta menor que a obra. Medido num cenário com parte do plano anterior a
+       01/07/2025: a curva fechava em 0,65 em vez de 1,0 — 35 pontos de meta
+       que sumiram.
+       Agora o peso é ancorado na BORDA: o que já deveria estar pronto antes da
+       janela entra no primeiro dia; o que só começa depois dela, no último. */
+    if (dFim < PROJETO_INICIO) { dIni = new Date(PROJETO_INICIO.getTime()); dFim = new Date(PROJETO_INICIO.getTime()); }
+    else if (dIni > PROJETO_FIM) { dIni = new Date(PROJETO_FIM.getTime()); dFim = new Date(PROJETO_FIM.getTime()); }
     if (dIni < PROJETO_INICIO) dIni = new Date(PROJETO_INICIO.getTime());
     if (dFim > PROJETO_FIM)    dFim = new Date(PROJETO_FIM.getTime());
     const dur = Math.max(1, Math.floor((dFim - dIni) / 86400000) + 1);
@@ -9375,7 +9522,10 @@ function renderMedicao(){
     <div class="card-body flush">
       ${lista.length===0?`<div class="empty"><div class="empty-icon">${ic('medicao')}</div><div class="empty-title">Nada consumido neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade (ou mude o mês do filtro) para ver os itens contratuais derivados.</div></div>`:`
       <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">Consumido</th><th>Pacotes</th></tr></thead>
-      <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${x.item}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${x.descricao}</td><td class="t-mono">${x.unidadeItem}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td></tr>`).join('')}</tbody>
+      <!-- Tudo que vem da planilha passa por escHtml: o código, a descrição e a
+           unidade do item são digitados à mão na aba Coeficientes, e um "<" ali
+           quebrava a tabela da medição (ou pior, injetava marcação na tela). -->
+      <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${escHtml(x.descricao)}</td><td class="t-mono">${escHtml(x.unidadeItem)}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${escHtml(x.pacotes.join(' + '))}</td></tr>`).join('')}</tbody>
       </table>`}
     </div>
   </div>`;
@@ -11624,7 +11774,19 @@ async function salvarRDO() {
     btn.disabled = false;
     btn.innerHTML = btnTxtOriginal;
     if (ehErroDeRede(e)) {
-      outboxAdicionar({ kind: 'rdo', params: reqParams, descricao: descricaoFila });
+      /* O retorno IMPORTA. `outboxAdicionar` devolve false quando não
+         consegue guardar (IndexedDB indisponível em aba anônima ou no
+         Safari, cota do aparelho zerada) — e o código seguia em frente
+         limpando o formulário e dizendo "guardado no aparelho". O apontador
+         ia embora do canteiro com o serviço perdido e a tela dizendo que
+         estava tudo certo. */
+      const rdoGuardado = await outboxAdicionar({ kind: 'rdo', params: reqParams, descricao: descricaoFila });
+      if (!rdoGuardado) {
+        // NÃO limpa o formulário: o que está na tela é a única cópia que existe.
+        toast('SEM INTERNET E SEM ESPAÇO PARA GUARDAR NO APARELHO. O lançamento NÃO foi salvo — ' +
+              'não feche esta tela. Tente de novo, ou anote o que está aqui antes de sair.', 'error', 0);
+        return;
+      }
       // As fotos vão para a mesma fila, atrás do lote: quando o RDO subir, a
       // linha já existe e a foto acha o serviço pelo id.
       let fotosNaFila = 0;
@@ -12322,8 +12484,14 @@ async function salvarDiarioV4() {
     btn.disabled = false;
     btn.innerHTML = original;
     if (ehErroDeRede(e)) {
-      outboxAdicionar({ kind: 'diario', params: params, descricao: descricaoFila });
-      toast('Sem internet — turno guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
+      // Mesmo cuidado do Lançar Serviço: só avisa "guardado" se guardou mesmo.
+      const guardou = await outboxAdicionar({ kind: 'diario', params: params, descricao: descricaoFila });
+      if (guardou) {
+        toast('Sem internet — turno guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
+      } else {
+        toast('SEM INTERNET E SEM ESPAÇO PARA GUARDAR NO APARELHO. O turno NÃO foi salvo — ' +
+              'não feche esta tela e tente de novo.', 'error', 0);
+      }
     } else {
       toast('Falha: ' + e.message, 'error', 0);
     }

@@ -63,7 +63,7 @@ process.on('exit', encerrar);
   ok('o index.html do repositório versiona os scripts', !!V_ANTIGA, 'não achei ?v= nas tags');
   if (!V_ANTIGA) { encerrar(); process.exit(1); }
 
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const p = await (await b.newContext()).newPage();
   await p.route('**://script.google.com/**', r => {
     const cb = new URL(r.request().url()).searchParams.get('callback');
