@@ -3016,9 +3016,49 @@ function atualizarIndicadorOutbox() {
 
 function num(s) {
   if (s === null || s === undefined || s === '') return 0;
+  /* Número JS já é número: reparsá-lo como texto pt-BR apaga o ponto e
+     transforma 22.26 em 2226. É a mesma armadilha que o ptNum() resolve na
+     saída; aqui ela é fechada na entrada, para quem esquecer do ptNum(). */
+  if (typeof s === 'number') return isFinite(s) ? s : 0;
   const cleaned = String(s).replace(/\./g, '').replace(',', '.');
   const v = parseFloat(cleaned);
   return isNaN(v) ? parseFloat(s) || 0 : v;
+}
+
+/* ------------------------------------------------------------------
+   numCampo() — o num() do que foi DIGITADO num campo do formulário
+   ------------------------------------------------------------------
+   num() existe para o CSV da planilha, onde o ponto é separador de
+   MILHAR ("1.234,56"). Aplicar essa regra ao que sai de um <input> é
+   destruir o número: o apontador digita 22,26 m³ de concreto e chega
+   2226 na medição — 100× mais, sem um aviso na tela.
+
+   Medido no Chromium (pt-BR e en-US), no campo Quantidade do Lançar
+   Serviço, ANTES desta correção:
+
+       digitou "22,26"  → foi para a medição como 2226   (100×)
+       digitou "22.26"  → foi para a medição como 2226   (100×)
+       digitou "0,5"    → foi para a medição como    5   ( 10×)
+       digitou "7"      → foi para a medição como    7   (ok)
+
+   Só número inteiro sobrevivia. Em campo digitado não existe separador
+   de milhar sozinho — quem digita quantidade não escreve "1.234" para
+   dizer mil duzentos e trinta e quatro. Então: vírgula é decimal;
+   ponto é decimal; e só quando os DOIS aparecem juntos o ponto volta a
+   ser milhar ("1.234,56"). É a mesma regra do num() de
+   js/equip/equipamentos.js:656, que já estava certa.
+
+   Todo valor que nasce num <input> passa por aqui. Todo valor que nasce
+   no CSV continua passando por num(). Os dois não se substituem.
+   ------------------------------------------------------------------ */
+function numCampo(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v == null ? '' : v).trim();
+  if (!s) return 0;
+  if (s.indexOf(',') > -1 && s.indexOf('.') > -1) s = s.replace(/\./g, '').replace(',', '.');
+  else s = s.replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
 }
 
 /* O inverso de num(): número JS vira o texto que o resto do app sabe ler.
@@ -9041,7 +9081,7 @@ function renderCronogramaReverso() {
     const pct      = qtdTotal > 0 ? Math.min(qtdExec / qtdTotal, 1) : 0;
 
     const prodPadrao = produtividadeDe(pid) || '';
-    const prodAtual  = (plan.prod !== undefined && plan.prod !== '') ? num(plan.prod) : num(prodPadrao);
+    const prodAtual  = (plan.prod !== undefined && plan.prod !== '') ? numCampo(plan.prod) : num(prodPadrao);
     const alvoStr    = plan.dataFim || alvoGlobal;   // cascata: alvo próprio → alvo global → prazo da obra
     const alvoData   = parseISODate(alvoStr);
 
@@ -9531,7 +9571,7 @@ function renderHistoricoServicos() {
                 </div>
                 <div>
                   <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Quantidade</div>
-                  <input type="number" id="hedit-qtd-${idx}" value="${esc(qtd)}" min="0" step="any" style="width:90px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                  <input type="text" inputmode="decimal" data-numeric id="hedit-qtd-${idx}" value="${esc(qtd)}" autocomplete="off" style="width:90px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
                 </div>
                 <div>
                   <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Sentido</div>
@@ -9739,7 +9779,9 @@ window.histSalvarEdicao = async function(idx) {
   const turno     = document.getElementById(`hedit-turno-${idx}`)?.value || 'Diurno';
   const pacoteId  = document.getElementById(`hedit-pacote-${idx}`)?.value || '';
   const qtdTexto  = (document.getElementById(`hedit-qtd-${idx}`)?.value ?? '').trim();
-  const qtd       = parseFloat(qtdTexto);
+  // numCampo() e não parseFloat(): "22,26" no parseFloat vira 22 (ele para na
+  // vírgula), e a correção do serviço saía menor do que o apontador digitou.
+  const qtd       = qtdTexto === '' ? NaN : numCampo(qtdTexto);
   const sentido   = document.getElementById(`hedit-sentido-${idx}`)?.value || 'CB';
   const estIni    = (document.getElementById(`hedit-estini-${idx}`)?.value || '').trim();
   const estFim    = (document.getElementById(`hedit-estfim-${idx}`)?.value || '').trim();
@@ -11096,7 +11138,15 @@ function renderServicoRow(s, idx, frentes) {
         </div>
         <div class="field">
           <label>Quantidade ${unidade ? `(${unidade})` : ''}</label>
-          <input type="number" data-svc="${idx}" data-field="quantidade" value="${s.quantidade}" placeholder="0" step="0.01" min="0">
+          <!-- type=text + inputmode=decimal, e NÃO type=number: com type=number
+               o Chromium DESCARTA a vírgula em silêncio ("22,26" vira "2226")
+               e o apontador manda 100× a quantidade para a medição sem ver.
+               Com text o que ele digitou é o que fica, e numCampo() lê vírgula
+               e ponto como decimal. O teclado numérico do celular vem do
+               inputmode. -->
+          <input type="text" inputmode="decimal" data-numeric data-svc="${idx}" data-field="quantidade"
+                 value="${escHtml(String(s.quantidade == null ? '' : s.quantidade))}" placeholder="0"
+                 autocomplete="off">
           ${(() => {
             // Dica de saldo: mostra quanto resta do pacote e avisa se a
             // quantidade digitada passa disso (não bloqueia o envio).
@@ -11105,7 +11155,7 @@ function renderServicoRow(s, idx, frentes) {
             const a = av[s.pacoteId];
             if (!a || a.qtdEstimada <= 0) return '';
             const saldo = Math.max(0, a.qtdEstimada - a.qtdExecutada);
-            const estoura = num(s.quantidade) > saldo + 0.001;
+            const estoura = numCampo(s.quantidade) > saldo + 0.001;
             let dica = `<div style="font-size:11px;margin-top:3px;color:${estoura ? 'var(--red)' : 'var(--muted)'}">${estoura ? 'acima do ' : ''}saldo do pacote: ${fmtNum(saldo)} ${unidade}</div>`;
             /* Etapa passando na frente da anterior. NÃO bloqueia: a etapa
                anterior pode ter sido executada antes do app existir, ou num
@@ -11115,7 +11165,7 @@ function renderServicoRow(s, idx, frentes) {
             const ant = etapaAnteriorDe(s.pacoteId);
             const aAnt = ant ? av[ant] : null;
             if (aAnt) {
-              const depois = a.qtdExecutada + num(s.quantidade);
+              const depois = a.qtdExecutada + numCampo(s.quantidade);
               if (depois > aAnt.qtdExecutada + 0.001) {
                 const nomeAnt = getCSVField(aAnt.pacote, 'Pacote') || ant;
                 dica += `<div style="font-size:11px;margin-top:2px;color:var(--ylw)">passa a etapa anterior — ${escHtml(nomeAnt)} está em ${fmtNum(aAnt.qtdExecutada)} ${unidade}</div>`;
@@ -11263,7 +11313,7 @@ window.copiarServicosDeOntem = function() {
   });
   if (doDia.length === 0) { toast('O último dia (' + fmtData(ultimaData) + ') só teve serviços avulsos.', 'info'); return; }
 
-  const jaTemDados = STATE.draft.servicos.some(s => s.pacoteId || num(s.quantidade) > 0);
+  const jaTemDados = STATE.draft.servicos.some(s => s.pacoteId || numCampo(s.quantidade) > 0);
   if (jaTemDados && !confirm('Substituir os serviços já preenchidos neste rascunho pelos ' + doDia.length + ' serviços de ' + fmtData(ultimaData) + '?')) return;
 
   STATE.draft.servicos = doDia.map(r => {
@@ -11337,7 +11387,7 @@ function validarRDO(d) {
   if (!d.data) erros.push('Data é obrigatória');
   if (!d.apontador.trim()) erros.push('Apontador é obrigatório');
 
-  const servicosValidos = d.servicos.filter(s => s.pacoteId && num(s.quantidade) > 0);
+  const servicosValidos = d.servicos.filter(s => s.pacoteId && numCampo(s.quantidade) > 0);
   const outrosValidos = (d.outrosServicos || []).filter(o => o.descricao && o.descricao.trim());
 
   if (servicosValidos.length === 0 && outrosValidos.length === 0) {
@@ -11346,7 +11396,7 @@ function validarRDO(d) {
   }
   for (let i = 0; i < d.servicos.length; i++) {
     const s = d.servicos[i];
-    if (s.pacoteId && num(s.quantidade) > 0) {
+    if (s.pacoteId && numCampo(s.quantidade) > 0) {
       if (!s.estacaIni || !s.estacaFim) {
         erros.push(`Serviço ${i+1}: estaca início e fim obrigatórias`);
         break;
@@ -11368,7 +11418,7 @@ function destacarCamposRDO(d) {
   if (!d.apontador || !d.apontador.trim()) marcar('[data-draft="apontador"]');
   for (let i = 0; i < d.servicos.length; i++) {
     const s = d.servicos[i];
-    if (s.pacoteId && num(s.quantidade) > 0 && (!s.estacaIni || !s.estacaFim)) {
+    if (s.pacoteId && numCampo(s.quantidade) > 0 && (!s.estacaIni || !s.estacaFim)) {
       if (!s.estacaIni) marcar(`[data-svc="${i}"][data-field="estacaIni"]`);
       if (!s.estacaFim) marcar(`[data-svc="${i}"][data-field="estacaFim"]`);
     }
@@ -11385,7 +11435,7 @@ async function salvarRDO() {
     return;
   }
   
-  const servicosValidos = d.servicos.filter(s => s.pacoteId && num(s.quantidade) > 0);
+  const servicosValidos = d.servicos.filter(s => s.pacoteId && numCampo(s.quantidade) > 0);
   const outrosValidos = (d.outrosServicos || []).filter(o => o.descricao && o.descricao.trim());
 
   const btn = document.getElementById('btnSalvarRDO');
@@ -11399,7 +11449,7 @@ async function salvarRDO() {
   const fotosDoLote = {};   // { '<id do serviço>': [{thumb, full}] }
 
   const batchPacotes = d.servicos
-    .filter(s => s.pacoteId && num(s.quantidade) > 0)
+    .filter(s => s.pacoteId && numCampo(s.quantidade) > 0)
     .map(s => {
       const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === s.pacoteId);
       const obsCompleta = [d.observacaoGeral, s.observacao].filter(x => x && x.trim()).join(' · ');
@@ -11422,7 +11472,7 @@ async function salvarRDO() {
         turno: d.turno || 'Diurno',
         pacote_id: s.pacoteId,
         pacote_nome: p ? getCSVField(p, 'Pacote') : '',
-        quantidade: num(s.quantidade),
+        quantidade: numCampo(s.quantidade),
         unidade: p ? (getCSVField(p, 'Unidade Física')||'') : '',
         local_estaca: localEstaca,
         equipe: s.equipe,
