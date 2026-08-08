@@ -57,7 +57,7 @@ const csvPacotes = 'ID,Frente,Pacote,Unidade Física,Qtd Estimada,Status,Observa
     { cwd: RAIZ, stdio: 'ignore' });
   await new Promise(r => setTimeout(r, 1500));
 
-  const navegador = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const navegador = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const ctx = await navegador.newContext({ acceptDownloads: true });
 
   // a planilha publicada e o Apps Script não entram no teste

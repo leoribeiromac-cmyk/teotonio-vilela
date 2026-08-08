@@ -54,7 +54,7 @@ async function pincar(p, alvo, de, para) {
 }
 
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 
   // Celular em pé: é onde a prancha é lida de verdade.
   const ctx = await b.newContext({

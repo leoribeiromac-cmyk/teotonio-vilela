@@ -89,7 +89,7 @@ const medirEstouro = (p, escopo) => p.evaluate((sel) => {
 }, escopo);
 
 (async () => {
-  const navegador = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const navegador = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 
   console.log('EQUIPAMENTOS NO CELULAR — 390×844');
   const { p, erros } = await abrirTela(navegador, 390, 844);

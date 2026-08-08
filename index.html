@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=25"></script>
-<script src="dados/ruas-de-terra.js?v=25"></script>
+<script src="dados/ranario.js?v=27"></script>
+<script src="dados/ruas-de-terra.js?v=27"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=25"></script>
+<script src="dados/teotonio-muros.js?v=27"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=25"></script>
-<script src="js/nf/adaptador.js?v=25"></script>
-<script src="js/nf/notas.js?v=25"></script>
-<script src="js/equip/equipamentos.js?v=25"></script>
+<script src="js/ui/icones.js?v=27"></script>
+<script src="js/nf/adaptador.js?v=27"></script>
+<script src="js/nf/notas.js?v=27"></script>
+<script src="js/equip/equipamentos.js?v=27"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -2540,6 +2540,10 @@ function trocarObra(id, opcoes) {
   // obra anterior — e o cronograma dela saía calculado sobre dados de outra.
   GANTT_DADOS = null;
   PLAN_DADOS = null;
+  // A janela do contrato (PROJETO_INICIO/PROJETO_FIM) também é da obra: sem
+  // repor aqui, a obra nova era medida contra o prazo da anterior até a
+  // primeira carga terminar.
+  reporJanelaDoContrato();
   // Trocar de obra pela barra lateral devolve ao Painel Executivo, que é o
   // ponto de partida da obra nova. Quem troca pelo filtro de uma tela quer
   // continuar NELA vendo a outra obra — aí a tela é mantida.
@@ -2651,14 +2655,35 @@ async function enviarPost(params) {
     if (t) fd.append('token', t);
   }
   const r = await fetch(CONFIG.appsScript, { method: 'POST', body: fd });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  return r.json();
+  if (!r.ok) throw new Error('Falha de rede: HTTP ' + r.status);
+  const txt = await r.text();
+  try {
+    return JSON.parse(txt);
+  } catch (e) {
+    /* O Apps Script devolve HTML quando está fora do ar, quando a implantação
+       expirou ou quando o Google interpõe uma página de login. Isso NÃO é um
+       lançamento inválido — é o servidor indisponível. Classificado como falha
+       de rede para o lançamento ir para a fila e ser reenviado, em vez de o
+       apontador levar "Falha ao salvar" e perder o que digitou. */
+    throw new Error('Falha de rede: o servidor respondeu uma página em vez de dados (Apps Script indisponível)');
+  }
 }
 
-// Tamanho aproximado que a chamada teria como querystring.
+/* Tamanho REAL que a chamada terá como querystring.
+   A versão anterior somava o comprimento cru de chave e valor e subestimava
+   o resultado em 1,6×: `encodeURIComponent` transforma cada acento em 6
+   caracteres (%C3%A7), cada espaço em 3, e as chaves de JSON viram %22.
+   Medido: uma URL real de 10.080 caracteres era estimada em 6.046 — ou seja,
+   passava folgada pelo teto de 6.000 e ia por GET assim mesmo, para ser
+   recusada pelo Apps Script. Agora a conta é feita sobre a string que
+   realmente vai ser enviada. */
 function tamanhoComoURL(params) {
-  return Object.entries(params)
-    .reduce((n, [k, v]) => n + k.length + String(v == null ? '' : v).length + 2, 0);
+  const base = (CONFIG && CONFIG.appsScript ? CONFIG.appsScript.length : 120) + 1;
+  const qs = Object.entries(params)
+    .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v == null ? '' : v))
+    .join('&');
+  // + margem para o &callback=jsonp_cb_… que o jsonp() acrescenta depois
+  return base + qs.length + 40;
 }
 
 /* Escolhe o transporte pelo tamanho: pequeno vai por JSONP (que já tem
@@ -2872,6 +2897,43 @@ async function outboxAdicionar(item) {
   return true;
 }
 
+/* -------------------------------------------------------------------
+   ERRO TERMINAL — o único caso em que reenviar não adianta
+   -------------------------------------------------------------------
+   O flush tratava TUDO que não fosse erro de rede como veredicto final e
+   APAGAVA o lançamento da fila. Só que a maior parte do que o Apps Script
+   devolve de ruim é passageiro e não tem cara de rede: cota diária estourada
+   ("Serviço invocado muitas vezes num dia"), 429/500/502/503 do /exec, a
+   página de erro HTML do Google, e o "Servidor ocupado" que a trava nova
+   devolve. Nesses casos o lançamento do apontador ia para o lixo, com um
+   toast, e não voltava mais.
+
+   Aqui a lógica se inverte: o item SÓ sai da fila quando o servidor disser
+   que ele é inválido — o que reenviar não conserta. Qualquer outra coisa
+   fica na fila e tenta de novo.
+   ------------------------------------------------------------------- */
+const ERROS_TERMINAIS = [
+  'batch inválido', 'payload inválido', 'Ação desconhecida',
+  'SEM_PERMISSAO', 'PERFIL_INVALIDO', 'prefixo não informado',
+  'ID não informado', 'Coluna ID não encontrada',
+];
+function ehErroTerminal(e) {
+  const m = String((e && e.message) || e || '');
+  return ERROS_TERMINAIS.some(t => m.indexOf(t) !== -1);
+}
+
+/* Guarda de volta um item que mudou (contador de tentativas). */
+function outboxAtualizar(item) {
+  const i = _fila.findIndex(it => it.id === item.id);
+  if (i === -1) return;
+  _fila[i] = item;
+  if (_filaModo === 'localStorage') {
+    try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(_fila)); } catch (e) {}
+  } else {
+    _filaOp('readwrite', s => s.put(item)).catch(() => {});
+  }
+}
+
 function outboxRemover(id) {
   _fila = _fila.filter(it => it.id !== id);
   if (_filaModo === 'localStorage') {
@@ -2909,9 +2971,27 @@ async function outboxFlush(manual = false) {
           toast('Sessão expirada — saia e faça login de novo. Os RDOs guardados serão reenviados em seguida.', 'error', 0);
           break;
         }
-        // Erro do servidor: reenviar não vai resolver. Remove e avisa.
-        outboxRemover(item.id);
-        toast('Um lançamento guardado (' + descricaoDaFila([item]) + ') não pôde ser enviado: ' + erroLegivel(e.message), 'error', 0);
+        if (ehErroTerminal(e)) {
+          // O servidor recusou o CONTEÚDO. Reenviar não conserta — mas o
+          // apontador precisa saber o que perdeu, com o dado à vista para
+          // poder redigitar.
+          outboxRemover(item.id);
+          console.warn('fila: descartado como inválido', item, e);
+          toast('Um lançamento guardado (' + descricaoDaFila([item]) + ') foi recusado pelo servidor e NÃO foi gravado: ' +
+                erroLegivel(e.message) + '. Lance de novo pela tela.', 'error', 0);
+          continue;
+        }
+        // Qualquer outra coisa é passageira até prova em contrário (cota do
+        // dia, 500/502/503, servidor ocupado). O item FICA na fila.
+        item.tentativas = (item.tentativas || 0) + 1;
+        item.ultimoErro = String((e && e.message) || e || '').slice(0, 200);
+        outboxAtualizar(item);
+        falhouRede = true;   // pausa a rodada; o temporizador de 30 s tenta de novo
+        if (item.tentativas === 1 || item.tentativas % 10 === 0) {
+          toast('O servidor recusou um envio agora (' + erroLegivel(e.message) +
+                '). O lançamento continua guardado no aparelho e vai ser reenviado sozinho.', 'error', 6000);
+        }
+        break;
       }
     }
   } finally {
@@ -3016,9 +3096,49 @@ function atualizarIndicadorOutbox() {
 
 function num(s) {
   if (s === null || s === undefined || s === '') return 0;
+  /* Número JS já é número: reparsá-lo como texto pt-BR apaga o ponto e
+     transforma 22.26 em 2226. É a mesma armadilha que o ptNum() resolve na
+     saída; aqui ela é fechada na entrada, para quem esquecer do ptNum(). */
+  if (typeof s === 'number') return isFinite(s) ? s : 0;
   const cleaned = String(s).replace(/\./g, '').replace(',', '.');
   const v = parseFloat(cleaned);
   return isNaN(v) ? parseFloat(s) || 0 : v;
+}
+
+/* ------------------------------------------------------------------
+   numCampo() — o num() do que foi DIGITADO num campo do formulário
+   ------------------------------------------------------------------
+   num() existe para o CSV da planilha, onde o ponto é separador de
+   MILHAR ("1.234,56"). Aplicar essa regra ao que sai de um <input> é
+   destruir o número: o apontador digita 22,26 m³ de concreto e chega
+   2226 na medição — 100× mais, sem um aviso na tela.
+
+   Medido no Chromium (pt-BR e en-US), no campo Quantidade do Lançar
+   Serviço, ANTES desta correção:
+
+       digitou "22,26"  → foi para a medição como 2226   (100×)
+       digitou "22.26"  → foi para a medição como 2226   (100×)
+       digitou "0,5"    → foi para a medição como    5   ( 10×)
+       digitou "7"      → foi para a medição como    7   (ok)
+
+   Só número inteiro sobrevivia. Em campo digitado não existe separador
+   de milhar sozinho — quem digita quantidade não escreve "1.234" para
+   dizer mil duzentos e trinta e quatro. Então: vírgula é decimal;
+   ponto é decimal; e só quando os DOIS aparecem juntos o ponto volta a
+   ser milhar ("1.234,56"). É a mesma regra do num() de
+   js/equip/equipamentos.js:656, que já estava certa.
+
+   Todo valor que nasce num <input> passa por aqui. Todo valor que nasce
+   no CSV continua passando por num(). Os dois não se substituem.
+   ------------------------------------------------------------------ */
+function numCampo(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  let s = String(v == null ? '' : v).trim();
+  if (!s) return 0;
+  if (s.indexOf(',') > -1 && s.indexOf('.') > -1) s = s.replace(/\./g, '').replace(',', '.');
+  else s = s.replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
 }
 
 /* O inverso de num(): número JS vira o texto que o resto do app sabe ler.
@@ -3069,11 +3189,33 @@ const FERIADOS_NACIONAIS = new Set([
   '2026-01-01','2026-01-25','2026-02-16','2026-02-17','2026-04-03','2026-04-21','2026-05-01',
   '2026-06-04','2026-07-09','2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25',
   // 2027 (até o horizonte do cronograma)
-  '2027-01-01','2027-01-25','2027-02-08','2027-02-09','2027-03-26','2027-04-21'
+  '2027-01-01','2027-01-25','2027-02-08','2027-02-09','2027-03-26','2027-04-21',
+  '2027-05-01','2027-05-27','2027-07-09','2027-09-07','2027-10-12','2027-11-02',
+  '2027-11-15','2027-11-20','2027-12-25',
+  // 2028 — o contrato já foi aditado uma vez; a tabela não pode acabar antes da obra
+  '2028-01-01','2028-01-25','2028-02-28','2028-02-29','2028-04-14','2028-04-21',
+  '2028-05-01','2028-06-15','2028-07-09','2028-09-07','2028-10-12','2028-11-02',
+  '2028-11-15','2028-11-20','2028-12-25'
 ]);
 
+/* O último ano que a tabela acima cobre. Passar disso não é erro de cálculo —
+   é a tabela que acabou —, mas o silêncio era: todo feriado virava dia útil e
+   a lista de "dias úteis sem RDO" passava a cobrar dias em que ninguém
+   trabalhou, no meio de um pleito de prazo. */
+const FERIADOS_ATE = 2028;
+let _avisouFeriados = false;
 function ehFeriadoNacional(d) {
-  return (d && !isNaN(d)) ? FERIADOS_NACIONAIS.has(getLocalISODate(d)) : false;
+  if (!d || isNaN(d)) return false;
+  if (d.getFullYear() > FERIADOS_ATE && !_avisouFeriados) {
+    _avisouFeriados = true;
+    console.warn('FERIADOS_NACIONAIS vai só até ' + FERIADOS_ATE +
+      '; a partir de ' + (FERIADOS_ATE + 1) + ' os feriados contam como dia útil. Atualize a tabela.');
+    try {
+      toast('A tabela de feriados vai até ' + FERIADOS_ATE + '. Datas depois disso contam feriado como dia útil — ' +
+            'atualize a tabela antes de usar esses números numa medição.', 'error', 9000);
+    } catch (e) {}
+  }
+  return FERIADOS_NACIONAIS.has(getLocalISODate(d));
 }
 
 // Sábado conta como dia útil? (obra que trabalha aos sábados). Padrão: não.
@@ -3457,6 +3599,95 @@ function baseDoAvanco() {
   return obraPonderaPorProdutividade()
     ? { ponderado: true,  rotulo: 'Avanço Ponderado', nota: 'escopo em dias-equivalentes' }
     : { ponderado: false, rotulo: 'Avanço Físico Médio', nota: 'média simples dos serviços — obra sem produtividade declarada' };
+}
+
+/* --------------------------------------------------------------------
+   PACOTES QUE PESAM ZERO — os que somem do avanço sem dizer nada
+   --------------------------------------------------------------------
+   Quando a obra pondera (basta UM pacote ter produtividade), todo pacote
+   SEM produtividade recebe peso 0 em diasEquivalentes(). Peso zero não é
+   "pesa pouco": é sumir. O pacote, e tudo que já foi lançado nele, não
+   entra no Avanço Ponderado, nem na Curva S, nem na projeção de término.
+
+   A produtividade sai da coluna `Produtividade` da aba Pacotes ou, na
+   falta dela, do mapa fixo PRODUTIVIDADE_PADRAO — que é por ID e tem
+   buracos. Um pacote novo colado na planilha sem essa coluna cai no
+   silêncio: o apontador lança, o número da diretoria não se move, e não há
+   nada na tela explicando.
+
+   Esta função é o que permite a tela DIZER. Não muda conta nenhuma.
+   -------------------------------------------------------------------- */
+function pacotesSemPeso() {
+  if (!obraPonderaPorProdutividade()) return [];
+  return (STATE.pacotes || []).filter(p => {
+    const id = getCSVField(p, 'ID');
+    if (!id) return false;
+    return num(getCSVField(p, 'Qtd Estimada')) > 0 && produtividadeDe(id) <= 0;
+  }).map(p => ({ id: getCSVField(p, 'ID'), nome: getCSVField(p, 'Pacote') || '' }));
+}
+
+/* --------------------------------------------------------------------
+   AVISO DE DADO SUJO — o que o cálculo teve de recusar
+   --------------------------------------------------------------------
+   A planilha é editada à mão por várias pessoas. Antes, tudo que o cálculo
+   não conseguia usar era descartado em silêncio: o apontador via a linha no
+   Histórico e ela não estava no avanço, e ninguém tinha como descobrir por
+   quê. Este aviso é o inverso disso — diz exatamente o que foi recusado e
+   onde consertar. Ele lê o que `calcularAvancoPorPacote` registrou.
+   -------------------------------------------------------------------- */
+function avisoDadoSujo() {
+  const d = DADO_SUJO || {};
+  const desconhecido = d.pacoteDesconhecido || [];
+  const negativa = d.quantidadeNegativa || [];
+  const estimada = d.estimadaInvalida || [];
+  if (!desconhecido.length && !negativa.length && !estimada.length) return '';
+
+  const blocos = [];
+  if (desconhecido.length) blocos.push(
+    `<li><strong>${desconhecido.length} código de pacote não existe na aba Pacotes</strong> —
+     os lançamentos ficam no Histórico mas não entram no avanço nem na medição.
+     <span class="t-mono" style="font-size:11px">${desconhecido.map(escHtml).join(' · ')}</span></li>`);
+  if (negativa.length) blocos.push(
+    `<li><strong>${negativa.length} lançamento com quantidade negativa</strong> — ignorado.
+     Um só chegava a zerar o avanço da frente inteira.
+     <span class="t-mono" style="font-size:11px">${negativa.slice(0, 6).map(x => escHtml(x.pacote + ' ' + x.valor + (x.data ? ' (' + x.data + ')' : ''))).join(' · ')}${negativa.length > 6 ? ' …' : ''}</span></li>`);
+  if (estimada.length) blocos.push(
+    `<li><strong>${estimada.length} pacote com Qtd Estimada negativa</strong> — tratado como não
+     informado. Com o valor negativo, o painel chegava a mostrar 50% onde o correto era 28%.
+     <span class="t-mono" style="font-size:11px">${estimada.map(x => escHtml(x.id + ': ' + x.valor)).join(' · ')}</span></li>`);
+
+  return `<div class="card stagger-item" style="border-left:3px solid var(--red)">
+    <div class="card-body">
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">A planilha tem linhas que o cálculo não conseguiu usar</div>
+      <ul style="font-size:12px;color:var(--muted);line-height:1.55;margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
+        ${blocos.join('')}
+      </ul>
+    </div>
+  </div>`;
+}
+
+/* O aviso pronto para a tela, ou '' quando está tudo pesado. */
+function avisoPacotesSemPeso() {
+  const semPeso = pacotesSemPeso();
+  if (!semPeso.length) return '';
+  const lancados = new Set((STATE.rdoavanco || [])
+    .map(r => getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
+  const comLancamento = semPeso.filter(p => lancados.has(p.id));
+  const lista = semPeso.map(p => p.id + (p.nome ? ' (' + escHtml(p.nome) + ')' : '')).join(' · ');
+  return `<div class="card stagger-item" style="border-left:3px solid var(--red)">
+    <div class="card-body">
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px">
+        ${semPeso.length} pacote(s) fora do Avanço Ponderado${comLancamento.length ? ' — e ' + comLancamento.length + ' já tem lançamento' : ''}
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5">
+        Sem produtividade declarada, o pacote pesa <strong>zero</strong>: ele e tudo que já
+        foi lançado nele ficam de fora do avanço, da Curva S e da projeção de término.
+        Preencha a coluna <strong>Produtividade</strong> da aba <strong>Pacotes</strong>
+        para eles entrarem na conta.<br>
+        <span class="t-mono" style="font-size:11px">${lista}</span>
+      </div>
+    </div>
+  </div>`;
 }
 /* dias-equivalentes do pacote, ou 1 quando a obra não pondera */
 function diasEquivalentes(qtdEstimada, pid) {
@@ -4820,8 +5051,19 @@ function soDaObraAtiva(linhas) {
   return (linhas || []).filter(l => obraDaLinha(l) === id);
 }
 
+/* Época da carga. Seis gatilhos chamam carregarTudo() — o temporizador de
+   5 min, o visibilitychange, o evento `online`, o pós-gravação, o botão de
+   tentar de novo e a troca de obra — e nada impedia duas em voo ao mesmo
+   tempo. A que terminava por último vencia, mesmo sendo a mais VELHA: o
+   serviço recém-lançado sumia da tela e o apontador o lançava de novo.
+   Cada chamada leva um número; ao voltar, quem não é a mais recente
+   descarta o que trouxe em vez de gravar por cima. */
+let _epocaCarga = 0;
+
 async function carregarTudo(opts = {}) {
   const fundo = opts && opts.fundo === true;
+  const minhaEpoca = ++_epocaCarga;
+  const minhaObra = OBRA.id;
   if (!fundo) setSyncStatus('loading', 'Carregando dados…');
   try {
     // Cadastro: da planilha (Teotônio) ou do arquivo da obra. Os LANÇAMENTOS
@@ -4834,6 +5076,10 @@ async function carregarTudo(opts = {}) {
       fetchCSV(CONFIG.csv.rdoavanco),
       fetchCSV(CONFIG.csv.rdodiario).catch(() => []),
     ]);
+    // Chegou atrasada, ou a obra mudou enquanto os CSVs vinham: joga fora.
+    // Gravar aqui seria sobrescrever dado mais novo com dado mais velho — ou
+    // encher o STATE de uma obra com os lançamentos de outra.
+    if (minhaEpoca !== _epocaCarga || minhaObra !== OBRA.id) return;
     STATE.cronograma = c;
     // Pacotes que o contrato já tem e a planilha ainda não (ver aplicarComplemento).
     const compl = aplicarComplemento(p, k);
@@ -4867,6 +5113,9 @@ async function carregarTudo(opts = {}) {
     }
     render();
   } catch(e) {
+    // Carga velha que falhou não pode apagar o status de uma nova que já
+    // deu certo depois dela.
+    if (minhaEpoca !== _epocaCarga) return;
     // Mantém STATE.loaded como está: se já houve uma carga boa, os dados velhos
     // continuam navegáveis (antes, uma falha de fundo deixava toda navegação em
     // branco até a próxima sincronização bem-sucedida).
@@ -4886,25 +5135,64 @@ function setSyncStatus(state, text) {
 // ====================================================================
 // CÁLCULOS DERIVADOS
 // ====================================================================
+/* Linhas da planilha que o cálculo teve de recusar. Zerado a cada cálculo e
+   lido pela tela — antes elas eram descartadas em silêncio, e o apontador via
+   o lançamento no Histórico sem ele aparecer no avanço. Ver avisoDadoSujo(). */
+let DADO_SUJO = { pacoteDesconhecido: [], quantidadeNegativa: [], estimadaInvalida: [] };
+
+/* Índice dos pacotes tolerante a caixa e espaço. "p01", "P01 " e "P01" são o
+   mesmo pacote para quem digita na planilha — e eram três coisas diferentes
+   para o app: 400 de 1.300 unidades saíam do avanço por causa disso. */
+function _chavePacote(v) {
+  return String(v == null ? '' : v).trim().toUpperCase();
+}
+
 function calcularAvancoPorPacote(rdos = STATE.rdoavanco, pacotes = STATE.pacotes) {
   const m = {};
+  const porChave = {};          // CHAVE NORMALIZADA -> id como está na planilha
+  DADO_SUJO = { pacoteDesconhecido: [], quantidadeNegativa: [], estimadaInvalida: [] };
   pacotes.forEach(p => {
     const id = getCSVField(p, 'ID');
     if (!id) return;
+    const est = num(getCSVField(p, 'Qtd Estimada'));
+    /* Qtd Estimada negativa entra com PESO NEGATIVO e sobe o avanço geral:
+       medido, o painel mostrava 50,00% onde o correto era 28,33%. Zero e
+       vazio dão o mesmo tipo de distorção (37,50%). Nos três casos o valor
+       é tratado como "não informado" (0) — que já significa "sem percentual"
+       no resto do app — e a linha é registrada para a tela poder avisar. */
+    if (est < 0) DADO_SUJO.estimadaInvalida.push({ id, valor: getCSVField(p, 'Qtd Estimada') });
     m[id] = {
       pacote: p,
-      qtdEstimada: num(getCSVField(p, 'Qtd Estimada')),
+      qtdEstimada: est > 0 ? est : 0,
       qtdExecutada: 0,
       lancamentos: 0,
       ultimaData: null,
       porEstaca: {},
     };
+    porChave[_chavePacote(id)] = id;
   });
-  
+
   rdos.forEach(r => {
-    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
-    if (!pid || !m[pid]) return;
-    const q = num(getCSVField(r, 'Quantidade'));
+    const pidCru = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    if (!pidCru) return;
+    const pid = m[pidCru] ? pidCru : porChave[_chavePacote(pidCru)];
+    if (!pid || !m[pid]) {
+      // Lançado num pacote que não existe na aba Pacotes. A linha continua
+      // aparecendo no Histórico, então sem este registro o apontador tem
+      // toda a razão de achar que apontou.
+      if (DADO_SUJO.pacoteDesconhecido.indexOf(pidCru) === -1) DADO_SUJO.pacoteDesconhecido.push(pidCru);
+      return;
+    }
+    const qCrua = num(getCSVField(r, 'Quantidade'));
+    /* Quantidade negativa cancelava o pacote vizinho e chegava a zerar o
+       avanço de uma frente inteira que tinha 800 m³ executados. Estorno de
+       medição não se lança como número negativo no apontamento de campo. */
+    if (qCrua < 0) {
+      DADO_SUJO.quantidadeNegativa.push({ pacote: pid, valor: getCSVField(r, 'Quantidade'),
+                                          data: getCSVField(r, 'Data') });
+      return;
+    }
+    const q = qCrua;
     m[pid].qtdExecutada += q;
     m[pid].lancamentos++;
     const d = parseISODate(getCSVField(r, 'Data'));
@@ -6663,13 +6951,50 @@ window.runAIAnalysis = async function() {
 let PROJETO_INICIO = new Date(2025, 6, 1);  // 01/07/2025
 let PROJETO_FIM    = new Date(2026, 11, 31); // 31/12/2026 (fallback)
 
+/* --------------------------------------------------------------------
+   A JANELA DO CONTRATO É DA OBRA, não do arquivo.
+   --------------------------------------------------------------------
+   PROJETO_INICIO era um `let` de módulo que nunca era reatribuído em lugar
+   nenhum — constante de fato, com a data de UMA obra. Trocar de obra pela
+   barra lateral mantinha a janela da anterior, e o Ranário (início 06/05/2026,
+   7 meses) era medido contra 01/07/2025–31/12/2026. A curva prevista, o
+   "status vs cronograma" e o planejamento reverso saíam todos da obra errada.
+
+   Agora os dois saem do cadastro da obra — `rdo.inicio` + `rdo.prazoDias`, ou
+   `inicioISO` + `prazoMeses`, que é o que as obras de arquivo trazem — e a
+   linha-raiz do Cronograma continua mandando no término quando existir.
+   -------------------------------------------------------------------- */
+function janelaDoContrato() {
+  const o = OBRA || {};
+  const r = o.rdo || {};
+  let ini = null;
+  if (r.inicio) ini = parseISODate(r.inicio);
+  if ((!ini || isNaN(ini)) && o.inicioISO) ini = parseISODate(o.inicioISO);
+  if (!ini || isNaN(ini)) ini = new Date(2025, 6, 1);
+
+  let fim = null;
+  if (r.prazoDias > 0) fim = new Date(ini.getTime() + r.prazoDias * 86400000);
+  else if (o.prazoMeses > 0) { fim = new Date(ini.getTime()); fim.setMonth(fim.getMonth() + o.prazoMeses); }
+  if (!fim || isNaN(fim) || fim <= ini) fim = new Date(2026, 11, 31);
+  return { inicio: ini, fim: fim };
+}
+
+/* Repõe a janela a partir da obra ativa. Chamado ao trocar de obra e a cada
+   carga — antes de `atualizarPrazoDoCronograma`, que refina o término. */
+function reporJanelaDoContrato() {
+  const j = janelaDoContrato();
+  PROJETO_INICIO = j.inicio;
+  PROJETO_FIM = j.fim;
+}
+
 function atualizarPrazoDoCronograma() {
+  reporJanelaDoContrato();
   try {
     const raiz = (STATE.cronograma || []).find(r => String(getCSVField(r, 'Nivel')).trim() === '0');
     if (!raiz) return;
     const fim = parseISODate(getCSVField(raiz, 'Termino'));
     if (fim && !isNaN(fim) && fim > PROJETO_INICIO) PROJETO_FIM = fim;
-  } catch (e) { /* mantém o fallback */ }
+  } catch (e) { /* mantém a janela do cadastro da obra */ }
 }
 
 // Datas planejadas por pacote, vindas da aba Cronograma: linhas com a coluna
@@ -6833,7 +7158,7 @@ function gerarNarrativaSemana(metrics, fa, totalPac, iniciados) {
   if (metrics.delta7d > 0.0001) {
     const dPct = (metrics.delta7d * 100).toFixed(2).replace('.', ',');
     let frase = `Nesta semana a obra avançou <strong class="pos">+${dPct} p.p.</strong>`;
-    if (fa.destaques[0]) frase += `, com <strong>${fa.destaques[0].frente}</strong> liderando o ritmo`;
+    if (fa.destaques[0]) frase += `, com <strong>${escHtml(fa.destaques[0].frente)}</strong> liderando o ritmo`;
     parts.push(frase + '.');
   } else if (metrics.delta7d <= 0.0001 && metrics.rdos7d > 0) {
     parts.push(`<strong>${metrics.rdos7d} RDOs</strong> registrados nos últimos 7 dias, com avanço marginal.`);
@@ -6842,8 +7167,8 @@ function gerarNarrativaSemana(metrics, fa, totalPac, iniciados) {
   }
   if (fa.atencao.length > 0) {
     const a = fa.atencao[0];
-    if (a.dias === null) parts.push(`<span class="nudge">Atenção:</span> <strong>${a.frente}</strong> ainda sem lançamentos.`);
-    else parts.push(`<span class="nudge">Atenção:</span> <strong>${a.frente}</strong> sem RDO há <strong>${a.dias} dias</strong>.`);
+    if (a.dias === null) parts.push(`<span class="nudge">Atenção:</span> <strong>${escHtml(a.frente)}</strong> ainda sem lançamentos.`);
+    else parts.push(`<span class="nudge">Atenção:</span> <strong>${escHtml(a.frente)}</strong> sem RDO há <strong>${a.dias} dias</strong>.`);
   }
   if (metrics.dataPrevista && metrics.velocity > 0) {
     const fmtDP = fmtData(metrics.dataPrevista);
@@ -6889,7 +7214,18 @@ function calcCurvaPrevista(pacotesAtivos, totalDiasEstimados) {
       dIni = new Date(PROJETO_INICIO.getTime());
       dFim = new Date(PROJETO_FIM.getTime());
     }
-    if (dFim < PROJETO_INICIO || dIni > PROJETO_FIM) return;
+    /* Pacote fora da janela do projeto NÃO pode ser descartado.
+       O peso dele (contribPct) já entrou no DENOMINADOR lá em cima, calculado
+       sobre TODOS os pacotes — sair daqui com `return` tirava a contribuição
+       do numerador e deixava o peso no divisor. O efeito: a curva prevista
+       nunca chegava a 100%, e o painel comparava o avanço real contra uma
+       meta menor que a obra. Medido num cenário com parte do plano anterior a
+       01/07/2025: a curva fechava em 0,65 em vez de 1,0 — 35 pontos de meta
+       que sumiram.
+       Agora o peso é ancorado na BORDA: o que já deveria estar pronto antes da
+       janela entra no primeiro dia; o que só começa depois dela, no último. */
+    if (dFim < PROJETO_INICIO) { dIni = new Date(PROJETO_INICIO.getTime()); dFim = new Date(PROJETO_INICIO.getTime()); }
+    else if (dIni > PROJETO_FIM) { dIni = new Date(PROJETO_FIM.getTime()); dFim = new Date(PROJETO_FIM.getTime()); }
     if (dIni < PROJETO_INICIO) dIni = new Date(PROJETO_INICIO.getTime());
     if (dFim > PROJETO_FIM)    dFim = new Date(PROJETO_FIM.getTime());
     const dur = Math.max(1, Math.floor((dFim - dIni) / 86400000) + 1);
@@ -7350,7 +7686,7 @@ function renderExecutivo() {
       </select>
       <select onchange="atualizarFiltro('frente', this.value)">
         <option value="">Todas as frentes</option>
-        ${todasFrentes.map(f => `<option value="${f}" ${STATE.filtros.frente === f ? 'selected' : ''}>Frente: ${f}</option>`).join('')}
+        ${todasFrentes.map(f => `<option value="${escHtml(f)}" ${STATE.filtros.frente === f ? 'selected' : ''}>Frente: ${escHtml(f)}</option>`).join('')}
       </select>
       ${(STATE.filtros.mes || STATE.filtros.frente) ? 
         `<div class="filter-clear" onclick="limparFiltros()">Limpar Filtros ${ic('fechar')}</div>` : ''}
@@ -7358,6 +7694,12 @@ function renderExecutivo() {
     </div>
 
     ${renderCentralCampo()}
+
+    <!-- Pacote sem produtividade pesa ZERO e some do avanço. Enquanto isso não
+         aparecia na tela, o apontador lançava e o número da diretoria não se
+         movia, sem ninguém saber por quê. -->
+    ${avisoPacotesSemPeso()}
+    ${avisoDadoSujo()}
 
     <!-- ============ HERO EXECUTIVO ============ -->
     <div class="exec-hero stagger-item" style="animation-delay:.04s">
@@ -7489,7 +7831,7 @@ function renderExecutivo() {
               <div class="exec-list-item">
                 <div class="exec-list-rank">${i+1}</div>
                 <div class="exec-list-body">
-                  <div class="exec-list-name">${d.frente}</div>
+                  <div class="exec-list-name">${escHtml(d.frente)}</div>
                   <div class="exec-list-meta">Última atividade: ${fmtData(d.ultData)}</div>
                 </div>
                 <div class="exec-list-val up">+${(d.valor*100).toFixed(2).replace('.', ',')} p.p.</div>
@@ -7502,7 +7844,7 @@ function renderExecutivo() {
               <div class="exec-list-item">
                 <div class="exec-list-rank">${i+1}</div>
                 <div class="exec-list-body">
-                  <div class="exec-list-name">${a.frente}</div>
+                  <div class="exec-list-name">${escHtml(a.frente)}</div>
                   <div class="exec-list-meta">${a.dias === null ? 'Nunca recebeu RDO' : 'Última: ' + fmtData(a.ultData)}${a.pacotes ? ' · ' + a.pacotes + ' pacote' + (a.pacotes>1?'s':'') : ''}</div>
                 </div>
                 <div class="exec-list-val warn">${a.dias === null ? '— d' : a.dias + ' d'}</div>
@@ -7524,7 +7866,7 @@ function renderExecutivo() {
             <div class="tech-card-image" style="--f-cor:${corDaFrente(f)};--f-halo:${corDaFrente(f, 0.22)}">
                <span class="tech-card-marca">${ic(icFrente(f), 84)}</span>
                <div class="tech-card-title-overlay">
-                  <div class="tech-card-title">${f}</div>
+                  <div class="tech-card-title">${escHtml(f)}</div>
                </div>
             </div>
             <div class="tech-card-content">
@@ -7561,8 +7903,8 @@ function renderExecutivo() {
             <tbody>
               ${ativosOrdenados.map(a => `
                 <tr>
-                  <td><strong>${getCSVField(a.pacote, 'Pacote')}</strong></td>
-                  <td><span class="f-tag f-${frenteSlug(getCSVField(a.pacote, 'Frente'))}">${getCSVField(a.pacote, 'Frente')||''}</span></td>
+                  <td><strong>${escHtml(getCSVField(a.pacote, 'Pacote'))}</strong></td>
+                  <td><span class="f-tag f-${frenteSlug(getCSVField(a.pacote, 'Frente'))}">${escHtml(getCSVField(a.pacote, 'Frente')||'')}</span></td>
                   <td class="t-num">${fmtNum(a.qtdExecutada)} <span style="color:var(--muted);font-size:11px">/ ${fmtNum(a.qtdEstimada,0)} ${getCSVField(a.pacote, 'Unidade Física')||''}</span></td>
                   <td>
                     <div style="display:flex;align-items:center;gap:8px">
@@ -8688,11 +9030,11 @@ function renderAvancoFisico() {
           </thead>
           <tbody>
             ${Object.entries(porFrente).map(([f, lista]) => `
-              <tr class="summary"><td colspan="7">${f} — ${lista.length} pacote${lista.length>1?'s':''}</td></tr>
+              <tr class="summary"><td colspan="7">${escHtml(f)} — ${lista.length} pacote${lista.length>1?'s':''}</td></tr>
               ${lista.map(a => `
                 <tr>
-                  <td><strong>${getCSVField(a.pacote, 'Pacote')||''}</strong></td>
-                  <td><span class="t-mono">${getCSVField(a.pacote, 'Unidade Física')||''}</span></td>
+                  <td><strong>${escHtml(getCSVField(a.pacote, 'Pacote')||'')}</strong></td>
+                  <td><span class="t-mono">${escHtml(getCSVField(a.pacote, 'Unidade Física')||'')}</span></td>
                   <td class="t-num">${fmtNum(a.qtdExecutada)}</td>
                   <td class="t-num" style="color:var(--muted)">${fmtNum(a.qtdEstimada, 0)}</td>
                   <td>
@@ -8744,11 +9086,11 @@ function renderHeatmap(av) {
         <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${label}</div>
         <div class="heatmap" style="grid-template-columns:${colTemplate}">
           <div class="hm-row-label" style="visibility:hidden">.</div>
-          ${lista.map(e => `<div class="hm-col-label">${e.id}</div>`).join('')}
+          ${lista.map(e => `<div class="hm-col-label">${escHtml(e.id)}</div>`).join('')}
           ${pacotesAtivos.map(a => {
             const max = maxPorPac[getCSVField(a.pacote, 'ID')] || 1;
             return `
-              <div class="hm-row-label">${getCSVField(a.pacote, 'Pacote')}</div>
+              <div class="hm-row-label">${escHtml(getCSVField(a.pacote, 'Pacote'))}</div>
               ${lista.map(e => {
                 const v = a.porEstaca[e.id] || 0;
                 const intensity = max > 0 ? Math.min(v / max, 1) : 0;
@@ -8756,7 +9098,7 @@ function renderHeatmap(av) {
                   `background:oklch(${0.95 - intensity * 0.45} 0.18 38)` :
                   `background:var(--bg)`;
                 const color = intensity > 0.5 ? '#fff' : 'var(--muted)';
-                const title = `${e.id} · ${getCSVField(a.pacote, 'Pacote')}: ${fmtNum(v, 1)} ${getCSVField(a.pacote, 'Unidade Física')||''}`;
+                const title = `${e.id} · ${escHtml(getCSVField(a.pacote, 'Pacote'))}: ${fmtNum(v, 1)} ${escHtml(getCSVField(a.pacote, 'Unidade Física')||'')}`;
                 return `<div class="hm-cell" style="${bg};color:${color}" title="${title}">${v > 0 ? fmtNum(v, 0) : ''}</div>`;
               }).join('')}
             `;
@@ -9041,7 +9383,7 @@ function renderCronogramaReverso() {
     const pct      = qtdTotal > 0 ? Math.min(qtdExec / qtdTotal, 1) : 0;
 
     const prodPadrao = produtividadeDe(pid) || '';
-    const prodAtual  = (plan.prod !== undefined && plan.prod !== '') ? num(plan.prod) : num(prodPadrao);
+    const prodAtual  = (plan.prod !== undefined && plan.prod !== '') ? numCampo(plan.prod) : num(prodPadrao);
     const alvoStr    = plan.dataFim || alvoGlobal;   // cascata: alvo próprio → alvo global → prazo da obra
     const alvoData   = parseISODate(alvoStr);
 
@@ -9150,7 +9492,7 @@ function renderCronogramaReverso() {
   // ─── Tabela ──────────────────────────────────────────────────────────────
   let body = '';
   Object.entries(porFrente).forEach(([frente, arr]) => {
-    body += `<tr class="summary"><td colspan="7">${frente}</td></tr>`;
+    body += `<tr class="summary"><td colspan="7">${escHtml(frente)}</td></tr>`;
 
     arr.forEach(l => {
       const { pid, unid, qtdTotal, qtdExec, saldo, pct, prodPadrao, plan, concluido } = l;
@@ -9159,16 +9501,16 @@ function renderCronogramaReverso() {
       // Coluna 1 — pacote + status + progresso
       let row = `<tr><td>
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:center">
-          <strong>${getCSVField(l.p, 'Pacote')}</strong>${statusPill(l)}
+          <strong>${escHtml(getCSVField(l.p, 'Pacote'))}</strong>${statusPill(l)}
         </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:2px">Exec.: ${fmtNum(qtdExec)} / ${fmtNum(qtdTotal)} ${unid} · ${fmtPct(pct)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Exec.: ${fmtNum(qtdExec)} / ${fmtNum(qtdTotal)} ${escHtml(unid)} · ${fmtPct(pct)}</div>
         <div style="height:4px;background:var(--border);border-radius:2px;margin-top:4px;max-width:170px;overflow:hidden">
           <div style="height:100%;width:${(pct*100).toFixed(0)}%;background:${barCor};border-radius:2px"></div>
         </div>
       </td>`;
 
       // Coluna 2 — saldo
-      row += `<td class="t-num" style="text-align:right;font-weight:600;color:${saldo>0?'var(--text)':'var(--grn)'}">${fmtNum(saldo)} ${unid}</td>`;
+      row += `<td class="t-num" style="text-align:right;font-weight:600;color:${saldo>0?'var(--text)':'var(--grn)'}">${fmtNum(saldo)} ${escHtml(unid)}</td>`;
 
       if (concluido) {
         row += '<td colspan="5" style="color:var(--grn);font-weight:600">100% concluído — nada a planejar</td></tr>';
@@ -9187,7 +9529,7 @@ function renderCronogramaReverso() {
         <input type="number" min="0" step="any" placeholder="${phProd}" value="${valProd}"
                style="width:72px;padding:4px 8px;font-size:12px;border:1px solid var(--border);border-radius:4px"
                onkeyup="if(event.key==='Enter') atualizarPlan('${pid}','prod',this.value)" onblur="atualizarPlan('${pid}','prod',this.value)">
-        <span style="font-size:11px;color:var(--muted)">${unid}/dia</span></div></td>`;
+        <span style="font-size:11px;color:var(--muted)">${escHtml(unid)}/dia</span></div></td>`;
 
       // Coluna 5 — duração em dias úteis
       row += `<td class="t-num" style="text-align:center">${l.duracao > 0 ? Math.ceil(l.duracao) + ' du' : '—'}</td>`;
@@ -9214,7 +9556,7 @@ function renderCronogramaReverso() {
         const ratio = l.prodAtual > 0 ? l.ritmoNec / l.prodAtual : Infinity;
         const via = ratio <= 1.0 ? ['pill-grn','viável'] : ratio <= 1.3 ? ['pill-ylw','apertado'] : ['pill-red','inviável'];
         row += `<td style="font-size:13px">
-          <div style="font-weight:600">${fmtNum(l.ritmoNec)} ${unid}/dia</div>
+          <div style="font-weight:600">${fmtNum(l.ritmoNec)} ${escHtml(unid)}/dia</div>
           <div style="font-size:10px;color:var(--muted)">${l.diasAteAlvo} dias úteis até o alvo · ${pill(via[0], via[1])}</div></td>`;
       } else {
         row += '<td style="color:var(--muted)">—</td>';
@@ -9277,6 +9619,64 @@ function consumoMedicao() {
   return calcularConsumoItens(av);
 }
 
+/* --------------------------------------------------------------------
+   LINHAS QUE PARECEM DUPLICADAS
+   --------------------------------------------------------------------
+   A prévia da tela soma TODAS as linhas do CSV. O endpoint
+   `producaoPorPacote` do backend (Code.gs:1285), oferecido no README para
+   automações externas, deduplica por conteúdo com a chave
+   data|turno|pacote_id|quantidade|apontador|local_estaca. Ou seja: os dois
+   caminhos oficiais dão números DIFERENTES para a mesma medição, e nenhum
+   diz que está discordando do outro.
+
+   Não dá para simplesmente copiar o dedup para cá: duas concretagens de
+   50 m³ na mesma estaca, no mesmo turno e pelo mesmo apontador são
+   indistinguíveis de uma duplicata — deduplicar apagaria serviço executado.
+   Qual das duas contas vale é decisão de quem fecha a medição, não do
+   código.
+
+   Então a tela NÃO muda o número: ela mostra quantas linhas o outro caminho
+   descartaria, para a divergência parar de ser invisível.
+   -------------------------------------------------------------------- */
+function linhasDuplicadasNaMedicao() {
+  const rdos = rdosDoMes(MEDICAO_MES);
+  const vistas = new Set();
+  const dup = [];
+  rdos.forEach(r => {
+    const chave = [
+      String(getCSVField(r, 'Data') || '').trim(),
+      String(getCSVField(r, 'Turno') || '').trim().toLowerCase(),
+      String(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id') || '').trim().toLowerCase(),
+      String(getCSVField(r, 'Quantidade') || '').trim(),
+      String(getCSVField(r, 'Apontador') || '').trim().toLowerCase(),
+      String(getCSVField(r, 'Local_Estaca') || '').trim().toLowerCase(),
+    ].join('|');
+    if (vistas.has(chave)) dup.push(r); else vistas.add(chave);
+  });
+  return dup;
+}
+
+function avisoDuplicadasMedicao() {
+  const dup = linhasDuplicadasNaMedicao();
+  if (!dup.length) return '';
+  const total = rdosDoMes(MEDICAO_MES).length;
+  return `<div class="card stagger-item" style="border-left:3px solid var(--red)">
+    <div class="card-body">
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px">
+        ${dup.length} de ${total} linhas do período parecem repetidas
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5">
+        Mesma data, turno, pacote, quantidade, apontador e estaca. <strong>A prévia
+        acima soma todas elas.</strong> Já o endpoint <span class="t-mono">producaoPorPacote</span>
+        do backend descarta as repetidas — os dois caminhos dão números diferentes
+        para esta mesma medição.<br>
+        Duas execuções iguais no mesmo turno e estaca existem de verdade, então o app
+        não decide sozinho: confira no Histórico antes de fechar o mês.
+      </div>
+    </div>
+  </div>`;
+}
+
 window.exportarMedicaoCSV = function() {
   const consumo = consumoMedicao();
   const lista = Object.values(consumo).filter(x => x.consumido > 0)
@@ -9320,7 +9720,7 @@ function renderMedicao(){
     return l.charAt(0).toUpperCase() + l.slice(1);
   };
 
-  return`<div class="card stagger-item">
+  return avisoDuplicadasMedicao() + `<div class="card stagger-item">
     <div class="card-header">
       <div><div class="card-title">Prévia de medição — consumo por item contratual</div><div class="card-title-sub">RDOs × matriz de coeficientes · filtre o mês da medição e exporte o CSV para conferir contra a Planilha Geral</div></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -9335,7 +9735,10 @@ function renderMedicao(){
     <div class="card-body flush">
       ${lista.length===0?`<div class="empty"><div class="empty-icon">${ic('medicao')}</div><div class="empty-title">Nada consumido neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade (ou mude o mês do filtro) para ver os itens contratuais derivados.</div></div>`:`
       <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">Consumido</th><th>Pacotes</th></tr></thead>
-      <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${x.item}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${x.descricao}</td><td class="t-mono">${x.unidadeItem}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${x.pacotes.join(' + ')}</td></tr>`).join('')}</tbody>
+      <!-- Tudo que vem da planilha passa por escHtml: o código, a descrição e a
+           unidade do item são digitados à mão na aba Coeficientes, e um "<" ali
+           quebrava a tabela da medição (ou pior, injetava marcação na tela). -->
+      <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${escHtml(x.descricao)}</td><td class="t-mono">${escHtml(x.unidadeItem)}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${escHtml(x.pacotes.join(' + '))}</td></tr>`).join('')}</tbody>
       </table>`}
     </div>
   </div>`;
@@ -9440,11 +9843,11 @@ function renderHistoricoServicos() {
       </select>
       <select onchange="setHistFiltro('frente', this.value)">
         <option value="">Todas as frentes</option>
-        ${frentes.map(f => `<option value="${f}" ${HIST_FILTRO.frente===f?'selected':''}>${f}</option>`).join('')}
+        ${frentes.map(f => `<option value="${escHtml(f)}" ${HIST_FILTRO.frente===f?'selected':''}>${escHtml(f)}</option>`).join('')}
       </select>
       <select onchange="setHistFiltro('apontador', this.value)">
         <option value="">Todos os apontadores</option>
-        ${apontadores.map(a => `<option value="${a}" ${HIST_FILTRO.apontador===a?'selected':''}>${a}</option>`).join('')}
+        ${apontadores.map(a => `<option value="${escHtml(a)}" ${HIST_FILTRO.apontador===a?'selected':''}>${escHtml(a)}</option>`).join('')}
       </select>
       ${filtroAtivo ? `<div class="filter-clear" onclick="limparHistFiltro()">Limpar ${ic('fechar')}</div><span style="font-size:11px;color:var(--muted)">${visiveis.length} de ${rdos.length}</span>` : ''}
     </div>`;
@@ -9495,14 +9898,14 @@ function renderHistoricoServicos() {
 
       return `
         <tr>
-          <td class="celula-titulo"><strong>${getCSVField(r,'Pacote_Nome')||'—'}</strong></td>
+          <td class="celula-titulo"><strong>${escHtml(getCSVField(r,'Pacote_Nome')||'—')}</strong></td>
           <td class="t-mono" data-rot="ID">${id}</td>
           <td style="font-size:12px" data-rot="Data">${fmtData(dataVal)}</td>
           <td data-rot="Turno"><span class="pill ${turno==='Noturno'?'pill-blu':'pill-ylw'}">${turno}</span></td>
-          <td class="t-num" data-rot="Quantidade">${fmtNum(num(qtd))} ${getCSVField(r,'Unidade')||''}</td>
-          <td class="t-mono" style="font-size:11px" data-rot="Estaca">${localEstaca||'—'}</td>
-          <td style="font-size:12px" data-rot="Equipe">${equipe||'—'}</td>
-          <td style="font-size:12px" data-rot="Apontador">${apontador||'—'}</td>
+          <td class="t-num" data-rot="Quantidade">${fmtNum(num(qtd))} ${escHtml(getCSVField(r,'Unidade')||'')}</td>
+          <td class="t-mono" style="font-size:11px" data-rot="Estaca">${escHtml(localEstaca||'—')}</td>
+          <td style="font-size:12px" data-rot="Equipe">${escHtml(equipe||'—')}</td>
+          <td style="font-size:12px" data-rot="Apontador">${escHtml(apontador||'—')}</td>
           <td class="celula-acoes" style="text-align:center;white-space:nowrap">
             ${podeEditar(r) ? `<button class="gantt-edit-btn" id="hedit-toggle-${idx}" onclick="histEditarServico(${idx})" title="Editar este lançamento" aria-label="Editar lançamento">${ic('editar')} <span class="so-mob">Editar</span></button>` : ''}
             ${podeExcluir(r) ? `<button class="gantt-edit-btn" onclick="histDeletarServico(${idx})" title="Apagar este lançamento" aria-label="Apagar lançamento" style="color:var(--err,#e53e3e);margin-left:2px">${ic('lixeira')} <span class="so-mob">Apagar</span></button>` : ''}
@@ -9531,7 +9934,7 @@ function renderHistoricoServicos() {
                 </div>
                 <div>
                   <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Quantidade</div>
-                  <input type="number" id="hedit-qtd-${idx}" value="${esc(qtd)}" min="0" step="any" style="width:90px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                  <input type="text" inputmode="decimal" data-numeric id="hedit-qtd-${idx}" value="${esc(qtd)}" autocomplete="off" style="width:90px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
                 </div>
                 <div>
                   <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Sentido</div>
@@ -9739,7 +10142,9 @@ window.histSalvarEdicao = async function(idx) {
   const turno     = document.getElementById(`hedit-turno-${idx}`)?.value || 'Diurno';
   const pacoteId  = document.getElementById(`hedit-pacote-${idx}`)?.value || '';
   const qtdTexto  = (document.getElementById(`hedit-qtd-${idx}`)?.value ?? '').trim();
-  const qtd       = parseFloat(qtdTexto);
+  // numCampo() e não parseFloat(): "22,26" no parseFloat vira 22 (ele para na
+  // vírgula), e a correção do serviço saía menor do que o apontador digitou.
+  const qtd       = qtdTexto === '' ? NaN : numCampo(qtdTexto);
   const sentido   = document.getElementById(`hedit-sentido-${idx}`)?.value || 'CB';
   const estIni    = (document.getElementById(`hedit-estini-${idx}`)?.value || '').trim();
   const estFim    = (document.getElementById(`hedit-estfim-${idx}`)?.value || '').trim();
@@ -10381,6 +10786,7 @@ function dadosRDOExport(fromSheet, data) {
   return {
     data,
     sheetId: getCSVField(fromSheet, 'ID'),
+    numeroRdo: getCSVField(fromSheet, 'numero_rdo') || getCSVField(fromSheet, 'Numero_RDO') || '',
     apontador_diurno: getCSVField(fromSheet, 'Apontador_Diurno') || getCSVField(fromSheet, 'apontador_diurno') || '',
     apontador_noturno: getCSVField(fromSheet, 'Apontador_Noturno') || getCSVField(fromSheet, 'apontador_noturno') || '',
     clima_manha: getCSVField(fromSheet, 'Clima_Manha') || '',
@@ -10522,7 +10928,8 @@ function wsRDOModeloPDF(d, data) {
   const df = fmtData(data);
   const dd = parseISODate(data);
   const diaSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][dd ? dd.getDay() : 0];
-  const nrRDO = d.sheetId ? (String(d.sheetId).replace(/^D0*/, '') || '1') : '—';
+  const nrRDO = String(d.numeroRdo || '').trim() ||
+    (d.sheetId ? (String(d.sheetId).replace(/^D0*/, '') || '1') : '—');
   let r;
 
   // Cabeçalho
@@ -11054,14 +11461,14 @@ function renderServicoRow(s, idx, frentes) {
           <label>Frente</label>
           <select data-svc="${idx}" data-field="frente">
             <option value="">— escolher —</option>
-            ${frentes.map(f => `<option ${s.frente===f?'selected':''}>${f}</option>`).join('')}
+            ${frentes.map(f => `<option value="${escHtml(f)}" ${s.frente===f?'selected':''}>${escHtml(f)}</option>`).join('')}
           </select>
         </div>
         <div class="field">
           <label>Pacote / Serviço</label>
           <select data-svc="${idx}" data-field="pacoteId" ${!s.frente ? 'disabled' : ''}>
             <option value="">${s.frente ? '— escolher pacote —' : '↑ escolha a frente primeiro'}</option>
-            ${pacotesDaFrente.map(p => `<option value="${getCSVField(p, 'ID')}" ${s.pacoteId===getCSVField(p, 'ID')?'selected':''}>${getCSVField(p, 'Pacote')} (${getCSVField(p, 'Unidade Física')||''})</option>`).join('')}
+            ${pacotesDaFrente.map(p => `<option value="${escHtml(getCSVField(p, 'ID'))}" ${s.pacoteId===getCSVField(p, 'ID')?'selected':''}>${escHtml(getCSVField(p, 'Pacote'))} (${escHtml(getCSVField(p, 'Unidade Física')||'')})</option>`).join('')}
           </select>
           ${(() => {
             /* A observação do pacote é a única coisa no cadastro que diz o que
@@ -11096,7 +11503,15 @@ function renderServicoRow(s, idx, frentes) {
         </div>
         <div class="field">
           <label>Quantidade ${unidade ? `(${unidade})` : ''}</label>
-          <input type="number" data-svc="${idx}" data-field="quantidade" value="${s.quantidade}" placeholder="0" step="0.01" min="0">
+          <!-- type=text + inputmode=decimal, e NÃO type=number: com type=number
+               o Chromium DESCARTA a vírgula em silêncio ("22,26" vira "2226")
+               e o apontador manda 100× a quantidade para a medição sem ver.
+               Com text o que ele digitou é o que fica, e numCampo() lê vírgula
+               e ponto como decimal. O teclado numérico do celular vem do
+               inputmode. -->
+          <input type="text" inputmode="decimal" data-numeric data-svc="${idx}" data-field="quantidade"
+                 value="${escHtml(String(s.quantidade == null ? '' : s.quantidade))}" placeholder="0"
+                 autocomplete="off">
           ${(() => {
             // Dica de saldo: mostra quanto resta do pacote e avisa se a
             // quantidade digitada passa disso (não bloqueia o envio).
@@ -11105,8 +11520,8 @@ function renderServicoRow(s, idx, frentes) {
             const a = av[s.pacoteId];
             if (!a || a.qtdEstimada <= 0) return '';
             const saldo = Math.max(0, a.qtdEstimada - a.qtdExecutada);
-            const estoura = num(s.quantidade) > saldo + 0.001;
-            let dica = `<div style="font-size:11px;margin-top:3px;color:${estoura ? 'var(--red)' : 'var(--muted)'}">${estoura ? 'acima do ' : ''}saldo do pacote: ${fmtNum(saldo)} ${unidade}</div>`;
+            const estoura = numCampo(s.quantidade) > saldo + 0.001;
+            let dica = `<div style="font-size:11px;margin-top:3px;color:${estoura ? 'var(--red)' : 'var(--muted)'}">${estoura ? 'acima do ' : ''}saldo do pacote: ${fmtNum(saldo)} ${escHtml(unidade)}</div>`;
             /* Etapa passando na frente da anterior. NÃO bloqueia: a etapa
                anterior pode ter sido executada antes do app existir, ou num
                mês que ninguém digitou. Mas avisar é o que impede o avanço
@@ -11115,10 +11530,10 @@ function renderServicoRow(s, idx, frentes) {
             const ant = etapaAnteriorDe(s.pacoteId);
             const aAnt = ant ? av[ant] : null;
             if (aAnt) {
-              const depois = a.qtdExecutada + num(s.quantidade);
+              const depois = a.qtdExecutada + numCampo(s.quantidade);
               if (depois > aAnt.qtdExecutada + 0.001) {
                 const nomeAnt = getCSVField(aAnt.pacote, 'Pacote') || ant;
-                dica += `<div style="font-size:11px;margin-top:2px;color:var(--ylw)">passa a etapa anterior — ${escHtml(nomeAnt)} está em ${fmtNum(aAnt.qtdExecutada)} ${unidade}</div>`;
+                dica += `<div style="font-size:11px;margin-top:2px;color:var(--ylw)">passa a etapa anterior — ${escHtml(nomeAnt)} está em ${fmtNum(aAnt.qtdExecutada)} ${escHtml(unidade)}</div>`;
               }
             }
             return dica;
@@ -11263,7 +11678,7 @@ window.copiarServicosDeOntem = function() {
   });
   if (doDia.length === 0) { toast('O último dia (' + fmtData(ultimaData) + ') só teve serviços avulsos.', 'info'); return; }
 
-  const jaTemDados = STATE.draft.servicos.some(s => s.pacoteId || num(s.quantidade) > 0);
+  const jaTemDados = STATE.draft.servicos.some(s => s.pacoteId || numCampo(s.quantidade) > 0);
   if (jaTemDados && !confirm('Substituir os serviços já preenchidos neste rascunho pelos ' + doDia.length + ' serviços de ' + fmtData(ultimaData) + '?')) return;
 
   STATE.draft.servicos = doDia.map(r => {
@@ -11337,7 +11752,7 @@ function validarRDO(d) {
   if (!d.data) erros.push('Data é obrigatória');
   if (!d.apontador.trim()) erros.push('Apontador é obrigatório');
 
-  const servicosValidos = d.servicos.filter(s => s.pacoteId && num(s.quantidade) > 0);
+  const servicosValidos = d.servicos.filter(s => s.pacoteId && numCampo(s.quantidade) > 0);
   const outrosValidos = (d.outrosServicos || []).filter(o => o.descricao && o.descricao.trim());
 
   if (servicosValidos.length === 0 && outrosValidos.length === 0) {
@@ -11346,7 +11761,7 @@ function validarRDO(d) {
   }
   for (let i = 0; i < d.servicos.length; i++) {
     const s = d.servicos[i];
-    if (s.pacoteId && num(s.quantidade) > 0) {
+    if (s.pacoteId && numCampo(s.quantidade) > 0) {
       if (!s.estacaIni || !s.estacaFim) {
         erros.push(`Serviço ${i+1}: estaca início e fim obrigatórias`);
         break;
@@ -11368,13 +11783,17 @@ function destacarCamposRDO(d) {
   if (!d.apontador || !d.apontador.trim()) marcar('[data-draft="apontador"]');
   for (let i = 0; i < d.servicos.length; i++) {
     const s = d.servicos[i];
-    if (s.pacoteId && num(s.quantidade) > 0 && (!s.estacaIni || !s.estacaFim)) {
+    if (s.pacoteId && numCampo(s.quantidade) > 0 && (!s.estacaIni || !s.estacaFim)) {
       if (!s.estacaIni) marcar(`[data-svc="${i}"][data-field="estacaIni"]`);
       if (!s.estacaFim) marcar(`[data-svc="${i}"][data-field="estacaFim"]`);
     }
   }
   if (primeiro) primeiro.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
+
+/* Trava de envio do Lançar Serviço. Fica FORA da função e fora do botão:
+   é o que sobrevive a sair da tela e voltar (ver o bloco onde ela é tomada). */
+let _envioRDOEmCurso = false;
 
 async function salvarRDO() {
   const d = STATE.draft;
@@ -11385,7 +11804,7 @@ async function salvarRDO() {
     return;
   }
   
-  const servicosValidos = d.servicos.filter(s => s.pacoteId && num(s.quantidade) > 0);
+  const servicosValidos = d.servicos.filter(s => s.pacoteId && numCampo(s.quantidade) > 0);
   const outrosValidos = (d.outrosServicos || []).filter(o => o.descricao && o.descricao.trim());
 
   const btn = document.getElementById('btnSalvarRDO');
@@ -11399,7 +11818,7 @@ async function salvarRDO() {
   const fotosDoLote = {};   // { '<id do serviço>': [{thumb, full}] }
 
   const batchPacotes = d.servicos
-    .filter(s => s.pacoteId && num(s.quantidade) > 0)
+    .filter(s => s.pacoteId && numCampo(s.quantidade) > 0)
     .map(s => {
       const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === s.pacoteId);
       const obsCompleta = [d.observacaoGeral, s.observacao].filter(x => x && x.trim()).join(' · ');
@@ -11422,7 +11841,7 @@ async function salvarRDO() {
         turno: d.turno || 'Diurno',
         pacote_id: s.pacoteId,
         pacote_nome: p ? getCSVField(p, 'Pacote') : '',
-        quantidade: num(s.quantidade),
+        quantidade: numCampo(s.quantidade),
         unidade: p ? (getCSVField(p, 'Unidade Física')||'') : '',
         local_estaca: localEstaca,
         equipe: s.equipe,
@@ -11524,6 +11943,20 @@ async function salvarRDO() {
   batch = enviar;
   const totalItens = batch.length;
 
+  /* TRAVA DE ENVIO EM CURSO — em variável de módulo, não no botão.
+     `btn.disabled` só vale enquanto AQUELE elemento existe. Bastava o
+     apontador sair da tela e voltar: `renderRDO` monta um botão novo, já
+     habilitado, e o rascunho continua lá porque só é limpo no sucesso.
+     Medido com 8 s de atraso no servidor: dois `addBatchRDO` com clientIds
+     DIFERENTES — a deduplicação do backend é por clientId e não pega —,
+     4 linhas na planilha em vez de 2, quantidade 50 em vez de 25.
+     Duplicata na medição de obra pública é glosa. */
+  if (_envioRDOEmCurso) {
+    toast('Este lançamento já está sendo enviado. Aguarde a confirmação.', 'info', 4000);
+    return;
+  }
+  _envioRDOEmCurso = true;
+
   btn.disabled = true;
   btn.innerHTML = ic('ampulheta', 0, 'ic-gira') + ' Salvando…';
 
@@ -11552,7 +11985,16 @@ async function salvarRDO() {
   const totalFotos = Object.values(fotosEnviar).reduce((n, l) => n + l.length, 0);
 
   try {
-    const result = await jsonp(CONFIG.appsScript, reqParams, 0, 0, null);
+    /* enviarAcao e NÃO jsonp direto. O JSONP viaja por GET, e o Apps Script
+       recusa URL acima de ~8.192 caracteres. Cada serviço do lote acrescenta
+       ~611 caracteres: a partir de 9 serviços o RDO estourava o limite,
+       era recusado pelo servidor, voltava para a fila — e a fila reenviava
+       o mesmo GET grande para sempre. Medido: 0 de 9 itens saíram em 4
+       tentativas. O lançamento do apontador simplesmente nunca era gravado.
+
+       `enviarAcao` mede o tamanho e troca para POST quando não cabe, que é
+       exatamente o caminho que já existia e não estava sendo usado aqui. */
+    const result = await enviarAcao(reqParams, 0, 0);
 
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
 
@@ -11574,7 +12016,19 @@ async function salvarRDO() {
     btn.disabled = false;
     btn.innerHTML = btnTxtOriginal;
     if (ehErroDeRede(e)) {
-      outboxAdicionar({ kind: 'rdo', params: reqParams, descricao: descricaoFila });
+      /* O retorno IMPORTA. `outboxAdicionar` devolve false quando não
+         consegue guardar (IndexedDB indisponível em aba anônima ou no
+         Safari, cota do aparelho zerada) — e o código seguia em frente
+         limpando o formulário e dizendo "guardado no aparelho". O apontador
+         ia embora do canteiro com o serviço perdido e a tela dizendo que
+         estava tudo certo. */
+      const rdoGuardado = await outboxAdicionar({ kind: 'rdo', params: reqParams, descricao: descricaoFila });
+      if (!rdoGuardado) {
+        // NÃO limpa o formulário: o que está na tela é a única cópia que existe.
+        toast('SEM INTERNET E SEM ESPAÇO PARA GUARDAR NO APARELHO. O lançamento NÃO foi salvo — ' +
+              'não feche esta tela. Tente de novo, ou anote o que está aqui antes de sair.', 'error', 0);
+        return;
+      }
       // As fotos vão para a mesma fila, atrás do lote: quando o RDO subir, a
       // linha já existe e a foto acha o serviço pelo id.
       let fotosNaFila = 0;
@@ -11604,6 +12058,11 @@ async function salvarRDO() {
     } else {
       toast('Falha ao salvar: ' + e.message, 'error', 0);
     }
+  } finally {
+    // Libera a trava em qualquer desfecho — inclusive nos `return` de dentro
+    // do catch. Sem o finally, uma falha de gravação na fila deixaria o
+    // apontador sem conseguir tentar de novo.
+    _envioRDOEmCurso = false;
   }
 }
 
@@ -11837,7 +12296,23 @@ window.editarRDODiario = function(data) {
 function renderRDODiarioV4() {
   const dataHoje = getLocalISODate(new Date());
   if (!DIARIO_V4) {
-    DIARIO_V4 = carregarDiarioDaSheet(dataHoje) || loadDiarioV4(dataHoje) || defaultDiarioV4(dataHoje);
+    /* PRECEDÊNCIA: o rascunho local vem PRIMEIRO.
+       Antes a planilha vencia, e `carregarDiarioDaSheet` só reaproveitava do
+       localStorage um único campo (`efetivo`). Recarregar a página no meio do
+       RDO Diário — ou o app trocar de versão — descartava apontador,
+       equipamentos, visitas, ocorrências, observações e funções digitadas.
+       O autosave por tecla existia; o que faltava era alguém olhar para ele.
+
+       Agora que `clearDiarioV4` é chamada depois de gravar, rascunho presente
+       quer dizer trabalho que NÃO subiu — e nesse caso ele manda. Sem
+       rascunho, a planilha continua sendo a fonte, como sempre foi. */
+    const rascunho = loadDiarioV4(dataHoje);
+    if (rascunho) {
+      DIARIO_V4 = rascunho;
+      setTimeout(() => toast('Retomando o RDO que estava aberto neste aparelho e ainda não foi enviado.', 'info', 5000), 400);
+    } else {
+      DIARIO_V4 = carregarDiarioDaSheet(dataHoje) || defaultDiarioV4(dataHoje);
+    }
   }
   
   if (!DIARIO_TURNO_ATIVO) {
@@ -12264,6 +12739,11 @@ async function salvarDiarioV4() {
   try {
     const result = await jsonp(CONFIG.appsScript, {...params, ...authParams()}, 0, 0, null);
     if (!result.ok) throw new Error(result.error || 'Erro');
+    // Gravou no servidor: o rascunho local cumpriu o papel dele e sai de cena.
+    // `clearDiarioV4` existia e nunca era chamada — o rascunho ficava para
+    // sempre, e por isso "existe rascunho" não podia significar nada. Agora
+    // significa: rascunho presente = trabalho que ainda NÃO subiu.
+    clearDiarioV4(d.data);
     toast(`Turno ${t.toUpperCase()} salvo`, 'success', 4000);
     setTimeout(() => carregarTudo(), 1500);
     btn.disabled = false;
@@ -12272,8 +12752,14 @@ async function salvarDiarioV4() {
     btn.disabled = false;
     btn.innerHTML = original;
     if (ehErroDeRede(e)) {
-      outboxAdicionar({ kind: 'diario', params: params, descricao: descricaoFila });
-      toast('Sem internet — turno guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
+      // Mesmo cuidado do Lançar Serviço: só avisa "guardado" se guardou mesmo.
+      const guardou = await outboxAdicionar({ kind: 'diario', params: params, descricao: descricaoFila });
+      if (guardou) {
+        toast('Sem internet — turno guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
+      } else {
+        toast('SEM INTERNET E SEM ESPAÇO PARA GUARDAR NO APARELHO. O turno NÃO foi salvo — ' +
+              'não feche esta tela e tente de novo.', 'error', 0);
+      }
     } else {
       toast('Falha: ' + e.message, 'error', 0);
     }
@@ -12312,6 +12798,7 @@ function _gerarPDFDiario(data) {
     d = {
       data: data,
       sheetId: fromSheet ? getCSVField(fromSheet, 'ID') : '',
+      numeroRdo: fromSheet ? (getCSVField(fromSheet, 'numero_rdo') || getCSVField(fromSheet, 'Numero_RDO') || '') : '',
       apontador_diurno: v4.diurno.apontador || '',
       apontador_noturno: v4.noturno.apontador || '',
       clima_manha: v4.clima_manha, clima_tarde: v4.clima_tarde, clima_noite: v4.clima_noite,
@@ -12348,6 +12835,10 @@ function _gerarPDFDiario(data) {
     d = {
       data: data,
       sheetId: getCSVField(fromSheet, 'ID'),
+      // Número que a fiscalização lê — contado POR OBRA no backend. O
+      // sheetId (D####) é chave técnica global e serve de reserva para
+      // as linhas gravadas antes de a coluna existir.
+      numeroRdo: getCSVField(fromSheet, 'numero_rdo') || getCSVField(fromSheet, 'Numero_RDO') || '',
       apontador_diurno: getCSVField(fromSheet, 'Apontador_Diurno') || getCSVField(fromSheet, 'apontador_diurno') || '',
       apontador_noturno: getCSVField(fromSheet, 'Apontador_Noturno') || getCSVField(fromSheet, 'apontador_noturno') || '',
       clima_manha: getCSVField(fromSheet, 'Clima_Manha') || getCSVField(fromSheet, 'clima_manha') || '',
@@ -12451,7 +12942,8 @@ function _gerarPDFDiario(data) {
     return sz;
   }
 
-  const nrRDO = (d.sheetId) ? String(d.sheetId).replace(/^D0*/, '') || '1' : '—';
+  const nrRDO = String(d.numeroRdo || '').trim() ||
+    ((d.sheetId) ? String(d.sheetId).replace(/^D0*/, '') || '1' : '—');
 
   function desenharCabecalho(continuacao) {
   let y = MT;
@@ -13889,21 +14381,24 @@ function apSlideHTML(sl, d) {
     const lista = [...(STATE.rdodiario || [])]
       .sort((a, b) => String(normalizarDataCSV(getCSVField(b, 'Data')))
         .localeCompare(String(normalizarDataCSV(getCSVField(a, 'Data'))))).slice(0, 6);
-    const efetivoDe = r => {
-      try {
-        const j = JSON.parse(getCSVField(r, 'Efetivo_JSON') || getCSVField(r, 'efetivo_json') || '[]');
-        return j.reduce((s, x) => s + (Number(x.qtd) || 0), 0);
-      } catch (e) { return 0; }
-    };
+    /* O Efetivo_JSON é um OBJETO ({padrao_diurno:{…}, customDireto_noturno:[…]}),
+       não um array. O leitor daqui fazia `.reduce` nele, tomava TypeError e o
+       `catch` devolvia 0 — a coluna Efetivo saía "—" em todas as linhas, na
+       reunião com a fiscalização. Quem já sabe ler o formato de verdade é o
+       efetivoTotaisRDO(), que alimenta o RDO oficial; o slide não deveria ter
+       um segundo leitor do mesmo dado. */
+    const efetivoDe = r => efetivoTotaisRDO(r).total;
     return `<div class="ap-slide"><div class="ap-kicker">Diário de obra</div>
       <h2>${(STATE.rdodiario || []).length} RDOs diários registrados</h2>
       <div class="ap-sub">Efetivo por função, clima por período e ocorrências do dia —
         a base documental de qualquer pleito de prazo.</div>
       <table class="ap-tab"><thead><tr>
-        <th>Data</th><th>Encarregado</th><th class="n">Efetivo</th><th>Clima</th>
+        <!-- "Encarregado" não é coluna do RDO_Diario: o app grava
+             Apontador_Diurno/Apontador_Noturno. A coluna saía vazia sempre. -->
+        <th>Data</th><th>Apontador</th><th class="n">Efetivo</th><th>Clima</th>
       </tr></thead><tbody>${lista.map(r => `<tr>
         <td>${escHtml(normalizarDataCSV(getCSVField(r, 'Data')).split('-').reverse().join('/'))}</td>
-        <td class="dim">${escHtml(getCSVField(r, 'Encarregado') || '—')}</td>
+        <td class="dim">${escHtml(getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador_Noturno') || getCSVField(r, 'Apontador') || '—')}</td>
         <td class="n">${efetivoDe(r) || '—'}</td>
         <td class="dim">${escHtml([getCSVField(r, 'Clima_Manha'), getCSVField(r, 'Clima_Tarde')]
           .filter(Boolean).join(' · ') || '—')}</td></tr>`).join('')}</tbody></table></div>`;

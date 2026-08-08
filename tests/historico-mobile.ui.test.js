@@ -116,7 +116,7 @@ const estouro = (p, sel) => p.evaluate((s) => {
 }, sel);
 
 (async () => {
-  const navegador = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const navegador = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
 
   console.log('HISTÓRICO NO CELULAR — 390×844');
   const { p, erros } = await abrir(navegador, 390, 844, true);

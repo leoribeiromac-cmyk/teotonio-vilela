@@ -22,7 +22,7 @@ const NOTAS = {
 };
 
 (async () => {
-  const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
+  const b = await chromium.launch({ executablePath: process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' });
   const p = await b.newPage({ viewport: { width: 1440, height: 950 } });
   const err = [];
   p.on('pageerror', e => err.push('PAGEERROR: ' + e.message));

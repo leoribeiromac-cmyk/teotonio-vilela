@@ -1,0 +1,60 @@
+name: Testes
+
+# O merge na main publica direto no canteiro pelo GitHub Pages. Sem porteiro,
+# uma regressão chega ao celular do apontador antes de qualquer pessoa notar.
+# Estes são os mesmos testes que já existiam no repositório — o que faltava
+# era alguém rodá-los.
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Os testes .ui rodam o app DE VERDADE no Chromium (Playwright).
+      - name: Instalar Playwright + Chromium
+        run: |
+          npm install --no-save playwright@1.49.1
+          npx playwright install --with-deps chromium
+
+      # Os testes de interface pedem o app servido por HTTP: o index.html
+      # carrega js/ e dados/ por <script src>, que o file:// bloqueia.
+      - name: Subir o app em localhost:8099
+        run: |
+          python3 -m http.server 8099 --directory . &
+          for i in $(seq 1 30); do
+            curl -fsS -o /dev/null http://localhost:8099/index.html && break
+            sleep 1
+          done
+          curl -fsS -o /dev/null http://localhost:8099/index.html
+
+      # O Chromium do Playwright não fica no caminho que os testes assumem
+      # quando rodam na máquina do Leonardo; CHROME_PATH resolve os dois casos.
+      - name: Descobrir o Chromium
+        run: |
+          CAMINHO="$(node -e "console.log(require('playwright').chromium.executablePath())")"
+          echo "CHROME_PATH=$CAMINHO" >> "$GITHUB_ENV"
+          echo "Chromium em $CAMINHO"
+
+      - name: Rodar os testes
+        env:
+          CHROME_PATH: ${{ env.CHROME_PATH }}
+        run: |
+          falhou=0
+          for t in tests/*.test.js; do
+            echo ""
+            echo "═══ $t"
+            if node "$t"; then echo "  → passou"; else echo "  → FALHOU"; falhou=1; fi
+          done
+          exit $falhou
