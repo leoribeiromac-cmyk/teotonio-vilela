@@ -10685,6 +10685,7 @@ function dadosRDOExport(fromSheet, data) {
   return {
     data,
     sheetId: getCSVField(fromSheet, 'ID'),
+    numeroRdo: getCSVField(fromSheet, 'numero_rdo') || getCSVField(fromSheet, 'Numero_RDO') || '',
     apontador_diurno: getCSVField(fromSheet, 'Apontador_Diurno') || getCSVField(fromSheet, 'apontador_diurno') || '',
     apontador_noturno: getCSVField(fromSheet, 'Apontador_Noturno') || getCSVField(fromSheet, 'apontador_noturno') || '',
     clima_manha: getCSVField(fromSheet, 'Clima_Manha') || '',
@@ -10826,7 +10827,8 @@ function wsRDOModeloPDF(d, data) {
   const df = fmtData(data);
   const dd = parseISODate(data);
   const diaSemana = ['Domingo','Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'][dd ? dd.getDay() : 0];
-  const nrRDO = d.sheetId ? (String(d.sheetId).replace(/^D0*/, '') || '1') : '—';
+  const nrRDO = String(d.numeroRdo || '').trim() ||
+    (d.sheetId ? (String(d.sheetId).replace(/^D0*/, '') || '1') : '—');
   let r;
 
   // Cabeçalho
@@ -12663,6 +12665,7 @@ function _gerarPDFDiario(data) {
     d = {
       data: data,
       sheetId: fromSheet ? getCSVField(fromSheet, 'ID') : '',
+      numeroRdo: fromSheet ? (getCSVField(fromSheet, 'numero_rdo') || getCSVField(fromSheet, 'Numero_RDO') || '') : '',
       apontador_diurno: v4.diurno.apontador || '',
       apontador_noturno: v4.noturno.apontador || '',
       clima_manha: v4.clima_manha, clima_tarde: v4.clima_tarde, clima_noite: v4.clima_noite,
@@ -12699,6 +12702,10 @@ function _gerarPDFDiario(data) {
     d = {
       data: data,
       sheetId: getCSVField(fromSheet, 'ID'),
+      // Número que a fiscalização lê — contado POR OBRA no backend. O
+      // sheetId (D####) é chave técnica global e serve de reserva para
+      // as linhas gravadas antes de a coluna existir.
+      numeroRdo: getCSVField(fromSheet, 'numero_rdo') || getCSVField(fromSheet, 'Numero_RDO') || '',
       apontador_diurno: getCSVField(fromSheet, 'Apontador_Diurno') || getCSVField(fromSheet, 'apontador_diurno') || '',
       apontador_noturno: getCSVField(fromSheet, 'Apontador_Noturno') || getCSVField(fromSheet, 'apontador_noturno') || '',
       clima_manha: getCSVField(fromSheet, 'Clima_Manha') || getCSVField(fromSheet, 'clima_manha') || '',
@@ -12802,7 +12809,8 @@ function _gerarPDFDiario(data) {
     return sz;
   }
 
-  const nrRDO = (d.sheetId) ? String(d.sheetId).replace(/^D0*/, '') || '1' : '—';
+  const nrRDO = String(d.numeroRdo || '').trim() ||
+    ((d.sheetId) ? String(d.sheetId).replace(/^D0*/, '') || '1' : '—');
 
   function desenharCabecalho(continuacao) {
   let y = MT;

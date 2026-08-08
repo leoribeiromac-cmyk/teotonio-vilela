@@ -1507,11 +1507,13 @@ function upsertRDODiario(p, deveExistir) {
   }
 
   garantirColuna(aba, 'obra');   // antes de ler o cabeçalho, para já vir nele
+  garantirColuna(aba, 'numero_rdo');  // o número que a fiscalização lê, por obra
     var cab = cabecalhoNormalizado(aba);
     var iData = idxColuna(cab, 'data');
     var iTurno = idxColuna(cab, 'turno');
     var iId = idxColuna(cab, 'id');
     var iObra = idxColuna(cab, 'obra');
+    var iNum = idxColuna(cab, 'numero_rdo');
     var dados = aba.getDataRange().getValues();
 
     var dataAlvo = normData(p.data);
@@ -1545,6 +1547,12 @@ function upsertRDODiario(p, deveExistir) {
         var idAtual = String(dados[linhaExistente - 1][iId] == null ? '' : dados[linhaExistente - 1][iId]).trim();
         if (!idAtual) registro['id'] = gerarIdDiario(dados, iId);
       }
+      // Backfill do número na linha antiga que ainda não o tem (mesmo efeito
+      // de migrarNumeroRdoPorObra, sem depender de alguém rodá-la).
+      if (iNum !== -1 && !registro['numero_rdo']) {
+        var numAtual = String(dados[linhaExistente - 1][iNum] == null ? '' : dados[linhaExistente - 1][iNum]).trim();
+        if (!numAtual) registro['numero_rdo'] = proximoNumeroRdo(dados, iNum, iObra, obraAlvo);
+      }
       cab.forEach(function (nomeCol, idx) {
         if (registro.hasOwnProperty(nomeCol)) {
           aba.getRange(linhaExistente, idx + 1).setValue(seguro(registro[nomeCol]));
@@ -1557,6 +1565,11 @@ function upsertRDODiario(p, deveExistir) {
       // INSERE nova linha, sempre com ID gerado (se a aba tem coluna ID).
       if (iId !== -1 && !registro['id']) {
         registro['id'] = gerarIdDiario(dados, iId);
+      }
+      // E com o NÚMERO do RDO contado dentro da obra — o `id` é chave técnica
+      // global, o número é o que sai impresso para a fiscalização.
+      if (iNum !== -1 && !registro['numero_rdo']) {
+        registro['numero_rdo'] = proximoNumeroRdo(dados, iNum, iObra, obraAlvo);
       }
       var linha = cab.map(function (nomeCol) {
         return registro.hasOwnProperty(nomeCol) ? registro[nomeCol] : '';
@@ -1596,6 +1609,70 @@ function gerarIdDiario(dados, iId) {
     if (m) { var n = parseInt(m[1], 10); if (!isNaN(n) && n > max) max = n; }
   }
   return 'D' + ('0000' + (max + 1)).slice(-4);
+}
+
+/* -------------------------------------------------------------------
+   NÚMERO DO RDO — por obra, e separado do `id`
+   -------------------------------------------------------------------
+   O número impresso no cabeçalho do RDO oficial saía do `id` (D####), que
+   `gerarIdDiario` gera varrendo a aba INTEIRA. Mas a aba RDO_Diario é
+   compartilhada por todas as obras: o primeiro RDO de uma obra nova sairia
+   numerado na sequência da Teotônio — "RDO nº 87" no primeiro dia de obra —
+   e as duas obras teriam numerações entrelaçadas no mesmo documento oficial.
+
+   A separação é em dois papéis:
+     `id`         chave TÉCNICA, global e única (é por ela que o app apaga e
+                  edita a linha). Continua exatamente como estava.
+     `numero_rdo` o número que a fiscalização lê. Conta por OBRA, do 1.
+
+   Os RDOs que a Teotônio já emitiu mantêm o número que já foi impresso: a
+   migração copia o número derivado do `id` atual, em vez de renumerar por
+   data. Documento entregue à fiscalização não muda de número.
+   ------------------------------------------------------------------- */
+function proximoNumeroRdo(dados, iNum, iObra, obraAlvo) {
+  var max = 0;
+  for (var i = 1; i < dados.length; i++) {
+    if (iObra !== -1 && normObra(dados[i][iObra]) !== obraAlvo) continue;
+    var n = parseInt(String(dados[i][iNum] == null ? '' : dados[i][iNum]).replace(/\D/g, ''), 10);
+    if (!isNaN(n) && n > max) max = n;
+  }
+  return max + 1;
+}
+
+/* Roda 1× no editor, depois de colar este Code.gs.
+   Preenche `numero_rdo` no que já existe, PRESERVANDO o número que cada RDO
+   já mostrava (o derivado do id). Só a Teotônio tem histórico, então na
+   prática ela fica idêntica ao que já foi impresso e qualquer obra nova
+   começa do 1. Rodar de novo é seguro: só preenche o que estiver vazio. */
+function migrarNumeroRdoPorObra() {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+  garantirColuna(aba, 'obra');
+  garantirColuna(aba, 'numero_rdo');
+  var cab = cabecalhoNormalizado(aba);
+  var iId = idxColuna(cab, 'id');
+  var iObra = idxColuna(cab, 'obra');
+  var iNum = idxColuna(cab, 'numero_rdo');
+  if (iNum === -1) return { ok: false, error: 'Coluna numero_rdo não criada' };
+
+  var dados = aba.getDataRange().getValues();
+  var preenchidos = 0;
+  var porObra = {};   // obra -> maior número já visto, para as linhas sem id
+  for (var i = 1; i < dados.length; i++) {
+    if (String(dados[i][iNum] == null ? '' : dados[i][iNum]).trim() !== '') continue;
+    var obra = iObra !== -1 ? normObra(dados[i][iObra]) : OBRA_ID;
+    var numero = 0;
+    if (iId !== -1) {
+      var m = String(dados[i][iId] == null ? '' : dados[i][iId]).match(/(\d+)/);
+      if (m) numero = parseInt(m[1], 10);
+    }
+    if (!numero || isNaN(numero)) numero = (porObra[obra] || 0) + 1;
+    porObra[obra] = Math.max(porObra[obra] || 0, numero);
+    aba.getRange(i + 1, iNum + 1).setValue(numero);
+    preenchidos++;
+  }
+  Logger.log('numero_rdo preenchido em ' + preenchidos + ' linha(s): ' + JSON.stringify(porObra));
+  return { ok: true, preenchidos: preenchidos, porObra: porObra };
 }
 
 // ------------------------------------------------------------

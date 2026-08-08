@@ -334,6 +334,29 @@ async function abrir(opts = {}) {
     await b.close();
   }
 
+  // ================================================================
+  console.log('\nNÚMERO DO RDO — por obra, e não a sequência global do id');
+  {
+    // A aba RDO_Diario é compartilhada. O número impresso saía do id (D####),
+    // que conta a aba inteira: o 1º RDO de uma obra nova sairia "nº 88".
+    const diario = ['id,numero_rdo,Data,Turno,Clima_Manha,Apontador_Diurno,obra',
+      'D0087,87,2026-07-10,Diurno,Bom,Wallace,teotonio',
+      'D0088,1,2026-07-11,Diurno,Bom,Ana,ranario'].join('\r\n');
+    const { b, p } = await abrir({ csv: { [GID.rdodiario]: diario } });
+    const r = await p.evaluate(() => {
+      const t = STATE.rdodiario.find(x => (getCSVField(x, 'obra') || '') === 'teotonio');
+      return {
+        teo: t ? getCSVField(t, 'numero_rdo') : null,
+        // a linha do ranário é filtrada por soDaObraAtiva — o que importa é
+        // que o número NÃO é derivado do id global
+        temColuna: STATE.rdodiario.length > 0 && getCSVField(STATE.rdodiario[0], 'numero_rdo') !== '',
+      };
+    });
+    ok('a coluna numero_rdo chega ao app', r.temColuna);
+    ok('a Teotônio mantém o número que já imprimiu (87)', r.teo === '87', 'veio ' + r.teo);
+    await b.close();
+  }
+
   console.log(falhas === 0 ? '\nTUDO CERTO\n' : `\n${falhas} FALHA(S)\n`);
   process.exit(falhas === 0 ? 0 : 1);
 })();

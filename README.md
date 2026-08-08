@@ -51,6 +51,31 @@ O modelo de dados central: **pacotes físicos (P01–P36)** lançados no campo �
 > planilha, mas desalinhada — que num log de auditoria equivale a perdida.
 > Rodar duas vezes é seguro; se a coluna já existir, a função não faz nada.
 
+> ### ⚠ E rode `migrarNumeroRdoPorObra()` uma vez
+>
+> O número impresso no cabeçalho do RDO oficial saía do `id` (D####), e o
+> `id` é gerado varrendo a aba `RDO_Diario` **inteira**. Só que a aba é
+> compartilhada por todas as obras: o primeiro RDO de uma obra nova sairia
+> numerado na sequência da Teotônio — "RDO nº 88" no primeiro dia de obra —
+> e as duas obras ficariam com a numeração entrelaçada no documento que a
+> fiscalização assina.
+>
+> Agora são dois papéis separados. O **`id`** continua sendo a chave técnica,
+> global e única (é por ela que o app apaga e edita a linha). O novo
+> **`numero_rdo`** é o número que a fiscalização lê, e conta **por obra**,
+> a partir de 1.
+>
+> `migrarNumeroRdoPorObra()` preenche a coluna no que já existe
+> **preservando o número que cada RDO já mostrava** — ela copia o número
+> derivado do `id` atual, em vez de renumerar por data. Como só a Teotônio
+> tem histórico, na prática ela fica idêntica ao que já foi impresso, e
+> qualquer obra nova começa do 1. **RDO já entregue à fiscalização não muda
+> de número.** Rodar de novo é seguro: só preenche o que estiver vazio.
+>
+> Se você esquecer, nada quebra: o app volta a derivar o número do `id`
+> quando a coluna está vazia, e o próprio `upsertRDODiario` preenche a linha
+> assim que ela for tocada.
+
 ## Segurança (fazer 1×, importante)
 
 As senhas antigas ficaram públicas no histórico deste repositório. Para blindar:
