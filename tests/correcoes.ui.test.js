@@ -457,6 +457,58 @@ async function abrir(opts = {}) {
     await b.close();
   }
 
+  // ================================================================
+  console.log('\nALVO DE TOQUE NO CELULAR — dedo com luva, não ponteiro');
+  {
+    const b = await chromium.launch({ executablePath: process.env.CHROME_PATH ||
+      '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--no-sandbox'] });
+    const ctx = await b.newContext({ locale: 'pt-BR', viewport: { width: 390, height: 844 },
+      isMobile: true, hasTouch: true, deviceScaleFactor: 3 });
+    const p = await ctx.newPage();
+    await p.route('**://docs.google.com/**', r => {
+      const gid = new URL(r.request().url()).searchParams.get('gid');
+      const d = { [GID.pacotes]: PACOTES, [GID.coeficientes]: COEF,
+                  [GID.rdoavanco]: RDO_COM_DADO, [GID.cronograma]: CRONO };
+      r.fulfill({ status: 200, contentType: 'text/csv', body: d[gid] === undefined ? '' : d[gid] });
+    });
+    await p.route('**://script.google.com/**', r => {
+      const u = new URL(r.request().url()), cb = u.searchParams.get('callback');
+      r.fulfill({ status: 200, contentType: 'application/javascript',
+        body: `${cb}(${JSON.stringify(u.searchParams.get('action') === 'login'
+          ? { ok: true, usuario: 'Leonardo', perfil: 'admin', token: 't', obras: '*' } : { ok: true })})` });
+    });
+    await p.goto('http://localhost:8099/index.html', { waitUntil: 'load' });
+    await p.evaluate(() => { localStorage.setItem('teotonio_user', 'Leonardo');
+      localStorage.setItem('teotonio_perfil_v1', 'admin'); localStorage.setItem('teotonio_token_v1', 't'); });
+    await p.reload({ waitUntil: 'load' });
+    await p.waitForFunction(() => typeof STATE !== 'undefined' && STATE.loaded === true, null, { timeout: 30000 });
+
+    for (const tela of ['executivo', 'cronograma', 'rdo', 'medicao', 'projetos']) {
+      await p.evaluate(t => { STATE.currentPage = t; render(); }, tela);
+      await p.waitForTimeout(500);
+      const pequenos = await p.evaluate(() =>
+        [...document.querySelectorAll('#page button, #page select, #page input[type=checkbox]')]
+          .map(el => {
+            const alvo = el.closest('label') || el;   // caixa de seleção: o rótulo é o alvo
+            const r = alvo.getBoundingClientRect();
+            return { h: Math.round(r.height), w: Math.round(r.width),
+                     txt: (el.textContent || el.value || '').trim().slice(0, 30) };
+          })
+          .filter(x => x.w > 0 && x.h > 0 && x.h < 40));
+      ok(`nenhum botão abaixo de 40px em "${tela}"`, pequenos.length === 0,
+        JSON.stringify(pequenos.slice(0, 4)));
+    }
+
+    const alturaBtnSm = await p.evaluate(() => {
+      const el = document.createElement('button');
+      el.className = 'btn btn-sm'; el.textContent = 'x';
+      document.getElementById('page').appendChild(el);
+      const h = getComputedStyle(el).minHeight; el.remove(); return h;
+    });
+    ok('.btn-sm tem min-height de 44px no celular', alturaBtnSm === '44px', alturaBtnSm);
+    await b.close();
+  }
+
   console.log(falhas === 0 ? '\nTUDO CERTO\n' : `\n${falhas} FALHA(S)\n`);
   process.exit(falhas === 0 ? 0 : 1);
 })();
