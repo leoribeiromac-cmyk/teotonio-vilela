@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=23"></script>
-<script src="dados/ruas-de-terra.js?v=23"></script>
+<script src="dados/ranario.js?v=25"></script>
+<script src="dados/ruas-de-terra.js?v=25"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=23"></script>
+<script src="dados/teotonio-muros.js?v=25"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=23"></script>
-<script src="js/nf/adaptador.js?v=23"></script>
-<script src="js/nf/notas.js?v=23"></script>
-<script src="js/equip/equipamentos.js?v=23"></script>
+<script src="js/ui/icones.js?v=25"></script>
+<script src="js/nf/adaptador.js?v=25"></script>
+<script src="js/nf/notas.js?v=25"></script>
+<script src="js/equip/equipamentos.js?v=25"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -553,6 +553,7 @@ html,body{
 
 /* ===================== PROJETOS ===================== */
 .proj-wrap{display:flex;gap:16px;align-items:flex-start}
+.proj-wrap-solo{display:block}
 .proj-lista{width:280px;flex-shrink:0;max-height:82vh;overflow:auto}
 .proj-visor{flex:1;min-width:0}
 .proj-grupo{
@@ -582,6 +583,42 @@ html,body{
   min-width:46px;text-align:center;font:600 12.5px 'JetBrains Mono',ui-monospace,monospace;
   color:var(--text-2);
 }
+
+/* ---- visor de quadrados (a prancha grande) ----
+   `touch-action:none` é o que faz a pinça do celular chegar até aqui em vez
+   de o navegador ampliar a PÁGINA inteira. `overscroll-behavior:contain`
+   impede que arrastar até a borda vire "puxar para atualizar". */
+.proj-mapa{
+  position:relative;overflow:hidden;height:78vh;background:var(--bg-2);
+  border-radius:0 0 var(--r) var(--r);cursor:grab;outline:none;
+  touch-action:none;overscroll-behavior:contain;
+  user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+}
+.proj-mapa.arrastando{cursor:grabbing}
+/* A folha é o único elemento que recebe transform — os quadrados vão de
+   carona. `will-change` mantém a camada na GPU entre um gesto e outro. */
+.proj-folha{
+  position:absolute;left:0;top:0;transform-origin:0 0;
+  background:#fff;will-change:transform;backface-visibility:hidden;
+}
+.proj-nivel{position:absolute;left:0;top:0;width:100%;height:100%}
+.proj-quadrado{position:absolute;display:block;pointer-events:none}
+.proj-dica{
+  padding:8px 16px 11px;font-size:11.5px;color:var(--muted);text-align:center;
+  border-top:1px solid var(--border);
+}
+
+/* Tela cheia por CSS: o Safari do iPhone não dá fullscreen a quem não é
+   vídeo, e o botão pela API ficava mudo justamente no aparelho da obra. */
+.proj-visor.cheia{
+  position:fixed;inset:0;z-index:1150;margin:0;border-radius:0;
+  display:flex;flex-direction:column;max-height:none;
+}
+.proj-visor.cheia .proj-mapa{flex:1;height:auto;border-radius:0}
+.proj-visor.cheia .proj-dica{display:none}
+body.proj-cheia-ativa{overflow:hidden}
+
+/* ---- prancha em PDF (obras ainda não fatiadas) ---- */
 .proj-canvas{
   height:78vh;overflow:auto;padding:14px;text-align:center;
   background:var(--bg-2);border-radius:0 0 var(--r) var(--r);
@@ -605,8 +642,16 @@ html,body{
   .proj-item{width:auto;flex-shrink:0;min-width:172px;border:1px solid var(--border)}
   .proj-acoes{margin-left:0;width:100%}
   .proj-canvas{height:68vh}
+  /* A prancha ganha tudo o que sobra da tela: deitada, ela ocupa a altura
+     inteira, e cada centímetro a mais é desenho legível.
+     `dvh` porque no celular a `100vh` conta a barra de endereço que está
+     recolhida — com `vh` puro a prancha passava por baixo do menu de baixo. */
+  .proj-mapa{height:calc(100vh - 300px);height:calc(100dvh - 300px);min-height:340px}
+  /* O recado dos gestos é para o mouse. No celular, pinçar e arrastar já são
+     o que a pessoa faz sem ler, e Girar/Tela cheia estão escritos no botão —
+     a linha só roubaria altura do desenho. */
+  .proj-dica{display:none}
 }
-
 /* ---- obras permitidas, no cadastro de usuário ---- */
 .usr-obras{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 12px;
   border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2)}
@@ -2368,31 +2413,17 @@ const OBRAS_CFG = {
     appsScript: 'https://script.google.com/macros/s/AKfycbwfslMjc5bmKbZ3y6OpUZyi8MD2KGriocjAVBUci5FOMiI7ho0KgTXvtAioDGWkpk5I/exec',
     estacasCB: { ini: 99, fim: 141, label: 'Centro→Bairro' },
     estacasBC: { ini: 201, fim: 244, label: 'Bairro→Centro' },
-    /* Pranchas do projeto executivo, na ordem em que aparecem ao longo da
-       avenida (conferida pelas coordenadas N do carimbo, de sul para norte).
-       `grupo` é o que agrupa a lista lateral; `cod` é o número da prancha
-       como está no carimbo, que é por onde a fiscalização se refere a ela. */
+    /* A prancha do executivo. É UMA folha A1 (o "plano de ataque"), servida
+       como pirâmide de quadrados — `tiles` é a pasta da pirâmide, e `arquivo`
+       o mesmo desenho em PDF, para abrir fora do app ou mandar imprimir.
+       `cod` é o número da prancha como está no carimbo, que é por onde a
+       fiscalização se refere a ela. */
     projetos: [
-      { grupo: 'Urbanismo', disciplina: 'Planta — folha 101', escala: '1:250',
-        ref: 'Rua José Nicolau de Lima',
-        cod: 'DE-VM-TV-01-5U-101 rev.H', codObra: '1000-SI060-015-UB3-101',
-        arquivo: 'projetos/teotonio/urbanismo-101.pdf' },
-      { grupo: 'Urbanismo', disciplina: 'Planta — folha 102', escala: '',
-        ref: 'Continuação (ver folha 103)',
-        cod: 'DE-VM-TV-01-5U-102 rev.H', codObra: '1000-SI060-015-UB3-102',
-        arquivo: 'projetos/teotonio/urbanismo-102.pdf' },
-      { grupo: 'Urbanismo', disciplina: 'Planta — folha 103', escala: '',
-        ref: 'Acesso Mercado Extra',
-        cod: 'DE-VM-TV-01-5U-103 rev.H', codObra: '1000-SI060-015-UB3-103',
-        arquivo: 'projetos/teotonio/urbanismo-103.pdf' },
-      { grupo: 'Urbanismo', disciplina: 'Planta — folha 104', escala: '1:250',
-        ref: '',
-        cod: 'DE-VM-TV-01-5U-104 rev.H', codObra: '1000-SI060-015-UB3-104',
-        arquivo: 'projetos/teotonio/urbanismo-104.pdf' },
-      { grupo: 'Urbanismo', disciplina: 'Planta — folha 105', escala: '1:250',
-        ref: 'Parada Satélite Ariel B/C',
-        cod: 'DE-VM-TV-01-5U-105 rev.H', codObra: '1000-SI060-015-UB3-105',
-        arquivo: 'projetos/teotonio/urbanismo-105.pdf' },
+      { grupo: 'Implantação', disciplina: 'Plano de ataque — planta', escala: '1:500',
+        ref: 'Av. Sen. Teotônio Vilela — extensão inteira (est. 100 a 141 e 203 a 243)',
+        cod: 'VM-TV-01-5P-103 rev.1', codObra: '1000-SI060-011-PV3-103_C',
+        tiles: 'projetos/teotonio/implantacao/',
+        arquivo: 'projetos/teotonio/implantacao.pdf' },
     ],
   }
 };
@@ -5272,6 +5303,11 @@ function toggleSidebar(open) {
 
 function render() {
   if (!STATE.loaded) return;
+
+  // Saindo da tela de Projetos, o visor da prancha tem de ser desmontado: ele
+  // deixa ouvintes no `window` (girar o aparelho remede a caixa) que a troca
+  // de `innerHTML` não leva junto.
+  if (STATE.currentPage !== 'projetos' && VISOR.folha) visorFechar();
   
   const pageEl = document.getElementById('page');
   
@@ -5287,7 +5323,7 @@ function render() {
     equip: ['Equipamentos', 'Frota da obra · apontamento de hora de máquina'],
     notas: ['Notas Fiscais', 'DANFE, estoque de material e histórico de preço'],
     galeria: ['Galeria de Fotos', 'Registro fotográfico dos serviços lançados'],
-    projetos: ['Projetos', 'Pranchas do projeto executivo · renderizadas offline'],
+    projetos: ['Projetos', 'Prancha do executivo · amplia até a cota, e abre sem sinal'],
     usuarios: ['Usuários', 'Quem entra no sistema e com qual acesso'],
   };
   const [t, s] = titles[STATE.currentPage] || ['', ''];
@@ -5398,15 +5434,35 @@ function normalizarDataCSV(v) {
 }
 
 // ====================================================================
-// PROJETOS — as pranchas do executivo, renderizadas no próprio app
+// PROJETOS — as pranchas do executivo, lidas dentro do app
 // --------------------------------------------------------------------
-// Vindo do "Gestor — Controle de Obras". O desenho é aberto pelo PDF.js
-// que já está vendorizado aqui (o mesmo que lê a DANFE), e não pelo leitor
-// de PDF do aparelho: no celular do canteiro, abrir em app externo tira o
-// apontador do sistema e, sem sinal, muitas vezes nem abre. Renderizado
-// aqui dentro, funciona offline depois da primeira vez e mantém o zoom.
+// Vindo do "Gestor — Controle de Obras". O desenho abre AQUI, e não no
+// leitor de PDF do aparelho: no celular do canteiro, abrir em app externo
+// tira o apontador do sistema e, sem sinal, muitas vezes nem abre.
+//
+// Só que "abrir aqui" com PDF.js tem um teto. A prancha da Teotônio é uma
+// folha A1 com ~50 mil entidades vetoriais; redesenhá-la a cada passo de
+// zoom levava segundos, e no meio do gesto a tela ficava parada. Um SVG
+// com 50 mil nós é pior ainda — o navegador rasteriza tudo de novo a cada
+// mudança de escala.
+//
+// Então a prancha grande não é mais um PDF: é uma PIRÂMIDE DE QUADRADOS,
+// do jeito que mapa de rua funciona.
+//
+//   projetos/<obra>/<prancha>/<nível>/<linha>_<coluna>.webp
+//
+// Cada nível tem o dobro da resolução do anterior, até 12 pixels por ponto
+// do PDF (~864 dpi na folha A1 — dá para ler cota de 2,9 pt sem borrar).
+// Arrastar e ampliar viram UM `transform` na camada: a GPU compõe o que já
+// está desenhado, nada é rasterizado de novo, e só os poucos quadrados que
+// entram na tela são baixados — abrir a prancha custa ~200 KB, não os 15 MB
+// da pirâmide inteira. O manifesto traz um bitmap dizendo quais quadrados
+// existem de fato: papel em branco não vira arquivo nem pedido de rede.
+//
+// Prancha cadastrada só com `arquivo` (obra que ainda não passou pelo
+// fatiador) continua abrindo pelo PDF.js vendorizado, como antes.
 // ====================================================================
-let PROJ = { sel: '', zoom: 1, doc: null, url: '', token: 0 };
+let PROJ = { sel: '', zoom: 1, doc: null, url: '', token: 0, mem: { base: '' } };
 
 function renderProjetos() {
   const projs = (OBRA.projetos || []);
@@ -5422,6 +5478,7 @@ function renderProjetos() {
 
   if (!PROJ.sel || !projs.some(p => p.arquivo === PROJ.sel)) PROJ.sel = projs[0].arquivo;
   const sel = projs.find(p => p.arquivo === PROJ.sel);
+  const emQuadrados = !!sel.tiles;
 
   const porGrupo = {};
   projs.forEach(p => { (porGrupo[p.grupo || 'Projeto'] = porGrupo[p.grupo || 'Projeto'] || []).push(p); });
@@ -5439,10 +5496,16 @@ function renderProjetos() {
         </span>
       </button>`).join('')}`).join('');
 
+  // Uma prancha só não precisa de lista para escolher: a tira lateral (ou a
+  // fileira de cartões, no celular) só tirava espaço do desenho.
+  const painel = projs.length > 1
+    ? `<div class="card proj-lista"><div class="card-body" style="padding:8px 10px 12px">${lista}</div></div>`
+    : '';
+
   return `
-    <div class="proj-wrap">
-      <div class="card proj-lista"><div class="card-body" style="padding:8px 10px 12px">${lista}</div></div>
-      <div class="card proj-visor">
+    <div class="proj-wrap${painel ? '' : ' proj-wrap-solo'}">
+      ${painel}
+      <div class="card proj-visor" id="projCartao">
         <div class="card-header proj-header">
           <div style="min-width:0">
             <div class="card-title">${escHtml(sel.disciplina)}</div>
@@ -5450,23 +5513,30 @@ function renderProjetos() {
               .filter(Boolean).map(escHtml).join(' · ')}</div>
           </div>
           <div class="proj-acoes">
-            <button type="button" class="btn btn-sm" onclick="prachaZoom(-0.2)" title="Reduzir" aria-label="Reduzir">${ic('menos')}</button>
-            <span class="proj-zoom" id="projZoom">${Math.round(PROJ.zoom * 100)}%</span>
-            <button type="button" class="btn btn-sm" onclick="prachaZoom(0.2)" title="Ampliar" aria-label="Ampliar">${ic('mais')}</button>
-            <button type="button" class="btn btn-sm" onclick="prachaAjustar()" title="Ajustar à largura">Ajustar</button>
+            <button type="button" class="btn btn-sm" onclick="prachaZoom(-1)" title="Reduzir" aria-label="Reduzir">${ic('menos')}</button>
+            <span class="proj-zoom" id="projZoom">100%</span>
+            <button type="button" class="btn btn-sm" onclick="prachaZoom(1)" title="Ampliar" aria-label="Ampliar">${ic('mais')}</button>
+            <button type="button" class="btn btn-sm" onclick="prachaAjustar()" title="Enquadrar a folha inteira">Ajustar</button>
+            ${emQuadrados ? `
+            <button type="button" class="btn btn-sm" onclick="prachaGirar()" title="Girar 90°">Girar</button>
+            <button type="button" class="btn btn-sm" id="projBtnCheia" onclick="prachaTelaCheia()">Tela cheia</button>
+            <button type="button" class="btn btn-sm" id="projBtnGuardar" onclick="prachaGuardar()"
+                    title="Baixar a prancha inteira para abrir sem sinal">${ic('nuvem')} Offline</button>` : ''}
             <a class="btn btn-sm" href="${escHtml(sel.arquivo)}" target="_blank" rel="noopener">${ic('enviar')} Abrir</a>
             <a class="btn btn-sm btn-primary" href="${escHtml(sel.arquivo)}" download>${ic('baixar')} Baixar</a>
           </div>
         </div>
-        <div id="projVisor" class="proj-canvas">
+        <div id="projVisor" class="${emQuadrados ? 'proj-mapa' : 'proj-canvas'}">
           <div class="proj-aviso">${ic('ampulheta')} Carregando prancha…</div>
         </div>
+        ${emQuadrados ? `<div class="proj-dica">Arraste para andar pela prancha · dois dedos (ou a roda do mouse) para ampliar · dois toques aproximam · <b>Girar</b> e <b>Tela cheia</b> valem no celular</div>` : ''}
       </div>
     </div>`;
 }
 
 window.selecionarPrancha = function (arq) {
-  PROJ.sel = arq; PROJ.zoom = 1;
+  if (arq === PROJ.sel) return;
+  PROJ.sel = arq; PROJ.zoom = 1; PROJ.mem = { base: '' };
   transitionTo(render);
 };
 
@@ -5477,8 +5547,581 @@ function prachaFalhou(url) {
         Abrir o arquivo</a>.</div></div>`;
 }
 
-/* Abre o PDF selecionado. Chamada depois que o HTML da tela já está no DOM. */
-async function abrirPrancha() {
+/* Abre a prancha selecionada. Chamada depois que o HTML da tela já está no
+   DOM. Escolhe o caminho pelo cadastro: com `tiles`, pirâmide; sem, PDF.js. */
+function abrirPrancha() {
+  visorFechar();
+  const p = (OBRA.projetos || []).find(x => x.arquivo === PROJ.sel);
+  if (p && p.tiles) abrirPranchaQuadrados(p);
+  else abrirPranchaPdf();
+}
+
+// ====================================================================
+// VISOR DE QUADRADOS
+// --------------------------------------------------------------------
+// Tudo o que a tela mostra é UMA camada (`.proj-folha`) com os quadrados
+// posicionados em PONTOS DO PDF, e um `transform` só por cima dela. Assim
+// o navegador trata a prancha como uma textura: arrastar e ampliar não
+// repintam nada, só reposicionam o que a GPU já tem.
+//
+//   tela = t + escala · giro · desenho
+//
+// `visorPara()` e `visorMundo()` são os dois únicos lugares que sabem
+// dessa conta — todo o resto (gestos, botões, escolha de quadrado) fala
+// por eles, para não haver duas versões da mesma matemática.
+// ====================================================================
+const VISOR = {
+  el: null, folha: null, man: null, base: '', niveis: [],
+  s: 1, tx: 0, ty: 0, rot: 0, fit: 1, min: 1, max: 8,
+  cx: 0, cy: 0, rect: null, giroManual: false,
+  raf: 0, animId: 0, inerciaId: 0, ouvintes: [], gesto: 0, tNivel: 0, elZoom: null,
+};
+
+/* base64 -> bytes. O manifesto guarda "quais quadrados existem" como bitmap:
+   1300 quadrados cabem em 164 bytes, contra ~20 KB de lista JSON. */
+function _visorBits(b64) {
+  const bin = atob(b64), out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function _visorTem(nv, lin, col) {
+  const i = lin * nv.cols + col;
+  return !!(nv.mapa[i >> 3] & (0x80 >> (i & 7)));
+}
+
+async function abrirPranchaQuadrados(p) {
+  const box = document.getElementById('projVisor');
+  if (!box) return;
+  const tok = ++PROJ.token;
+  const base = String(p.tiles).replace(/\/*$/, '/');
+  let man;
+  try {
+    const r = await fetch(base + 'prancha.json');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    man = await r.json();
+  } catch (e) {
+    if (tok === PROJ.token && document.getElementById('projVisor')) box.innerHTML = prachaFalhou(p.arquivo);
+    return;
+  }
+  if (tok !== PROJ.token || !document.body.contains(box)) return;
+  visorMontar(box, base, man);
+}
+
+function visorMontar(box, base, man) {
+  const V = VISOR;
+  V.el = box; V.base = base; V.man = man;
+  V.niveis = man.niveis.map(n => ({
+    res: n.res, w: n.w, h: n.h, cols: n.cols, rows: n.rows,
+    mapa: _visorBits(n.mapa), el: null, quadrados: new Map(),
+  }));
+
+  box.innerHTML = '';
+  const folha = document.createElement('div');
+  folha.className = 'proj-folha';
+  folha.style.width = man.larguraPt + 'px';
+  folha.style.height = man.alturaPt + 'px';
+  box.appendChild(folha);
+  V.folha = folha;
+  V.elZoom = document.getElementById('projZoom');
+
+  // Voltar para a mesma prancha (a tela se redesenha quando chega dado novo)
+  // não pode jogar o desenho de volta para o começo: quem estava lendo uma
+  // boca de lobo perdia o lugar sem ter tocado em nada.
+  //
+  // A CÓPIA importa: `PROJ.mem` é o mesmo objeto que `visorAplicar()` reescreve
+  // a cada quadro, e o `visorMedir()` logo abaixo já dispara um. Segurando a
+  // referência, o que se leria adiante já seria o estado novo, não o guardado.
+  const g = PROJ.mem;
+  const mem = g.base === base
+    ? { s: g.s, tx: g.tx, ty: g.ty, rot: g.rot, giroManual: g.giroManual }
+    : null;
+  V.rot = mem ? mem.rot : 0;
+  V.giroManual = mem ? mem.giroManual : false;
+  visorMedir(!mem);
+  if (mem) { V.s = mem.s; V.tx = mem.tx; V.ty = mem.ty; visorAplicar(); }
+  visorAutoGirar();
+  visorLigarEventos();
+}
+
+function visorFechar() {
+  const V = VISOR;
+  V.animId++; V.inerciaId++; V.gesto = 0;
+  if (V.raf) { cancelAnimationFrame(V.raf); V.raf = 0; }
+  V.ouvintes.forEach(([alvo, tipo, fn, op]) => alvo.removeEventListener(tipo, fn, op));
+  V.ouvintes = [];
+  const cartao = document.querySelector('.proj-visor.cheia');
+  if (cartao) cartao.classList.remove('cheia');
+  document.body.classList.remove('proj-cheia-ativa');
+  V.el = null; V.folha = null; V.man = null; V.niveis = [];
+}
+
+function _visorEscutar(alvo, tipo, fn, op) {
+  alvo.addEventListener(tipo, fn, op);
+  VISOR.ouvintes.push([alvo, tipo, fn, op]);
+}
+
+/* Tamanho da folha na tela, já contando o giro. */
+function visorDim() {
+  const V = VISOR, m = V.man;
+  return (V.rot % 180) ? [m.alturaPt, m.larguraPt] : [m.larguraPt, m.alturaPt];
+}
+
+/* Põe o ponto (X,Y) do desenho exatamente sobre o pixel (px,py) da caixa.
+   É por aqui que zoom, pinça e toque duplo mantêm o dedo no mesmo lugar. */
+function visorPara(X, Y, px, py) {
+  const V = VISOR, a = V.rot * Math.PI / 180, co = Math.cos(a), se = Math.sin(a);
+  V.tx = px - V.s * (X * co - Y * se);
+  V.ty = py - V.s * (X * se + Y * co);
+}
+
+/* O contrário: que ponto do desenho está sob este pixel da caixa. */
+function visorMundo(px, py) {
+  const V = VISOR, a = V.rot * Math.PI / 180, co = Math.cos(a), se = Math.sin(a);
+  const u = (px - V.tx) / V.s, v = (py - V.ty) / V.s;
+  return { X: u * co + v * se, Y: -u * se + v * co };
+}
+
+function visorMedir(reenquadrar) {
+  const V = VISOR;
+  if (!V.el) return;
+  V.rect = V.el.getBoundingClientRect();
+  V.cx = V.el.clientWidth; V.cy = V.el.clientHeight;
+  if (!V.cx || !V.cy) return;
+  const [lg, at] = visorDim();
+  V.fit = Math.min(V.cx / lg, V.cy / at) || 1;
+  V.min = V.fit;
+  // Teto do zoom: o nível mais fino da pirâmide, com folga de 2× para quem
+  // quiser chegar mais perto. Passar muito disso só entrega borrão ampliado.
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const resMax = V.niveis[V.niveis.length - 1].res;
+  V.max = Math.max(V.fit * 3, Math.min(14, resMax * 2 / dpr));
+  if (reenquadrar) {
+    V.s = V.fit;
+    visorPara(V.man.larguraPt / 2, V.man.alturaPt / 2, V.cx / 2, V.cy / 2);
+  }
+  visorAplicar();
+}
+
+/* Não deixa a folha escapar da caixa: menor que ela, fica centrada; maior,
+   pode andar até as bordas e não além. */
+function visorLimitar() {
+  const V = VISOR, m = V.man;
+  const a = V.rot * Math.PI / 180, co = Math.cos(a), se = Math.sin(a);
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  [[0, 0], [m.larguraPt, 0], [m.larguraPt, m.alturaPt], [0, m.alturaPt]].forEach(function (q) {
+    const px = V.s * (q[0] * co - q[1] * se), py = V.s * (q[0] * se + q[1] * co);
+    if (px < x0) x0 = px; if (px > x1) x1 = px;
+    if (py < y0) y0 = py; if (py > y1) y1 = py;
+  });
+  const lg = x1 - x0, at = y1 - y0;
+  V.tx = lg <= V.cx ? (V.cx - lg) / 2 - x0 : Math.min(-x0, Math.max(V.cx - x1, V.tx));
+  V.ty = at <= V.cy ? (V.cy - at) / 2 - y0 : Math.min(-y0, Math.max(V.cy - y1, V.ty));
+}
+
+function visorAplicar() {
+  const V = VISOR;
+  if (!V.folha) return;
+  visorLimitar();
+  V.folha.style.transform = 'translate3d(' + V.tx.toFixed(2) + 'px,' + V.ty.toFixed(2) +
+    'px,0) rotate(' + V.rot + 'deg) scale(' + V.s.toFixed(5) + ')';
+  // Isto roda a cada quadro de um arrasto. Nada de `getElementById` nem de
+  // objeto novo aqui dentro: é o caminho quente, e o que o app economiza aqui
+  // é o que sobra para o navegador compor os 60 quadros por segundo.
+  const pct = Math.round(V.s / V.fit * 100) + '%';
+  if (V.elZoom && V.elZoom.textContent !== pct) V.elZoom.textContent = pct;
+  const mem = PROJ.mem;
+  mem.base = V.base; mem.s = V.s; mem.tx = V.tx; mem.ty = V.ty;
+  mem.rot = V.rot; mem.giroManual = V.giroManual;
+  // A troca de quadrados anda no ritmo do quadro, não no do dedo: durante um
+  // arrasto chegam dezenas de eventos por segundo e recalcular a cada um era
+  // a única coisa que ainda engasgava.
+  if (!V.raf) V.raf = requestAnimationFrame(function () { V.raf = 0; visorQuadrados(); });
+}
+
+function visorEscalar(nova, px, py) {
+  const V = VISOR;
+  const m = visorMundo(px, py);
+  V.s = Math.max(V.min, Math.min(V.max, nova));
+  visorPara(m.X, m.Y, px, py);
+}
+
+/* Retângulo do desenho que está aparecendo, em pontos do PDF, com uma folga
+   para o quadrado de fora chegar antes de fazer falta. */
+function visorRetVisivel() {
+  const V = VISOR;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  [[0, 0], [V.cx, 0], [V.cx, V.cy], [0, V.cy]].forEach(function (q) {
+    const p = visorMundo(q[0], q[1]);
+    if (p.X < x0) x0 = p.X; if (p.X > x1) x1 = p.X;
+    if (p.Y < y0) y0 = p.Y; if (p.Y > y1) y1 = p.Y;
+  });
+  const fx = (x1 - x0) * 0.18, fy = (y1 - y0) * 0.18;
+  return { x0: x0 - fx, y0: y0 - fy, x1: x1 + fx, y1: y1 + fy };
+}
+
+function visorQuadrados() {
+  const V = VISOR;
+  if (!V.folha || !V.niveis.length) return;
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const alvo = V.s * dpr;
+  // Arredonda para CIMA — o nível tem de ter pelo menos a resolução da tela,
+  // senão traço fino de CAD vira borrão. Os 0.15 de tolerância (≈11% de
+  // ampliação) evitam pular de nível por um triz: cada degrau custa QUATRO
+  // vezes mais bytes, e 11% não se enxerga num traço de meio pixel.
+  let n = Math.ceil(Math.log(alvo / V.niveis[0].res) / Math.LN2 - 0.15);
+  n = Math.max(0, Math.min(V.niveis.length - 1, n));
+  const fundo = Math.min(2, V.niveis.length - 1);
+
+  // Durante um gesto, um nível NOVO só entra a cada 350 ms. Uma pinça rápida
+  // atravessa três níveis em meio segundo; sem isto, cada um deles baixaria
+  // seus quadrados para ser descartado no quadro seguinte. Pinça lenta segue
+  // ficando nítida no caminho, e ao soltar o nível certo entra na hora.
+  if (V.gesto && !V.niveis[n].el) {
+    const agora = performance.now();
+    if (agora - V.tNivel < 350) { while (n > fundo && !V.niveis[n].el) n--; }
+    else V.tNivel = agora;
+  }
+  const vis = visorRetVisivel();
+
+  // O fundo é a folha inteira num nível barato (8 quadrados): enquanto o
+  // nível fino não chega, é ele que aparece — nunca um buraco branco.
+  visorPintarNivel(fundo, null);
+  // O nível de baixo entra como reforço SÓ se já estiver em memória — o que
+  // é o caso de quem foi aproximando degrau a degrau. Numa pinça rápida, que
+  // atravessa três níveis num gesto, criá-lo do zero seria baixar quadrados
+  // para descartar meio segundo depois; o fundo já cobre esse intervalo.
+  if (n - 1 > fundo) visorPintarNivel(n - 1, vis, true);
+  if (n !== fundo) visorPintarNivel(n, vis);
+
+  V.niveis.forEach(function (nv, i) {
+    if (i === n || i === n - 1 || i === fundo) return;
+    if (nv.el) { nv.el.remove(); nv.el = null; nv.quadrados.clear(); }
+  });
+}
+
+function visorPintarNivel(i, ret, soSeJaAberto) {
+  const V = VISOR, nv = V.niveis[i], t = V.man.tile;
+  if (!nv.el) {
+    if (soSeJaAberto) return;
+    const d = document.createElement('div');
+    d.className = 'proj-nivel';
+    d.style.zIndex = String(i + 1);   // nível mais fino cobre o mais grosso
+    V.folha.appendChild(d);
+    nv.el = d;
+  }
+  let c0 = 0, c1 = nv.cols - 1, l0 = 0, l1 = nv.rows - 1;
+  if (ret) {
+    c0 = Math.max(0, Math.floor(ret.x0 * nv.res / t));
+    c1 = Math.min(nv.cols - 1, Math.floor(ret.x1 * nv.res / t));
+    l0 = Math.max(0, Math.floor(ret.y0 * nv.res / t));
+    l1 = Math.min(nv.rows - 1, Math.floor(ret.y1 * nv.res / t));
+  }
+  for (let l = l0; l <= l1; l++) {
+    for (let c = c0; c <= c1; c++) {
+      const k = l + '_' + c;
+      if (nv.quadrados.has(k) || !_visorTem(nv, l, c)) continue;
+      const lp = Math.min(t, nv.w - c * t), ap = Math.min(t, nv.h - l * t);
+      // Sobra de menos de um pixel para a direita e para baixo: sem ela, uma
+      // escala que cai em fração de pixel deixa risco branco entre quadrados.
+      const sx = c < nv.cols - 1 ? 0.8 : 0, sy = l < nv.rows - 1 ? 0.8 : 0;
+      const img = new Image();
+      img.className = 'proj-quadrado';
+      img.decoding = 'async';
+      img.alt = '';
+      img.style.left = (c * t / nv.res) + 'px';
+      img.style.top = (l * t / nv.res) + 'px';
+      img.style.width = ((lp + sx) / nv.res) + 'px';
+      img.style.height = ((ap + sy) / nv.res) + 'px';
+      img.src = V.base + i + '/' + k + '.webp';
+      nv.el.appendChild(img);
+      nv.quadrados.set(k, img);
+    }
+  }
+  if (!ret) return;
+  nv.quadrados.forEach(function (img, k) {
+    const p = k.split('_'), l = +p[0], c = +p[1];
+    if (l < l0 - 1 || l > l1 + 1 || c < c0 - 1 || c > c1 + 1) { img.remove(); nv.quadrados.delete(k); }
+  });
+}
+
+/* ---------------- gestos ---------------- */
+function visorLigarEventos() {
+  const V = VISOR, box = V.el;
+  const pts = new Map();
+  let pinca = null, ultimo = null, vx = 0, vy = 0, tUlt = 0, andou = 0;
+  let toque = { t: 0, x: 0, y: 0 };
+
+  const local = (e) => ({ x: e.clientX - V.rect.left, y: e.clientY - V.rect.top });
+  const centro = () => {
+    let x = 0, y = 0;
+    pts.forEach(p => { x += p.x; y += p.y; });
+    return { x: x / pts.size, y: y / pts.size };
+  };
+  const afast = () => {
+    const a = Array.from(pts.values());
+    return Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y);
+  };
+
+  _visorEscutar(box, 'pointerdown', (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    V.rect = box.getBoundingClientRect();
+    V.inerciaId++; V.animId++;            // dedo na tela cancela o que estava correndo
+    vx = vy = 0;
+    try { box.setPointerCapture(e.pointerId); } catch (_) { }
+    pts.set(e.pointerId, local(e));
+    box.classList.add('arrastando');
+    if (pts.size === 2) {
+      const c = centro();
+      pinca = { d: afast(), s: V.s, m: visorMundo(c.x, c.y) };
+      V.gesto++;
+    } else {
+      pinca = null; andou = 0;
+      ultimo = local(e); tUlt = performance.now();
+    }
+  });
+
+  _visorEscutar(box, 'pointermove', (e) => {
+    if (!pts.has(e.pointerId)) return;
+    e.preventDefault();
+    pts.set(e.pointerId, local(e));
+    if (pts.size >= 2) {
+      if (!pinca) { const c0 = centro(); pinca = { d: afast(), s: V.s, m: visorMundo(c0.x, c0.y) }; }
+      const d = afast(), c = centro();
+      if (pinca.d > 4) {
+        // Ancorado no ESTADO EM QUE A PINÇA COMEÇOU, não no quadro anterior:
+        // somando quadro a quadro o erro se acumula e o desenho escorrega
+        // debaixo dos dedos.
+        V.s = Math.max(V.min, Math.min(V.max, pinca.s * d / pinca.d));
+        visorPara(pinca.m.X, pinca.m.Y, c.x, c.y);
+      }
+      visorAplicar();
+      return;
+    }
+    const p = local(e), agora = performance.now(), dt = Math.max(1, agora - tUlt);
+    const dx = p.x - ultimo.x, dy = p.y - ultimo.y;
+    andou += Math.abs(dx) + Math.abs(dy);
+    V.tx += dx; V.ty += dy;
+    vx = 0.75 * (dx / dt) + 0.25 * vx;
+    vy = 0.75 * (dy / dt) + 0.25 * vy;
+    ultimo = p; tUlt = agora;
+    visorAplicar();
+  });
+
+  const soltou = (e) => {
+    if (!pts.has(e.pointerId)) return;
+    pts.delete(e.pointerId);
+    try { box.releasePointerCapture(e.pointerId); } catch (_) { }
+    if (pts.size === 1) {                       // largou um dedo: volta a arrastar
+      const p = Array.from(pts.values())[0];
+      ultimo = { x: p.x, y: p.y }; tUlt = performance.now();
+      if (pinca) { V.gesto = Math.max(0, V.gesto - 1); pinca = null; visorAplicar(); }
+      vx = vy = 0; andou = 999;                 // não vira toque duplo
+      return;
+    }
+    if (pts.size) return;
+    box.classList.remove('arrastando');
+    if (pinca) { V.gesto = Math.max(0, V.gesto - 1); pinca = null; visorAplicar(); }
+    const p = local(e), agora = performance.now();
+    if (andou < 12) {
+      if (agora - toque.t < 330 && Math.hypot(p.x - toque.x, p.y - toque.y) < 34) {
+        toque.t = 0;
+        visorAproximar(p.x, p.y);
+        return;
+      }
+      toque = { t: agora, x: p.x, y: p.y };
+      return;
+    }
+    if (Math.hypot(vx, vy) > 0.12) visorInercia(vx, vy);
+  };
+  _visorEscutar(box, 'pointerup', soltou);
+  _visorEscutar(box, 'pointercancel', soltou);
+
+  // A roda vem em rajada: conta como UM gesto, que termina quando ela para.
+  let rodaFim = 0;
+  _visorEscutar(box, 'wheel', (e) => {
+    e.preventDefault();
+    V.rect = box.getBoundingClientRect();
+    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+    const p = local(e);
+    if (!rodaFim) V.gesto++;
+    clearTimeout(rodaFim);
+    rodaFim = setTimeout(() => { rodaFim = 0; V.gesto = Math.max(0, V.gesto - 1); visorAplicar(); }, 180);
+    visorEscalar(V.s * Math.exp(-dy * 0.0022), p.x, p.y);
+    visorAplicar();
+  }, { passive: false });
+
+  _visorEscutar(box, 'dblclick', (e) => {
+    V.rect = box.getBoundingClientRect();
+    const p = local(e);
+    visorAproximar(p.x, p.y);
+  });
+
+  // Teclado, para quem lê a prancha no computador da obra.
+  box.tabIndex = 0;
+  _visorEscutar(box, 'keydown', (e) => {
+    const passo = e.shiftKey ? 260 : 90;
+    const mapa = { ArrowLeft: [passo, 0], ArrowRight: [-passo, 0], ArrowUp: [0, passo], ArrowDown: [0, -passo] };
+    if (mapa[e.key]) { V.tx += mapa[e.key][0]; V.ty += mapa[e.key][1]; visorAplicar(); e.preventDefault(); return; }
+    if (e.key === '+' || e.key === '=') { prachaZoom(1); e.preventDefault(); }
+    else if (e.key === '-' || e.key === '_') { prachaZoom(-1); e.preventDefault(); }
+    else if (e.key === '0') { prachaAjustar(); e.preventDefault(); }
+    else if (e.key === 'Escape' && document.querySelector('.proj-visor.cheia')) { prachaTelaCheia(); e.preventDefault(); }
+  });
+
+  // Girar o aparelho ou abrir o teclado muda a caixa; sem remedir, a folha
+  // fica torta. O ouvinte se desliga sozinho quando a tela sai do DOM.
+  const aoMudar = () => {
+    if (!V.el || !document.body.contains(V.el)) { visorFechar(); return; }
+    visorMedir(false);
+    visorAutoGirar();
+  };
+  _visorEscutar(window, 'resize', aoMudar);
+  _visorEscutar(window, 'orientationchange', aoMudar);
+}
+
+function visorInercia(vx, vy) {
+  const V = VISOR, id = ++V.inerciaId;
+  let px = vx, py = vy, t0 = performance.now();
+  const passo = () => {
+    if (id !== V.inerciaId || !V.folha) return;
+    const agora = performance.now(), dt = Math.min(34, agora - t0);
+    t0 = agora;
+    V.tx += px * dt; V.ty += py * dt;
+    const f = Math.pow(0.938, dt / 16);
+    px *= f; py *= f;
+    visorAplicar();
+    if (Math.hypot(px, py) > 0.02) requestAnimationFrame(passo);
+  };
+  requestAnimationFrame(passo);
+}
+
+/* Anima até a escala pedida mantendo o ponto (px,py) da tela parado. */
+function visorAnimar(alvo, px, py) {
+  const V = VISOR;
+  if (!V.folha) return;
+  const de = V.s, m = visorMundo(px, py), t0 = performance.now(), id = ++V.animId;
+  alvo = Math.max(V.min, Math.min(V.max, alvo));
+  V.gesto++;
+  const passo = () => {
+    if (id !== V.animId) { V.gesto = Math.max(0, V.gesto - 1); return; }
+    if (!V.folha) { V.gesto = 0; return; }
+    const k = Math.min(1, (performance.now() - t0) / 240);
+    const e = 1 - Math.pow(1 - k, 3);
+    V.s = de + (alvo - de) * e;
+    visorPara(m.X, m.Y, px, py);
+    if (k < 1) { visorAplicar(); requestAnimationFrame(passo); }
+    else { V.gesto = Math.max(0, V.gesto - 1); visorAplicar(); }
+  };
+  requestAnimationFrame(passo);
+}
+
+function visorAproximar(px, py) {
+  const V = VISOR;
+  if (V.s >= V.max * 0.98) visorAnimar(V.fit, V.cx / 2, V.cy / 2);
+  else visorAnimar(V.s * 2.6, px, py);
+}
+
+/* ---------------- botões ---------------- */
+window.prachaZoom = function (dir) {
+  if (VISOR.folha) { visorAnimar(VISOR.s * (dir > 0 ? 1.7 : 1 / 1.7), VISOR.cx / 2, VISOR.cy / 2); return; }
+  PROJ.zoom = Math.min(4, Math.max(0.4, +(PROJ.zoom + dir * 0.2).toFixed(2)));
+  desenharPrancha();
+};
+
+window.prachaAjustar = function () {
+  if (VISOR.folha) { visorAnimar(VISOR.fit, VISOR.cx / 2, VISOR.cy / 2); return; }
+  PROJ.zoom = 1; desenharPrancha();
+};
+
+/* A folha é 3,3× mais larga que alta. Em pé num celular, a prancha inteira
+   cabe numa tira de 2 cm de altura e sobra tela vazia dos dois lados; deitada,
+   ocupa tudo. `graus` ausente = mais 90°. */
+function visorGirar(graus) {
+  const V = VISOR;
+  if (!V.folha) return;
+  const noFit = Math.abs(V.s - V.fit) < V.fit * 0.02;
+  const centro = visorMundo(V.cx / 2, V.cy / 2);
+  V.rot = (((graus === undefined ? V.rot + 90 : graus) % 360) + 360) % 360;
+  const [lg, at] = visorDim();
+  V.fit = Math.min(V.cx / lg, V.cy / at) || 1;
+  V.min = V.fit;
+  V.s = noFit ? V.fit : Math.max(V.fit, V.s);
+  visorPara(centro.X, centro.Y, V.cx / 2, V.cy / 2);
+  visorAplicar();
+}
+
+/* Abre na orientação que mostra MAIS desenho — no celular em pé isso é o
+   dobro, e era a diferença entre uma tira ilegível e a prancha ocupando a
+   tela. Vale enquanto ninguém tocou em "Girar": a partir daí a escolha é de
+   quem está lendo, e nem virar o aparelho desfaz. */
+function visorAutoGirar() {
+  const V = VISOR;
+  if (V.giroManual || !V.folha || !V.cx || !V.cy) return;
+  const m = V.man;
+  const reto = Math.min(V.cx / m.larguraPt, V.cy / m.alturaPt);
+  const deitado = Math.min(V.cx / m.alturaPt, V.cy / m.larguraPt);
+  const quer = deitado > reto * 1.3 ? 90 : 0;
+  // Só reenquadra quem está vendo a folha inteira: girar por baixo de alguém
+  // que já ampliou uma boca de lobo seria tirar o desenho da mão.
+  if (V.rot !== quer && Math.abs(V.s - V.fit) < V.fit * 0.02) visorGirar(quer);
+}
+
+window.prachaGirar = function () { VISOR.giroManual = true; visorGirar(); };
+
+/* Tela cheia por CSS, não pela API de fullscreen: no iPhone o Safari só
+   aceita fullscreen em vídeo, e o botão simplesmente não fazia nada. */
+window.prachaTelaCheia = function () {
+  const cartao = document.getElementById('projCartao');
+  if (!cartao || !VISOR.folha) return;
+  const entrando = !cartao.classList.contains('cheia');
+  cartao.classList.toggle('cheia', entrando);
+  document.body.classList.toggle('proj-cheia-ativa', entrando);
+  const b = document.getElementById('projBtnCheia');
+  if (b) b.textContent = entrando ? 'Sair' : 'Tela cheia';
+  // o layout só está pronto no quadro seguinte
+  requestAnimationFrame(() => { visorMedir(false); visorAutoGirar(); });
+};
+
+/* Guarda a prancha inteira no aparelho. Não mexe no cache direto: só pede
+   cada quadrado, e o service worker (cache-primeiro) grava no balde certo —
+   assim não há dois lugares sabendo o nome do cache. */
+window.prachaGuardar = async function () {
+  const V = VISOR, b = document.getElementById('projBtnGuardar');
+  if (!V.man || !b || b.disabled) return;
+  const urls = [];
+  V.niveis.forEach(function (nv, i) {
+    for (let l = 0; l < nv.rows; l++) {
+      for (let c = 0; c < nv.cols; c++) if (_visorTem(nv, l, c)) urls.push(V.base + i + '/' + l + '_' + c + '.webp');
+    }
+  });
+  const mb = V.man.bytes ? ' (' + (V.man.bytes / 1048576).toFixed(0) + ' MB)' : '';
+  if (!confirm('Baixar a prancha inteira' + mb + ' para abrir sem sinal?')) return;
+
+  b.disabled = true;
+  let feitos = 0, falhou = 0, i = 0;
+  const proximo = async () => {
+    while (i < urls.length) {
+      const u = urls[i++];
+      try { await fetch(u, { cache: 'force-cache' }); } catch (e) { falhou++; }
+      feitos++;
+      if (feitos % 8 === 0 || feitos === urls.length) {
+        b.textContent = Math.round(feitos / urls.length * 100) + '%';
+      }
+    }
+  };
+  await Promise.all([proximo(), proximo(), proximo(), proximo()]);
+  b.disabled = false;
+  b.innerHTML = ic('nuvem') + ' Offline';
+  toast(falhou ? 'Prancha guardada, mas ' + falhou + ' pedaço(s) faltaram — repita com sinal melhor.'
+               : 'Prancha guardada: abre sem sinal.', falhou ? 'error' : 'success', 5000);
+};
+
+// ====================================================================
+// PRANCHA EM PDF — o caminho antigo, para as obras que ainda não foram
+// fatiadas. Rola a página inteira e redesenha a cada passo de zoom; serve
+// para folha pequena, e é justamente o que não dava conta da A1.
+// ====================================================================
+async function abrirPranchaPdf() {
   const box = document.getElementById('projVisor');
   if (!box || !PROJ.sel) return;
   if (PROJ.doc && PROJ.url === PROJ.sel) { desenharPrancha(); return; }
@@ -5531,12 +6174,6 @@ async function desenharPrancha() {
   const z = document.getElementById('projZoom');
   if (z) z.textContent = Math.round(PROJ.zoom * 100) + '%';
 }
-
-window.prachaZoom = function (d) {
-  PROJ.zoom = Math.min(4, Math.max(0.4, +(PROJ.zoom + d).toFixed(2)));
-  desenharPrancha();
-};
-window.prachaAjustar = function () { PROJ.zoom = 1; desenharPrancha(); };
 
 function renderGaleria() {
   const todas = fotosDaObra();

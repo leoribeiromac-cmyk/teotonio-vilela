@@ -251,28 +251,80 @@ medição, semanas depois, quando não dá mais para lembrar o que foi executado
 
 ## Projetos
 
-Tela **Projetos**: as pranchas do projeto executivo, **renderizadas dentro do
-app** pelo PDF.js vendorizado (o mesmo que lê a DANFE) — não pelo leitor de PDF
-do aparelho. No celular do canteiro, abrir em app externo tira o apontador do
-sistema e, sem sinal, muitas vezes nem abre. Aqui funciona offline depois da
-primeira vez, com zoom de 40% a 400% e botão de ajustar à largura.
+Tela **Projetos**: as pranchas do executivo **abertas dentro do app**, nunca no
+leitor de PDF do aparelho. No celular do canteiro, abrir em app externo tira o
+apontador do sistema e, sem sinal, muitas vezes nem abre.
+
+### Por que a prancha grande não é mais um PDF
+
+A prancha da Teotônio é uma folha A1 com ~50 mil entidades vetoriais. Com PDF.js,
+cada passo de zoom mandava redesenhar tudo: segundos parado, e no meio de um
+gesto de dois dedos a tela simplesmente não acompanhava. Um SVG com 50 mil nós é
+pior — o navegador rasteriza de novo a cada mudança de escala.
+
+Então ela é servida como **pirâmide de quadrados**, do jeito que mapa de rua
+funciona:
+
+```
+projetos/teotonio/implantacao/
+  prancha.json          manifesto (856 bytes)
+  0/0_0.webp            nível 0 — a folha inteira, 443 px
+  …
+  6/12_34.webp          nível 6 — 28368 × 8556 px (12 px por ponto do PDF)
+```
+
+Cada nível tem o dobro da resolução do anterior, até **12 px por ponto do PDF**
+(~864 dpi na folha A1 — dá para ler cota de 2,9 pt sem borrar). Arrastar e
+ampliar viram **um `transform`** na camada: a GPU compõe o que já está
+desenhado, nada é rasterizado de novo, e só os poucos quadrados que entram na
+tela são baixados.
+
+| | |
+|---|---|
+| Pirâmide inteira | 835 quadrados · 12,6 MB |
+| **Custo de abrir a tela** | **~100 KB** (a folha inteira, num nível grosso) |
+| Custo de ampliar num ponto | ~10 quadrados, ~150 KB |
+| Papel em branco | 393 dos 952 quadrados do nível fino **não existem** |
+
+O manifesto traz um bitmap dizendo quais quadrados existem — quadrado em branco
+não vira arquivo no repositório nem pedido de rede. O `sw.js` guarda os
+quadrados num **balde próprio** (`VERSAO_PRANCHAS`), que sobrevive à atualização
+do app, e os serve **sem revalidar**: são imutáveis, e revalidar dezenas deles a
+cada arrastada gastaria o 4G do canteiro para receber o mesmo desenho de volta.
+
+No visor: arrastar (com inércia), pinça, roda do mouse, toque duplo, setas do
+teclado, **Girar** (a folha é 3,3× mais larga que alta — deitada, ocupa a tela
+do celular em pé) e **Tela cheia** — esta por CSS, porque o Safari do iPhone só
+dá fullscreen a vídeo. O botão **Offline** baixa a pirâmide inteira para o
+aparelho, para a prancha abrir sem sinal nenhum.
+
+Para fatiar uma prancha nova: `python3 ferramentas/fatiar-prancha.py entrada.pdf
+projetos/<obra>/<nome>/` (precisa de `pymupdf` e `pillow`). Refatiar uma prancha
+existente pede que se suba o `VERSAO_PRANCHAS` do `sw.js` — o nome do arquivo
+não muda, então é a versão do balde que descarta os quadrados velhos.
+
+### Cadastro
 
 Os arquivos ficam em `projetos/<obra>/` e são listados em `projetos`, na
 configuração da obra dentro do `index.html`:
 
 ```js
 projetos: [
-  { grupo: 'Urbanismo', disciplina: 'Planta — folha 101', escala: '1:250',
-    ref: 'Rua José Nicolau de Lima',          // trecho ou referência da prancha
-    cod: 'DE-VM-TV-01-5U-101 rev.H',          // número como está no carimbo
-    codObra: '1000-SI060-015-UB3-101',        // código interno SPObras
-    arquivo: 'projetos/teotonio/urbanismo-101.pdf' },
+  { grupo: 'Implantação', disciplina: 'Plano de ataque — planta', escala: '1:500',
+    ref: 'Av. Sen. Teotônio Vilela — extensão inteira (est. 100 a 141 e 203 a 243)',
+    cod: 'VM-TV-01-5P-103 rev.1',             // número como está no carimbo
+    codObra: '1000-SI060-011-PV3-103_C',      // código interno SPObras
+    tiles: 'projetos/teotonio/implantacao/',  // pirâmide (opcional)
+    arquivo: 'projetos/teotonio/implantacao.pdf' },
 ]
 ```
 
-`grupo` agrupa a lista lateral (Urbanismo, Drenagem, Pavimentação…). Todos os
-perfis enxergam a tela — inclusive Campo, que é quem mais precisa saber o que
-construir.
+`grupo` agrupa a lista lateral (Urbanismo, Drenagem, Pavimentação…), que só
+aparece quando há mais de uma prancha. Prancha cadastrada **sem** `tiles` abre
+pelo PDF.js vendorizado, como antes — é o caso das obras que ainda não passaram
+pelo fatiador. `arquivo` é sempre o PDF, que alimenta os botões Abrir e Baixar.
+Todos os perfis enxergam a tela — inclusive Campo, que é quem mais precisa saber
+o que construir.
 
 ## Fila offline
 
@@ -398,7 +450,7 @@ Pages, e o service worker guarda junto com o app.
 | `vendor/chartjs/` | Chart.js 4.4.0 | ao abrir um painel com gráfico |
 | `vendor/jspdf/` | jsPDF 2.5.1 + AutoTable 3.5.31 | ao gerar um PDF |
 | `vendor/xlsx/` | xlsx-js-style 1.2.0 | ao exportar Excel |
-| `vendor/pdfjs/` | PDF.js (Mozilla) | na leitura da DANFE e na tela de Projetos |
+| `vendor/pdfjs/` | PDF.js (Mozilla) | na leitura da DANFE e nas pranchas ainda em PDF |
 | `vendor/fontes/` | Space Grotesk + JetBrains Mono | na abertura (140 KB, subconjunto latino) |
 
 **Nenhuma das quatro primeiras entra no `<head>`.** Somadas são 1,3 MB, e
