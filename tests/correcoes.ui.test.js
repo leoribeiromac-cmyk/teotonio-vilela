@@ -357,6 +357,106 @@ async function abrir(opts = {}) {
     await b.close();
   }
 
+  // ================================================================
+  console.log('\nLOTE GRANDE — não pode ir por GET e ser recusado pelo servidor');
+  {
+    const { b, p } = await abrir();
+    const r = await p.evaluate(() => {
+      // 12 serviços com acento, como um dia cheio de canteiro
+      const params = { action: 'addBatchRDO', clientId: 'c1', token: 't',
+        batch: JSON.stringify(Array.from({ length: 12 }, (_, i) => ({
+          id: 'i' + i, obra: 'teotonio', data: '2026-07-10', turno: 'Diurno',
+          pacote_id: 'P01', pacote_nome: 'Execução de berço e assentamento de tubulação',
+          quantidade: 12.5, unidade: 'm³', local_estaca: 'E10' + i + ' a E11' + i + ' (CB)',
+          equipe: 'Sena Obras', observacao: 'Serviço executado conforme projeto — sem interferências' }))) };
+      const url = CONFIG.appsScript + '?' + Object.entries(params)
+        .map(([k, v]) => encodeURIComponent(k) + '=' + encodeURIComponent(v)).join('&');
+      return { estimado: tamanhoComoURL(params), real: url.length, limite: LIMITE_URL };
+    });
+    ok('tamanhoComoURL não subestima mais o tamanho real',
+      r.estimado >= r.real * 0.95, `estimado ${r.estimado} vs real ${r.real}`);
+    ok('e um lote de 12 serviços é reconhecido como grande demais para GET',
+      r.estimado > r.limite, `estimado ${r.estimado} · limite ${r.limite}`);
+
+    // salvarRDO tem de usar enviarAcao (que troca para POST), não jsonp direto
+    const usaEnviarAcao = await p.evaluate(() => String(salvarRDO).indexOf('enviarAcao(reqParams') !== -1);
+    ok('salvarRDO envia por enviarAcao, não por jsonp direto', usaEnviarAcao);
+    await b.close();
+  }
+
+  // ================================================================
+  console.log('\nENVIO DUPLO — a trava sobrevive a sair da tela e voltar');
+  {
+    const { b, p } = await abrir();
+    const r = await p.evaluate(() => ({
+      existe: typeof _envioRDOEmCurso !== 'undefined',
+      noBotao: String(salvarRDO).indexOf('_envioRDOEmCurso') !== -1,
+      liberaNoFinally: /finally\s*\{[^}]*_envioRDOEmCurso\s*=\s*false/.test(String(salvarRDO)),
+    }));
+    ok('a trava é de módulo, não do elemento do botão', r.existe && r.noBotao, JSON.stringify(r));
+    ok('e é liberada no finally, em qualquer desfecho', r.liberaNoFinally);
+    await b.close();
+  }
+
+  // ================================================================
+  console.log('\nDADO SUJO — o cálculo recusa e a tela avisa');
+  {
+    const sujo = [
+      'ID,Frente,Pacote,Unidade Física,Qtd Estimada,Produtividade,Status',
+      'P01,Drenagem,Bom,m3,1000,10,Ativo',
+      'P02,Drenagem,Estimada negativa,m3,-500,10,Ativo',
+    ].join('\r\n');
+    const lanc = [RDO_VAZIO,
+      'r1,2026-07-10,P01,500,E100,Diurno,Wallace,teotonio',
+      'r2,2026-07-10,p01,200,E101,Diurno,Wallace,teotonio',      // caixa trocada
+      'r3,2026-07-10,P01,-800,E102,Diurno,Wallace,teotonio',     // negativa
+      'r4,2026-07-10,P77,300,E103,Diurno,Wallace,teotonio',      // pacote inexistente
+    ].join('\r\n');
+    const { b, p } = await abrir({ csv: { [GID.pacotes]: sujo, [GID.rdoavanco]: lanc } });
+    const r = await p.evaluate(() => {
+      const av = calcularAvancoPorPacote();
+      return {
+        p01: av['P01'] ? av['P01'].qtdExecutada : null,
+        estimadaP02: av['P02'] ? av['P02'].qtdEstimada : null,
+        negativas: DADO_SUJO.quantidadeNegativa.length,
+        desconhecidos: DADO_SUJO.pacoteDesconhecido,
+        estimadaInvalida: DADO_SUJO.estimadaInvalida.length,
+      };
+    });
+    ok('"p01" em caixa baixa soma no mesmo pacote de "P01"', r.p01 === 700, 'somou ' + r.p01);
+    ok('a quantidade negativa é recusada, não subtraída', r.negativas === 1, JSON.stringify(r));
+    ok('Qtd Estimada negativa vira 0 (não peso negativo)', r.estimadaP02 === 0, 'ficou ' + r.estimadaP02);
+    ok('o pacote inexistente é registrado', r.desconhecidos.indexOf('P77') !== -1, JSON.stringify(r.desconhecidos));
+
+    await p.evaluate(() => navigate('executivo'));
+    await p.waitForTimeout(500);
+    const txt = await p.evaluate(() => document.getElementById('page').textContent);
+    ok('e o Painel Executivo avisa que houve linha recusada',
+      txt.indexOf('não conseguiu usar') !== -1 && txt.indexOf('P77') !== -1);
+    await b.close();
+  }
+
+  // ================================================================
+  console.log('\nXSS — texto da planilha não vira marcação em nenhuma tela');
+  {
+    const P = '<img src=x onerror="window.__x=(window.__x||0)+1">';
+    const pac = ['ID,Frente,Pacote,Unidade Física,Qtd Estimada,Produtividade,Status',
+      `P01,"Drenagem${P}","Concreto${P}","m3${P}",1000,10,Ativo`].join('\r\n');
+    const lanc = ['id,Data,Pacote_ID,Quantidade,Local_Estaca,Equipe,Apontador,Turno,obra',
+      `r1,2026-07-10,P01,100,"E100${P}","Equipe${P}","Wallace${P}",Diurno,teotonio`].join('\r\n');
+    const cron = ['Nivel,EDT,Nome da tarefa,Início,Término,Pacote_ID',
+      '0,1,OBRA,09/05/2024,08/03/2026,', `1,1.1,"Tarefa${P}",01/06/2025,01/06/2026,P01`].join('\r\n');
+    const { b, p } = await abrir({ csv: { [GID.pacotes]: pac, [GID.rdoavanco]: lanc, [GID.cronograma]: cron } });
+    for (const tela of ['executivo', 'avancofisico', 'historico', 'medicao', 'rdo', 'cronograma']) {
+      await p.evaluate(() => { window.__x = 0; });
+      await p.evaluate(t => navigate(t), tela);
+      await p.waitForTimeout(420);
+      const n = await p.evaluate(() => window.__x || 0);
+      ok(`nenhum script da planilha executa em "${tela}"`, n === 0, n + ' execuções');
+    }
+    await b.close();
+  }
+
   console.log(falhas === 0 ? '\nTUDO CERTO\n' : `\n${falhas} FALHA(S)\n`);
   process.exit(falhas === 0 ? 0 : 1);
 })();
