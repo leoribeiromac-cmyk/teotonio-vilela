@@ -9518,6 +9518,64 @@ function consumoMedicao() {
   return calcularConsumoItens(av);
 }
 
+/* --------------------------------------------------------------------
+   LINHAS QUE PARECEM DUPLICADAS
+   --------------------------------------------------------------------
+   A prévia da tela soma TODAS as linhas do CSV. O endpoint
+   `producaoPorPacote` do backend (Code.gs:1285), oferecido no README para
+   automações externas, deduplica por conteúdo com a chave
+   data|turno|pacote_id|quantidade|apontador|local_estaca. Ou seja: os dois
+   caminhos oficiais dão números DIFERENTES para a mesma medição, e nenhum
+   diz que está discordando do outro.
+
+   Não dá para simplesmente copiar o dedup para cá: duas concretagens de
+   50 m³ na mesma estaca, no mesmo turno e pelo mesmo apontador são
+   indistinguíveis de uma duplicata — deduplicar apagaria serviço executado.
+   Qual das duas contas vale é decisão de quem fecha a medição, não do
+   código.
+
+   Então a tela NÃO muda o número: ela mostra quantas linhas o outro caminho
+   descartaria, para a divergência parar de ser invisível.
+   -------------------------------------------------------------------- */
+function linhasDuplicadasNaMedicao() {
+  const rdos = rdosDoMes(MEDICAO_MES);
+  const vistas = new Set();
+  const dup = [];
+  rdos.forEach(r => {
+    const chave = [
+      String(getCSVField(r, 'Data') || '').trim(),
+      String(getCSVField(r, 'Turno') || '').trim().toLowerCase(),
+      String(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id') || '').trim().toLowerCase(),
+      String(getCSVField(r, 'Quantidade') || '').trim(),
+      String(getCSVField(r, 'Apontador') || '').trim().toLowerCase(),
+      String(getCSVField(r, 'Local_Estaca') || '').trim().toLowerCase(),
+    ].join('|');
+    if (vistas.has(chave)) dup.push(r); else vistas.add(chave);
+  });
+  return dup;
+}
+
+function avisoDuplicadasMedicao() {
+  const dup = linhasDuplicadasNaMedicao();
+  if (!dup.length) return '';
+  const total = rdosDoMes(MEDICAO_MES).length;
+  return `<div class="card stagger-item" style="border-left:3px solid var(--red)">
+    <div class="card-body">
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px">
+        ${dup.length} de ${total} linhas do período parecem repetidas
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5">
+        Mesma data, turno, pacote, quantidade, apontador e estaca. <strong>A prévia
+        acima soma todas elas.</strong> Já o endpoint <span class="t-mono">producaoPorPacote</span>
+        do backend descarta as repetidas — os dois caminhos dão números diferentes
+        para esta mesma medição.<br>
+        Duas execuções iguais no mesmo turno e estaca existem de verdade, então o app
+        não decide sozinho: confira no Histórico antes de fechar o mês.
+      </div>
+    </div>
+  </div>`;
+}
+
 window.exportarMedicaoCSV = function() {
   const consumo = consumoMedicao();
   const lista = Object.values(consumo).filter(x => x.consumido > 0)
@@ -9561,7 +9619,7 @@ function renderMedicao(){
     return l.charAt(0).toUpperCase() + l.slice(1);
   };
 
-  return`<div class="card stagger-item">
+  return avisoDuplicadasMedicao() + `<div class="card stagger-item">
     <div class="card-header">
       <div><div class="card-title">Prévia de medição — consumo por item contratual</div><div class="card-title-sub">RDOs × matriz de coeficientes · filtre o mês da medição e exporte o CSV para conferir contra a Planilha Geral</div></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
