@@ -3579,6 +3579,55 @@ function baseDoAvanco() {
     ? { ponderado: true,  rotulo: 'Avanço Ponderado', nota: 'escopo em dias-equivalentes' }
     : { ponderado: false, rotulo: 'Avanço Físico Médio', nota: 'média simples dos serviços — obra sem produtividade declarada' };
 }
+
+/* --------------------------------------------------------------------
+   PACOTES QUE PESAM ZERO — os que somem do avanço sem dizer nada
+   --------------------------------------------------------------------
+   Quando a obra pondera (basta UM pacote ter produtividade), todo pacote
+   SEM produtividade recebe peso 0 em diasEquivalentes(). Peso zero não é
+   "pesa pouco": é sumir. O pacote, e tudo que já foi lançado nele, não
+   entra no Avanço Ponderado, nem na Curva S, nem na projeção de término.
+
+   A produtividade sai da coluna `Produtividade` da aba Pacotes ou, na
+   falta dela, do mapa fixo PRODUTIVIDADE_PADRAO — que é por ID e tem
+   buracos. Um pacote novo colado na planilha sem essa coluna cai no
+   silêncio: o apontador lança, o número da diretoria não se move, e não há
+   nada na tela explicando.
+
+   Esta função é o que permite a tela DIZER. Não muda conta nenhuma.
+   -------------------------------------------------------------------- */
+function pacotesSemPeso() {
+  if (!obraPonderaPorProdutividade()) return [];
+  return (STATE.pacotes || []).filter(p => {
+    const id = getCSVField(p, 'ID');
+    if (!id) return false;
+    return num(getCSVField(p, 'Qtd Estimada')) > 0 && produtividadeDe(id) <= 0;
+  }).map(p => ({ id: getCSVField(p, 'ID'), nome: getCSVField(p, 'Pacote') || '' }));
+}
+
+/* O aviso pronto para a tela, ou '' quando está tudo pesado. */
+function avisoPacotesSemPeso() {
+  const semPeso = pacotesSemPeso();
+  if (!semPeso.length) return '';
+  const lancados = new Set((STATE.rdoavanco || [])
+    .map(r => getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
+  const comLancamento = semPeso.filter(p => lancados.has(p.id));
+  const lista = semPeso.map(p => p.id + (p.nome ? ' (' + escHtml(p.nome) + ')' : '')).join(' · ');
+  return `<div class="card stagger-item" style="border-left:3px solid var(--red)">
+    <div class="card-body">
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px">
+        ${semPeso.length} pacote(s) fora do Avanço Ponderado${comLancamento.length ? ' — e ' + comLancamento.length + ' já tem lançamento' : ''}
+      </div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5">
+        Sem produtividade declarada, o pacote pesa <strong>zero</strong>: ele e tudo que já
+        foi lançado nele ficam de fora do avanço, da Curva S e da projeção de término.
+        Preencha a coluna <strong>Produtividade</strong> da aba <strong>Pacotes</strong>
+        para eles entrarem na conta.<br>
+        <span class="t-mono" style="font-size:11px">${lista}</span>
+      </div>
+    </div>
+  </div>`;
+}
 /* dias-equivalentes do pacote, ou 1 quando a obra não pondera */
 function diasEquivalentes(qtdEstimada, pid) {
   const prod = produtividadeDe(pid);
@@ -7545,6 +7594,11 @@ function renderExecutivo() {
     </div>
 
     ${renderCentralCampo()}
+
+    <!-- Pacote sem produtividade pesa ZERO e some do avanço. Enquanto isso não
+         aparecia na tela, o apontador lançava e o número da diretoria não se
+         movia, sem ninguém saber por quê. -->
+    ${avisoPacotesSemPeso()}
 
     <!-- ============ HERO EXECUTIVO ============ -->
     <div class="exec-hero stagger-item" style="animation-delay:.04s">
@@ -12049,7 +12103,23 @@ window.editarRDODiario = function(data) {
 function renderRDODiarioV4() {
   const dataHoje = getLocalISODate(new Date());
   if (!DIARIO_V4) {
-    DIARIO_V4 = carregarDiarioDaSheet(dataHoje) || loadDiarioV4(dataHoje) || defaultDiarioV4(dataHoje);
+    /* PRECEDÊNCIA: o rascunho local vem PRIMEIRO.
+       Antes a planilha vencia, e `carregarDiarioDaSheet` só reaproveitava do
+       localStorage um único campo (`efetivo`). Recarregar a página no meio do
+       RDO Diário — ou o app trocar de versão — descartava apontador,
+       equipamentos, visitas, ocorrências, observações e funções digitadas.
+       O autosave por tecla existia; o que faltava era alguém olhar para ele.
+
+       Agora que `clearDiarioV4` é chamada depois de gravar, rascunho presente
+       quer dizer trabalho que NÃO subiu — e nesse caso ele manda. Sem
+       rascunho, a planilha continua sendo a fonte, como sempre foi. */
+    const rascunho = loadDiarioV4(dataHoje);
+    if (rascunho) {
+      DIARIO_V4 = rascunho;
+      setTimeout(() => toast('Retomando o RDO que estava aberto neste aparelho e ainda não foi enviado.', 'info', 5000), 400);
+    } else {
+      DIARIO_V4 = carregarDiarioDaSheet(dataHoje) || defaultDiarioV4(dataHoje);
+    }
   }
   
   if (!DIARIO_TURNO_ATIVO) {
@@ -12476,6 +12546,11 @@ async function salvarDiarioV4() {
   try {
     const result = await jsonp(CONFIG.appsScript, {...params, ...authParams()}, 0, 0, null);
     if (!result.ok) throw new Error(result.error || 'Erro');
+    // Gravou no servidor: o rascunho local cumpriu o papel dele e sai de cena.
+    // `clearDiarioV4` existia e nunca era chamada — o rascunho ficava para
+    // sempre, e por isso "existe rascunho" não podia significar nada. Agora
+    // significa: rascunho presente = trabalho que ainda NÃO subiu.
+    clearDiarioV4(d.data);
     toast(`Turno ${t.toUpperCase()} salvo`, 'success', 4000);
     setTimeout(() => carregarTudo(), 1500);
     btn.disabled = false;
@@ -14107,21 +14182,24 @@ function apSlideHTML(sl, d) {
     const lista = [...(STATE.rdodiario || [])]
       .sort((a, b) => String(normalizarDataCSV(getCSVField(b, 'Data')))
         .localeCompare(String(normalizarDataCSV(getCSVField(a, 'Data'))))).slice(0, 6);
-    const efetivoDe = r => {
-      try {
-        const j = JSON.parse(getCSVField(r, 'Efetivo_JSON') || getCSVField(r, 'efetivo_json') || '[]');
-        return j.reduce((s, x) => s + (Number(x.qtd) || 0), 0);
-      } catch (e) { return 0; }
-    };
+    /* O Efetivo_JSON é um OBJETO ({padrao_diurno:{…}, customDireto_noturno:[…]}),
+       não um array. O leitor daqui fazia `.reduce` nele, tomava TypeError e o
+       `catch` devolvia 0 — a coluna Efetivo saía "—" em todas as linhas, na
+       reunião com a fiscalização. Quem já sabe ler o formato de verdade é o
+       efetivoTotaisRDO(), que alimenta o RDO oficial; o slide não deveria ter
+       um segundo leitor do mesmo dado. */
+    const efetivoDe = r => efetivoTotaisRDO(r).total;
     return `<div class="ap-slide"><div class="ap-kicker">Diário de obra</div>
       <h2>${(STATE.rdodiario || []).length} RDOs diários registrados</h2>
       <div class="ap-sub">Efetivo por função, clima por período e ocorrências do dia —
         a base documental de qualquer pleito de prazo.</div>
       <table class="ap-tab"><thead><tr>
-        <th>Data</th><th>Encarregado</th><th class="n">Efetivo</th><th>Clima</th>
+        <!-- "Encarregado" não é coluna do RDO_Diario: o app grava
+             Apontador_Diurno/Apontador_Noturno. A coluna saía vazia sempre. -->
+        <th>Data</th><th>Apontador</th><th class="n">Efetivo</th><th>Clima</th>
       </tr></thead><tbody>${lista.map(r => `<tr>
         <td>${escHtml(normalizarDataCSV(getCSVField(r, 'Data')).split('-').reverse().join('/'))}</td>
-        <td class="dim">${escHtml(getCSVField(r, 'Encarregado') || '—')}</td>
+        <td class="dim">${escHtml(getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador_Noturno') || getCSVField(r, 'Apontador') || '—')}</td>
         <td class="n">${efetivoDe(r) || '—'}</td>
         <td class="dim">${escHtml([getCSVField(r, 'Clima_Manha'), getCSVField(r, 'Clima_Tarde')]
           .filter(Boolean).join(' · ') || '—')}</td></tr>`).join('')}</tbody></table></div>`;

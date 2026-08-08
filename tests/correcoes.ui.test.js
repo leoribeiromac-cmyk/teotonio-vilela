@@ -260,6 +260,80 @@ async function abrir(opts = {}) {
     await b.close();
   }
 
+  // ================================================================
+  console.log('\nPACOTE SEM PRODUTIVIDADE — pesa zero, e a tela tem de dizer');
+  {
+    const semProd = [
+      'ID,Frente,Pacote,Unidade Física,Qtd Estimada,Produtividade,Status',
+      'P01,Drenagem,Com produtividade,m,1000,10,Ativo',
+      'P97,Muros,Pacote novo sem produtividade,m,1000,,Ativo',
+    ].join('\r\n');
+    const { b, p } = await abrir({ csv: {
+      [GID.pacotes]: semProd,
+      [GID.rdoavanco]: RDO_VAZIO + '\r\nr9,2026-07-10,P97,500,E100,Diurno,Wallace,teotonio' } });
+
+    const r = await p.evaluate(() => ({
+      pondera: obraPonderaPorProdutividade(),
+      peso97: diasEquivalentes(1000, 'P97'),
+      semPeso: pacotesSemPeso().map(x => x.id),
+    }));
+    ok('a obra pondera (há pacote com produtividade)', r.pondera);
+    ok('o pacote sem produtividade realmente pesa zero', r.peso97 === 0, 'peso=' + r.peso97);
+    ok('e pacotesSemPeso() o encontra', r.semPeso.indexOf('P97') !== -1, JSON.stringify(r.semPeso));
+
+    await p.evaluate(() => navigate('executivo'));
+    await p.waitForTimeout(500);
+    const txt = await p.evaluate(() => document.getElementById('page').textContent);
+    ok('o Painel Executivo AVISA que o pacote está fora do avanço',
+      txt.indexOf('fora do Avanço Ponderado') !== -1 && txt.indexOf('P97') !== -1);
+    ok('e avisa que ele já tem lançamento', txt.indexOf('já tem lançamento') !== -1);
+    await b.close();
+  }
+
+  // ================================================================
+  console.log('\nMODO APRESENTAÇÃO — o slide do diário mostra o efetivo');
+  {
+    const efetivo = JSON.stringify({ padrao_diurno: { Servente: 8, Pedreiro: 4 },
+                                     customDireto_diurno: [{ nome: 'Topógrafo', qtd: 2 }] });
+    const diario = ['id,Data,Turno,Clima_Manha,Clima_Tarde,Apontador_Diurno,Efetivo_JSON,obra',
+      'D1,2026-07-10,Diurno,Bom,Chuva,Wallace,"' + efetivo.replace(/"/g, '""') + '",teotonio'].join('\r\n');
+    const { b, p } = await abrir({ csv: { [GID.rdodiario]: diario } });
+    const r = await p.evaluate(() => {
+      const reg = STATE.rdodiario[0];
+      return { total: efetivoTotaisRDO(reg).total,
+               apont: getCSVField(reg, 'Apontador_Diurno') };
+    });
+    ok('efetivoTotaisRDO soma padrão + customizados', r.total === 14, 'total=' + r.total);
+    ok('e o apontador do turno está lá', r.apont === 'Wallace', r.apont);
+    await b.close();
+  }
+
+  // ================================================================
+  console.log('\nRDO DIÁRIO — recarregar não descarta o que foi digitado');
+  {
+    const { b, p } = await abrir();
+    const r = await p.evaluate(() => {
+      const hoje = getLocalISODate(new Date());
+      const d = defaultDiarioV4(hoje);
+      d.diurno.apontador = 'Guilherme';
+      d.diurno.ocorrencias = 'Interferência de concessionária às 10h';
+      saveDiarioV4(d);
+      DIARIO_V4 = null;                    // simula o recarregar da página
+      renderRDODiarioV4();
+      return { apont: DIARIO_V4.diurno.apontador, ocor: DIARIO_V4.diurno.ocorrencias };
+    });
+    ok('o apontador digitado sobrevive', r.apont === 'Guilherme', r.apont);
+    ok('e a ocorrência também', /concessionária/.test(r.ocor || ''), r.ocor);
+
+    const limpou = await p.evaluate(() => {
+      const hoje = getLocalISODate(new Date());
+      clearDiarioV4(hoje);
+      return loadDiarioV4(hoje) === null;
+    });
+    ok('clearDiarioV4 realmente apaga o rascunho', limpou);
+    await b.close();
+  }
+
   console.log(falhas === 0 ? '\nTUDO CERTO\n' : `\n${falhas} FALHA(S)\n`);
   process.exit(falhas === 0 ? 0 : 1);
 })();
