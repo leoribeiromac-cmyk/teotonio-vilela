@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=27"></script>
-<script src="dados/ruas-de-terra.js?v=27"></script>
+<script src="dados/ranario.js?v=28"></script>
+<script src="dados/ruas-de-terra.js?v=28"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=27"></script>
+<script src="dados/teotonio-muros.js?v=28"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=27"></script>
-<script src="js/nf/adaptador.js?v=27"></script>
-<script src="js/nf/notas.js?v=27"></script>
-<script src="js/equip/equipamentos.js?v=27"></script>
+<script src="js/ui/icones.js?v=28"></script>
+<script src="js/nf/adaptador.js?v=28"></script>
+<script src="js/nf/notas.js?v=28"></script>
+<script src="js/equip/equipamentos.js?v=28"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -1858,7 +1858,22 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .btn, button {
     min-height: 40px;
   }
-  .btn-sm { min-height: 36px; }
+  /* O .btn-sm rebaixava para 36px justamente os botões mais usados no
+     canteiro — "Tirar foto", "Anexar foto", "Copiar do último dia", os
+     controles da prancha. Medido em 8 telas: 36px é menos que a própria
+     régua de 44px que os campos de texto aqui em cima já respeitam, e o
+     dedo que aponta serviço está com luva. Igualado a 44. */
+  .btn-sm { min-height: 44px; }
+
+  /* Caixa de seleção nasce com 13px no celular — os dois filtros do
+     Cronograma ("Sábado é dia útil", "Ocultar concluídos") eram alvos de
+     13px. O rótulo inteiro vira área de toque junto. */
+  input[type="checkbox"], input[type="radio"] {
+    width: 24px; height: 24px; min-height: 24px;
+  }
+  label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) {
+    display: inline-flex; align-items: center; gap: 8px; min-height: 44px;
+  }
   /* Cancela hover transforms que ficam estranhos em touch */
   .kpi-card:hover, .exec-kpi:hover, .tech-card-3d:hover, .card:hover {
     transform: none !important;
