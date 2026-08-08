@@ -23,9 +23,20 @@ jobs:
           node-version: '20'
 
       # Os testes .ui rodam o app DE VERDADE no Chromium (Playwright).
+      #
+      # A VERSÃO É FIXA de propósito. Os testes de RDO geram o PDF e leem o
+      # texto de volta, conferindo o que caiu em CADA folha — ou seja, dependem
+      # de como o navegador quebra a linha e pagina. Num Chromium mais velho a
+      # quebra muda de lugar, a folha 1 passa a levar outras linhas, e o teste
+      # lê um subtotal onde esperava o total geral: 4 falhas em
+      # rdo-equipamentos e 7 em rdo-paginacao, sem nada de errado no app.
+      # (Foi exatamente o que aconteceu com o 1.49.1 na primeira execução.)
+      #
+      # Ao subir esta versão, rode a suíte inteira ANTES de mergear: se algum
+      # teste de PDF ficar vermelho, é a régua que mudou, não o app.
       - name: Instalar Playwright + Chromium
         run: |
-          npm install --no-save playwright@1.49.1
+          npm install --no-save playwright@1.62.1
           npx playwright install --with-deps chromium
 
       # Os testes de interface pedem o app servido por HTTP: o index.html
