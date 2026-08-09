@@ -45,11 +45,19 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 cp .clasp.json "$TMP/.clasp.json"
 ( cd "$TMP" && clasp pull >/dev/null )
+# Compara pelo NOME SEM EXTENSÃO: no Apps Script o arquivo não tem extensão,
+# quem põe é o clasp ao baixar (.js ou .gs, conforme a configuração).
+# Comparar "Code.gs" com "Code.js" daria falso alarme e travaria tudo.
 SOBRANDO=""
 for f in "$TMP"/*.gs "$TMP"/*.js "$TMP"/*.html; do
   [ -e "$f" ] || continue
   nome="$(basename "$f")"
-  [ -e "$nome" ] || SOBRANDO="$SOBRANDO $nome"
+  raiz="${nome%.*}"
+  achou=0
+  for ext in gs js html; do
+    [ -e "$raiz.$ext" ] && achou=1
+  done
+  [ "$achou" = "1" ] || SOBRANDO="$SOBRANDO $nome"
 done
 [ -z "$SOBRANDO" ] || erro "Estes arquivos existem no Apps Script e não no repositório:$SOBRANDO
    'clasp push -f' apagaria os três. Traga-os com 'clasp pull' e comite antes de implantar."

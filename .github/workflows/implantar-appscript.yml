@@ -102,7 +102,10 @@ jobs:
         run: |
           printf '%s' "$CLASPRC" > "$HOME/.clasprc.json"
           chmod 600 "$HOME/.clasprc.json"
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > .clasp.json
+          # `fileExtension: gs` é o que faz o clasp escrever .gs em vez de .js
+          # ao baixar. Sem isso, o projeto volta como Code.js e a conferência
+          # do passo seguinte acha que o Code.gs do repositório sumiu.
+          printf '{"scriptId":"%s","rootDir":".","fileExtension":"gs"}\n' "$SCRIPT_ID" > .clasp.json
           clasp --version
 
       - name: Nenhum arquivo do projeto vai ser apagado
@@ -113,15 +116,23 @@ jobs:
           # Baixa o projeto que está no ar, numa pasta à parte, e compara com
           # o que o repositório tem. `clasp push -f` apaga o que sobrar.
           mkdir -p /tmp/atual
-          printf '{"scriptId":"%s","rootDir":"."}\n' "$SCRIPT_ID" > /tmp/atual/.clasp.json
-          cp "$HOME/.clasprc.json" /tmp/atual/.clasprc.json 2>/dev/null || true
+          printf '{"scriptId":"%s","rootDir":".","fileExtension":"gs"}\n' "$SCRIPT_ID" > /tmp/atual/.clasp.json
           ( cd /tmp/atual && clasp pull )
 
+          # Compara pelo NOME SEM EXTENSÃO. No Apps Script o arquivo não tem
+          # extensão — quem põe é o clasp ao baixar, e ele escreve .js ou .gs
+          # conforme a configuração. Comparar "Code.gs" com "Code.js" daria
+          # falso alarme e travaria toda implantação, sem nada de errado.
           sobrando=""
           for f in /tmp/atual/*.gs /tmp/atual/*.js /tmp/atual/*.html; do
             [ -e "$f" ] || continue
             nome=$(basename "$f")
-            [ -e "$GITHUB_WORKSPACE/$nome" ] || sobrando="$sobrando $nome"
+            raiz="${nome%.*}"
+            achou=0
+            for ext in gs js html; do
+              [ -e "$GITHUB_WORKSPACE/$raiz.$ext" ] && achou=1
+            done
+            [ "$achou" = "1" ] || sobrando="$sobrando $nome"
           done
 
           if [ -n "$sobrando" ]; then

@@ -57,6 +57,45 @@ console.log('\nNÃO APAGAR CÓDIGO QUE SÓ EXISTE NO PROJETO');
      /clasp pull/.test(script) && /apagaria/i.test(script));
 }
 
+console.log('\nCode.gs E Code.js SÃO O MESMO ARQUIVO');
+{
+  /* No Apps Script o arquivo não tem extensão: quem põe é o clasp ao baixar,
+     e por padrão ele escreve .js. O repositório guarda .gs. Comparar os nomes
+     crus daria "Code.js seria apagado" na primeira execução — um falso alarme
+     que travaria toda implantação sem nada de errado no projeto. */
+  ok('o clasp é configurado para baixar como .gs',
+     /"fileExtension"\s*:\s*"gs"/.test(fluxo), 'falta fileExtension no .clasp.json do fluxo');
+  ok('e a comparação ignora a extensão de qualquer jeito',
+     /\$\{nome%\.\*\}/.test(fluxo) && /\$\{nome%\.\*\}/.test(script),
+     'os dois têm de comparar pelo nome sem extensão');
+
+  // Roda a lógica de verdade, com os dois nomes, num diretório de mentira.
+  const { execFileSync } = require('child_process');
+  const os = require('os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'impl-'));
+  const projeto = path.join(tmp, 'atual'), repo = path.join(tmp, 'repo');
+  fs.mkdirSync(projeto); fs.mkdirSync(repo);
+  // o projeto voltou com .js; o repositório tem .gs — e um arquivo a mais lá
+  fs.writeFileSync(path.join(projeto, 'Code.js'), '//');
+  fs.writeFileSync(path.join(projeto, 'antigo.js'), '//');
+  fs.writeFileSync(path.join(repo, 'Code.gs'), '//');
+
+  const logica = `
+    sobrando=""
+    for f in ${projeto}/*.gs ${projeto}/*.js ${projeto}/*.html; do
+      [ -e "$f" ] || continue
+      nome=$(basename "$f"); raiz="\${nome%.*}"; achou=0
+      for ext in gs js html; do [ -e "${repo}/$raiz.$ext" ] && achou=1; done
+      [ "$achou" = "1" ] || sobrando="$sobrando $nome"
+    done
+    echo "$sobrando"`;
+  const saida = execFileSync('bash', ['-c', logica]).toString().trim();
+  ok('Code.js do projeto casa com o Code.gs do repositório', saida.indexOf('Code.js') === -1, saida);
+  ok('e o arquivo que só existe no projeto continua sendo acusado',
+     saida.indexOf('antigo.js') > -1, saida);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
 console.log('\nNÃO SOBRESCREVER O MANIFESTO COM UM INVENTADO');
 {
   // appsscript.json guarda fuso, escopos de OAuth e a configuração do app da

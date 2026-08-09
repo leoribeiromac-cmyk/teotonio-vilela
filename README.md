@@ -95,8 +95,11 @@ Dá para automatizar. São **dois caminhos** — escolha um.
    projeto → IDs → ID do script**.
 5. Na raiz do repositório, crie o `.clasp.json` (ele é ignorado pelo git):
    ```json
-   {"scriptId":"COLE-O-ID-AQUI","rootDir":"."}
+   {"scriptId":"COLE-O-ID-AQUI","rootDir":".","fileExtension":"gs"}
    ```
+   > O `fileExtension` importa: sem ele o `clasp` baixa os arquivos como
+   > `.js`, e o repositório guarda `.gs`. A conferência acharia que o
+   > `Code.gs` sumiu do projeto e travaria a implantação por nada.
 6. **Traga o manifesto de verdade**: `clasp pull` — ele baixa o
    `appsscript.json` do projeto (fuso, escopos de OAuth, configuração do app da
    web). **Comite esse arquivo.** Ele nunca deve ser inventado: um manifesto
@@ -135,6 +138,19 @@ quando o `Code.gs` muda na `main`. Precisa de **três segredos** em
 | `CLASPRC_JSON` | o conteúdo inteiro do `~/.clasprc.json`, criado pelo `clasp login` |
 | `APPSCRIPT_SCRIPT_ID` | passo 4 acima |
 | `APPSCRIPT_DEPLOYMENT_ID` | passo 7 acima |
+
+Para copiar o conteúdo da credencial:
+
+```bash
+cat ~/.clasprc.json          # Mac/Linux
+type %USERPROFILE%\.clasprc.json   # Windows
+```
+
+Copie **tudo**, incluindo as chaves `{` `}`, e cole no valor do segredo.
+
+Depois de criar os três, teste sem esperar merge nenhum: aba **Actions →
+implantar-appscript → Run workflow**. Se algo estiver errado, o próprio fluxo
+diz o quê — ele foi escrito para parar com o motivo, não para falhar seco.
 
 Sem os três, o fluxo **não falha** — ele avisa que não está configurado e
 encerra, e o `Code.gs` segue sendo colado à mão.
