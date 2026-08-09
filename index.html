@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=31"></script>
-<script src="dados/ruas-de-terra.js?v=31"></script>
+<script src="dados/ranario.js?v=32"></script>
+<script src="dados/ruas-de-terra.js?v=32"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=31"></script>
+<script src="dados/teotonio-muros.js?v=32"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=31"></script>
-<script src="js/nf/adaptador.js?v=31"></script>
-<script src="js/nf/notas.js?v=31"></script>
-<script src="js/equip/equipamentos.js?v=31"></script>
+<script src="js/ui/icones.js?v=32"></script>
+<script src="js/nf/adaptador.js?v=32"></script>
+<script src="js/nf/notas.js?v=32"></script>
+<script src="js/equip/equipamentos.js?v=32"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -5314,6 +5314,76 @@ function calcularConsumoItens(avanco) {
    Aqui os três números aparecem juntos: o que foi consumido NO MÊS, o que
    já vinha ANTES dele, e quanto sobra do contrato depois dos dois.
    -------------------------------------------------------------------- */
+/* --------------------------------------------------------------------
+   MEDIÇÕES FECHADAS
+   --------------------------------------------------------------------
+   A lista vem do backend (aba `Medicoes`) e fica em memória para a tela
+   não pedir de novo a cada render. Cada item guarda o SNAPSHOT do que foi
+   apresentado à fiscalização — é contra ele que a prévia de hoje é
+   comparada.
+   -------------------------------------------------------------------- */
+let MEDICOES_FECHADAS = null;      // null = ainda não buscou
+let _medicoesBuscando = false;
+
+async function carregarMedicoesFechadas(forcar) {
+  if (_medicoesBuscando) return MEDICOES_FECHADAS;
+  if (MEDICOES_FECHADAS && !forcar) return MEDICOES_FECHADAS;
+  if (!STATE.usuarioLogado) { MEDICOES_FECHADAS = []; return MEDICOES_FECHADAS; }
+  _medicoesBuscando = true;
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'medicaoListar', obra: OBRA.id, ...authParams() }, 0);
+    MEDICOES_FECHADAS = (r && r.ok && Array.isArray(r.medicoes)) ? r.medicoes : [];
+  } catch (e) {
+    // Backend antigo (sem a ação) ou sem sinal: a tela segue funcionando
+    // exatamente como antes de existir fechamento.
+    MEDICOES_FECHADAS = [];
+  } finally { _medicoesBuscando = false; }
+  return MEDICOES_FECHADAS;
+}
+
+function medicaoFechadaDe(comp) {
+  if (!comp || !MEDICOES_FECHADAS) return null;
+  return MEDICOES_FECHADAS.find(m =>
+    String(m.competencia).trim() === comp &&
+    String(m.reaberta || '').trim().toLowerCase() !== 'sim') || null;
+}
+
+/* A chave de um item no snapshot. Código sozinho não serve: o mesmo código
+   aparece em capítulos diferentes da planilha SIURB, com número de item
+   próprio. Esta função é a MESMA usada ao fechar e ao comparar — se as duas
+   divergirem, todo item vira "divergente". */
+function chaveItemMedicao(x) {
+  return x.itemPlanilha ? x.item + ' ' + x.itemPlanilha : x.item;
+}
+
+/* O snapshot guardado, em forma de mapa chave→quantidade apresentada. */
+function itensDaMedicaoFechada(m) {
+  if (!m) return null;
+  try {
+    const arr = typeof m.itens === 'string' ? JSON.parse(m.itens || '[]') : (m.itens || []);
+    const mapa = {};
+    arr.forEach(x => { mapa[x.k] = num(x.q); });
+    return mapa;
+  } catch (e) { return null; }
+}
+
+/* A tela desenha primeiro com o que tem e só depois pergunta ao backend se
+   aquele mês já foi fechado. Sem isso a medição ficaria em branco esperando a
+   rede — e no canteiro a rede é o que falta. Redesenha uma vez só, quando a
+   resposta muda alguma coisa. */
+function medicaoGarantirFechadas() {
+  if (MEDICOES_FECHADAS !== null) return;
+  carregarMedicoesFechadas().then(() => {
+    if (STATE.currentPage === 'medicao' && (MEDICOES_FECHADAS || []).length) render();
+  });
+}
+
+/* Fechar medição é ato de quem responde pela obra perante a fiscalização. */
+function podeFecharMedicao() {
+  const p = perfilAtual();
+  return STATE.usuarioLogado && (p === 'admin' || p === 'engenharia');
+}
+
 function consumoComSaldo(mes) {
   const doMes = calcularConsumoItens(calcularAvancoPorPacote(rdosDoMes(mes), STATE.pacotes));
   // "Antes" = tudo que foi executado até o fim do mês anterior. Sem filtro de
@@ -5732,7 +5802,7 @@ function render() {
   if (STATE.currentPage === 'executivo') pageEl.innerHTML = renderExecutivo();
   else if (STATE.currentPage === 'avancofisico') pageEl.innerHTML = renderAvancoFisico();
   else if (STATE.currentPage === 'cronograma') pageEl.innerHTML = renderCronograma();
-  else if (STATE.currentPage === 'medicao') pageEl.innerHTML = renderMedicao();
+  else if (STATE.currentPage === 'medicao') { pageEl.innerHTML = renderMedicao(); medicaoGarantirFechadas(); }
   else if (STATE.currentPage === 'improdutivos') pageEl.innerHTML = renderImprodutivos();
   else if (STATE.currentPage === 'analista') pageEl.innerHTML = renderAnalistaIA();
   else if (STATE.currentPage === 'rdo') { pageEl.innerHTML = renderRDO(); attachRDOForm(); }
@@ -10028,6 +10098,50 @@ function avisoDuplicadasMedicao() {
   </div>`;
 }
 
+window.fecharMedicao = async function () {
+  const comp = MEDICAO_MES;
+  if (!comp) { toast('Escolha o mês da medição antes de fechar.', 'error', 5000); return; }
+  if (!STATE.usuarioLogado) { toast('Entre no sistema para fechar a medição.', 'error', 5000); return; }
+
+  const lista = Object.values(consumoComSaldo(comp)).filter(x => x.consumido > 0);
+  if (!lista.length) { toast('Nada consumido em ' + comp + ' — não há o que fechar.', 'error', 5000); return; }
+
+  const estourados = lista.filter(x => x.estourou).length;
+  if (!confirm(
+    `Fechar a medição de ${nomeMesAno(comp)}?\n\n` +
+    `${lista.length} item contratual será congelado como o que foi apresentado à fiscalização.` +
+    (estourados ? `\n\n⚠️ ${estourados} item está ACIMA da quantidade contratual.` : '') +
+    `\n\nLançamento retroativo continua sendo aceito depois disso — a diferença passa a aparecer na tela em vez de reescrever o número calado.`
+  )) return;
+
+  // Snapshot enxuto: chave e quantidade. É o que precisa ser comparado depois.
+  const itens = lista.map(x => ({ k: chaveItemMedicao(x), q: x.consumido }));
+  try {
+    const r = await enviarAcao({ action: 'medicaoFechar', obra: OBRA.id, competencia: comp,
+                                 itens: JSON.stringify(itens), ...authParams() }, 0, 0);
+    if (!r.ok) throw new Error(r.mensagem || r.error || 'Erro');
+    toast(`Medição de ${nomeMesAno(comp)} fechada com ${itens.length} itens.`, 'success', 5000);
+    await carregarMedicoesFechadas(true);
+    transitionTo(render);
+  } catch (e) {
+    toast('Não foi possível fechar: ' + erroLegivel(e.message), 'error', 7000);
+  }
+};
+
+window.reabrirMedicao = async function () {
+  const comp = MEDICAO_MES;
+  if (!confirm(`Reabrir a medição de ${nomeMesAno(comp)}?\n\nO fechamento anterior NÃO é apagado — fica registrado como reaberto, com quem e quando.`)) return;
+  try {
+    const r = await enviarAcao({ action: 'medicaoReabrir', obra: OBRA.id, competencia: comp, ...authParams() }, 0, 0);
+    if (!r.ok) throw new Error(r.mensagem || r.error || 'Erro');
+    toast('Medição reaberta.', 'success', 4000);
+    await carregarMedicoesFechadas(true);
+    transitionTo(render);
+  } catch (e) {
+    toast('Não foi possível reabrir: ' + erroLegivel(e.message), 'error', 7000);
+  }
+};
+
 window.exportarMedicaoCSV = function() {
   const consumo = consumoComSaldo(MEDICAO_MES);
   const lista = Object.values(consumo).filter(x => x.consumido > 0)
@@ -10043,18 +10157,29 @@ window.exportarMedicaoCSV = function() {
      `Qtd Contratual`. Sem ela o CSV sai idêntico ao de antes — quem já tem
      uma planilha montada em cima deste arquivo não perde as colunas. */
   const temContrato = lista.some(x => x.qtdContratual > 0);
-  const header = ['Item_Planilha', 'Codigo', 'Descricao', 'Unid', 'Qtd_Consumida']
+  /* Mês fechado: o CSV leva junto o que foi APRESENTADO e a diferença de hoje.
+     É esse arquivo que vai para a conferência contra a Planilha Geral — se o
+     número mudou depois do fechamento, tem de mudar no arquivo também. */
+  const snap = itensDaMedicaoFechada(medicaoFechadaDe(MEDICAO_MES));
+  const header = ['Item_Planilha', 'Codigo', 'Descricao', 'Unid']
+    .concat(snap ? ['Qtd_Medida'] : [])
+    .concat(['Qtd_Consumida'])
+    .concat(snap ? ['Diferenca'] : [])
     .concat(temContrato ? ['Acum_Anterior', 'Acumulado', 'Qtd_Contratual', 'Saldo', 'Pct_Contrato', 'Acima_do_Contrato'] : [])
     .concat(['Periodo', 'Pacotes_Origem']);
-  const rows = lista.map(x => [
-    x.itemPlanilha || '', x.item, x.descricao, x.unidadeItem, dec(x.consumido),
-  ].concat(temContrato ? [
-    dec(x.anterior), dec(x.acumulado), x.qtdContratual > 0 ? dec(x.qtdContratual) : '',
-    dec(x.saldo), x.pctContrato === null ? '' : dec(x.pctContrato * 100), x.estourou ? 'SIM' : '',
-  ] : []).concat([
-    MEDICAO_MES || 'obra inteira',
-    x.pacotes.join(' + ')
-  ]).map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`));
+  const rows = lista.map(x => {
+    const med = snap ? snap[chaveItemMedicao(x)] : undefined;
+    return [x.itemPlanilha || '', x.item, x.descricao, x.unidadeItem]
+      .concat(snap ? [med === undefined ? '' : dec(med)] : [])
+      .concat([dec(x.consumido)])
+      .concat(snap ? [med === undefined ? 'NAO MEDIDO' : dec(x.consumido - med)] : [])
+      .concat(temContrato ? [
+        dec(x.anterior), dec(x.acumulado), x.qtdContratual > 0 ? dec(x.qtdContratual) : '',
+        dec(x.saldo), x.pctContrato === null ? '' : dec(x.pctContrato * 100), x.estourou ? 'SIM' : '',
+      ] : [])
+      .concat([MEDICAO_MES || 'obra inteira', x.pacotes.join(' + ')])
+      .map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`);
+  });
   const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -10073,6 +10198,78 @@ function renderMedicao(){
   // Sem a coluna publicada, a tabela fica exatamente como era.
   const temContrato = lista.some(x => x.qtdContratual > 0);
   const estourados = lista.filter(x => x.estourou);
+
+  /* ------------------------------------------------------------------
+     MEDIÇÃO FECHADA
+     ------------------------------------------------------------------
+     Enquanto o mês está aberto, esta prévia é um número vivo: apagar um
+     RDO de junho em setembro muda, calado, o que já foi apresentado à
+     fiscalização em junho. Fechar o mês congela o que foi apresentado.
+     O lançamento retroativo continua sendo aceito — ele só deixa de
+     reescrever o passado sem ninguém ver, porque a diferença passa a
+     aparecer nas colunas "Medido" e "Diferença".
+     ------------------------------------------------------------------ */
+  const fechada = medicaoFechadaDe(MEDICAO_MES);
+  const snap = itensDaMedicaoFechada(fechada);
+  const TOL = 0.005;   // diferença abaixo de meio centésimo é arredondamento
+  let divergentes = [], itemNovo = [], sumidos = [];
+  if (snap) {
+    const vistos = new Set();
+    lista.forEach(x => {
+      const k = chaveItemMedicao(x);
+      vistos.add(k);
+      if (!(k in snap)) { x._novo = true; x._medido = null; x._dif = x.consumido; itemNovo.push(x); return; }
+      x._medido = snap[k];
+      x._dif = x.consumido - snap[k];
+      if (Math.abs(x._dif) > TOL) divergentes.push(x);
+    });
+    // Item que foi medido e hoje não é mais derivado (RDO apagado, pacote
+    // trocado) não aparece na tabela — some justamente no caso mais grave.
+    // Por isso é listado à parte.
+    sumidos = Object.keys(snap).filter(k => !vistos.has(k) && snap[k] > TOL)
+      .map(k => ({ k, q: snap[k] }));
+  }
+
+  const nDif = divergentes.length + itemNovo.length + sumidos.length;
+  const dataFech = fechada ? (String(fechada.fechadaEm || '').slice(0, 10).split('-').reverse().join('/')) : '';
+
+  const faixaFechamento = !MEDICAO_MES ? '' : (fechada ? `
+    <div class="card stagger-item" style="border-left:3px solid ${nDif ? 'var(--red)' : 'var(--grn)'}">
+      <div class="card-body" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between">
+        <div>
+          <div style="font-weight:600;font-size:13px">
+            Medição de ${escHtml(nomeMesAno(MEDICAO_MES))} fechada${dataFech ? ' em ' + escHtml(dataFech) : ''}${fechada.fechadaPor ? ' por ' + escHtml(fechada.fechadaPor) : ''}
+          </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:2px">
+            ${nDif
+              ? `<strong style="color:var(--red)">${nDif} ${nDif === 1 ? 'item mudou' : 'itens mudaram'} depois do fechamento.</strong> A coluna <em>Medido</em> é o que foi apresentado; <em>No período</em> é o que os RDOs dão hoje.`
+              : 'O que os RDOs dão hoje bate com o que foi apresentado à fiscalização.'}
+            ${sumidos.length ? `<br><span style="color:var(--red)">${sumidos.length} ${sumidos.length === 1 ? 'item medido sumiu' : 'itens medidos sumiram'} da prévia:</span> ${sumidos.slice(0, 6).map(s => `<span class="t-mono" style="font-size:11px">${escHtml(s.k)} (${fmtNum(s.q)})</span>`).join(', ')}${sumidos.length > 6 ? ' …' : ''}` : ''}
+          </div>
+        </div>
+        ${podeFecharMedicao() ? `<button class="btn btn-outline btn-sm" onclick="reabrirMedicao()">${ic('editar')} Reabrir</button>` : ''}
+      </div>
+    </div>` : (podeFecharMedicao() && lista.length ? `
+    <div class="card stagger-item">
+      <div class="card-body" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between">
+        <div>
+          <div style="font-weight:600;font-size:13px">Medição de ${escHtml(nomeMesAno(MEDICAO_MES))} em aberto</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:2px">
+            Enquanto está aberta, apagar ou corrigir um RDO deste mês muda estes números sem deixar rastro.
+            Feche depois de apresentar à fiscalização: o app guarda o que foi apresentado e passa a mostrar a diferença.
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="fecharMedicao()">${ic('cadeado')} Fechar medição do mês</button>
+      </div>
+    </div>` : ''));
+
+  /* Duas cores diferentes porque são dois problemas diferentes: vermelho é
+     passar do contrato, âmbar é o número ter mudado depois de apresentado. */
+  const estiloLinhaMedicao = x => {
+    if (x.estourou) return ' style="background:rgba(220,80,70,.08)"';
+    if (snap && (x._novo || Math.abs(x._dif || 0) > TOL)) return ' style="background:rgba(230,180,60,.13)"';
+    return '';
+  };
 
   const mesesSet = new Set();
   STATE.rdoavanco.forEach(r => {
@@ -10103,7 +10300,7 @@ function renderMedicao(){
     </div>
   </div>` : '';
 
-  return avisoDuplicadasMedicao() + avisoEstouro + `<div class="card stagger-item">
+  return faixaFechamento + avisoDuplicadasMedicao() + avisoEstouro + `<div class="card stagger-item">
     <div class="card-header">
       <div><div class="card-title">Prévia de medição — consumo por item contratual</div><div class="card-title-sub">RDOs × matriz de coeficientes · filtre o mês da medição e exporte o CSV para conferir contra a Planilha Geral</div></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -10117,11 +10314,11 @@ function renderMedicao(){
     </div>
     <div class="card-body flush">
       ${lista.length===0?`<div class="empty"><div class="empty-icon">${ic('medicao')}</div><div class="empty-title">Nada consumido neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade (ou mude o mês do filtro) para ver os itens contratuais derivados.</div></div>`:`
-      <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">No período</th>${temContrato ? '<th class="t-num">Acum. anterior</th><th class="t-num">Acumulado</th><th class="t-num">Contratual</th><th class="t-num">Saldo</th><th class="t-num">% contrato</th>' : ''}<th>Pacotes</th></tr></thead>
+      <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th>${snap ? '<th class="t-num">Medido</th>' : ''}<th class="t-num">No período</th>${snap ? '<th class="t-num">Diferença</th>' : ''}${temContrato ? '<th class="t-num">Acum. anterior</th><th class="t-num">Acumulado</th><th class="t-num">Contratual</th><th class="t-num">Saldo</th><th class="t-num">% contrato</th>' : ''}<th>Pacotes</th></tr></thead>
       <!-- Tudo que vem da planilha passa por escHtml: o código, a descrição e a
            unidade do item são digitados à mão na aba Coeficientes, e um "<" ali
            quebrava a tabela da medição (ou pior, injetava marcação na tela). -->
-      <tbody>${lista.map((x,i)=>`<tr${x.estourou?' style="background:rgba(220,80,70,.08)"':''}><td class="t-mono"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${escHtml(x.descricao)}</td><td class="t-mono">${escHtml(x.unidadeItem)}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td>${temContrato?`<td class="t-num" style="color:var(--muted)">${x.anterior?fmtNum(x.anterior):'—'}</td><td class="t-num">${fmtNum(x.acumulado)}</td><td class="t-num t-mono">${x.qtdContratual>0?fmtNum(x.qtdContratual):'—'}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.saldo===null?'—':fmtNum(x.saldo)}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.pctContrato===null?'—':fmtPct(x.pctContrato)}</td>`:''}<td style="font-size:11px;color:var(--muted)">${escHtml(x.pacotes.join(' + '))}</td></tr>`).join('')}</tbody>
+      <tbody>${lista.map((x,i)=>`<tr${estiloLinhaMedicao(x)}><td class="t-mono"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${escHtml(x.descricao)}</td><td class="t-mono">${escHtml(x.unidadeItem)}</td>${snap?`<td class="t-num" style="color:var(--muted)">${x._novo?'—':fmtNum(x._medido)}</td>`:''}<td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td>${snap?`<td class="t-num"${(x._novo||Math.abs(x._dif)>TOL)?' style="color:var(--red);font-weight:700"':''}>${x._novo?'não medido':(Math.abs(x._dif)<=TOL?'—':(x._dif>0?'+':'')+fmtNum(x._dif))}</td>`:''}${temContrato?`<td class="t-num" style="color:var(--muted)">${x.anterior?fmtNum(x.anterior):'—'}</td><td class="t-num">${fmtNum(x.acumulado)}</td><td class="t-num t-mono">${x.qtdContratual>0?fmtNum(x.qtdContratual):'—'}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.saldo===null?'—':fmtNum(x.saldo)}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.pctContrato===null?'—':fmtPct(x.pctContrato)}</td>`:''}<td style="font-size:11px;color:var(--muted)">${escHtml(x.pacotes.join(' + '))}</td></tr>`).join('')}</tbody>
       </table>`}
     </div>
   </div>`;
