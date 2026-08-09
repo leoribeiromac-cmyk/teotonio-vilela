@@ -76,6 +76,26 @@ O modelo de dados central: **pacotes físicos (P01–P36)** lançados no campo �
 > quando a coluna está vazia, e o próprio `upsertRDODiario` preenche a linha
 > assim que ela for tocada.
 
+## Colunas opcionais da planilha (o que liga cada tela nova)
+
+Nenhuma delas é obrigatória: sem a coluna, a tela correspondente continua
+funcionando como antes — só sem o número que ela traria. Todas ficam em abas
+que você já mantém.
+
+| Onde | Coluna | O que passa a existir |
+|---|---|---|
+| `Coeficientes` | **`Qtd Contratual`** | Saldo e % do contrato na prévia de medição, e o aviso de item **acima** do contratado (que pede aditivo, não medição). |
+| `Coeficientes` | **`Item Planilha`** | O mesmo código SIURB em capítulos diferentes deixa de somar numa linha só. |
+| `Coeficientes` | **`Material Estoque`** | O de-para do **Teórico × Real**: o nome do material como ele aparece na nota fiscal. Sem ele, a tela casa pela descrição e avisa que casou sozinha. |
+| `RDO_Diario` | **`paralisacoes_json`** | Criada sozinha pelo backend no primeiro turno salvo. Guarda a paralisação estruturada (motivo, horário, frente, efetivo e equipamento parados). |
+| — | aba **`Medicoes`** | Criada sozinha no primeiro fechamento. Guarda o que foi apresentado à fiscalização em cada competência. |
+
+**Fechar a medição do mês** (Apoio à Medição → escolha o mês → *Fechar medição
+do mês*) congela o que foi apresentado. Depois disso o lançamento retroativo
+continua sendo aceito — ele só deixa de reescrever o passado sem ninguém ver,
+porque a tela passa a mostrar as colunas *Medido* e *Diferença*. Só engenharia
+e admin fecham; reabrir não apaga o fechamento, marca como reaberto.
+
 ## Segurança (fazer 1×, importante)
 
 As senhas antigas ficaram públicas no histórico deste repositório. Para blindar:
