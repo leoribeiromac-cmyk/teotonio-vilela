@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=29"></script>
-<script src="dados/ruas-de-terra.js?v=29"></script>
+<script src="dados/ranario.js?v=30"></script>
+<script src="dados/ruas-de-terra.js?v=30"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=29"></script>
+<script src="dados/teotonio-muros.js?v=30"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=29"></script>
-<script src="js/nf/adaptador.js?v=29"></script>
-<script src="js/nf/notas.js?v=29"></script>
-<script src="js/equip/equipamentos.js?v=29"></script>
+<script src="js/ui/icones.js?v=30"></script>
+<script src="js/nf/adaptador.js?v=30"></script>
+<script src="js/nf/notas.js?v=30"></script>
+<script src="js/equip/equipamentos.js?v=30"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -3671,14 +3671,12 @@ function avisoDadoSujo() {
      informado. Com o valor negativo, o painel chegava a mostrar 50% onde o correto era 28%.
      <span class="t-mono" style="font-size:11px">${estimada.map(x => escHtml(x.id + ': ' + x.valor)).join(' · ')}</span></li>`);
 
-  return `<div class="card stagger-item" style="border-left:3px solid var(--red)">
-    <div class="card-body">
-      <div style="font-weight:600;font-size:13px;margin-bottom:6px">A planilha tem linhas que o cálculo não conseguiu usar</div>
+  return `<div style="margin-bottom:10px">
+      <div style="font-weight:600;font-size:12.5px;margin-bottom:5px">A planilha tem linhas que o cálculo não conseguiu usar</div>
       <ul style="font-size:12px;color:var(--muted);line-height:1.55;margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
         ${blocos.join('')}
       </ul>
-    </div>
-  </div>`;
+    </div>`;
 }
 
 /* O aviso pronto para a tela, ou '' quando está tudo pesado. */
@@ -3689,9 +3687,8 @@ function avisoPacotesSemPeso() {
     .map(r => getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
   const comLancamento = semPeso.filter(p => lancados.has(p.id));
   const lista = semPeso.map(p => p.id + (p.nome ? ' (' + escHtml(p.nome) + ')' : '')).join(' · ');
-  return `<div class="card stagger-item" style="border-left:3px solid var(--red)">
-    <div class="card-body">
-      <div style="font-weight:600;font-size:13px;margin-bottom:4px">
+  return `<div style="margin-bottom:10px">
+      <div style="font-weight:600;font-size:12.5px;margin-bottom:4px">
         ${semPeso.length} pacote(s) fora do Avanço Ponderado${comLancamento.length ? ' — e ' + comLancamento.length + ' já tem lançamento' : ''}
       </div>
       <div style="font-size:12px;color:var(--muted);line-height:1.5">
@@ -3701,8 +3698,30 @@ function avisoPacotesSemPeso() {
         para eles entrarem na conta.<br>
         <span class="t-mono" style="font-size:11px">${lista}</span>
       </div>
-    </div>
-  </div>`;
+    </div>`;
+}
+
+/* --------------------------------------------------------------------
+   Os avisos de dado, num único bloco RECOLHIDO.
+   --------------------------------------------------------------------
+   Eles são importantes — dizem por que um lançamento não aparece no
+   avanço — mas não são o assunto do Painel Executivo. Abertos, empurravam
+   os KPIs para baixo da dobra todo dia. Aqui viram uma linha discreta que
+   abre quando alguém quiser ver, e o navegador lembra se estava aberta.
+   -------------------------------------------------------------------- */
+function avisosDeDados() {
+  const partes = [avisoPacotesSemPeso(), avisoDadoSujo()].filter(Boolean);
+  if (!partes.length) return '';
+  let aberto = false;
+  try { aberto = localStorage.getItem('teotonio_avisos_abertos_v1') === '1'; } catch (e) {}
+  return `<details class="card stagger-item" style="border-left:3px solid var(--ylw,#d69e2e)" ${aberto ? 'open' : ''}
+      ontoggle="try{localStorage.setItem('teotonio_avisos_abertos_v1', this.open?'1':'0')}catch(e){}">
+    <summary style="cursor:pointer;padding:11px 16px;font-size:12.5px;font-weight:600;list-style:none;display:flex;align-items:center;gap:8px">
+      ${ic('alerta')} ${partes.length} aviso(s) sobre os dados da planilha
+      <span style="font-weight:400;color:var(--muted);font-size:11.5px">— toque para ver</span>
+    </summary>
+    <div class="card-body" style="padding-top:0">${partes.join('')}</div>
+  </details>`;
 }
 /* dias-equivalentes do pacote, ou 1 quando a obra não pondera */
 function diasEquivalentes(qtdEstimada, pid) {
@@ -5192,10 +5211,15 @@ function calcularAvancoPorPacote(rdos = STATE.rdoavanco, pacotes = STATE.pacotes
     if (!pidCru) return;
     const pid = m[pidCru] ? pidCru : porChave[_chavePacote(pidCru)];
     if (!pid || !m[pid]) {
-      // Lançado num pacote que não existe na aba Pacotes. A linha continua
-      // aparecendo no Histórico, então sem este registro o apontador tem
-      // toda a razão de achar que apontou.
-      if (DADO_SUJO.pacoteDesconhecido.indexOf(pidCru) === -1) DADO_SUJO.pacoteDesconhecido.push(pidCru);
+      /* `OUTRO` é o marcador dos SERVIÇOS AVULSOS (ver index.html:12408) —
+         limpeza de faixa, remoção de entulho, o que não tem pacote. Não é
+         código faltando na aba Pacotes: é assim de propósito, e ele nunca
+         entrou no avanço por não ter quantidade prevista.
+         Acusá-lo aqui enchia o painel com um alerta vermelho permanente
+         sobre um comportamento correto. */
+      if (_chavePacote(pidCru) !== 'OUTRO' && DADO_SUJO.pacoteDesconhecido.indexOf(pidCru) === -1) {
+        DADO_SUJO.pacoteDesconhecido.push(pidCru);
+      }
       return;
     }
     const qCrua = num(getCSVField(r, 'Quantidade'));
@@ -5720,10 +5744,20 @@ function fotosDaObra() {
      (`yyyyMMddHHmmss_...`, crescente = quem lançou antes vem antes) e,
      por último, `idx`, que mantém as fotos de um mesmo serviço juntas e
      na ordem em que foram anexadas. */
+  /* A LISTA INTEIRA É DO MAIS NOVO PARA O MAIS VELHO — inclusive dentro do dia.
+     Antes a data descia (dia mais novo primeiro) mas o turno subia (Diurno
+     antes de Noturno): duas ordens opostas na mesma lista. O efeito para quem
+     olha é que a foto do turno da NOITE aparecia depois da manhã do mesmo dia
+     e, numa lista que desce, "depois" lê como "mais antiga" — parecia que a
+     noite tinha sido lançada antes do dia.
+     O mesmo vale para o desempate por `id` (yyyyMMddHHmmss…, o relógio do
+     aparelho no momento do lançamento): também desce.
+     `idx` continua SUBINDO: são as fotos de um mesmo serviço, e ali a ordem
+     que importa é a em que o apontador anexou (1ª, 2ª, 3ª). */
   return out.sort((a, b) =>
     String(b.data).localeCompare(String(a.data)) ||
-    ordemTurno(a.turno) - ordemTurno(b.turno) ||
-    String(a.id).localeCompare(String(b.id)) ||
+    ordemTurno(b.turno) - ordemTurno(a.turno) ||
+    String(b.id).localeCompare(String(a.id)) ||
     a.idx - b.idx);
 }
 
@@ -6481,6 +6515,80 @@ async function desenharPrancha() {
   if (z) z.textContent = Math.round(PROJ.zoom * 100) + '%';
 }
 
+/* ====================================================================
+   RELATÓRIO FOTOGRÁFICO MENSAL
+   --------------------------------------------------------------------
+   Fica aqui na Galeria, e NÃO dentro do RDO oficial: o RDO é diário e a
+   fiscalização recebe o registro fotográfico como peça mensal própria,
+   com capa e seleção — não como anexo de cada dia.
+
+   O que a tela precisa dar, e por isso os filtros são vários: quem monta
+   o relatório escolhe por mês, por frente, por pacote, por estaca, por
+   apontador e por intervalo de datas, e depois ainda tira à mão as fotos
+   que não vão. Relatório fotográfico bom é seleção, não despejo.
+   ==================================================================== */
+const GAL_FILTRO = { frente: '', estaca: '', apontador: '', de: '', ate: '', busca: '' };
+let GAL_SELECAO = null;          // Set de fileId; null = "todas as filtradas"
+let GAL_MODO_SELECAO = false;
+
+window.setGalFiltro = function (campo, valor) {
+  GAL_FILTRO[campo] = valor;
+  GAL_SELECAO = null;            // filtro novo desfaz a seleção manual
+  transitionTo(render);
+};
+window.limparGalFiltro = function () {
+  Object.keys(GAL_FILTRO).forEach(k => { GAL_FILTRO[k] = ''; });
+  STATE.galPacote = 'Todos'; STATE.galMes = 'Todos';
+  GAL_SELECAO = null;
+  transitionTo(render);
+};
+window.galToggleSelecao = function () {
+  GAL_MODO_SELECAO = !GAL_MODO_SELECAO;
+  transitionTo(render);
+};
+window.galMarcar = function (fileId, marcado) {
+  if (!GAL_SELECAO) GAL_SELECAO = new Set(galeriaFiltrada().map(f => f.fileId));
+  if (marcado) GAL_SELECAO.add(fileId); else GAL_SELECAO.delete(fileId);
+  const el = document.getElementById('galContagemSel');
+  if (el) el.textContent = GAL_SELECAO.size + ' selecionada(s)';
+};
+window.galMarcarTodas = function (marcar) {
+  GAL_SELECAO = marcar ? new Set(galeriaFiltrada().map(f => f.fileId)) : new Set();
+  transitionTo(render);
+};
+
+/* A lista que os filtros deixaram passar — usada pela grade, pela seleção
+   e pelo relatório, para os três nunca discordarem. */
+function galeriaFiltrada() {
+  const frenteDoPacote = pid => {
+    const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid);
+    return p ? getCSVField(p, 'Frente') : '';
+  };
+  const termo = String(GAL_FILTRO.busca || '').trim().toLowerCase();
+  return fotosDaObra().filter(f => {
+    if (STATE.galPacote && STATE.galPacote !== 'Todos' && f.pacote !== STATE.galPacote) return false;
+    if (STATE.galMes && STATE.galMes !== 'Todos' && String(f.data).slice(0, 7) !== STATE.galMes) return false;
+    if (GAL_FILTRO.frente && frenteDoPacote(f.pacoteId) !== GAL_FILTRO.frente) return false;
+    if (GAL_FILTRO.apontador && f.apontador !== GAL_FILTRO.apontador) return false;
+    if (GAL_FILTRO.estaca && !String(f.estaca).toLowerCase().includes(GAL_FILTRO.estaca.toLowerCase())) return false;
+    if (GAL_FILTRO.de && String(f.data) < GAL_FILTRO.de) return false;
+    if (GAL_FILTRO.ate && String(f.data) > GAL_FILTRO.ate) return false;
+    if (termo) {
+      const alvo = [f.pacote, f.estaca, f.equipe, f.apontador, f.data, f.id].join(' ').toLowerCase();
+      if (!alvo.includes(termo)) return false;
+    }
+    return true;
+  });
+}
+
+/* O que vai para o relatório: a seleção manual, se houver; senão, tudo que
+   passou pelos filtros. */
+function galeriaParaRelatorio() {
+  const fs = galeriaFiltrada();
+  if (!GAL_SELECAO) return fs;
+  return fs.filter(f => GAL_SELECAO.has(f.fileId));
+}
+
 function renderGaleria() {
   const todas = fotosDaObra();
   if (!todas.length) {
@@ -6493,26 +6601,70 @@ function renderGaleria() {
   }
   const meses = [...new Set(todas.map(f => String(f.data).slice(0, 7)))].filter(Boolean).sort().reverse();
   const pacotes = [...new Set(todas.map(f => f.pacote))].sort();
-  const fs = todas.filter(f =>
-    (STATE.galPacote === 'Todos' || !STATE.galPacote || f.pacote === STATE.galPacote) &&
-    (STATE.galMes === 'Todos' || !STATE.galMes || String(f.data).slice(0, 7) === STATE.galMes));
+  const apontadores = [...new Set(todas.map(f => f.apontador).filter(Boolean))].sort();
+  const frentes = [...new Set(STATE.pacotes.map(p => getCSVField(p, 'Frente')).filter(Boolean))].sort();
+  const fs = galeriaFiltrada();
+  const selecionadas = galeriaParaRelatorio();
+  const temFiltro = STATE.galPacote && STATE.galPacote !== 'Todos' || STATE.galMes && STATE.galMes !== 'Todos'
+    || Object.values(GAL_FILTRO).some(Boolean);
+  const labelMes = m => {
+    const d = new Date(m + '-01T12:00:00');
+    const l = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  };
 
   const filtros = `<div class="card" style="margin-bottom:16px"><div class="card-body">
-    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:end">
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end">
+      <div class="field"><label>Mês</label>
+        <select onchange="STATE.galMes=this.value;setGalFiltro('_','')">
+          <option value="Todos">Todos os meses</option>
+          ${meses.map(m => `<option value="${m}" ${STATE.galMes === m ? 'selected' : ''}>${escHtml(labelMes(m))}</option>`).join('')}
+        </select></div>
+      <div class="field"><label>Frente</label>
+        <select onchange="setGalFiltro('frente', this.value)">
+          <option value="">Todas as frentes</option>
+          ${frentes.map(f => `<option value="${escHtml(f)}" ${GAL_FILTRO.frente === f ? 'selected' : ''}>${escHtml(f)}</option>`).join('')}
+        </select></div>
       <div class="field"><label>Pacote / serviço</label>
-        <select onchange="STATE.galPacote=this.value;transitionTo(render)">
+        <select onchange="STATE.galPacote=this.value;setGalFiltro('_','')">
           <option value="Todos">Todos os pacotes</option>
           ${pacotes.map(p => `<option ${STATE.galPacote === p ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
         </select></div>
-      <div class="field"><label>Mês</label>
-        <select onchange="STATE.galMes=this.value;transitionTo(render)">
-          <option value="Todos">Todos os meses</option>
-          ${meses.map(m => `<option value="${m}" ${STATE.galMes === m ? 'selected' : ''}>${m}</option>`).join('')}
+      <div class="field"><label>Apontador</label>
+        <select onchange="setGalFiltro('apontador', this.value)">
+          <option value="">Todos</option>
+          ${apontadores.map(a => `<option value="${escHtml(a)}" ${GAL_FILTRO.apontador === a ? 'selected' : ''}>${escHtml(a)}</option>`).join('')}
         </select></div>
-      <div style="text-align:right"><span class="pill">${fs.length} foto(s)</span></div>
+      <div class="field"><label>Estaca</label>
+        <input type="text" value="${escHtml(GAL_FILTRO.estaca)}" placeholder="ex: E118"
+               onchange="setGalFiltro('estaca', this.value)"></div>
+      <div class="field"><label>De</label>
+        <input type="date" value="${escHtml(GAL_FILTRO.de)}" onchange="setGalFiltro('de', this.value)"></div>
+      <div class="field"><label>Até</label>
+        <input type="date" value="${escHtml(GAL_FILTRO.ate)}" onchange="setGalFiltro('ate', this.value)"></div>
+      <div class="field"><label>Buscar</label>
+        <input type="search" value="${escHtml(GAL_FILTRO.busca)}" placeholder="pacote, equipe, estaca…"
+               onchange="setGalFiltro('busca', this.value)"></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <span class="pill">${fs.length} foto(s)${temFiltro ? ' de ' + todas.length : ''}</span>
+      ${temFiltro ? `<button class="btn btn-ghost btn-sm" onclick="limparGalFiltro()">${ic('fechar')} Limpar filtros</button>` : ''}
+      <button class="btn btn-outline btn-sm" onclick="galToggleSelecao()">
+        ${ic(GAL_MODO_SELECAO ? 'caixaMarcada' : 'caixaVazia')} ${GAL_MODO_SELECAO ? 'Sair da seleção' : 'Escolher fotos'}</button>
+      ${GAL_MODO_SELECAO ? `
+        <button class="btn btn-ghost btn-sm" onclick="galMarcarTodas(true)">Marcar todas</button>
+        <button class="btn btn-ghost btn-sm" onclick="galMarcarTodas(false)">Desmarcar todas</button>
+        <span id="galContagemSel" style="font-size:12px;color:var(--muted)">${selecionadas.length} selecionada(s)</span>` : ''}
+      <button class="btn btn-primary btn-sm" style="margin-left:auto"
+              onclick="gerarRelatorioFotografico()" ${selecionadas.length ? '' : 'disabled'}>
+        ${ic('pdf')} Relatório fotográfico (${selecionadas.length})</button>
     </div></div></div>`;
 
-  const cartoes = fs.map(f => `<div class="card" style="overflow:hidden;padding:0">
+  const marcada = f => !GAL_SELECAO || GAL_SELECAO.has(f.fileId);
+  const cartoes = fs.map(f => `<div class="card" style="overflow:hidden;padding:0${GAL_MODO_SELECAO && !marcada(f) ? ';opacity:.4' : ''}">
+    ${GAL_MODO_SELECAO ? `<label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">
+      <input type="checkbox" ${marcada(f) ? 'checked' : ''} onchange="galMarcar('${f.fileId}', this.checked)">
+      ${marcada(f) ? 'No relatório' : 'Fora'}</label>` : ''}
     <div id="galbox-${f.fileId}" style="position:relative;background:var(--surface-2);cursor:zoom-in;height:170px"
          onclick="ampliarFoto('${f.fileId}','${escHtml(f.pacote)}')">
       <img id="gal-${f.fileId}" alt="${escHtml(f.pacote)}"
@@ -6578,6 +6730,137 @@ async function pintarFotoGaleria(fileId) {
     const cx = document.getElementById('galAvisoServidor');
     if (cx) cx.style.display = '';
   }
+}
+
+/* --------------------------------------------------------------------
+   O PDF do relatório fotográfico mensal.
+   --------------------------------------------------------------------
+   Capa com os dados do contrato (os mesmos que o RDO usa, via rdoInfo() —
+   não há uma segunda versão da verdade), duas fotos por folha com legenda
+   completa, e numeração "FOTO 01/24" para a fiscalização citar no ofício.
+   -------------------------------------------------------------------- */
+window.gerarRelatorioFotografico = function () {
+  return comLib('pdf', _gerarRelatorioFotografico, 'o relatório fotográfico');
+};
+
+async function _gerarRelatorioFotografico() {
+  const fotos = galeriaParaRelatorio();
+  if (!fotos.length) { toast('Nenhuma foto selecionada.', 'error', 4000); return; }
+  if (!STATE.usuarioLogado) { toast('Entre no sistema para baixar as fotos.', 'error', 5000); return; }
+
+  const info = rdoInfo();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const L = 210, A = 297, M = 14, TW = L - M * 2;
+
+  // Período coberto, lido das próprias fotos (e não do filtro): é o que a
+  // fiscalização confere contra as datas das legendas.
+  const datas = fotos.map(f => String(f.data)).filter(Boolean).sort();
+  const periodo = datas.length
+    ? (datas[0] === datas[datas.length - 1]
+        ? fmtData(datas[0])
+        : fmtData(datas[0]) + ' a ' + fmtData(datas[datas.length - 1]))
+    : '—';
+  const mesRef = datas.length ? (() => {
+    const d = new Date(datas[0] + 'T12:00:00');
+    const s = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  })() : '';
+
+  toast(`Montando o relatório com ${fotos.length} foto(s)…`, 'info', 3000);
+
+  // ---------------------------------------------------------------- capa
+  let y = M + 6;
+  doc.setFillColor(20, 32, 52); doc.rect(0, 0, L, 34, 'F');
+  doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+  doc.text('RELATÓRIO FOTOGRÁFICO MENSAL', M, 15);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+  doc.text(mesRef || periodo, M, 24);
+  doc.setTextColor(0);
+  y = 44;
+
+  const linhaCapa = (rot, val) => {
+    if (!val) return;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(90);
+    doc.text(String(rot).toUpperCase(), M, y);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(0);
+    const txt = doc.splitTextToSize(String(val), TW);
+    doc.text(txt, M, y + 4.6);
+    y += 4.6 + txt.length * 4.4 + 4;
+  };
+  linhaCapa('Obra', OBRA.nome);
+  linhaCapa('Objeto', info.objeto);
+  linhaCapa('Local', info.local);
+  linhaCapa('Contrato', OBRA.contrato);
+  linhaCapa('Contratada', info.contratada || OBRA.contratada);
+  linhaCapa('Fiscalização', info.fiscalizacao);
+  linhaCapa('Período do registro', periodo);
+  linhaCapa('Fotos neste relatório', String(fotos.length));
+  linhaCapa('Emitido em', fmtData(getLocalISODate(new Date())) + (STATE.usuarioLogado ? ' · por ' + STATE.usuarioLogado : ''));
+
+  // -------------------------------------------------------- folhas de foto
+  const rodape = (n) => {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(120);
+    doc.text(info.rodape || OBRA.nome, M, A - 8);
+    doc.text('Folha ' + n, L - M, A - 8, { align: 'right' });
+    doc.setTextColor(0);
+  };
+  rodape(1);
+
+  const PORFOLHA = 2;
+  const ALT = 96;                        // altura da moldura da foto
+  let folha = 1, naFolha = 0;
+
+  for (let i = 0; i < fotos.length; i++) {
+    const f = fotos[i];
+    if (naFolha === 0) {
+      doc.addPage(); folha++; rodape(folha);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(90);
+      doc.text('REGISTRO FOTOGRÁFICO — ' + (mesRef || periodo).toUpperCase(), M, M);
+      doc.setTextColor(0);
+      y = M + 6;
+    }
+
+    let dataUri = '';
+    try { dataUri = await baixarFotoServidor(f.fileId, false); } catch (e) {}
+
+    const topo = y;
+    doc.setDrawColor(200); doc.rect(M, topo, TW, ALT);
+    if (dataUri) {
+      try {
+        const props = doc.getImageProperties(dataUri);
+        const escala = Math.min((TW - 4) / props.width, (ALT - 4) / props.height);
+        const w = props.width * escala, h = props.height * escala;
+        doc.addImage(dataUri, 'JPEG', M + (TW - w) / 2, topo + (ALT - h) / 2, w, h);
+      } catch (e) {
+        doc.setFontSize(9); doc.setTextColor(150);
+        doc.text('(imagem não pôde ser lida)', L / 2, topo + ALT / 2, { align: 'center' });
+        doc.setTextColor(0);
+      }
+    } else {
+      doc.setFontSize(9); doc.setTextColor(150);
+      doc.text('(foto indisponível no Drive)', L / 2, topo + ALT / 2, { align: 'center' });
+      doc.setTextColor(0);
+    }
+
+    // legenda
+    const n = String(i + 1).padStart(2, '0') + '/' + String(fotos.length).padStart(2, '0');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+    doc.text('FOTO ' + n + ' — ' + fmtData(f.data), M, topo + ALT + 5);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    const det = [f.pacote, f.estaca, f.turno,
+                 f.qtd ? fmtNum(num(f.qtd)) + ' ' + (f.un || '') : '',
+                 f.equipe, f.apontador ? 'Apontador: ' + f.apontador : '']
+      .map(x => String(x || '').trim()).filter(Boolean).join('  ·  ');
+    doc.text(doc.splitTextToSize(det, TW), M, topo + ALT + 10);
+
+    y = topo + ALT + 20;
+    naFolha = (naFolha + 1) % PORFOLHA;
+  }
+
+  const nome = `relatorio-fotografico-${OBRA.id}-${(datas[0] || '').slice(0, 7) || 'periodo'}.pdf`;
+  doc.save(nome);
+  toast(`Relatório com ${fotos.length} foto(s) gerado.`, 'success', 4500);
 }
 
 function carregarImagensGaleria() {
@@ -7716,8 +7999,7 @@ function renderExecutivo() {
     <!-- Pacote sem produtividade pesa ZERO e some do avanço. Enquanto isso não
          aparecia na tela, o apontador lançava e o número da diretoria não se
          movia, sem ninguém saber por quê. -->
-    ${avisoPacotesSemPeso()}
-    ${avisoDadoSujo()}
+    ${avisosDeDados()}
 
     <!-- ============ HERO EXECUTIVO ============ -->
     <div class="exec-hero stagger-item" style="animation-delay:.04s">

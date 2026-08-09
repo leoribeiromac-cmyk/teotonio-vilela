@@ -1,10 +1,13 @@
 // A galeria ordenava só pela data. Dentro do MESMO dia quem decidia era a
-// ordem em que a linha caiu na planilha, e a foto do turno noturno aparecia
-// antes da foto da manhã — o dia lido ao contrário.
+// ordem em que a linha caiu na planilha.
 //
-// Este teste semeia a planilha DE PROPÓSITO ao contrário (o noturno lançado
-// antes do diurno) e cobra a ordem do relógio da obra: dia mais novo
-// primeiro, e dentro do dia Diurno antes de Noturno.
+// A regra agora é UMA SÓ, do mais novo para o mais velho, e ela vale também
+// DENTRO do dia. Antes a data descia e o turno subia — duas ordens opostas na
+// mesma lista —, e numa lista que desce a foto da noite aparecendo depois da
+// manhã do mesmo dia lia como se fosse a mais antiga das duas.
+//
+// Este teste semeia a planilha de propósito fora de ordem e cobra: dia mais
+// novo primeiro, e dentro do dia Noturno (fim do dia) antes de Diurno.
 //
 // Como rodar:
 //   python3 -m http.server 8099        (na raiz do repositório)
@@ -67,8 +70,8 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
       Local_Estaca: 'E1 125', foto_link: 'drive_id:DIA7' }
   ]);
   let ordem = await ordemNaTela();
-  ok('dia mais novo primeiro, e nele o diurno antes do noturno',
-    JSON.stringify(ordem) === JSON.stringify(['DIA7', 'NOITE7', 'DIA6', 'NOITE6']), ordem.join(' → '));
+  ok('dia mais novo primeiro, e nele o noturno antes do diurno',
+    JSON.stringify(ordem) === JSON.stringify(['NOITE7', 'DIA7', 'NOITE6', 'DIA6']), ordem.join(' → '));
 
   console.log('\nTURNO VAZIO CONTA COMO DIURNO (é o padrão do lançamento)');
   await semear([
@@ -78,10 +81,10 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
       Local_Estaca: 'E1 110', foto_link: 'drive_id:SEMTURNO' }
   ]);
   ordem = await ordemNaTela();
-  ok('a linha sem turno vem antes da noturna',
-    JSON.stringify(ordem) === JSON.stringify(['SEMTURNO', 'NOITE']), ordem.join(' → '));
+  ok('a noturna vem antes da que não declarou turno (que conta como diurna)',
+    JSON.stringify(ordem) === JSON.stringify(['NOITE', 'SEMTURNO']), ordem.join(' → '));
 
-  console.log('\nMESMO DIA, MESMO TURNO: QUEM LANÇOU ANTES VEM ANTES');
+  console.log('\nMESMO DIA, MESMO TURNO: QUEM LANÇOU DEPOIS VEM ANTES');
   await semear([
     { ID: '20260807150000_0_1111', Data: '2026-08-07', Turno: 'Diurno', Pacote_Nome: 'CBUQ',
       Local_Estaca: 'E1 120', foto_link: 'drive_id:TARDE' },
@@ -89,8 +92,8 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
       Local_Estaca: 'E1 110', foto_link: 'drive_id:CEDO' }
   ]);
   ordem = await ordemNaTela();
-  ok('o ID do lançamento (yyyyMMddHHmmss) desempata',
-    JSON.stringify(ordem) === JSON.stringify(['CEDO', 'TARDE']), ordem.join(' → '));
+  ok('o ID do lançamento (yyyyMMddHHmmss) desempata, também do mais novo',
+    JSON.stringify(ordem) === JSON.stringify(['TARDE', 'CEDO']), ordem.join(' → '));
 
   console.log('\nAS FOTOS DE UM MESMO SERVIÇO FICAM JUNTAS E NA ORDEM');
   await semear([
