@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=32"></script>
-<script src="dados/ruas-de-terra.js?v=32"></script>
+<script src="dados/ranario.js?v=33"></script>
+<script src="dados/ruas-de-terra.js?v=33"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=32"></script>
+<script src="dados/teotonio-muros.js?v=33"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=32"></script>
-<script src="js/nf/adaptador.js?v=32"></script>
-<script src="js/nf/notas.js?v=32"></script>
-<script src="js/equip/equipamentos.js?v=32"></script>
+<script src="js/ui/icones.js?v=33"></script>
+<script src="js/nf/adaptador.js?v=33"></script>
+<script src="js/nf/notas.js?v=33"></script>
+<script src="js/equip/equipamentos.js?v=33"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -10402,13 +10402,23 @@ function calcDiasImprodutivos(mes) {
     const climaChuvoso = climas.some(c => /chuva|garoa/i.test(c));
     const servicos = servicosPorData[iso] || 0;
     const util = ehDiaUtil(d);
-    const temCausa = (chuvaMm != null && chuvaMm > 0) || climaChuvoso || (paradasChuva[iso] > 0);
+    /* A paralisação REGISTRADA pelo apontador vale mais que a inferência
+       pelo clima: é a causa que ele declarou, com hora e frente. Um dia com
+       parada registrada é improdutivo mesmo sem chuva medida — e um dia com
+       parada de meio período aparece com as horas, ainda que tenha havido
+       serviço no resto do turno. */
+    const paralis = reg ? paralisacoesDoDia(reg) : [];
+    const horasParadas = paralis.reduce((s, p) => s + (horasParalisacao(p) || 0), 0);
+    const pleiteavel = paralis.some(p => MOTIVOS_PLEITEAVEIS.indexOf(p.motivo) > -1);
+    const temCausa = (chuvaMm != null && chuvaMm > 0) || climaChuvoso ||
+                     (paradasChuva[iso] > 0) || paralis.length > 0;
     dias.push({
       iso, d, util,
       diaSemana: ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][d.getDay()],
       temRDO: !!reg, climas, climaChuvoso,
       chuvaMm, fonte: reg ? fonteClimaDe(reg) : '',
       servicos, paradasChuva: paradasChuva[iso] || 0,
+      paralisacoes: paralis, horasParadas, pleiteavel,
       improdutivo: util && servicos === 0 && temCausa,
       semRDO: util && !reg,
     });
@@ -10420,6 +10430,11 @@ function calcDiasImprodutivos(mes) {
     comChuvaMedida: dias.filter(x => x.chuvaMm != null && x.chuvaMm > 0).length,
     mmAcumulado: dias.reduce((s, x) => s + (x.chuvaMm || 0), 0),
     semMedicao: dias.filter(x => x.util && x.chuvaMm == null).length,
+    paralisacoes: dias.reduce((s, x) => s + x.paralisacoes.length, 0),
+    horasParadas: dias.reduce((s, x) => s + x.horasParadas, 0),
+    // Dia improdutivo com causa que NÃO é da construtora — é este o número
+    // que entra no pedido de prorrogação.
+    diasPleiteaveis: dias.filter(x => x.improdutivo && (x.pleiteavel || x.chuvaMm > 0 || x.climaChuvoso)).length,
   };
   return { dias, totais };
 }
@@ -10460,8 +10475,10 @@ function renderImprodutivos() {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
         ${[['Dias úteis', totais.diasUteis, ''],
            ['Improdutivos', totais.improdutivos, 'var(--red)'],
+           ['Pleiteáveis', totais.diasPleiteaveis, totais.diasPleiteaveis ? 'var(--red)' : ''],
            ['Com chuva medida', totais.comChuvaMedida, ''],
            ['Chuva acumulada', fmtNum(totais.mmAcumulado) + ' mm', ''],
+           ['Horas paradas', fmtNum(totais.horasParadas, 1) + ' h', ''],
            ['Dias úteis sem RDO', totais.semRDO, totais.semRDO ? 'var(--red)' : '']]
           .map(([r, v, cor]) => `<div>
             <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${r}</div>
@@ -10481,7 +10498,7 @@ function renderImprodutivos() {
       <div class="tabela-rolagem" style="overflow-x:auto">
       <table class="t"><thead><tr>
         <th>Data</th><th>Dia</th><th class="t-num">Chuva medida</th><th>Fonte</th>
-        <th>Clima apontado</th><th class="t-num">Serviços</th><th class="t-num">Equip. parado</th><th>Situação</th>
+        <th>Clima apontado</th><th>Paralisação registrada</th><th class="t-num">Serviços</th><th class="t-num">Equip. parado</th><th>Situação</th>
       </tr></thead><tbody>
       ${dias.map(x => {
         const sit = x.improdutivo ? '<span style="color:var(--red);font-weight:600">Improdutivo</span>'
@@ -10494,6 +10511,11 @@ function renderImprodutivos() {
           <td class="t-num t-mono">${x.chuvaMm == null ? '<span style="color:var(--muted)">—</span>' : fmtNum(x.chuvaMm) + ' mm'}</td>
           <td style="font-size:11px;color:var(--muted)">${escHtml(x.fonte || '—')}</td>
           <td style="font-size:12px${x.climaChuvoso ? ';font-weight:600' : ''}">${escHtml(x.climas.join(' · ') || '—')}</td>
+          <td style="font-size:11px;max-width:280px">${x.paralisacoes.length
+            ? x.paralisacoes.map(p => `<div>${escHtml(p.turno === 'Noturno' ? 'Not · ' : '')}<strong>${escHtml(p.motivo)}</strong>${
+                horasParalisacao(p) !== null ? ' · ' + fmtNum(horasParalisacao(p), 1) + ' h' : ''}${
+                p.frente ? ' · ' + escHtml(p.frente) : ''}</div>`).join('')
+            : '<span style="color:var(--muted)">—</span>'}</td>
           <td class="t-num">${x.servicos || '<span style="color:var(--muted)">0</span>'}</td>
           <td class="t-num">${x.paradasChuva || '<span style="color:var(--muted)">—</span>'}</td>
           <td>${sit}</td>
@@ -10509,19 +10531,27 @@ window.exportarImprodutivosCSV = function () {
   const { dias, totais } = calcDiasImprodutivos(IMPROD_MES);
   const dec = n => String(n).replace('.', ',');
   const linhas = [['Data', 'Dia da semana', 'Dia util', 'Chuva medida (mm)', 'Fonte',
-                   'Clima apontado', 'Servicos lancados', 'Equip. parado por chuva', 'Situacao'].join(';')];
+                   'Clima apontado', 'Paralisacao registrada', 'Horas paradas', 'Sustenta pleito',
+                   'Servicos lancados', 'Equip. parado por chuva', 'Situacao'].join(';')];
   dias.forEach(x => linhas.push([
     x.iso, x.diaSemana, x.util ? 'sim' : 'nao',
     x.chuvaMm == null ? '' : dec(x.chuvaMm), x.fonte,
-    x.climas.join(' / '), x.servicos, x.paradasChuva,
+    x.climas.join(' / '),
+    x.paralisacoes.map(p => p.turno + ': ' + textoParalisacao(p)).join(' | '),
+    x.horasParadas ? dec(Math.round(x.horasParadas * 10) / 10) : '',
+    x.paralisacoes.length ? (x.pleiteavel ? 'sim' : 'nao') : '',
+    x.servicos, x.paradasChuva,
     x.improdutivo ? 'IMPRODUTIVO' : x.semRDO ? 'SEM RDO' : x.util ? 'produtivo' : 'nao util',
   ].map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(';')));
   linhas.push('');
-  linhas.push(['TOTAIS', '', '', '', '', '', '', '', ''].join(';'));
+  linhas.push(['TOTAIS'].join(';'));
   linhas.push(['Dias uteis', totais.diasUteis].join(';'));
   linhas.push(['Dias improdutivos', totais.improdutivos].join(';'));
+  linhas.push(['Dias improdutivos que sustentam pleito', totais.diasPleiteaveis].join(';'));
   linhas.push(['Dias com chuva medida', totais.comChuvaMedida].join(';'));
   linhas.push(['Chuva acumulada (mm)', dec(totais.mmAcumulado)].join(';'));
+  linhas.push(['Paralisacoes registradas', totais.paralisacoes].join(';'));
+  linhas.push(['Horas paradas', dec(Math.round(totais.horasParadas * 10) / 10)].join(';'));
   linhas.push(['Dias uteis sem RDO', totais.semRDO].join(';'));
 
   const blob = new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
@@ -11643,7 +11673,8 @@ function dadosRDOExport(fromSheet, data) {
     clima_tarde: getCSVField(fromSheet, 'Clima_Tarde') || '',
     clima_noite: getCSVField(fromSheet, 'Clima_Noite') || '',
     visitas: getCSVField(fromSheet, 'Visitas') || '',
-    ocorrencias: getCSVField(fromSheet, 'Ocorrencias') || '',
+    ocorrencias: ocorrenciasComParalisacoes(
+      getCSVField(fromSheet, 'Ocorrencias') || '', paralisacoesDoDia(fromSheet)),
     observacoes_gerais: getCSVField(fromSheet, 'Observacoes_Gerais') || '',
     efetivo_diurno: efetJson.padrao_diurno || {},
     efetivo_noturno: efetJson.padrao_noturno || {},
@@ -13044,18 +13075,154 @@ window.buscarClima = async function () {
   }
 };
 
+/* ====================================================================
+   PARALISAÇÃO ESTRUTURADA
+   --------------------------------------------------------------------
+   A coluna `paralisado_motivo` existe na planilha desde sempre e o app
+   SEMPRE a gravava vazia. Parada de obra virava, na melhor das hipóteses,
+   uma frase solta no campo "Ocorrências" — texto livre que não soma, não
+   filtra e não vira anexo de pleito.
+
+   Aqui a parada passa a ter forma: motivo de uma lista fechada, hora de
+   início e fim, frente afetada, e quanto efetivo e equipamento ficou
+   parado. Com isso a tela de Dias Improdutivos deixa de inferir a causa
+   pelo clima e passa a citar o que o apontador registrou — que é
+   exatamente o que a fiscalização cobra num pedido de prorrogação.
+
+   A lista é fechada de propósito: 40 apontadores escrevendo "chuva",
+   "Chuva", "chuveu muito" e "chva" dão quatro motivos diferentes na hora
+   de somar. "Outro" existe para o que não couber, com descrição livre ao
+   lado.
+   ==================================================================== */
+const MOTIVOS_PARALISACAO = [
+  'Chuva',
+  'Pista impraticável após chuva',
+  'Interferência de concessionária',
+  'Falta de projeto ou definição',
+  'Área não liberada / desapropriação',
+  'Falta de licença ou autorização',
+  'Falta de material',
+  'Equipamento quebrado ou indisponível',
+  'Falta de frente de serviço',
+  'Determinação da fiscalização',
+  'Acidente ou ocorrência de segurança',
+  'Interferência de trânsito ou evento',
+  'Falta de energia',
+  'Falta de efetivo',
+  'Outro',
+];
+
+/* Motivos que sustentam pleito de prazo — parada que NÃO é responsabilidade
+   da construtora. Falta de material ou equipamento quebrado é problema da
+   obra: entra no relatório, mas não conta como dia improdutivo pleiteável. */
+const MOTIVOS_PLEITEAVEIS = [
+  'Chuva', 'Pista impraticável após chuva', 'Interferência de concessionária',
+  'Falta de projeto ou definição', 'Área não liberada / desapropriação',
+  'Falta de licença ou autorização', 'Determinação da fiscalização',
+  'Interferência de trânsito ou evento',
+];
+
+function paralisacaoVazia() {
+  return { motivo: 'Chuva', inicio: '', fim: '', frente: '', efetivo: '', equip: '', obs: '' };
+}
+
+/* Horas paradas de um registro. O turno noturno atravessa a meia-noite:
+   22:00 → 02:00 são 4 horas, não menos vinte. */
+function horasParalisacao(p) {
+  const emMin = s => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(s == null ? '' : s).trim());
+    if (!m) return null;
+    const h = +m[1], mi = +m[2];
+    return (h >= 0 && h < 24 && mi >= 0 && mi < 60) ? h * 60 + mi : null;
+  };
+  const a = emMin(p && p.inicio), b = emMin(p && p.fim);
+  if (a === null || b === null) return null;
+  let dif = b - a;
+  if (dif < 0) dif += 24 * 60;
+  return dif / 60;
+}
+
+/* Só entra na planilha (e na conta) o registro que tem motivo. Linha em
+   branco que o apontador abriu e não preencheu é descartada. */
+function paralisacoesValidas(lista) {
+  return (lista || []).filter(p => p && String(p.motivo || '').trim());
+}
+
+/* Uma linha por parada, legível por quem lê o RDO impresso. */
+function textoParalisacao(p) {
+  const h = horasParalisacao(p);
+  return [
+    String(p.motivo || '').trim(),
+    (p.inicio && p.fim) ? `${p.inicio}–${p.fim}${h !== null ? ' (' + fmtNum(h, 1) + ' h)' : ''}` : '',
+    p.frente ? 'frente: ' + String(p.frente).trim() : '',
+    num(p.efetivo) > 0 ? num(p.efetivo) + ' na mão de obra parada' : '',
+    num(p.equip) > 0 ? num(p.equip) + ' equip. parado' : '',
+    String(p.obs || '').trim(),
+  ].filter(Boolean).join(' · ');
+}
+
+function resumoParalisacoes(lista) {
+  const v = paralisacoesValidas(lista);
+  if (!v.length) return '';
+  return 'PARALISAÇÕES: ' + v.map(textoParalisacao).join(' | ');
+}
+
+/* O RDO impresso precisa dizer que a obra parou. Em vez de mexer no desenho
+   do PDF (que é o documento oficial e não pode mudar de forma), a parada entra
+   no bloco "Ocorrências e observações do dia" que já existe.
+
+   Isto é montado NA HORA de gerar o PDF, nunca gravado — se fosse gravado no
+   campo de ocorrências, ao reabrir o RDO o texto voltaria para o formulário e
+   o próximo "salvar" o duplicaria. */
+function ocorrenciasComParalisacoes(base, lista) {
+  const r = resumoParalisacoes(lista);
+  return [base, r].filter(x => x && String(x).trim()).join('   ·   ');
+}
+
+/* As paralisações de uma linha da aba RDO_Diario, nos dois turnos. Linha
+   gravada antes desta coluna existir devolve as duas listas vazias — o app
+   inteiro continua funcionando sobre o histórico que já está lá. */
+function paralisacoesDaLinha(reg) {
+  const bruto = getCSVField(reg, 'Paralisacoes_JSON') || getCSVField(reg, 'paralisacoes_json') || '';
+  if (!bruto) return { diurno: [], noturno: [] };
+  try {
+    const o = JSON.parse(bruto);
+    return { diurno: Array.isArray(o.diurno) ? o.diurno : [],
+             noturno: Array.isArray(o.noturno) ? o.noturno : [] };
+  } catch (e) { return { diurno: [], noturno: [] }; }
+}
+
+/* Os dois turnos juntos, já filtrados, com o turno marcado em cada item. */
+function paralisacoesDoDia(reg) {
+  const p = paralisacoesDaLinha(reg);
+  return paralisacoesValidas(p.diurno).map(x => Object.assign({ turno: 'Diurno' }, x))
+    .concat(paralisacoesValidas(p.noturno).map(x => Object.assign({ turno: 'Noturno' }, x)));
+}
+
 // ====================================================================
 // ESTADO DO RDO DIÁRIO V4 E LÓGICA DE TURNOS
 // ====================================================================
 let DIARIO_V4 = null;
-let DIARIO_TURNO_ATIVO = null; 
+let DIARIO_TURNO_ATIVO = null;
 
 function loadDiarioV4(data) {
   try {
     const raw = localStorage.getItem(lsObra('teotonio_rdo_diario_v4_' + data));
-    if (raw) return JSON.parse(raw);
+    if (raw) return normalizarDiarioV4(JSON.parse(raw));
   } catch(e) {}
   return null;
+}
+
+/* Rascunho gravado antes de existir paralisação não tem o campo. Sem isto,
+   o primeiro `td.paralisacoes.map` estoura a tela de quem estava com um
+   rascunho aberto no celular — justamente quem não pode perder o turno. */
+function normalizarDiarioV4(d) {
+  if (!d) return d;
+  ['diurno', 'noturno'].forEach(t => {
+    if (!d[t]) return;
+    if (!Array.isArray(d[t].paralisacoes)) d[t].paralisacoes = [];
+  });
+  return d;
 }
 
 function saveDiarioV4(d) {
@@ -13074,10 +13241,12 @@ function defaultDiarioV4(data) {
     clima_noite: 'Bom',
     diurno: {
       apontador: '', efetivo: {}, equipamentos: {}, customIndireto: [], customDireto: [], customEquip: [],
+      paralisacoes: [],
       visitas: '', ocorrencias: '', observacoes: '', preenchido: false,
     },
     noturno: {
       apontador: '', efetivo: {}, equipamentos: {}, customIndireto: [], customDireto: [], customEquip: [],
+      paralisacoes: [],
       visitas: '', ocorrencias: '', observacoes: '', preenchido: false,
     },
   };
@@ -13096,7 +13265,8 @@ function carregarDiarioDaSheet(data) {
   const rawEquip = getCSVField(sheetRow, 'Equipamentos_JSON') || getCSVField(sheetRow, 'equipamentos_json') || '{}';
   try { efetivoJson = JSON.parse(rawEfetivo); } catch(e) {}
   try { equipJson = JSON.parse(rawEquip); } catch(e) {}
-  
+  const paralJson = paralisacoesDaLinha(sheetRow);
+
   const d = defaultDiarioV4(data);
   d.clima_manha = getCSVField(sheetRow, 'Clima_Manha') || getCSVField(sheetRow, 'clima_manha') || 'Bom';
   d.clima_tarde = getCSVField(sheetRow, 'Clima_Tarde') || getCSVField(sheetRow, 'clima_tarde') || 'Bom';
@@ -13112,7 +13282,8 @@ function carregarDiarioDaSheet(data) {
   d.diurno.customIndireto = efetivoJson.customIndireto_diurno || [];
   d.diurno.customDireto = efetivoJson.customDireto_diurno || [];
   d.diurno.customEquip = equipJson.custom_diurno || [];
-  d.diurno.visitas = getCSVField(sheetRow, 'Visitas_Diurno') || getCSVField(sheetRow, 'visitas_diurno') || getCSVField(sheetRow, 'Visitas') || getCSVField(sheetRow, 'visitas') || '';
+  d.diurno.paralisacoes = paralJson.diurno || [];
+  d.diurno.visitas =getCSVField(sheetRow, 'Visitas_Diurno') || getCSVField(sheetRow, 'visitas_diurno') || getCSVField(sheetRow, 'Visitas') || getCSVField(sheetRow, 'visitas') || '';
   d.diurno.ocorrencias = getCSVField(sheetRow, 'Ocorrencias_Diurno') || getCSVField(sheetRow, 'ocorrencias_diurno') || getCSVField(sheetRow, 'Ocorrencias') || getCSVField(sheetRow, 'ocorrencias') || '';
   d.diurno.observacoes = getCSVField(sheetRow, 'Obs_Diurno') || getCSVField(sheetRow, 'obs_diurno') || getCSVField(sheetRow, 'Observacoes_Gerais') || getCSVField(sheetRow, 'observacoes_gerais') || '';
   d.diurno.preenchido = !!d.diurno.apontador;
@@ -13124,7 +13295,8 @@ function carregarDiarioDaSheet(data) {
   d.noturno.customIndireto = efetivoJson.customIndireto_noturno || [];
   d.noturno.customDireto = efetivoJson.customDireto_noturno || [];
   d.noturno.customEquip = equipJson.custom_noturno || [];
-  d.noturno.visitas = getCSVField(sheetRow, 'Visitas_Noturno') || getCSVField(sheetRow, 'visitas_noturno') || '';
+  d.noturno.paralisacoes = paralJson.noturno || [];
+  d.noturno.visitas =getCSVField(sheetRow, 'Visitas_Noturno') || getCSVField(sheetRow, 'visitas_noturno') || '';
   d.noturno.ocorrencias = getCSVField(sheetRow, 'Ocorrencias_Noturno') || getCSVField(sheetRow, 'ocorrencias_noturno') || '';
   d.noturno.observacoes = getCSVField(sheetRow, 'Obs_Noturno') || getCSVField(sheetRow, 'obs_noturno') || '';
   d.noturno.preenchido = !!d.noturno.apontador;
@@ -13338,6 +13510,8 @@ function renderFormularioTurno() {
       </div>
     </div>
     
+    ${renderParalisacoesV4(td, turnoLabel, cor)}
+
     <div class="card stagger-item" style="animation-delay:.25s">
       <div class="card-header">
         <div>
@@ -13420,6 +13594,90 @@ function renderEfetivoV4(titulo, categorias, td, prefix, corBorda) {
   `;
 }
 
+/* O cartão de paralisações do turno. Nasce vazio: obra que trabalhou o turno
+   inteiro não precisa clicar em nada. */
+function renderParalisacoesV4(td, turnoLabel, corBorda) {
+  const lista = td.paralisacoes || [];
+  const frentes = [...new Set((STATE.pacotes || [])
+    .map(p => String(getCSVField(p, 'Frente') || '').trim()).filter(Boolean))].sort();
+  const totalH = lista.reduce((s, p) => s + (horasParalisacao(p) || 0), 0);
+
+  const linha = (p, i) => `
+    <div style="border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:10px;position:relative;background:var(--bg)">
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+        <div class="field" style="grid-column:1/-1">
+          <label>Motivo da parada</label>
+          <select data-paralis4="${i}|motivo">
+            ${MOTIVOS_PARALISACAO.map(m => `<option ${p.motivo === m ? 'selected' : ''}>${escHtml(m)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Início</label>
+          <input type="time" data-paralis4="${i}|inicio" value="${escHtml(p.inicio || '')}">
+        </div>
+        <div class="field">
+          <label>Fim</label>
+          <input type="time" data-paralis4="${i}|fim" value="${escHtml(p.fim || '')}">
+        </div>
+        <div class="field">
+          <label>Frente afetada</label>
+          <input type="text" list="frentesParalis" data-paralis4="${i}|frente" value="${escHtml(p.frente || '')}" placeholder="ex: Drenagem">
+        </div>
+        <div class="field">
+          <label>Efetivo parado</label>
+          <input type="number" min="0" data-paralis4="${i}|efetivo" value="${escHtml(p.efetivo || '')}" placeholder="0">
+        </div>
+        <div class="field">
+          <label>Equip. parado</label>
+          <input type="number" min="0" data-paralis4="${i}|equip" value="${escHtml(p.equip || '')}" placeholder="0">
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Detalhe ${p.motivo === 'Outro' ? '(obrigatório para "Outro")' : '(opcional)'}</label>
+          <input type="text" data-paralis4="${i}|obs" value="${escHtml(p.obs || '')}" placeholder="ex: Enel não removeu o poste da est. 112">
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">
+        ${horasParalisacao(p) === null
+          ? 'Preencha início e fim para contar as horas paradas.'
+          : '<strong>' + fmtNum(horasParalisacao(p), 1) + ' h</strong> paradas' +
+            (MOTIVOS_PLEITEAVEIS.indexOf(p.motivo) === -1
+              ? ' · motivo interno da obra, não sustenta pleito de prazo'
+              : ' · motivo que sustenta pleito de prazo')}
+      </div>
+      <button class="btn-remove-custom" onclick="removerParalisacaoV4(${i})" title="Remover">×</button>
+    </div>`;
+
+  return `
+    <datalist id="frentesParalis">${frentes.map(f => `<option value="${escHtml(f)}">`).join('')}</datalist>
+    <div class="card stagger-item" style="animation-delay:.22s">
+      <div class="card-header" style="border-left:3px solid ${corBorda}">
+        <div>
+          <div class="card-title">Paralisações do turno ${turnoLabel}</div>
+          <div class="card-title-sub">${lista.length
+            ? lista.length + ' registro(s)' + (totalH > 0 ? ' · ' + fmtNum(totalH, 1) + ' h paradas no turno' : '')
+            : 'Só preencha se a obra parou — motivo, horário e frente viram anexo de pleito'}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="adicionarParalisacaoV4()">+ Paralisação</button>
+      </div>
+      ${lista.length ? `<div class="card-body">${lista.map(linha).join('')}</div>` : ''}
+    </div>`;
+}
+
+window.adicionarParalisacaoV4 = function () {
+  const td = DIARIO_V4[DIARIO_TURNO_ATIVO];
+  if (!Array.isArray(td.paralisacoes)) td.paralisacoes = [];
+  td.paralisacoes.push(paralisacaoVazia());
+  saveDiarioV4(DIARIO_V4);
+  transitionTo(render);
+};
+
+window.removerParalisacaoV4 = function (i) {
+  const td = DIARIO_V4[DIARIO_TURNO_ATIVO];
+  (td.paralisacoes || []).splice(i, 1);
+  saveDiarioV4(DIARIO_V4);
+  transitionTo(render);
+};
+
 function attachRDODiarioV4Form() {
   const dataInput = document.querySelector('[data-diario4-data]');
   if (dataInput) {
@@ -13460,6 +13718,20 @@ function attachRDODiarioV4Form() {
       td.equipamentos[el.dataset.equip4] = el.value;
       saveDiarioV4(DIARIO_V4);
     };
+  });
+
+  /* Paralisação. Trocar o MOTIVO redesenha o cartão (é o motivo que decide se
+     o detalhe é obrigatório e se a parada sustenta pleito); os outros campos
+     só gravam, senão o cursor sairia da caixa a cada tecla digitada. */
+  document.querySelectorAll('[data-paralis4]').forEach(el => {
+    const [i, campo] = el.dataset.paralis4.split('|');
+    const grava = () => {
+      if (!Array.isArray(td.paralisacoes) || !td.paralisacoes[i]) return;
+      td.paralisacoes[i][campo] = el.value;
+      saveDiarioV4(DIARIO_V4);
+    };
+    if (campo === 'motivo') el.onchange = () => { grava(); transitionTo(render); };
+    else el.oninput = el.onchange = grava;
   });
   
   document.querySelectorAll('[data-equipcustom4]').forEach(el => {
@@ -13535,7 +13807,16 @@ async function salvarDiarioV4() {
   if (!td.apontador || !td.apontador.trim()) {
     toast('Apontador obrigatório pra salvar', 'error', 0); return;
   }
-  
+
+  /* "Outro" sem descrição não é motivo — é uma parada sem causa registrada,
+     que na hora do pleito não sustenta nada. Barra antes de subir. */
+  const outroSemTexto = paralisacoesValidas(td.paralisacoes)
+    .some(p => p.motivo === 'Outro' && !String(p.obs || '').trim());
+  if (outroSemTexto) {
+    toast('Paralisação com motivo "Outro" precisa do detalhe escrito — sem ele a parada não sustenta pleito.', 'error', 8000);
+    return;
+  }
+
   const btn = document.getElementById('btnSalvarDiarioV4');
   const original = btn.innerHTML;
   btn.disabled = true;
@@ -13563,7 +13844,19 @@ async function salvarDiarioV4() {
     custom_diurno: (d.diurno.customEquip || []).filter(e => e.label && e.label.trim()),
     custom_noturno: (d.noturno.customEquip || []).filter(e => e.label && e.label.trim()),
   };
-  
+  const paralisacoesJSON = {
+    diurno: paralisacoesValidas(d.diurno.paralisacoes),
+    noturno: paralisacoesValidas(d.noturno.paralisacoes),
+  };
+  const totalParalis = paralisacoesJSON.diurno.length + paralisacoesJSON.noturno.length;
+  /* A coluna `paralisado_motivo` da planilha existe desde o começo e o app
+     sempre a gravou vazia. Agora ela recebe o resumo legível — quem lê a
+     planilha direto (ou uma automação antiga) vê a parada sem precisar
+     entender o JSON ao lado. */
+  const motivosResumo = paralisacoesValidas(
+    paralisacoesJSON.diurno.concat(paralisacoesJSON.noturno)).map(p => p.motivo).join(' / ');
+
+
   const params = {
     action: existe ? 'updateRDODiario' : 'addRDODiario',
     obra: OBRA.id,          // de qual obra é este diário (todas na mesma aba)
@@ -13580,6 +13873,8 @@ async function salvarDiarioV4() {
     tem_turno_noturno: d.noturno.preenchido ? 'true' : 'false',
     efetivo_json: JSON.stringify(efetivoJSON),
     equipamentos_json: JSON.stringify(equipJSON),
+    paralisacoes_json: JSON.stringify(paralisacoesJSON),
+    paralisado_motivo: motivosResumo,
   };
   
   const descricaoFila = `RDO Diário · turno ${t} · ${d.data}`;
@@ -13594,7 +13889,8 @@ async function salvarDiarioV4() {
     // sempre, e por isso "existe rascunho" não podia significar nada. Agora
     // significa: rascunho presente = trabalho que ainda NÃO subiu.
     clearDiarioV4(d.data);
-    toast(`Turno ${t.toUpperCase()} salvo`, 'success', 4000);
+    toast(`Turno ${t.toUpperCase()} salvo` +
+          (totalParalis ? ` · ${totalParalis} paralisação(ões) registrada(s)` : ''), 'success', 4000);
     setTimeout(() => carregarTudo(), 1500);
     btn.disabled = false;
     btn.innerHTML = original;
@@ -13653,7 +13949,9 @@ function _gerarPDFDiario(data) {
       apontador_noturno: v4.noturno.apontador || '',
       clima_manha: v4.clima_manha, clima_tarde: v4.clima_tarde, clima_noite: v4.clima_noite,
       visitas: [v4.diurno.visitas, v4.noturno.visitas].filter(x=>x).join(' / ') || '',
-      ocorrencias: [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / ') || '',
+      ocorrencias: ocorrenciasComParalisacoes(
+        [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / '),
+        (v4.diurno.paralisacoes || []).concat(v4.noturno.paralisacoes || [])),
       observacoes_gerais: [v4.diurno.observacoes, v4.noturno.observacoes].filter(x=>x).join(' / ') || '',
       efetivo_diurno: v4.diurno.efetivo || {},
       efetivo_noturno: v4.noturno.efetivo || {},
@@ -13695,7 +13993,9 @@ function _gerarPDFDiario(data) {
       clima_tarde: getCSVField(fromSheet, 'Clima_Tarde') || getCSVField(fromSheet, 'clima_tarde') || '',
       clima_noite: getCSVField(fromSheet, 'Clima_Noite') || getCSVField(fromSheet, 'clima_noite') || '',
       visitas: getCSVField(fromSheet, 'Visitas') || getCSVField(fromSheet, 'visitas') || '',
-      ocorrencias: getCSVField(fromSheet, 'Ocorrencias') || getCSVField(fromSheet, 'ocorrencias') || '',
+      ocorrencias: ocorrenciasComParalisacoes(
+        getCSVField(fromSheet, 'Ocorrencias') || getCSVField(fromSheet, 'ocorrencias') || '',
+        paralisacoesDoDia(fromSheet)),
       observacoes_gerais: getCSVField(fromSheet, 'Observacoes_Gerais') || getCSVField(fromSheet, 'observacoes_gerais') || '',
       efetivo_diurno: efetivoDiurno,
       efetivo_noturno: efetivoNoturno,
@@ -14454,7 +14754,9 @@ async function _gerarPDFInterno(data, turnoFocus) {
       apontador_noturno: v4.noturno.apontador || '',
       clima_manha: v4.clima_manha, clima_tarde: v4.clima_tarde, clima_noite: v4.clima_noite,
       visitas: [v4.diurno.visitas, v4.noturno.visitas].filter(x=>x).join(' / ') || '',
-      ocorrencias: [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / ') || '',
+      ocorrencias: ocorrenciasComParalisacoes(
+        [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / '),
+        (v4.diurno.paralisacoes || []).concat(v4.noturno.paralisacoes || [])),
       observacoes_gerais: [v4.diurno.observacoes, v4.noturno.observacoes].filter(x=>x).join(' / ') || '',
       efetivo_diurno: v4.diurno.efetivo || {},
       efetivo_noturno: v4.noturno.efetivo || {},
@@ -14489,7 +14791,8 @@ async function _gerarPDFInterno(data, turnoFocus) {
       clima_tarde: getCSVField(fromSheet, 'Clima_Tarde') || '',
       clima_noite: getCSVField(fromSheet, 'Clima_Noite') || '',
       visitas: getCSVField(fromSheet, 'Visitas') || '',
-      ocorrencias: getCSVField(fromSheet, 'Ocorrencias') || '',
+      ocorrencias: ocorrenciasComParalisacoes(
+      getCSVField(fromSheet, 'Ocorrencias') || '', paralisacoesDoDia(fromSheet)),
       observacoes_gerais: getCSVField(fromSheet, 'Observacoes_Gerais') || '',
       efetivo_diurno: efetivoDiurnoInt,
       efetivo_noturno: efetivoNoturnoInt,

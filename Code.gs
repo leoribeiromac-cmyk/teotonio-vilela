@@ -1517,6 +1517,10 @@ function upsertRDODiario(p, deveExistir) {
 
   garantirColuna(aba, 'obra');   // antes de ler o cabeçalho, para já vir nele
   garantirColuna(aba, 'numero_rdo');  // o número que a fiscalização lê, por obra
+  // Paralisação estruturada (motivo, horário, frente, efetivo e equipamento
+  // parados). A coluna `paralisado_motivo` da aba de avanço guarda o resumo
+  // legível; esta guarda o registro que a tela de Dias Improdutivos soma.
+  garantirColuna(aba, 'paralisacoes_json');
     var cab = cabecalhoNormalizado(aba);
     var iData = idxColuna(cab, 'data');
     var iTurno = idxColuna(cab, 'turno');
