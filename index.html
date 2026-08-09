@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=33"></script>
-<script src="dados/ruas-de-terra.js?v=33"></script>
+<script src="dados/ranario.js?v=34"></script>
+<script src="dados/ruas-de-terra.js?v=34"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=33"></script>
+<script src="dados/teotonio-muros.js?v=34"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=33"></script>
-<script src="js/nf/adaptador.js?v=33"></script>
-<script src="js/nf/notas.js?v=33"></script>
-<script src="js/equip/equipamentos.js?v=33"></script>
+<script src="js/ui/icones.js?v=34"></script>
+<script src="js/nf/adaptador.js?v=34"></script>
+<script src="js/nf/notas.js?v=34"></script>
+<script src="js/equip/equipamentos.js?v=34"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -1913,6 +1913,11 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   }
   .filter-bar > span { font-size: 11px; }
   .filter-bar select { width: 100%; padding: 10px 12px; min-height: 44px; }
+  /* A regra acima só pegava os <select>. A caixa de busca e o seletor de dia
+     do Histórico são <input> e ficavam com 32 px — alvo de dedo com luva de
+     vaqueta, no celular do apontador. O !important vence o style= inline que
+     vem do template da barra. */
+  .filter-bar input { width: 100%; padding: 10px 12px !important; min-height: 44px; font-size: 14px !important; }
   .filter-clear { width: 100%; text-align: center; padding: 8px; background: var(--bg); border-radius: 6px; }
 }
 
@@ -3896,19 +3901,19 @@ const PERFIS = {
   administrativo: {
     nome: 'Administrativo',
     desc: 'Escritório — acompanha, confere e exporta',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
     pode: ['exportar', 'relatorio', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'saidaEstoque']
   },
   engenharia: {
     nome: 'Engenharia',
     desc: 'Engenheiro da obra — lança, confere e analisa',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
     pode: ['lancarServico', 'lancarDiario', 'editar', 'exportar', 'relatorio', 'analiseIA', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque']
   },
   diretoria: {
     nome: 'Diretoria',
     desc: 'Consulta — acompanha sem lançar',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'analista', 'historico', 'galeria', 'projetos', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'analista', 'historico', 'galeria', 'projetos', 'notas'],
     pode: ['exportar', 'relatorio', 'analiseIA']
   },
   admin: { nome: 'Administrador', desc: 'Acesso completo', telas: '*', pode: '*' }
@@ -3966,7 +3971,7 @@ function podeEditar(reg) { return podeExcluir(reg) || pode('editar'); }
 function telaBloqueada(tela) {
   const nomes = {
     executivo: 'o Painel Executivo', avancofisico: 'o Avanço Físico', cronograma: 'o Cronograma',
-    medicao: 'o Apoio à Medição', improdutivos: 'os Dias Improdutivos', analista: 'o Analista IA', rdo: 'o lançamento de serviços',
+    medicao: 'o Apoio à Medição', improdutivos: 'os Dias Improdutivos', teoricoreal: 'o Teórico × Real', analista: 'o Analista IA', rdo: 'o lançamento de serviços',
     rdodiario: 'o RDO Diário', historico: 'o Histórico', usuarios: 'a gestão de usuários',
     equip: 'os Equipamentos', galeria: 'a Galeria de Fotos', notas: 'as Notas Fiscais',
     projetos: 'os Projetos'
@@ -5288,9 +5293,18 @@ function calcularConsumoItens(avanco) {
              passa a saber o SALDO — que é o que impede exportar acima do
              contrato sem ninguém ver. */
           qtdContratual: 0,
+          /* MATERIAL DE ESTOQUE — coluna OPCIONAL `Material Estoque` na aba
+             Coeficientes. É o de-para entre o item contratual (vocabulário da
+             SIURB) e o material que sai do almoxarifado (vocabulário da nota
+             fiscal): "05-48-00 Brita graduada" ↔ "BGS 0/25". Sem ela a tela de
+             Teórico × Real tenta casar pela descrição e diz que casou sozinha;
+             com ela, o vínculo é o que o engenheiro declarou. */
+          materialEstoque: '',
           consumido: 0, pacotes: []
         };
       }
+      const mat = String(getCSVField(c, 'Material Estoque') || getCSVField(c, 'Material_Estoque') || '').trim();
+      if (mat && !out[chave].materialEstoque) out[chave].materialEstoque = mat;
       /* Se mais de uma linha da matriz aponta o mesmo item, vale a MAIOR
          quantidade contratual declarada: divergência entre elas é erro de
          digitação na planilha, e pegar a maior evita acusar estouro falso. */
@@ -5551,6 +5565,7 @@ function renderShell() {
           { id: 'cronograma',   icone: 'cronograma', texto: 'Cronograma' },
           { id: 'medicao',      icone: 'medicao',    texto: 'Apoio Medição' },
           { id: 'improdutivos', icone: 'nuvem',      texto: 'Dias Improdutivos' },
+          { id: 'teoricoreal',  icone: 'balanca',    texto: 'Teórico × Real' },
           { id: 'analista',     icone: 'ia',         texto: 'Analista IA' },
         ])}
 
@@ -5766,6 +5781,7 @@ function render() {
     cronograma: ['Cronograma', 'Planejamento reverso · quando iniciar cada saldo'],
     medicao: ['Apoio à Medição', 'Consumo derivado por item contratual'],
     improdutivos: ['Dias Improdutivos', 'Chuva medida × clima apontado × serviço lançado'],
+    teoricoreal: ['Teórico × Real', 'Consumo derivado dos coeficientes × saídas do almoxarifado'],
     analista: ['Analista IA', 'Resumo inteligente da obra'],
     rdo: ['Lançar Serviço', 'Registra serviços executados · grava em RDO_Avanco'],
     rdodiario: ['RDO Diário', 'Cabeçalho do dia · efetivo, equipamentos, clima'],
@@ -5804,6 +5820,7 @@ function render() {
   else if (STATE.currentPage === 'cronograma') pageEl.innerHTML = renderCronograma();
   else if (STATE.currentPage === 'medicao') { pageEl.innerHTML = renderMedicao(); medicaoGarantirFechadas(); }
   else if (STATE.currentPage === 'improdutivos') pageEl.innerHTML = renderImprodutivos();
+  else if (STATE.currentPage === 'teoricoreal') pageEl.innerHTML = renderTeoricoReal();
   else if (STATE.currentPage === 'analista') pageEl.innerHTML = renderAnalistaIA();
   else if (STATE.currentPage === 'rdo') { pageEl.innerHTML = renderRDO(); attachRDOForm(); }
   else if (STATE.currentPage === 'rdodiario') { pageEl.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
@@ -10560,6 +10577,268 @@ window.exportarImprodutivosCSV = function () {
   a.download = `dias-improdutivos-${OBRA.id}-${IMPROD_MES}.csv`;
   a.click();
   toast('CSV de dias improdutivos gerado.', 'success', 3500);
+};
+
+/* ====================================================================
+   VIEW: TEÓRICO × REAL — o que a obra devia ter consumido e o que saiu
+   --------------------------------------------------------------------
+   O app já sabia as duas metades e nunca as pôs lado a lado:
+
+     TEÓRICO   avanço executado × matriz de coeficientes. É a mesma conta
+               que alimenta a prévia de medição — 320 m de tubo × 0,15
+               m³/m dão 48 m³ de brita que a obra DEVERIA ter gasto.
+     REAL      as saídas do almoxarifado, que a tela de Notas já registra
+               material por material.
+
+   Comparar as duas é o que separa "consumo previsto" de perda, furto,
+   retrabalho e apontamento errado. Diferença grande para cima é material
+   saindo sem serviço correspondente; para baixo é serviço lançado sem
+   material — quase sempre RDO apontado no pacote errado.
+
+   O VÍNCULO entre os dois vocabulários (item contratual da SIURB × nome
+   do material na nota) vem da coluna opcional `Material Estoque`, na
+   mesma aba Coeficientes. Onde ela está vazia a tela tenta casar pela
+   descrição e DIZ que casou sozinha — palpite silencioso aqui viraria um
+   número errado com cara de conferido.
+   ==================================================================== */
+let TR_MES = '';
+window.setTeoricoRealMes = function (m) { TR_MES = m; transitionTo(render); };
+
+/* Mesma normalização do módulo de notas, para os dois lados falarem a
+   mesma língua. Se o módulo não estiver carregado, cai numa versão simples. */
+function trNorm(s) {
+  if (typeof nfNorm === 'function') return nfNorm(s);
+  return String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/* As saídas de estoque da obra ativa, no período. */
+function saidasDoPeriodo(mes) {
+  let lista = [];
+  try { lista = (typeof nfSaiGet === 'function') ? (nfSaiGet(OBRA.id) || []) : []; } catch (e) { lista = []; }
+  if (!mes) return lista;
+  return lista.filter(s => String(s.dataISO || '').slice(0, 7) === mes);
+}
+
+function consumoTeoricoReal(mes) {
+  const teorico = calcularConsumoItens(calcularAvancoPorPacote(rdosDoMes(mes), STATE.pacotes));
+  const saidas = saidasDoPeriodo(mes);
+
+  // Real por material, com a descrição mais recente e a unidade da saída.
+  const real = {};
+  saidas.forEach(s => {
+    const k = trNorm(s.descricao) || String(s.materialId || '');
+    if (!real[k]) real[k] = { chave: k, descricao: s.descricao || '', un: s.un || '', qtd: 0, lancamentos: 0 };
+    real[k].qtd += num(s.qtd);
+    real[k].lancamentos++;
+  });
+
+  const linhas = [];
+  const realUsado = new Set();
+
+  Object.values(teorico).forEach(t => {
+    if (!(t.consumido > 0)) return;
+    let chave = '', vinculo = 'sem vínculo';
+    if (t.materialEstoque) {
+      chave = trNorm(t.materialEstoque);
+      vinculo = real[chave] ? 'declarado' : 'declarado (sem saída no período)';
+    } else {
+      /* Palpite conservador: só casa quando as descrições normalizadas são
+         iguais, ou quando uma contém a outra inteira e o trecho tem pelo
+         menos 8 caracteres. "BRITA" dentro de "BRITA GRADUADA" e de "BRITA
+         CORRIDA" casaria com as duas — e um vínculo errado aqui dá um
+         número errado com cara de conferido. */
+      const alvo = trNorm(t.descricao);
+      const candidatos = Object.keys(real).filter(k =>
+        k === alvo || (alvo.length >= 8 && k.indexOf(alvo) > -1) || (k.length >= 8 && alvo.indexOf(k) > -1));
+      if (candidatos.length === 1) { chave = candidatos[0]; vinculo = 'automático'; }
+      else if (candidatos.length > 1) vinculo = 'ambíguo';
+    }
+
+    const r = chave ? real[chave] : null;
+    if (r) realUsado.add(chave);
+    const qtdReal = r ? r.qtd : null;
+    linhas.push({
+      item: t.item, itemPlanilha: t.itemPlanilha, descricao: t.descricao,
+      unidadeItem: t.unidadeItem, teorico: t.consumido,
+      material: r ? r.descricao : (t.materialEstoque || ''),
+      unidadeMaterial: r ? r.un : '',
+      real: qtdReal, vinculo,
+      diferenca: qtdReal === null ? null : qtdReal - t.consumido,
+      desvio: (qtdReal === null || t.consumido <= 0) ? null : (qtdReal - t.consumido) / t.consumido,
+      // Unidade diferente dos dois lados: a diferença existe, mas não é
+      // comparável. Melhor gritar do que somar maçã com laranja.
+      unidadeDiverge: !!(r && trNorm(t.unidadeItem) && trNorm(r.un) && trNorm(t.unidadeItem) !== trNorm(r.un)),
+    });
+  });
+
+  // Material que saiu do almoxarifado e não tem serviço teórico nenhum
+  // apontado contra ele — o caso mais caro de todos.
+  const semTeorico = Object.values(real).filter(r => !realUsado.has(r.chave))
+    .sort((a, b) => b.qtd - a.qtd);
+
+  linhas.sort((a, b) => Math.abs(b.desvio || 0) - Math.abs(a.desvio || 0)
+                     || b.teorico - a.teorico);
+
+  const comparaveis = linhas.filter(x => x.real !== null && !x.unidadeDiverge);
+  return {
+    linhas, semTeorico,
+    totais: {
+      itens: linhas.length,
+      vinculados: linhas.filter(x => x.real !== null).length,
+      declarados: linhas.filter(x => x.vinculo === 'declarado').length,
+      automaticos: linhas.filter(x => x.vinculo === 'automático').length,
+      semVinculo: linhas.filter(x => x.real === null).length,
+      acima: comparaveis.filter(x => x.desvio > 0.1).length,
+      abaixo: comparaveis.filter(x => x.desvio < -0.1).length,
+      saidasOrfas: semTeorico.length,
+    },
+  };
+}
+
+function renderTeoricoReal() {
+  const mesesSet = new Set();
+  (STATE.rdoavanco || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d) mesesSet.add(getLocalISODate(d).slice(0, 7));
+  });
+  saidasDoPeriodo('').forEach(s => { if (s.dataISO) mesesSet.add(String(s.dataISO).slice(0, 7)); });
+  const meses = [...mesesSet].filter(Boolean).sort().reverse();
+  const labelMes = m => {
+    const d = new Date(m + '-01T12:00:00');
+    const l = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  };
+
+  const { linhas, semTeorico, totais } = consumoTeoricoReal(TR_MES);
+  const temSaidas = saidasDoPeriodo(TR_MES).length > 0;
+
+  const corVinculo = v => v === 'declarado' ? 'var(--grn)'
+    : v === 'automático' ? 'var(--ylw-d, var(--ylw))' : 'var(--muted)';
+
+  const aviso = !temSaidas ? `
+    <div class="card stagger-item">
+      <div class="card-body" style="font-size:12px;color:var(--muted);line-height:1.6">
+        Nenhuma saída de almoxarifado registrada ${TR_MES ? 'em ' + escHtml(labelMes(TR_MES)) : 'nesta obra'}.
+        A metade <strong>real</strong> desta tela vem da aba <strong>Saídas</strong> da tela de Notas —
+        sem ela, só o teórico existe e não há o que comparar.
+      </div>
+    </div>` : (totais.automaticos ? `
+    <div class="card stagger-item" style="border-left:3px solid var(--ylw)">
+      <div class="card-body" style="font-size:12px;color:var(--muted);line-height:1.6">
+        <strong>${totais.automaticos} vínculo(s) foram feitos pela descrição</strong>, não declarados.
+        Para travar o de-para, preencha a coluna <span class="t-mono">Material Estoque</span> na aba
+        Coeficientes com o nome exato do material da nota — é a mesma aba onde já está o coeficiente.
+      </div>
+    </div>` : '');
+
+  return `
+  <div class="card stagger-item">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Consumo teórico × real${TR_MES ? ' — ' + escHtml(labelMes(TR_MES)) : ''}</div>
+        <div class="card-title-sub">Avanço × coeficientes contra as saídas do almoxarifado — perda, retrabalho e RDO no pacote errado</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select onchange="setTeoricoRealMes(this.value)" style="padding:6px 10px;border:1px solid var(--border-strong);border-radius:var(--r-sm);background:var(--bg);font-family:inherit;font-size:12px;font-weight:500">
+          <option value="">Obra inteira</option>
+          ${meses.map(m => `<option value="${m}" ${TR_MES === m ? 'selected' : ''}>${escHtml(labelMes(m))}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="exportarTeoricoRealCSV()">${ic('baixar')} CSV</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
+        ${[['Itens com consumo', totais.itens, ''],
+           ['Vinculados', totais.vinculados, ''],
+           ['Acima do teórico', totais.acima, totais.acima ? 'var(--red)' : ''],
+           ['Abaixo do teórico', totais.abaixo, totais.abaixo ? 'var(--ylw-d, var(--ylw))' : ''],
+           ['Saídas sem serviço', totais.saidasOrfas, totais.saidasOrfas ? 'var(--red)' : '']]
+          .map(([r, v, cor]) => `<div>
+            <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${r}</div>
+            <div style="font-size:22px;font-weight:700${cor ? ';color:' + cor : ''}">${v}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  ${aviso}
+
+  <div class="card stagger-item">
+    <div class="card-body flush">
+      ${linhas.length === 0 ? `<div class="empty"><div class="empty-icon">${ic('balanca')}</div><div class="empty-title">Nada a comparar neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade para a tela derivar o consumo teórico.</div></div>` : `
+      <div class="tabela-rolagem" style="overflow-x:auto">
+      <table class="t"><thead><tr>
+        <th>Item contratual</th><th>Material no estoque</th><th>Vínculo</th>
+        <th class="t-num">Teórico</th><th class="t-num">Real (saídas)</th>
+        <th class="t-num">Diferença</th><th class="t-num">Desvio</th>
+      </tr></thead><tbody>
+      ${linhas.map(x => {
+        const grave = x.desvio !== null && Math.abs(x.desvio) > 0.1;
+        return `<tr${grave && !x.unidadeDiverge ? ' style="background:rgba(220,80,70,.06)"' : ''}>
+          <td class="t-mono" style="font-size:12px"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha ? `<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>` : ''}
+            <div style="font-size:11px;color:var(--muted);font-weight:400">${escHtml(x.descricao)}</div></td>
+          <td style="font-size:12px">${x.material ? escHtml(x.material) : '<span style="color:var(--muted)">—</span>'}
+            ${x.unidadeDiverge ? `<div style="font-size:10px;color:var(--red)">unidades diferentes: ${escHtml(x.unidadeItem)} × ${escHtml(x.unidadeMaterial)}</div>` : ''}</td>
+          <td style="font-size:11px;color:${corVinculo(x.vinculo)}">${escHtml(x.vinculo)}</td>
+          <td class="t-num">${fmtNum(x.teorico)} <span style="font-size:10px;color:var(--muted)">${escHtml(x.unidadeItem)}</span></td>
+          <td class="t-num">${x.real === null ? '<span style="color:var(--muted)">—</span>' : fmtNum(x.real) + ' <span style="font-size:10px;color:var(--muted)">' + escHtml(x.unidadeMaterial) + '</span>'}</td>
+          <td class="t-num"${grave ? ' style="font-weight:700"' : ''}>${x.diferenca === null ? '—' : (x.diferenca > 0 ? '+' : '') + fmtNum(x.diferenca)}</td>
+          <td class="t-num"${grave ? ' style="color:var(--red);font-weight:700"' : ''}>${x.desvio === null ? '—' : (x.desvio > 0 ? '+' : '') + fmtPct(x.desvio)}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>
+      </div>`}
+    </div>
+  </div>
+
+  ${semTeorico.length ? `
+  <div class="card stagger-item" style="border-left:3px solid var(--red)">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Saiu do almoxarifado sem serviço correspondente</div>
+        <div class="card-title-sub">${semTeorico.length} material(is) com saída e nenhum item contratual vinculado no período</div>
+      </div>
+    </div>
+    <div class="card-body flush">
+      <table class="t"><thead><tr><th>Material</th><th>Unid</th><th class="t-num">Saiu</th><th class="t-num">Lançamentos</th></tr></thead>
+      <tbody>${semTeorico.map(r => `<tr>
+        <td style="font-size:12px">${escHtml(r.descricao)}</td>
+        <td class="t-mono">${escHtml(r.un)}</td>
+        <td class="t-num"><strong>${fmtNum(r.qtd)}</strong></td>
+        <td class="t-num" style="color:var(--muted)">${r.lancamentos}</td>
+      </tr>`).join('')}</tbody></table>
+    </div>
+  </div>` : ''}`;
+}
+
+window.exportarTeoricoRealCSV = function () {
+  const { linhas, semTeorico } = consumoTeoricoReal(TR_MES);
+  if (!linhas.length && !semTeorico.length) { toast('Nada a exportar neste período.', 'info'); return; }
+  const dec = n => (n === null || n === undefined) ? ''
+    : String((Math.round(n * 100) / 100).toFixed(2)).replace('.', ',');
+  const asp = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const out = [['Codigo', 'Item_Planilha', 'Descricao_Item', 'Unid_Item', 'Material_Estoque', 'Unid_Material',
+                'Vinculo', 'Teorico', 'Real', 'Diferenca', 'Desvio_pct', 'Unidades_divergem', 'Periodo']
+               .map(asp).join(';')];
+  linhas.forEach(x => out.push([
+    x.item, x.itemPlanilha, x.descricao, x.unidadeItem, x.material, x.unidadeMaterial, x.vinculo,
+    dec(x.teorico), x.real === null ? '' : dec(x.real), dec(x.diferenca),
+    x.desvio === null ? '' : dec(x.desvio * 100), x.unidadeDiverge ? 'SIM' : '',
+    TR_MES || 'obra inteira',
+  ].map(asp).join(';')));
+  if (semTeorico.length) {
+    out.push('');
+    out.push(asp('SAIDAS SEM SERVICO CORRESPONDENTE'));
+    out.push(['Material', 'Unid', 'Saiu', 'Lancamentos'].map(asp).join(';'));
+    semTeorico.forEach(r => out.push([r.descricao, r.un, dec(r.qtd), r.lancamentos].map(asp).join(';')));
+  }
+  const blob = new Blob(['﻿' + out.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `teorico-real-${OBRA.id}-${TR_MES || 'total'}.csv`;
+  a.click();
+  toast('CSV de teórico × real gerado.', 'success', 3500);
 };
 
 // ====================================================================

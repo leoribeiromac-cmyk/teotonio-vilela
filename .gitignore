@@ -1,1 +1,3 @@
 node_modules/
+tests/jornada.json
+tests/tela-*.png
