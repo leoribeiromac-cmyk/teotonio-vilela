@@ -52,7 +52,12 @@ var HEADERS = {
   'NotasFiscais': ['id','clientId','obra','numero','serie','chave','dataEmissao','dataEntrada','cnpj','razaoSocial',
                    'nomeFantasia','municipio','uf','vProd','vFrete','vTotal','vBaseICMS','vICMS','itens','obs',
                    'responsavel','status','driveId','driveLink','paginas','leitura','historico','usuario','criadoEm','atualizadoEm'],
-  'EstoqueSaidas':['id','obra','materialId','descricao','un','qtd','data','capid','rua','responsavel','obs','usuario','criadoEm']
+  'EstoqueSaidas':['id','obra','materialId','descricao','un','qtd','data','capid','rua','responsavel','obs','usuario','criadoEm'],
+  /* MEDIÇÕES FECHADAS. `itens` guarda o snapshot do que foi APRESENTADO à
+     fiscalização naquela competência, em JSON. Sem isso, um lançamento
+     retroativo reescrevia em silêncio a prévia de um mês já medido e já
+     pago, e nada no sistema registrava o que tinha sido entregue. */
+  'Medicoes':     ['id','obra','competencia','fechadaEm','fechadaPor','itens','observacao','reaberta','reabertaEm','reabertaPor']
 };
 
 // ------------------------------------------------------------
@@ -69,7 +74,8 @@ function rotear(e) {
     // SEGURANÇA: com a Propriedade do script EXIGIR_TOKEN = 'true', toda ação
     // que altera dados passa a exigir um token de sessão obtido via 'login'.
     // Enquanto a propriedade não existir, nada muda (migração sem quebrar o campo).
-    var PROTEGIDAS = ['deleteRDO', 'updateRDO', 'limparDuplicados', 'apagarPorPrefixoId',
+    var PROTEGIDAS = ['medicaoFechar', 'medicaoReabrir',
+                      'deleteRDO', 'updateRDO', 'limparDuplicados', 'apagarPorPrefixoId',
                       'addBatchRDO', 'addRDODiario', 'updateRDODiario', 'deleteRDODiario',
                       'usuariosListar', 'usuarioSalvar', 'usuarioExcluir',
                       'rdoFoto', 'obterFoto',
@@ -168,6 +174,9 @@ function rotear(e) {
       case 'usuarioSalvar':   resp = usuarioSalvar(p); break;
       case 'usuarioExcluir':  resp = usuarioExcluir(p); break;
       case 'usuariosNomes':   resp = usuariosNomes(); break;
+      case 'medicaoListar':   resp = medicaoListar(p.obra); break;
+      case 'medicaoFechar':   resp = medicaoFechar(p); break;
+      case 'medicaoReabrir':  resp = medicaoReabrir(p); break;
       default:
         // NUNCA inserir nada aqui. Ação desconhecida = erro, e ponto.
         resp = { ok: false, error: 'Ação desconhecida: "' + action + '"' };
@@ -1508,6 +1517,10 @@ function upsertRDODiario(p, deveExistir) {
 
   garantirColuna(aba, 'obra');   // antes de ler o cabeçalho, para já vir nele
   garantirColuna(aba, 'numero_rdo');  // o número que a fiscalização lê, por obra
+  // Paralisação estruturada (motivo, horário, frente, efetivo e equipamento
+  // parados). A coluna `paralisado_motivo` da aba de avanço guarda o resumo
+  // legível; esta guarda o registro que a tela de Dias Improdutivos soma.
+  garantirColuna(aba, 'paralisacoes_json');
     var cab = cabecalhoNormalizado(aba);
     var iData = idxColuna(cab, 'data');
     var iTurno = idxColuna(cab, 'turno');
@@ -2155,6 +2168,117 @@ function usuariosListar(token) {
     };
   });
   return { ok: true, usuarios: lista, eu: usuarioDoToken(token) };
+}
+
+/* ------------------------------------------------------------
+   MEDIÇÃO FECHADA POR COMPETÊNCIA
+   ------------------------------------------------------------
+   `rdosDoMes()` do app recalcula a prévia do zero a cada abertura da tela.
+   Um lançamento retroativo — correção, foto que faltava, dia esquecido —
+   altera em silêncio o número de um mês JÁ MEDIDO E JÁ PAGO, e nada no
+   sistema registra o que foi efetivamente apresentado à fiscalização.
+
+   Fechar a competência congela o snapshot do que foi entregue. O
+   lançamento retroativo continua sendo aceito (ele é legítimo: o serviço
+   foi feito naquele dia); o que muda é que a divergência passa a ser
+   VISÍVEL, em vez de reescrever o passado sem ninguém ver.
+   ------------------------------------------------------------ */
+function medicaoListar(obra) {
+  var aba = getOrCreateAba('Medicoes');
+  var cab = cabecalhoNormalizado(aba);
+  var dados = aba.getDataRange().getValues();
+  var alvo = normObra(obra);
+  var iObra = idxColuna(cab, 'obra');
+  var out = [];
+  for (var i = 1; i < dados.length; i++) {
+    if (iObra !== -1 && normObra(dados[i][iObra]) !== alvo) continue;
+    var o = {};
+    cab.forEach(function (nome, k) { o[nome] = dados[i][k]; });
+    // `itens` é JSON; devolve como texto e o app decide quando abrir
+    out.push(o);
+  }
+  return { ok: true, medicoes: out };
+}
+
+function medicaoFechar(p) {
+  var perfil = perfilDoToken(p.token);
+  // Fechar medição é ato de quem responde por ela: engenharia ou admin.
+  if (perfil && perfil !== 'admin' && perfil !== 'engenharia') {
+    return negarPorPermissao(p.token, 'medicaoFechar', p.competencia, '');
+  }
+  var comp = String(p.competencia || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(comp)) return { ok: false, error: 'competência inválida (use AAAA-MM)' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var aba = getOrCreateAba('Medicoes');
+    var cab = cabecalhoNormalizado(aba);
+    var dados = aba.getDataRange().getValues();
+    var alvo = normObra(p.obra);
+    var iObra = idxColuna(cab, 'obra'), iComp = idxColuna(cab, 'competencia'),
+        iReab = idxColuna(cab, 'reaberta');
+
+    for (var i = 1; i < dados.length; i++) {
+      if (normObra(dados[i][iObra]) === alvo && String(dados[i][iComp]).trim() === comp
+          && String(dados[i][iReab]).trim().toLowerCase() !== 'sim') {
+        return { ok: false, error: 'JA_FECHADA', mensagem: 'A competência ' + comp + ' já está fechada.' };
+      }
+    }
+
+    var reg = {
+      id: 'M' + comp.replace('-', '') + '_' + Utilities.getUuid().slice(0, 6),
+      obra: alvo, competencia: comp,
+      fechadaEm: new Date(), fechadaPor: usuarioDoToken(p.token) || p.usuario || '',
+      itens: String(p.itens || '[]'), observacao: String(p.observacao || ''),
+      reaberta: '', reabertaEm: '', reabertaPor: ''
+    };
+    var linha = cab.map(function (n) { return reg.hasOwnProperty(n) ? reg[n] : ''; });
+    aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
+    registrarAuditoria(reg.fechadaPor, perfil, 'medicaoFechar', alvo, comp, '', reg.itens.length + ' bytes de snapshot');
+    return { ok: true, id: reg.id, competencia: comp };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message ? err.message : err) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* Reabrir NÃO apaga a linha: marca a antiga como reaberta e deixa o rastro.
+   Medição que foi apresentada e depois reaberta é fato do contrato, e some
+   da planilha exatamente quando mais faz falta. */
+function medicaoReabrir(p) {
+  var perfil = perfilDoToken(p.token);
+  if (perfil && perfil !== 'admin' && perfil !== 'engenharia') {
+    return negarPorPermissao(p.token, 'medicaoReabrir', p.competencia, '');
+  }
+  var comp = String(p.competencia || '').trim();
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var aba = getOrCreateAba('Medicoes');
+    var cab = cabecalhoNormalizado(aba);
+    var dados = aba.getDataRange().getValues();
+    var alvo = normObra(p.obra);
+    var iObra = idxColuna(cab, 'obra'), iComp = idxColuna(cab, 'competencia'),
+        iReab = idxColuna(cab, 'reaberta'), iRem = idxColuna(cab, 'reabertaem'),
+        iRpor = idxColuna(cab, 'reabertapor');
+    for (var i = dados.length - 1; i >= 1; i--) {
+      if (normObra(dados[i][iObra]) === alvo && String(dados[i][iComp]).trim() === comp
+          && String(dados[i][iReab]).trim().toLowerCase() !== 'sim') {
+        aba.getRange(i + 1, iReab + 1).setValue('sim');
+        if (iRem !== -1) aba.getRange(i + 1, iRem + 1).setValue(new Date());
+        if (iRpor !== -1) aba.getRange(i + 1, iRpor + 1).setValue(usuarioDoToken(p.token) || '');
+        registrarAuditoria(usuarioDoToken(p.token), perfil, 'medicaoReabrir', alvo, comp, 'fechada', 'reaberta');
+        return { ok: true, competencia: comp };
+      }
+    }
+    return { ok: false, error: 'NAO_ENCONTRADA', mensagem: 'Não há medição fechada em ' + comp + '.' };
+  } catch (err) {
+    return { ok: false, error: String(err && err.message ? err.message : err) };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function usuariosNomes() {

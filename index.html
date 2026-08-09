@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=28"></script>
-<script src="dados/ruas-de-terra.js?v=28"></script>
+<script src="dados/ranario.js?v=34"></script>
+<script src="dados/ruas-de-terra.js?v=34"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=28"></script>
+<script src="dados/teotonio-muros.js?v=34"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=28"></script>
-<script src="js/nf/adaptador.js?v=28"></script>
-<script src="js/nf/notas.js?v=28"></script>
-<script src="js/equip/equipamentos.js?v=28"></script>
+<script src="js/ui/icones.js?v=34"></script>
+<script src="js/nf/adaptador.js?v=34"></script>
+<script src="js/nf/notas.js?v=34"></script>
+<script src="js/equip/equipamentos.js?v=34"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -1913,6 +1913,11 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   }
   .filter-bar > span { font-size: 11px; }
   .filter-bar select { width: 100%; padding: 10px 12px; min-height: 44px; }
+  /* A regra acima só pegava os <select>. A caixa de busca e o seletor de dia
+     do Histórico são <input> e ficavam com 32 px — alvo de dedo com luva de
+     vaqueta, no celular do apontador. O !important vence o style= inline que
+     vem do template da barra. */
+  .filter-bar input { width: 100%; padding: 10px 12px !important; min-height: 44px; font-size: 14px !important; }
   .filter-clear { width: 100%; text-align: center; padding: 8px; background: var(--bg); border-radius: 6px; }
 }
 
@@ -3671,14 +3676,12 @@ function avisoDadoSujo() {
      informado. Com o valor negativo, o painel chegava a mostrar 50% onde o correto era 28%.
      <span class="t-mono" style="font-size:11px">${estimada.map(x => escHtml(x.id + ': ' + x.valor)).join(' · ')}</span></li>`);
 
-  return `<div class="card stagger-item" style="border-left:3px solid var(--red)">
-    <div class="card-body">
-      <div style="font-weight:600;font-size:13px;margin-bottom:6px">A planilha tem linhas que o cálculo não conseguiu usar</div>
+  return `<div style="margin-bottom:10px">
+      <div style="font-weight:600;font-size:12.5px;margin-bottom:5px">A planilha tem linhas que o cálculo não conseguiu usar</div>
       <ul style="font-size:12px;color:var(--muted);line-height:1.55;margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px">
         ${blocos.join('')}
       </ul>
-    </div>
-  </div>`;
+    </div>`;
 }
 
 /* O aviso pronto para a tela, ou '' quando está tudo pesado. */
@@ -3689,9 +3692,8 @@ function avisoPacotesSemPeso() {
     .map(r => getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
   const comLancamento = semPeso.filter(p => lancados.has(p.id));
   const lista = semPeso.map(p => p.id + (p.nome ? ' (' + escHtml(p.nome) + ')' : '')).join(' · ');
-  return `<div class="card stagger-item" style="border-left:3px solid var(--red)">
-    <div class="card-body">
-      <div style="font-weight:600;font-size:13px;margin-bottom:4px">
+  return `<div style="margin-bottom:10px">
+      <div style="font-weight:600;font-size:12.5px;margin-bottom:4px">
         ${semPeso.length} pacote(s) fora do Avanço Ponderado${comLancamento.length ? ' — e ' + comLancamento.length + ' já tem lançamento' : ''}
       </div>
       <div style="font-size:12px;color:var(--muted);line-height:1.5">
@@ -3701,8 +3703,30 @@ function avisoPacotesSemPeso() {
         para eles entrarem na conta.<br>
         <span class="t-mono" style="font-size:11px">${lista}</span>
       </div>
-    </div>
-  </div>`;
+    </div>`;
+}
+
+/* --------------------------------------------------------------------
+   Os avisos de dado, num único bloco RECOLHIDO.
+   --------------------------------------------------------------------
+   Eles são importantes — dizem por que um lançamento não aparece no
+   avanço — mas não são o assunto do Painel Executivo. Abertos, empurravam
+   os KPIs para baixo da dobra todo dia. Aqui viram uma linha discreta que
+   abre quando alguém quiser ver, e o navegador lembra se estava aberta.
+   -------------------------------------------------------------------- */
+function avisosDeDados() {
+  const partes = [avisoPacotesSemPeso(), avisoDadoSujo()].filter(Boolean);
+  if (!partes.length) return '';
+  let aberto = false;
+  try { aberto = localStorage.getItem('teotonio_avisos_abertos_v1') === '1'; } catch (e) {}
+  return `<details class="card stagger-item" style="border-left:3px solid var(--ylw,#d69e2e)" ${aberto ? 'open' : ''}
+      ontoggle="try{localStorage.setItem('teotonio_avisos_abertos_v1', this.open?'1':'0')}catch(e){}">
+    <summary style="cursor:pointer;padding:11px 16px;font-size:12.5px;font-weight:600;list-style:none;display:flex;align-items:center;gap:8px">
+      ${ic('alerta')} ${partes.length} aviso(s) sobre os dados da planilha
+      <span style="font-weight:400;color:var(--muted);font-size:11.5px">— toque para ver</span>
+    </summary>
+    <div class="card-body" style="padding-top:0">${partes.join('')}</div>
+  </details>`;
 }
 /* dias-equivalentes do pacote, ou 1 quando a obra não pondera */
 function diasEquivalentes(qtdEstimada, pid) {
@@ -3877,19 +3901,19 @@ const PERFIS = {
   administrativo: {
     nome: 'Administrativo',
     desc: 'Escritório — acompanha, confere e exporta',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
     pode: ['exportar', 'relatorio', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'saidaEstoque']
   },
   engenharia: {
     nome: 'Engenharia',
     desc: 'Engenheiro da obra — lança, confere e analisa',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
     pode: ['lancarServico', 'lancarDiario', 'editar', 'exportar', 'relatorio', 'analiseIA', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque']
   },
   diretoria: {
     nome: 'Diretoria',
     desc: 'Consulta — acompanha sem lançar',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'analista', 'historico', 'galeria', 'projetos', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'analista', 'historico', 'galeria', 'projetos', 'notas'],
     pode: ['exportar', 'relatorio', 'analiseIA']
   },
   admin: { nome: 'Administrador', desc: 'Acesso completo', telas: '*', pode: '*' }
@@ -3947,7 +3971,7 @@ function podeEditar(reg) { return podeExcluir(reg) || pode('editar'); }
 function telaBloqueada(tela) {
   const nomes = {
     executivo: 'o Painel Executivo', avancofisico: 'o Avanço Físico', cronograma: 'o Cronograma',
-    medicao: 'o Apoio à Medição', analista: 'o Analista IA', rdo: 'o lançamento de serviços',
+    medicao: 'o Apoio à Medição', improdutivos: 'os Dias Improdutivos', teoricoreal: 'o Teórico × Real', analista: 'o Analista IA', rdo: 'o lançamento de serviços',
     rdodiario: 'o RDO Diário', historico: 'o Histórico', usuarios: 'a gestão de usuários',
     equip: 'os Equipamentos', galeria: 'a Galeria de Fotos', notas: 'as Notas Fiscais',
     projetos: 'os Projetos'
@@ -5192,10 +5216,15 @@ function calcularAvancoPorPacote(rdos = STATE.rdoavanco, pacotes = STATE.pacotes
     if (!pidCru) return;
     const pid = m[pidCru] ? pidCru : porChave[_chavePacote(pidCru)];
     if (!pid || !m[pid]) {
-      // Lançado num pacote que não existe na aba Pacotes. A linha continua
-      // aparecendo no Histórico, então sem este registro o apontador tem
-      // toda a razão de achar que apontou.
-      if (DADO_SUJO.pacoteDesconhecido.indexOf(pidCru) === -1) DADO_SUJO.pacoteDesconhecido.push(pidCru);
+      /* `OUTRO` é o marcador dos SERVIÇOS AVULSOS (ver index.html:12408) —
+         limpeza de faixa, remoção de entulho, o que não tem pacote. Não é
+         código faltando na aba Pacotes: é assim de propósito, e ele nunca
+         entrou no avanço por não ter quantidade prevista.
+         Acusá-lo aqui enchia o painel com um alerta vermelho permanente
+         sobre um comportamento correto. */
+      if (_chavePacote(pidCru) !== 'OUTRO' && DADO_SUJO.pacoteDesconhecido.indexOf(pidCru) === -1) {
+        DADO_SUJO.pacoteDesconhecido.push(pidCru);
+      }
       return;
     }
     const qCrua = num(getCSVField(r, 'Quantidade'));
@@ -5257,11 +5286,141 @@ function calcularConsumoItens(avanco) {
         out[chave] = {
           item, itemPlanilha, descricao: desc,
           unidadeItem: getCSVField(c, 'Unid Item') || '',
+          /* QUANTIDADE CONTRATUAL — coluna OPCIONAL `Qtd Contratual` na aba
+             Coeficientes. Ela já existe na Planilha Geral do .xlsm; aqui só
+             precisa ser publicada. Sem ela fica 0 e a tela se comporta como
+             antes: nenhuma linha some, nenhuma conta muda. Com ela, a prévia
+             passa a saber o SALDO — que é o que impede exportar acima do
+             contrato sem ninguém ver. */
+          qtdContratual: 0,
+          /* MATERIAL DE ESTOQUE — coluna OPCIONAL `Material Estoque` na aba
+             Coeficientes. É o de-para entre o item contratual (vocabulário da
+             SIURB) e o material que sai do almoxarifado (vocabulário da nota
+             fiscal): "05-48-00 Brita graduada" ↔ "BGS 0/25". Sem ela a tela de
+             Teórico × Real tenta casar pela descrição e diz que casou sozinha;
+             com ela, o vínculo é o que o engenheiro declarou. */
+          materialEstoque: '',
           consumido: 0, pacotes: []
         };
       }
+      const mat = String(getCSVField(c, 'Material Estoque') || getCSVField(c, 'Material_Estoque') || '').trim();
+      if (mat && !out[chave].materialEstoque) out[chave].materialEstoque = mat;
+      /* Se mais de uma linha da matriz aponta o mesmo item, vale a MAIOR
+         quantidade contratual declarada: divergência entre elas é erro de
+         digitação na planilha, e pegar a maior evita acusar estouro falso. */
+      const qc = num(getCSVField(c, 'Qtd Contratual') || getCSVField(c, 'Qtd_Contratual'));
+      if (qc > out[chave].qtdContratual) out[chave].qtdContratual = qc;
       out[chave].consumido += consumo;
       out[chave].pacotes.push(`${getCSVField(a.pacote, 'Pacote')} × ${coef}`);
+    });
+  });
+  return out;
+}
+
+/* --------------------------------------------------------------------
+   O CONSUMO DE UM MÊS, COM ACUMULADO E SALDO
+   --------------------------------------------------------------------
+   A prévia mostrava só o consumido no período e mais nada: sem quantidade
+   contratual, sem acumulado dos meses anteriores, sem saldo. Dava para
+   exportar acima do contrato sem um aviso — e é essa prévia que vira a
+   coluna do mês na Planilha Geral.
+
+   Aqui os três números aparecem juntos: o que foi consumido NO MÊS, o que
+   já vinha ANTES dele, e quanto sobra do contrato depois dos dois.
+   -------------------------------------------------------------------- */
+/* --------------------------------------------------------------------
+   MEDIÇÕES FECHADAS
+   --------------------------------------------------------------------
+   A lista vem do backend (aba `Medicoes`) e fica em memória para a tela
+   não pedir de novo a cada render. Cada item guarda o SNAPSHOT do que foi
+   apresentado à fiscalização — é contra ele que a prévia de hoje é
+   comparada.
+   -------------------------------------------------------------------- */
+let MEDICOES_FECHADAS = null;      // null = ainda não buscou
+let _medicoesBuscando = false;
+
+async function carregarMedicoesFechadas(forcar) {
+  if (_medicoesBuscando) return MEDICOES_FECHADAS;
+  if (MEDICOES_FECHADAS && !forcar) return MEDICOES_FECHADAS;
+  if (!STATE.usuarioLogado) { MEDICOES_FECHADAS = []; return MEDICOES_FECHADAS; }
+  _medicoesBuscando = true;
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'medicaoListar', obra: OBRA.id, ...authParams() }, 0);
+    MEDICOES_FECHADAS = (r && r.ok && Array.isArray(r.medicoes)) ? r.medicoes : [];
+  } catch (e) {
+    // Backend antigo (sem a ação) ou sem sinal: a tela segue funcionando
+    // exatamente como antes de existir fechamento.
+    MEDICOES_FECHADAS = [];
+  } finally { _medicoesBuscando = false; }
+  return MEDICOES_FECHADAS;
+}
+
+function medicaoFechadaDe(comp) {
+  if (!comp || !MEDICOES_FECHADAS) return null;
+  return MEDICOES_FECHADAS.find(m =>
+    String(m.competencia).trim() === comp &&
+    String(m.reaberta || '').trim().toLowerCase() !== 'sim') || null;
+}
+
+/* A chave de um item no snapshot. Código sozinho não serve: o mesmo código
+   aparece em capítulos diferentes da planilha SIURB, com número de item
+   próprio. Esta função é a MESMA usada ao fechar e ao comparar — se as duas
+   divergirem, todo item vira "divergente". */
+function chaveItemMedicao(x) {
+  return x.itemPlanilha ? x.item + ' ' + x.itemPlanilha : x.item;
+}
+
+/* O snapshot guardado, em forma de mapa chave→quantidade apresentada. */
+function itensDaMedicaoFechada(m) {
+  if (!m) return null;
+  try {
+    const arr = typeof m.itens === 'string' ? JSON.parse(m.itens || '[]') : (m.itens || []);
+    const mapa = {};
+    arr.forEach(x => { mapa[x.k] = num(x.q); });
+    return mapa;
+  } catch (e) { return null; }
+}
+
+/* A tela desenha primeiro com o que tem e só depois pergunta ao backend se
+   aquele mês já foi fechado. Sem isso a medição ficaria em branco esperando a
+   rede — e no canteiro a rede é o que falta. Redesenha uma vez só, quando a
+   resposta muda alguma coisa. */
+function medicaoGarantirFechadas() {
+  if (MEDICOES_FECHADAS !== null) return;
+  carregarMedicoesFechadas().then(() => {
+    if (STATE.currentPage === 'medicao' && (MEDICOES_FECHADAS || []).length) render();
+  });
+}
+
+/* Fechar medição é ato de quem responde pela obra perante a fiscalização. */
+function podeFecharMedicao() {
+  const p = perfilAtual();
+  return STATE.usuarioLogado && (p === 'admin' || p === 'engenharia');
+}
+
+function consumoComSaldo(mes) {
+  const doMes = calcularConsumoItens(calcularAvancoPorPacote(rdosDoMes(mes), STATE.pacotes));
+  // "Antes" = tudo que foi executado até o fim do mês anterior. Sem filtro de
+  // mês (obra inteira) não existe "antes": o próprio período já é tudo.
+  const anteriores = mes
+    ? calcularConsumoItens(calcularAvancoPorPacote(
+        (STATE.rdoavanco || []).filter(r => {
+          const d = parseISODate(getCSVField(r, 'Data'));
+          return d && getLocalISODate(d).slice(0, 7) < mes;
+        }), STATE.pacotes))
+    : {};
+
+  const out = {};
+  Object.keys(doMes).forEach(k => {
+    const x = doMes[k];
+    const antes = anteriores[k] ? anteriores[k].consumido : 0;
+    const acumulado = antes + x.consumido;
+    out[k] = Object.assign({}, x, {
+      anterior: antes,
+      acumulado,
+      saldo: x.qtdContratual > 0 ? x.qtdContratual - acumulado : null,
+      pctContrato: x.qtdContratual > 0 ? acumulado / x.qtdContratual : null,
+      estourou: x.qtdContratual > 0 && acumulado > x.qtdContratual + 0.0001,
     });
   });
   return out;
@@ -5405,6 +5564,8 @@ function renderShell() {
           { id: 'avancofisico', icone: 'avanco',     texto: 'Avanço Físico' },
           { id: 'cronograma',   icone: 'cronograma', texto: 'Cronograma' },
           { id: 'medicao',      icone: 'medicao',    texto: 'Apoio Medição' },
+          { id: 'improdutivos', icone: 'nuvem',      texto: 'Dias Improdutivos' },
+          { id: 'teoricoreal',  icone: 'balanca',    texto: 'Teórico × Real' },
           { id: 'analista',     icone: 'ia',         texto: 'Analista IA' },
         ])}
 
@@ -5619,6 +5780,8 @@ function render() {
     avancofisico: ['Avanço Físico', 'Pacotes, mapa de estacas e produtividade'],
     cronograma: ['Cronograma', 'Planejamento reverso · quando iniciar cada saldo'],
     medicao: ['Apoio à Medição', 'Consumo derivado por item contratual'],
+    improdutivos: ['Dias Improdutivos', 'Chuva medida × clima apontado × serviço lançado'],
+    teoricoreal: ['Teórico × Real', 'Consumo derivado dos coeficientes × saídas do almoxarifado'],
     analista: ['Analista IA', 'Resumo inteligente da obra'],
     rdo: ['Lançar Serviço', 'Registra serviços executados · grava em RDO_Avanco'],
     rdodiario: ['RDO Diário', 'Cabeçalho do dia · efetivo, equipamentos, clima'],
@@ -5655,7 +5818,9 @@ function render() {
   if (STATE.currentPage === 'executivo') pageEl.innerHTML = renderExecutivo();
   else if (STATE.currentPage === 'avancofisico') pageEl.innerHTML = renderAvancoFisico();
   else if (STATE.currentPage === 'cronograma') pageEl.innerHTML = renderCronograma();
-  else if (STATE.currentPage === 'medicao') pageEl.innerHTML = renderMedicao();
+  else if (STATE.currentPage === 'medicao') { pageEl.innerHTML = renderMedicao(); medicaoGarantirFechadas(); }
+  else if (STATE.currentPage === 'improdutivos') pageEl.innerHTML = renderImprodutivos();
+  else if (STATE.currentPage === 'teoricoreal') pageEl.innerHTML = renderTeoricoReal();
   else if (STATE.currentPage === 'analista') pageEl.innerHTML = renderAnalistaIA();
   else if (STATE.currentPage === 'rdo') { pageEl.innerHTML = renderRDO(); attachRDOForm(); }
   else if (STATE.currentPage === 'rdodiario') { pageEl.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
@@ -5717,10 +5882,20 @@ function fotosDaObra() {
      (`yyyyMMddHHmmss_...`, crescente = quem lançou antes vem antes) e,
      por último, `idx`, que mantém as fotos de um mesmo serviço juntas e
      na ordem em que foram anexadas. */
+  /* A LISTA INTEIRA É DO MAIS NOVO PARA O MAIS VELHO — inclusive dentro do dia.
+     Antes a data descia (dia mais novo primeiro) mas o turno subia (Diurno
+     antes de Noturno): duas ordens opostas na mesma lista. O efeito para quem
+     olha é que a foto do turno da NOITE aparecia depois da manhã do mesmo dia
+     e, numa lista que desce, "depois" lê como "mais antiga" — parecia que a
+     noite tinha sido lançada antes do dia.
+     O mesmo vale para o desempate por `id` (yyyyMMddHHmmss…, o relógio do
+     aparelho no momento do lançamento): também desce.
+     `idx` continua SUBINDO: são as fotos de um mesmo serviço, e ali a ordem
+     que importa é a em que o apontador anexou (1ª, 2ª, 3ª). */
   return out.sort((a, b) =>
     String(b.data).localeCompare(String(a.data)) ||
-    ordemTurno(a.turno) - ordemTurno(b.turno) ||
-    String(a.id).localeCompare(String(b.id)) ||
+    ordemTurno(b.turno) - ordemTurno(a.turno) ||
+    String(b.id).localeCompare(String(a.id)) ||
     a.idx - b.idx);
 }
 
@@ -6478,6 +6653,80 @@ async function desenharPrancha() {
   if (z) z.textContent = Math.round(PROJ.zoom * 100) + '%';
 }
 
+/* ====================================================================
+   RELATÓRIO FOTOGRÁFICO MENSAL
+   --------------------------------------------------------------------
+   Fica aqui na Galeria, e NÃO dentro do RDO oficial: o RDO é diário e a
+   fiscalização recebe o registro fotográfico como peça mensal própria,
+   com capa e seleção — não como anexo de cada dia.
+
+   O que a tela precisa dar, e por isso os filtros são vários: quem monta
+   o relatório escolhe por mês, por frente, por pacote, por estaca, por
+   apontador e por intervalo de datas, e depois ainda tira à mão as fotos
+   que não vão. Relatório fotográfico bom é seleção, não despejo.
+   ==================================================================== */
+const GAL_FILTRO = { frente: '', estaca: '', apontador: '', de: '', ate: '', busca: '' };
+let GAL_SELECAO = null;          // Set de fileId; null = "todas as filtradas"
+let GAL_MODO_SELECAO = false;
+
+window.setGalFiltro = function (campo, valor) {
+  GAL_FILTRO[campo] = valor;
+  GAL_SELECAO = null;            // filtro novo desfaz a seleção manual
+  transitionTo(render);
+};
+window.limparGalFiltro = function () {
+  Object.keys(GAL_FILTRO).forEach(k => { GAL_FILTRO[k] = ''; });
+  STATE.galPacote = 'Todos'; STATE.galMes = 'Todos';
+  GAL_SELECAO = null;
+  transitionTo(render);
+};
+window.galToggleSelecao = function () {
+  GAL_MODO_SELECAO = !GAL_MODO_SELECAO;
+  transitionTo(render);
+};
+window.galMarcar = function (fileId, marcado) {
+  if (!GAL_SELECAO) GAL_SELECAO = new Set(galeriaFiltrada().map(f => f.fileId));
+  if (marcado) GAL_SELECAO.add(fileId); else GAL_SELECAO.delete(fileId);
+  const el = document.getElementById('galContagemSel');
+  if (el) el.textContent = GAL_SELECAO.size + ' selecionada(s)';
+};
+window.galMarcarTodas = function (marcar) {
+  GAL_SELECAO = marcar ? new Set(galeriaFiltrada().map(f => f.fileId)) : new Set();
+  transitionTo(render);
+};
+
+/* A lista que os filtros deixaram passar — usada pela grade, pela seleção
+   e pelo relatório, para os três nunca discordarem. */
+function galeriaFiltrada() {
+  const frenteDoPacote = pid => {
+    const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid);
+    return p ? getCSVField(p, 'Frente') : '';
+  };
+  const termo = String(GAL_FILTRO.busca || '').trim().toLowerCase();
+  return fotosDaObra().filter(f => {
+    if (STATE.galPacote && STATE.galPacote !== 'Todos' && f.pacote !== STATE.galPacote) return false;
+    if (STATE.galMes && STATE.galMes !== 'Todos' && String(f.data).slice(0, 7) !== STATE.galMes) return false;
+    if (GAL_FILTRO.frente && frenteDoPacote(f.pacoteId) !== GAL_FILTRO.frente) return false;
+    if (GAL_FILTRO.apontador && f.apontador !== GAL_FILTRO.apontador) return false;
+    if (GAL_FILTRO.estaca && !String(f.estaca).toLowerCase().includes(GAL_FILTRO.estaca.toLowerCase())) return false;
+    if (GAL_FILTRO.de && String(f.data) < GAL_FILTRO.de) return false;
+    if (GAL_FILTRO.ate && String(f.data) > GAL_FILTRO.ate) return false;
+    if (termo) {
+      const alvo = [f.pacote, f.estaca, f.equipe, f.apontador, f.data, f.id].join(' ').toLowerCase();
+      if (!alvo.includes(termo)) return false;
+    }
+    return true;
+  });
+}
+
+/* O que vai para o relatório: a seleção manual, se houver; senão, tudo que
+   passou pelos filtros. */
+function galeriaParaRelatorio() {
+  const fs = galeriaFiltrada();
+  if (!GAL_SELECAO) return fs;
+  return fs.filter(f => GAL_SELECAO.has(f.fileId));
+}
+
 function renderGaleria() {
   const todas = fotosDaObra();
   if (!todas.length) {
@@ -6490,26 +6739,70 @@ function renderGaleria() {
   }
   const meses = [...new Set(todas.map(f => String(f.data).slice(0, 7)))].filter(Boolean).sort().reverse();
   const pacotes = [...new Set(todas.map(f => f.pacote))].sort();
-  const fs = todas.filter(f =>
-    (STATE.galPacote === 'Todos' || !STATE.galPacote || f.pacote === STATE.galPacote) &&
-    (STATE.galMes === 'Todos' || !STATE.galMes || String(f.data).slice(0, 7) === STATE.galMes));
+  const apontadores = [...new Set(todas.map(f => f.apontador).filter(Boolean))].sort();
+  const frentes = [...new Set(STATE.pacotes.map(p => getCSVField(p, 'Frente')).filter(Boolean))].sort();
+  const fs = galeriaFiltrada();
+  const selecionadas = galeriaParaRelatorio();
+  const temFiltro = STATE.galPacote && STATE.galPacote !== 'Todos' || STATE.galMes && STATE.galMes !== 'Todos'
+    || Object.values(GAL_FILTRO).some(Boolean);
+  const labelMes = m => {
+    const d = new Date(m + '-01T12:00:00');
+    const l = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  };
 
   const filtros = `<div class="card" style="margin-bottom:16px"><div class="card-body">
-    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;align-items:end">
+    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end">
+      <div class="field"><label>Mês</label>
+        <select onchange="STATE.galMes=this.value;setGalFiltro('_','')">
+          <option value="Todos">Todos os meses</option>
+          ${meses.map(m => `<option value="${m}" ${STATE.galMes === m ? 'selected' : ''}>${escHtml(labelMes(m))}</option>`).join('')}
+        </select></div>
+      <div class="field"><label>Frente</label>
+        <select onchange="setGalFiltro('frente', this.value)">
+          <option value="">Todas as frentes</option>
+          ${frentes.map(f => `<option value="${escHtml(f)}" ${GAL_FILTRO.frente === f ? 'selected' : ''}>${escHtml(f)}</option>`).join('')}
+        </select></div>
       <div class="field"><label>Pacote / serviço</label>
-        <select onchange="STATE.galPacote=this.value;transitionTo(render)">
+        <select onchange="STATE.galPacote=this.value;setGalFiltro('_','')">
           <option value="Todos">Todos os pacotes</option>
           ${pacotes.map(p => `<option ${STATE.galPacote === p ? 'selected' : ''}>${escHtml(p)}</option>`).join('')}
         </select></div>
-      <div class="field"><label>Mês</label>
-        <select onchange="STATE.galMes=this.value;transitionTo(render)">
-          <option value="Todos">Todos os meses</option>
-          ${meses.map(m => `<option value="${m}" ${STATE.galMes === m ? 'selected' : ''}>${m}</option>`).join('')}
+      <div class="field"><label>Apontador</label>
+        <select onchange="setGalFiltro('apontador', this.value)">
+          <option value="">Todos</option>
+          ${apontadores.map(a => `<option value="${escHtml(a)}" ${GAL_FILTRO.apontador === a ? 'selected' : ''}>${escHtml(a)}</option>`).join('')}
         </select></div>
-      <div style="text-align:right"><span class="pill">${fs.length} foto(s)</span></div>
+      <div class="field"><label>Estaca</label>
+        <input type="text" value="${escHtml(GAL_FILTRO.estaca)}" placeholder="ex: E118"
+               onchange="setGalFiltro('estaca', this.value)"></div>
+      <div class="field"><label>De</label>
+        <input type="date" value="${escHtml(GAL_FILTRO.de)}" onchange="setGalFiltro('de', this.value)"></div>
+      <div class="field"><label>Até</label>
+        <input type="date" value="${escHtml(GAL_FILTRO.ate)}" onchange="setGalFiltro('ate', this.value)"></div>
+      <div class="field"><label>Buscar</label>
+        <input type="search" value="${escHtml(GAL_FILTRO.busca)}" placeholder="pacote, equipe, estaca…"
+               onchange="setGalFiltro('busca', this.value)"></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <span class="pill">${fs.length} foto(s)${temFiltro ? ' de ' + todas.length : ''}</span>
+      ${temFiltro ? `<button class="btn btn-ghost btn-sm" onclick="limparGalFiltro()">${ic('fechar')} Limpar filtros</button>` : ''}
+      <button class="btn btn-outline btn-sm" onclick="galToggleSelecao()">
+        ${ic(GAL_MODO_SELECAO ? 'caixaMarcada' : 'caixaVazia')} ${GAL_MODO_SELECAO ? 'Sair da seleção' : 'Escolher fotos'}</button>
+      ${GAL_MODO_SELECAO ? `
+        <button class="btn btn-ghost btn-sm" onclick="galMarcarTodas(true)">Marcar todas</button>
+        <button class="btn btn-ghost btn-sm" onclick="galMarcarTodas(false)">Desmarcar todas</button>
+        <span id="galContagemSel" style="font-size:12px;color:var(--muted)">${selecionadas.length} selecionada(s)</span>` : ''}
+      <button class="btn btn-primary btn-sm" style="margin-left:auto"
+              onclick="gerarRelatorioFotografico()" ${selecionadas.length ? '' : 'disabled'}>
+        ${ic('pdf')} Relatório fotográfico (${selecionadas.length})</button>
     </div></div></div>`;
 
-  const cartoes = fs.map(f => `<div class="card" style="overflow:hidden;padding:0">
+  const marcada = f => !GAL_SELECAO || GAL_SELECAO.has(f.fileId);
+  const cartoes = fs.map(f => `<div class="card" style="overflow:hidden;padding:0${GAL_MODO_SELECAO && !marcada(f) ? ';opacity:.4' : ''}">
+    ${GAL_MODO_SELECAO ? `<label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:12px">
+      <input type="checkbox" ${marcada(f) ? 'checked' : ''} onchange="galMarcar('${f.fileId}', this.checked)">
+      ${marcada(f) ? 'No relatório' : 'Fora'}</label>` : ''}
     <div id="galbox-${f.fileId}" style="position:relative;background:var(--surface-2);cursor:zoom-in;height:170px"
          onclick="ampliarFoto('${f.fileId}','${escHtml(f.pacote)}')">
       <img id="gal-${f.fileId}" alt="${escHtml(f.pacote)}"
@@ -6575,6 +6868,137 @@ async function pintarFotoGaleria(fileId) {
     const cx = document.getElementById('galAvisoServidor');
     if (cx) cx.style.display = '';
   }
+}
+
+/* --------------------------------------------------------------------
+   O PDF do relatório fotográfico mensal.
+   --------------------------------------------------------------------
+   Capa com os dados do contrato (os mesmos que o RDO usa, via rdoInfo() —
+   não há uma segunda versão da verdade), duas fotos por folha com legenda
+   completa, e numeração "FOTO 01/24" para a fiscalização citar no ofício.
+   -------------------------------------------------------------------- */
+window.gerarRelatorioFotografico = function () {
+  return comLib('pdf', _gerarRelatorioFotografico, 'o relatório fotográfico');
+};
+
+async function _gerarRelatorioFotografico() {
+  const fotos = galeriaParaRelatorio();
+  if (!fotos.length) { toast('Nenhuma foto selecionada.', 'error', 4000); return; }
+  if (!STATE.usuarioLogado) { toast('Entre no sistema para baixar as fotos.', 'error', 5000); return; }
+
+  const info = rdoInfo();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const L = 210, A = 297, M = 14, TW = L - M * 2;
+
+  // Período coberto, lido das próprias fotos (e não do filtro): é o que a
+  // fiscalização confere contra as datas das legendas.
+  const datas = fotos.map(f => String(f.data)).filter(Boolean).sort();
+  const periodo = datas.length
+    ? (datas[0] === datas[datas.length - 1]
+        ? fmtData(datas[0])
+        : fmtData(datas[0]) + ' a ' + fmtData(datas[datas.length - 1]))
+    : '—';
+  const mesRef = datas.length ? (() => {
+    const d = new Date(datas[0] + 'T12:00:00');
+    const s = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  })() : '';
+
+  toast(`Montando o relatório com ${fotos.length} foto(s)…`, 'info', 3000);
+
+  // ---------------------------------------------------------------- capa
+  let y = M + 6;
+  doc.setFillColor(20, 32, 52); doc.rect(0, 0, L, 34, 'F');
+  doc.setTextColor(255); doc.setFont('helvetica', 'bold'); doc.setFontSize(16);
+  doc.text('RELATÓRIO FOTOGRÁFICO MENSAL', M, 15);
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(10);
+  doc.text(mesRef || periodo, M, 24);
+  doc.setTextColor(0);
+  y = 44;
+
+  const linhaCapa = (rot, val) => {
+    if (!val) return;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(90);
+    doc.text(String(rot).toUpperCase(), M, y);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); doc.setTextColor(0);
+    const txt = doc.splitTextToSize(String(val), TW);
+    doc.text(txt, M, y + 4.6);
+    y += 4.6 + txt.length * 4.4 + 4;
+  };
+  linhaCapa('Obra', OBRA.nome);
+  linhaCapa('Objeto', info.objeto);
+  linhaCapa('Local', info.local);
+  linhaCapa('Contrato', OBRA.contrato);
+  linhaCapa('Contratada', info.contratada || OBRA.contratada);
+  linhaCapa('Fiscalização', info.fiscalizacao);
+  linhaCapa('Período do registro', periodo);
+  linhaCapa('Fotos neste relatório', String(fotos.length));
+  linhaCapa('Emitido em', fmtData(getLocalISODate(new Date())) + (STATE.usuarioLogado ? ' · por ' + STATE.usuarioLogado : ''));
+
+  // -------------------------------------------------------- folhas de foto
+  const rodape = (n) => {
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(120);
+    doc.text(info.rodape || OBRA.nome, M, A - 8);
+    doc.text('Folha ' + n, L - M, A - 8, { align: 'right' });
+    doc.setTextColor(0);
+  };
+  rodape(1);
+
+  const PORFOLHA = 2;
+  const ALT = 96;                        // altura da moldura da foto
+  let folha = 1, naFolha = 0;
+
+  for (let i = 0; i < fotos.length; i++) {
+    const f = fotos[i];
+    if (naFolha === 0) {
+      doc.addPage(); folha++; rodape(folha);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(90);
+      doc.text('REGISTRO FOTOGRÁFICO — ' + (mesRef || periodo).toUpperCase(), M, M);
+      doc.setTextColor(0);
+      y = M + 6;
+    }
+
+    let dataUri = '';
+    try { dataUri = await baixarFotoServidor(f.fileId, false); } catch (e) {}
+
+    const topo = y;
+    doc.setDrawColor(200); doc.rect(M, topo, TW, ALT);
+    if (dataUri) {
+      try {
+        const props = doc.getImageProperties(dataUri);
+        const escala = Math.min((TW - 4) / props.width, (ALT - 4) / props.height);
+        const w = props.width * escala, h = props.height * escala;
+        doc.addImage(dataUri, 'JPEG', M + (TW - w) / 2, topo + (ALT - h) / 2, w, h);
+      } catch (e) {
+        doc.setFontSize(9); doc.setTextColor(150);
+        doc.text('(imagem não pôde ser lida)', L / 2, topo + ALT / 2, { align: 'center' });
+        doc.setTextColor(0);
+      }
+    } else {
+      doc.setFontSize(9); doc.setTextColor(150);
+      doc.text('(foto indisponível no Drive)', L / 2, topo + ALT / 2, { align: 'center' });
+      doc.setTextColor(0);
+    }
+
+    // legenda
+    const n = String(i + 1).padStart(2, '0') + '/' + String(fotos.length).padStart(2, '0');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5);
+    doc.text('FOTO ' + n + ' — ' + fmtData(f.data), M, topo + ALT + 5);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    const det = [f.pacote, f.estaca, f.turno,
+                 f.qtd ? fmtNum(num(f.qtd)) + ' ' + (f.un || '') : '',
+                 f.equipe, f.apontador ? 'Apontador: ' + f.apontador : '']
+      .map(x => String(x || '').trim()).filter(Boolean).join('  ·  ');
+    doc.text(doc.splitTextToSize(det, TW), M, topo + ALT + 10);
+
+    y = topo + ALT + 20;
+    naFolha = (naFolha + 1) % PORFOLHA;
+  }
+
+  const nome = `relatorio-fotografico-${OBRA.id}-${(datas[0] || '').slice(0, 7) || 'periodo'}.pdf`;
+  doc.save(nome);
+  toast(`Relatório com ${fotos.length} foto(s) gerado.`, 'success', 4500);
 }
 
 function carregarImagensGaleria() {
@@ -7713,8 +8137,7 @@ function renderExecutivo() {
     <!-- Pacote sem produtividade pesa ZERO e some do avanço. Enquanto isso não
          aparecia na tela, o apontador lançava e o número da diretoria não se
          movia, sem ninguém saber por quê. -->
-    ${avisoPacotesSemPeso()}
-    ${avisoDadoSujo()}
+    ${avisosDeDados()}
 
     <!-- ============ HERO EXECUTIVO ============ -->
     <div class="exec-hero stagger-item" style="animation-delay:.04s">
@@ -9692,22 +10115,88 @@ function avisoDuplicadasMedicao() {
   </div>`;
 }
 
+window.fecharMedicao = async function () {
+  const comp = MEDICAO_MES;
+  if (!comp) { toast('Escolha o mês da medição antes de fechar.', 'error', 5000); return; }
+  if (!STATE.usuarioLogado) { toast('Entre no sistema para fechar a medição.', 'error', 5000); return; }
+
+  const lista = Object.values(consumoComSaldo(comp)).filter(x => x.consumido > 0);
+  if (!lista.length) { toast('Nada consumido em ' + comp + ' — não há o que fechar.', 'error', 5000); return; }
+
+  const estourados = lista.filter(x => x.estourou).length;
+  if (!confirm(
+    `Fechar a medição de ${nomeMesAno(comp)}?\n\n` +
+    `${lista.length} item contratual será congelado como o que foi apresentado à fiscalização.` +
+    (estourados ? `\n\n⚠️ ${estourados} item está ACIMA da quantidade contratual.` : '') +
+    `\n\nLançamento retroativo continua sendo aceito depois disso — a diferença passa a aparecer na tela em vez de reescrever o número calado.`
+  )) return;
+
+  // Snapshot enxuto: chave e quantidade. É o que precisa ser comparado depois.
+  const itens = lista.map(x => ({ k: chaveItemMedicao(x), q: x.consumido }));
+  try {
+    const r = await enviarAcao({ action: 'medicaoFechar', obra: OBRA.id, competencia: comp,
+                                 itens: JSON.stringify(itens), ...authParams() }, 0, 0);
+    if (!r.ok) throw new Error(r.mensagem || r.error || 'Erro');
+    toast(`Medição de ${nomeMesAno(comp)} fechada com ${itens.length} itens.`, 'success', 5000);
+    await carregarMedicoesFechadas(true);
+    transitionTo(render);
+  } catch (e) {
+    toast('Não foi possível fechar: ' + erroLegivel(e.message), 'error', 7000);
+  }
+};
+
+window.reabrirMedicao = async function () {
+  const comp = MEDICAO_MES;
+  if (!confirm(`Reabrir a medição de ${nomeMesAno(comp)}?\n\nO fechamento anterior NÃO é apagado — fica registrado como reaberto, com quem e quando.`)) return;
+  try {
+    const r = await enviarAcao({ action: 'medicaoReabrir', obra: OBRA.id, competencia: comp, ...authParams() }, 0, 0);
+    if (!r.ok) throw new Error(r.mensagem || r.error || 'Erro');
+    toast('Medição reaberta.', 'success', 4000);
+    await carregarMedicoesFechadas(true);
+    transitionTo(render);
+  } catch (e) {
+    toast('Não foi possível reabrir: ' + erroLegivel(e.message), 'error', 7000);
+  }
+};
+
 window.exportarMedicaoCSV = function() {
-  const consumo = consumoMedicao();
+  const consumo = consumoComSaldo(MEDICAO_MES);
   const lista = Object.values(consumo).filter(x => x.consumido > 0)
     // Mesmo código em capítulos diferentes: o nº do item desempata, para as
     // duas linhas saírem sempre na mesma ordem de uma exportação à outra.
     .sort((a, b) => String(a.item).localeCompare(String(b.item), 'pt-BR', { numeric: true })
                  || String(a.itemPlanilha || '').localeCompare(String(b.itemPlanilha || ''), 'pt-BR', { numeric: true }));
   if (lista.length === 0) { toast('Nada a exportar neste período.', 'info'); return; }
-  const header = ['Item_Planilha', 'Codigo', 'Descricao', 'Unid', 'Qtd_Consumida', 'Periodo', 'Pacotes_Origem'];
-  const rows = lista.map(x => [
-    x.itemPlanilha || '', x.item, x.descricao, x.unidadeItem,
-    // decimal com vírgula, sem separador de milhar — cola direto no Excel pt-BR
-    String((Math.round(x.consumido * 100) / 100).toFixed(2)).replace('.', ','),
-    MEDICAO_MES || 'obra inteira',
-    x.pacotes.join(' + ')
-  ].map(v => `"${String(v).replace(/"/g, '""')}"`));
+  // decimal com vírgula, sem separador de milhar — cola direto no Excel pt-BR
+  const dec = n => (n === null || n === undefined) ? ''
+    : String((Math.round(n * 100) / 100).toFixed(2)).replace('.', ',');
+  /* As colunas de contrato só entram quando a aba Coeficientes declara
+     `Qtd Contratual`. Sem ela o CSV sai idêntico ao de antes — quem já tem
+     uma planilha montada em cima deste arquivo não perde as colunas. */
+  const temContrato = lista.some(x => x.qtdContratual > 0);
+  /* Mês fechado: o CSV leva junto o que foi APRESENTADO e a diferença de hoje.
+     É esse arquivo que vai para a conferência contra a Planilha Geral — se o
+     número mudou depois do fechamento, tem de mudar no arquivo também. */
+  const snap = itensDaMedicaoFechada(medicaoFechadaDe(MEDICAO_MES));
+  const header = ['Item_Planilha', 'Codigo', 'Descricao', 'Unid']
+    .concat(snap ? ['Qtd_Medida'] : [])
+    .concat(['Qtd_Consumida'])
+    .concat(snap ? ['Diferenca'] : [])
+    .concat(temContrato ? ['Acum_Anterior', 'Acumulado', 'Qtd_Contratual', 'Saldo', 'Pct_Contrato', 'Acima_do_Contrato'] : [])
+    .concat(['Periodo', 'Pacotes_Origem']);
+  const rows = lista.map(x => {
+    const med = snap ? snap[chaveItemMedicao(x)] : undefined;
+    return [x.itemPlanilha || '', x.item, x.descricao, x.unidadeItem]
+      .concat(snap ? [med === undefined ? '' : dec(med)] : [])
+      .concat([dec(x.consumido)])
+      .concat(snap ? [med === undefined ? 'NAO MEDIDO' : dec(x.consumido - med)] : [])
+      .concat(temContrato ? [
+        dec(x.anterior), dec(x.acumulado), x.qtdContratual > 0 ? dec(x.qtdContratual) : '',
+        dec(x.saldo), x.pctContrato === null ? '' : dec(x.pctContrato * 100), x.estourou ? 'SIM' : '',
+      ] : [])
+      .concat([MEDICAO_MES || 'obra inteira', x.pacotes.join(' + ')])
+      .map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`);
+  });
   const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -9720,8 +10209,84 @@ window.exportarMedicaoCSV = function() {
 };
 
 function renderMedicao(){
-  const consumo=consumoMedicao();
+  const consumo=consumoComSaldo(MEDICAO_MES);
   const lista=Object.values(consumo).filter(x=>x.consumido>0).sort((a,b)=>b.consumido-a.consumido);
+  // Só faz sentido mostrar saldo se ALGUM item declarou quantidade contratual.
+  // Sem a coluna publicada, a tabela fica exatamente como era.
+  const temContrato = lista.some(x => x.qtdContratual > 0);
+  const estourados = lista.filter(x => x.estourou);
+
+  /* ------------------------------------------------------------------
+     MEDIÇÃO FECHADA
+     ------------------------------------------------------------------
+     Enquanto o mês está aberto, esta prévia é um número vivo: apagar um
+     RDO de junho em setembro muda, calado, o que já foi apresentado à
+     fiscalização em junho. Fechar o mês congela o que foi apresentado.
+     O lançamento retroativo continua sendo aceito — ele só deixa de
+     reescrever o passado sem ninguém ver, porque a diferença passa a
+     aparecer nas colunas "Medido" e "Diferença".
+     ------------------------------------------------------------------ */
+  const fechada = medicaoFechadaDe(MEDICAO_MES);
+  const snap = itensDaMedicaoFechada(fechada);
+  const TOL = 0.005;   // diferença abaixo de meio centésimo é arredondamento
+  let divergentes = [], itemNovo = [], sumidos = [];
+  if (snap) {
+    const vistos = new Set();
+    lista.forEach(x => {
+      const k = chaveItemMedicao(x);
+      vistos.add(k);
+      if (!(k in snap)) { x._novo = true; x._medido = null; x._dif = x.consumido; itemNovo.push(x); return; }
+      x._medido = snap[k];
+      x._dif = x.consumido - snap[k];
+      if (Math.abs(x._dif) > TOL) divergentes.push(x);
+    });
+    // Item que foi medido e hoje não é mais derivado (RDO apagado, pacote
+    // trocado) não aparece na tabela — some justamente no caso mais grave.
+    // Por isso é listado à parte.
+    sumidos = Object.keys(snap).filter(k => !vistos.has(k) && snap[k] > TOL)
+      .map(k => ({ k, q: snap[k] }));
+  }
+
+  const nDif = divergentes.length + itemNovo.length + sumidos.length;
+  const dataFech = fechada ? (String(fechada.fechadaEm || '').slice(0, 10).split('-').reverse().join('/')) : '';
+
+  const faixaFechamento = !MEDICAO_MES ? '' : (fechada ? `
+    <div class="card stagger-item" style="border-left:3px solid ${nDif ? 'var(--red)' : 'var(--grn)'}">
+      <div class="card-body" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between">
+        <div>
+          <div style="font-weight:600;font-size:13px">
+            Medição de ${escHtml(nomeMesAno(MEDICAO_MES))} fechada${dataFech ? ' em ' + escHtml(dataFech) : ''}${fechada.fechadaPor ? ' por ' + escHtml(fechada.fechadaPor) : ''}
+          </div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:2px">
+            ${nDif
+              ? `<strong style="color:var(--red)">${nDif} ${nDif === 1 ? 'item mudou' : 'itens mudaram'} depois do fechamento.</strong> A coluna <em>Medido</em> é o que foi apresentado; <em>No período</em> é o que os RDOs dão hoje.`
+              : 'O que os RDOs dão hoje bate com o que foi apresentado à fiscalização.'}
+            ${sumidos.length ? `<br><span style="color:var(--red)">${sumidos.length} ${sumidos.length === 1 ? 'item medido sumiu' : 'itens medidos sumiram'} da prévia:</span> ${sumidos.slice(0, 6).map(s => `<span class="t-mono" style="font-size:11px">${escHtml(s.k)} (${fmtNum(s.q)})</span>`).join(', ')}${sumidos.length > 6 ? ' …' : ''}` : ''}
+          </div>
+        </div>
+        ${podeFecharMedicao() ? `<button class="btn btn-outline btn-sm" onclick="reabrirMedicao()">${ic('editar')} Reabrir</button>` : ''}
+      </div>
+    </div>` : (podeFecharMedicao() && lista.length ? `
+    <div class="card stagger-item">
+      <div class="card-body" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between">
+        <div>
+          <div style="font-weight:600;font-size:13px">Medição de ${escHtml(nomeMesAno(MEDICAO_MES))} em aberto</div>
+          <div style="font-size:12px;color:var(--muted);line-height:1.5;margin-top:2px">
+            Enquanto está aberta, apagar ou corrigir um RDO deste mês muda estes números sem deixar rastro.
+            Feche depois de apresentar à fiscalização: o app guarda o que foi apresentado e passa a mostrar a diferença.
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="fecharMedicao()">${ic('cadeado')} Fechar medição do mês</button>
+      </div>
+    </div>` : ''));
+
+  /* Duas cores diferentes porque são dois problemas diferentes: vermelho é
+     passar do contrato, âmbar é o número ter mudado depois de apresentado. */
+  const estiloLinhaMedicao = x => {
+    if (x.estourou) return ' style="background:rgba(220,80,70,.08)"';
+    if (snap && (x._novo || Math.abs(x._dif || 0) > TOL)) return ' style="background:rgba(230,180,60,.13)"';
+    return '';
+  };
 
   const mesesSet = new Set();
   STATE.rdoavanco.forEach(r => {
@@ -9735,7 +10300,24 @@ function renderMedicao(){
     return l.charAt(0).toUpperCase() + l.slice(1);
   };
 
-  return avisoDuplicadasMedicao() + `<div class="card stagger-item">
+  /* ITEM ACIMA DO CONTRATO. Antes a prévia deixava exportar quantidade acima
+     do contratado sem um aviso — e é dela que sai a coluna do mês da Planilha
+     Geral. Não bloqueia: medir acima do contrato acontece de verdade e é o
+     que dispara aditivo. Mas tem de estar na cara de quem fecha o mês. */
+  const avisoEstouro = estourados.length ? `<div class="card stagger-item" style="border-left:3px solid var(--red)">
+    <div class="card-body">
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px">
+        ${estourados.length} item acima da quantidade contratual</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5">
+        O acumulado da obra já passou do contratado. Confira antes de fechar o mês —
+        quantidade acima do contrato pede aditivo, não medição.<br>
+        ${estourados.slice(0, 8).map(x => `<span class="t-mono" style="font-size:11px">${escHtml(x.item)}${x.itemPlanilha ? ' (' + escHtml(x.itemPlanilha) + ')' : ''}: ${fmtNum(x.acumulado)} de ${fmtNum(x.qtdContratual)} ${escHtml(x.unidadeItem)}</span>`).join('<br>')}
+        ${estourados.length > 8 ? '<br>…' : ''}
+      </div>
+    </div>
+  </div>` : '';
+
+  return faixaFechamento + avisoDuplicadasMedicao() + avisoEstouro + `<div class="card stagger-item">
     <div class="card-header">
       <div><div class="card-title">Prévia de medição — consumo por item contratual</div><div class="card-title-sub">RDOs × matriz de coeficientes · filtre o mês da medição e exporte o CSV para conferir contra a Planilha Geral</div></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -9749,15 +10331,515 @@ function renderMedicao(){
     </div>
     <div class="card-body flush">
       ${lista.length===0?`<div class="empty"><div class="empty-icon">${ic('medicao')}</div><div class="empty-title">Nada consumido neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade (ou mude o mês do filtro) para ver os itens contratuais derivados.</div></div>`:`
-      <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">Consumido</th><th>Pacotes</th></tr></thead>
+      <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th>${snap ? '<th class="t-num">Medido</th>' : ''}<th class="t-num">No período</th>${snap ? '<th class="t-num">Diferença</th>' : ''}${temContrato ? '<th class="t-num">Acum. anterior</th><th class="t-num">Acumulado</th><th class="t-num">Contratual</th><th class="t-num">Saldo</th><th class="t-num">% contrato</th>' : ''}<th>Pacotes</th></tr></thead>
       <!-- Tudo que vem da planilha passa por escHtml: o código, a descrição e a
            unidade do item são digitados à mão na aba Coeficientes, e um "<" ali
            quebrava a tabela da medição (ou pior, injetava marcação na tela). -->
-      <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${escHtml(x.descricao)}</td><td class="t-mono">${escHtml(x.unidadeItem)}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${escHtml(x.pacotes.join(' + '))}</td></tr>`).join('')}</tbody>
+      <tbody>${lista.map((x,i)=>`<tr${estiloLinhaMedicao(x)}><td class="t-mono"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${escHtml(x.descricao)}</td><td class="t-mono">${escHtml(x.unidadeItem)}</td>${snap?`<td class="t-num" style="color:var(--muted)">${x._novo?'—':fmtNum(x._medido)}</td>`:''}<td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td>${snap?`<td class="t-num"${(x._novo||Math.abs(x._dif)>TOL)?' style="color:var(--red);font-weight:700"':''}>${x._novo?'não medido':(Math.abs(x._dif)<=TOL?'—':(x._dif>0?'+':'')+fmtNum(x._dif))}</td>`:''}${temContrato?`<td class="t-num" style="color:var(--muted)">${x.anterior?fmtNum(x.anterior):'—'}</td><td class="t-num">${fmtNum(x.acumulado)}</td><td class="t-num t-mono">${x.qtdContratual>0?fmtNum(x.qtdContratual):'—'}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.saldo===null?'—':fmtNum(x.saldo)}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.pctContrato===null?'—':fmtPct(x.pctContrato)}</td>`:''}<td style="font-size:11px;color:var(--muted)">${escHtml(x.pacotes.join(' + '))}</td></tr>`).join('')}</tbody>
       </table>`}
     </div>
   </div>`;
 }
+
+/* ====================================================================
+   VIEW: DIAS IMPRODUTIVOS — o pleito de prazo que já estava pago
+   --------------------------------------------------------------------
+   O gatilho `registrarClimaAuto()` do Code.gs grava TODO DIA, na aba
+   RDO_Diario, as colunas `Chuva_mm_Auto` e `Clima_Fonte` — chuva medida
+   por estação oficial, que o README chama de "contraprova objetiva, base
+   para pleitos de prazo".
+
+   O app nunca leu nenhuma das duas. O milímetro medido estava guardado há
+   meses e não aparecia em tela nenhuma, não entrava no RDO e não virava
+   documento. Esta tela é só a leitura do que já existe.
+
+   Reúne, por mês: o clima apontado pelo apontador nos três períodos, a
+   chuva MEDIDA com a fonte, se houve RDO, quantos serviços foram lançados
+   e quais equipamentos pararam por chuva. No pé, os totais que o pleito
+   precisa citar.
+   ==================================================================== */
+let IMPROD_MES = '';
+window.setImprodMes = function (m) { IMPROD_MES = m; transitionTo(render); };
+
+/* Chuva medida na estação, em mm, para uma data. '' quando o robô ainda não
+   passou por aquele dia (a coluna nasce vazia no histórico anterior a ele). */
+function chuvaMedidaDe(reg) {
+  const v = getCSVField(reg, 'Chuva_mm_Auto') || getCSVField(reg, 'chuva_mm_auto');
+  if (v === '' || v == null) return null;
+  const n = num(v);
+  return isFinite(n) ? n : null;
+}
+function fonteClimaDe(reg) {
+  return getCSVField(reg, 'Clima_Fonte') || getCSVField(reg, 'clima_fonte') || '';
+}
+
+/* Um dia é IMPRODUTIVO quando é dia útil, não teve serviço lançado, e há
+   uma causa registrada — chuva medida, clima de chuva apontado, ou parada
+   de equipamento por chuva. Sem causa registrada ele entra como "sem RDO",
+   que é outra conversa (é falha de apontamento, não pleito). */
+function calcDiasImprodutivos(mes) {
+  const porData = {};
+  (STATE.rdodiario || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d) porData[getLocalISODate(d)] = r;
+  });
+  const servicosPorData = {};
+  (STATE.rdoavanco || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (!d) return;
+    const k = getLocalISODate(d);
+    servicosPorData[k] = (servicosPorData[k] || 0) + 1;
+  });
+  // paradas de equipamento por chuva, do módulo js/equip
+  const paradasChuva = {};
+  try {
+    ((window.EQUIP && EQUIP.apontamentos) || []).forEach(a => {
+      const k = String(normalizarDataCSV(a.data) || '').slice(0, 10);
+      if (!k) return;
+      const txt = JSON.stringify(a).toLowerCase();
+      if (txt.includes('chuva')) paradasChuva[k] = (paradasChuva[k] || 0) + 1;
+    });
+  } catch (e) {}
+
+  const ano = parseInt(mes.slice(0, 4), 10);
+  const m = parseInt(mes.slice(5, 7), 10);
+  if (!ano || !m) return { dias: [], totais: {} };
+  const ultimo = new Date(ano, m, 0).getDate();
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+
+  const dias = [];
+  for (let dia = 1; dia <= ultimo; dia++) {
+    const d = new Date(ano, m - 1, dia);
+    if (d > hoje) break;
+    const iso = getLocalISODate(d);
+    const reg = porData[iso];
+    const chuvaMm = reg ? chuvaMedidaDe(reg) : null;
+    const climas = reg ? [getCSVField(reg, 'Clima_Manha'), getCSVField(reg, 'Clima_Tarde'), getCSVField(reg, 'Clima_Noite')]
+      .map(x => String(x || '').trim()).filter(Boolean) : [];
+    const climaChuvoso = climas.some(c => /chuva|garoa/i.test(c));
+    const servicos = servicosPorData[iso] || 0;
+    const util = ehDiaUtil(d);
+    /* A paralisação REGISTRADA pelo apontador vale mais que a inferência
+       pelo clima: é a causa que ele declarou, com hora e frente. Um dia com
+       parada registrada é improdutivo mesmo sem chuva medida — e um dia com
+       parada de meio período aparece com as horas, ainda que tenha havido
+       serviço no resto do turno. */
+    const paralis = reg ? paralisacoesDoDia(reg) : [];
+    const horasParadas = paralis.reduce((s, p) => s + (horasParalisacao(p) || 0), 0);
+    const pleiteavel = paralis.some(p => MOTIVOS_PLEITEAVEIS.indexOf(p.motivo) > -1);
+    const temCausa = (chuvaMm != null && chuvaMm > 0) || climaChuvoso ||
+                     (paradasChuva[iso] > 0) || paralis.length > 0;
+    dias.push({
+      iso, d, util,
+      diaSemana: ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][d.getDay()],
+      temRDO: !!reg, climas, climaChuvoso,
+      chuvaMm, fonte: reg ? fonteClimaDe(reg) : '',
+      servicos, paradasChuva: paradasChuva[iso] || 0,
+      paralisacoes: paralis, horasParadas, pleiteavel,
+      improdutivo: util && servicos === 0 && temCausa,
+      semRDO: util && !reg,
+    });
+  }
+  const totais = {
+    diasUteis: dias.filter(x => x.util).length,
+    improdutivos: dias.filter(x => x.improdutivo).length,
+    semRDO: dias.filter(x => x.semRDO).length,
+    comChuvaMedida: dias.filter(x => x.chuvaMm != null && x.chuvaMm > 0).length,
+    mmAcumulado: dias.reduce((s, x) => s + (x.chuvaMm || 0), 0),
+    semMedicao: dias.filter(x => x.util && x.chuvaMm == null).length,
+    paralisacoes: dias.reduce((s, x) => s + x.paralisacoes.length, 0),
+    horasParadas: dias.reduce((s, x) => s + x.horasParadas, 0),
+    // Dia improdutivo com causa que NÃO é da construtora — é este o número
+    // que entra no pedido de prorrogação.
+    diasPleiteaveis: dias.filter(x => x.improdutivo && (x.pleiteavel || x.chuvaMm > 0 || x.climaChuvoso)).length,
+  };
+  return { dias, totais };
+}
+
+function renderImprodutivos() {
+  const mesesSet = new Set();
+  (STATE.rdodiario || []).concat(STATE.rdoavanco || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d) mesesSet.add(getLocalISODate(d).slice(0, 7));
+  });
+  const meses = [...mesesSet].sort().reverse();
+  if (!IMPROD_MES) IMPROD_MES = meses[0] || getLocalISODate(new Date()).slice(0, 7);
+
+  const { dias, totais } = calcDiasImprodutivos(IMPROD_MES);
+  const labelMes = m => {
+    const d = new Date(m + '-01T12:00:00');
+    const l = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  };
+
+  const semNenhumaMedicao = totais.semMedicao === totais.diasUteis && totais.diasUteis > 0;
+
+  return `
+  <div class="card stagger-item">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Dias improdutivos — ${escHtml(labelMes(IMPROD_MES))}</div>
+        <div class="card-title-sub">Chuva medida por estação oficial × clima apontado × serviço lançado — a base de um pleito de prazo</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select onchange="setImprodMes(this.value)" style="padding:6px 10px;border:1px solid var(--border-strong);border-radius:var(--r-sm);background:var(--bg);font-family:inherit;font-size:12px;font-weight:500">
+          ${meses.map(m => `<option value="${m}" ${IMPROD_MES === m ? 'selected' : ''}>${escHtml(labelMes(m))}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="exportarImprodutivosCSV()">${ic('baixar')} CSV</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
+        ${[['Dias úteis', totais.diasUteis, ''],
+           ['Improdutivos', totais.improdutivos, 'var(--red)'],
+           ['Pleiteáveis', totais.diasPleiteaveis, totais.diasPleiteaveis ? 'var(--red)' : ''],
+           ['Com chuva medida', totais.comChuvaMedida, ''],
+           ['Chuva acumulada', fmtNum(totais.mmAcumulado) + ' mm', ''],
+           ['Horas paradas', fmtNum(totais.horasParadas, 1) + ' h', ''],
+           ['Dias úteis sem RDO', totais.semRDO, totais.semRDO ? 'var(--red)' : '']]
+          .map(([r, v, cor]) => `<div>
+            <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${r}</div>
+            <div style="font-size:22px;font-weight:700${cor ? ';color:' + cor : ''}">${v}</div>
+          </div>`).join('')}
+      </div>
+      ${semNenhumaMedicao ? `<div style="margin-top:14px;font-size:12px;color:var(--muted);border-left:2px solid var(--border);padding-left:12px">
+        Nenhum dia do mês tem chuva medida. O robô <span class="t-mono">registrarClimaAuto</span> grava
+        <span class="t-mono">Chuva_mm_Auto</span> às 05h — se a coluna está vazia, ele ainda não rodou neste período
+        (rode <span class="t-mono">configurarGatilhos()</span> no editor do Apps Script).
+      </div>` : ''}
+    </div>
+  </div>
+
+  <div class="card stagger-item">
+    <div class="card-body flush">
+      <div class="tabela-rolagem" style="overflow-x:auto">
+      <table class="t"><thead><tr>
+        <th>Data</th><th>Dia</th><th class="t-num">Chuva medida</th><th>Fonte</th>
+        <th>Clima apontado</th><th>Paralisação registrada</th><th class="t-num">Serviços</th><th class="t-num">Equip. parado</th><th>Situação</th>
+      </tr></thead><tbody>
+      ${dias.map(x => {
+        const sit = x.improdutivo ? '<span style="color:var(--red);font-weight:600">Improdutivo</span>'
+                  : x.semRDO ? '<span style="color:var(--wrn,#d69e2e);font-weight:600">Sem RDO</span>'
+                  : !x.util ? '<span style="color:var(--muted)">Não útil</span>'
+                  : '<span style="color:var(--grn,#2f855a)">Produtivo</span>';
+        return `<tr${x.improdutivo ? ' style="background:rgba(220,80,70,.06)"' : ''}>
+          <td class="t-mono">${escHtml(x.iso.split('-').reverse().join('/'))}</td>
+          <td style="font-size:12px">${escHtml(x.diaSemana)}</td>
+          <td class="t-num t-mono">${x.chuvaMm == null ? '<span style="color:var(--muted)">—</span>' : fmtNum(x.chuvaMm) + ' mm'}</td>
+          <td style="font-size:11px;color:var(--muted)">${escHtml(x.fonte || '—')}</td>
+          <td style="font-size:12px${x.climaChuvoso ? ';font-weight:600' : ''}">${escHtml(x.climas.join(' · ') || '—')}</td>
+          <td style="font-size:11px;max-width:280px">${x.paralisacoes.length
+            ? x.paralisacoes.map(p => `<div>${escHtml(p.turno === 'Noturno' ? 'Not · ' : '')}<strong>${escHtml(p.motivo)}</strong>${
+                horasParalisacao(p) !== null ? ' · ' + fmtNum(horasParalisacao(p), 1) + ' h' : ''}${
+                p.frente ? ' · ' + escHtml(p.frente) : ''}</div>`).join('')
+            : '<span style="color:var(--muted)">—</span>'}</td>
+          <td class="t-num">${x.servicos || '<span style="color:var(--muted)">0</span>'}</td>
+          <td class="t-num">${x.paradasChuva || '<span style="color:var(--muted)">—</span>'}</td>
+          <td>${sit}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>
+      </div>
+    </div>
+  </div>`;
+}
+
+window.exportarImprodutivosCSV = function () {
+  const { dias, totais } = calcDiasImprodutivos(IMPROD_MES);
+  const dec = n => String(n).replace('.', ',');
+  const linhas = [['Data', 'Dia da semana', 'Dia util', 'Chuva medida (mm)', 'Fonte',
+                   'Clima apontado', 'Paralisacao registrada', 'Horas paradas', 'Sustenta pleito',
+                   'Servicos lancados', 'Equip. parado por chuva', 'Situacao'].join(';')];
+  dias.forEach(x => linhas.push([
+    x.iso, x.diaSemana, x.util ? 'sim' : 'nao',
+    x.chuvaMm == null ? '' : dec(x.chuvaMm), x.fonte,
+    x.climas.join(' / '),
+    x.paralisacoes.map(p => p.turno + ': ' + textoParalisacao(p)).join(' | '),
+    x.horasParadas ? dec(Math.round(x.horasParadas * 10) / 10) : '',
+    x.paralisacoes.length ? (x.pleiteavel ? 'sim' : 'nao') : '',
+    x.servicos, x.paradasChuva,
+    x.improdutivo ? 'IMPRODUTIVO' : x.semRDO ? 'SEM RDO' : x.util ? 'produtivo' : 'nao util',
+  ].map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(';')));
+  linhas.push('');
+  linhas.push(['TOTAIS'].join(';'));
+  linhas.push(['Dias uteis', totais.diasUteis].join(';'));
+  linhas.push(['Dias improdutivos', totais.improdutivos].join(';'));
+  linhas.push(['Dias improdutivos que sustentam pleito', totais.diasPleiteaveis].join(';'));
+  linhas.push(['Dias com chuva medida', totais.comChuvaMedida].join(';'));
+  linhas.push(['Chuva acumulada (mm)', dec(totais.mmAcumulado)].join(';'));
+  linhas.push(['Paralisacoes registradas', totais.paralisacoes].join(';'));
+  linhas.push(['Horas paradas', dec(Math.round(totais.horasParadas * 10) / 10)].join(';'));
+  linhas.push(['Dias uteis sem RDO', totais.semRDO].join(';'));
+
+  const blob = new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `dias-improdutivos-${OBRA.id}-${IMPROD_MES}.csv`;
+  a.click();
+  toast('CSV de dias improdutivos gerado.', 'success', 3500);
+};
+
+/* ====================================================================
+   VIEW: TEÓRICO × REAL — o que a obra devia ter consumido e o que saiu
+   --------------------------------------------------------------------
+   O app já sabia as duas metades e nunca as pôs lado a lado:
+
+     TEÓRICO   avanço executado × matriz de coeficientes. É a mesma conta
+               que alimenta a prévia de medição — 320 m de tubo × 0,15
+               m³/m dão 48 m³ de brita que a obra DEVERIA ter gasto.
+     REAL      as saídas do almoxarifado, que a tela de Notas já registra
+               material por material.
+
+   Comparar as duas é o que separa "consumo previsto" de perda, furto,
+   retrabalho e apontamento errado. Diferença grande para cima é material
+   saindo sem serviço correspondente; para baixo é serviço lançado sem
+   material — quase sempre RDO apontado no pacote errado.
+
+   O VÍNCULO entre os dois vocabulários (item contratual da SIURB × nome
+   do material na nota) vem da coluna opcional `Material Estoque`, na
+   mesma aba Coeficientes. Onde ela está vazia a tela tenta casar pela
+   descrição e DIZ que casou sozinha — palpite silencioso aqui viraria um
+   número errado com cara de conferido.
+   ==================================================================== */
+let TR_MES = '';
+window.setTeoricoRealMes = function (m) { TR_MES = m; transitionTo(render); };
+
+/* Mesma normalização do módulo de notas, para os dois lados falarem a
+   mesma língua. Se o módulo não estiver carregado, cai numa versão simples. */
+function trNorm(s) {
+  if (typeof nfNorm === 'function') return nfNorm(s);
+  return String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/* As saídas de estoque da obra ativa, no período. */
+function saidasDoPeriodo(mes) {
+  let lista = [];
+  try { lista = (typeof nfSaiGet === 'function') ? (nfSaiGet(OBRA.id) || []) : []; } catch (e) { lista = []; }
+  if (!mes) return lista;
+  return lista.filter(s => String(s.dataISO || '').slice(0, 7) === mes);
+}
+
+function consumoTeoricoReal(mes) {
+  const teorico = calcularConsumoItens(calcularAvancoPorPacote(rdosDoMes(mes), STATE.pacotes));
+  const saidas = saidasDoPeriodo(mes);
+
+  // Real por material, com a descrição mais recente e a unidade da saída.
+  const real = {};
+  saidas.forEach(s => {
+    const k = trNorm(s.descricao) || String(s.materialId || '');
+    if (!real[k]) real[k] = { chave: k, descricao: s.descricao || '', un: s.un || '', qtd: 0, lancamentos: 0 };
+    real[k].qtd += num(s.qtd);
+    real[k].lancamentos++;
+  });
+
+  const linhas = [];
+  const realUsado = new Set();
+
+  Object.values(teorico).forEach(t => {
+    if (!(t.consumido > 0)) return;
+    let chave = '', vinculo = 'sem vínculo';
+    if (t.materialEstoque) {
+      chave = trNorm(t.materialEstoque);
+      vinculo = real[chave] ? 'declarado' : 'declarado (sem saída no período)';
+    } else {
+      /* Palpite conservador: só casa quando as descrições normalizadas são
+         iguais, ou quando uma contém a outra inteira e o trecho tem pelo
+         menos 8 caracteres. "BRITA" dentro de "BRITA GRADUADA" e de "BRITA
+         CORRIDA" casaria com as duas — e um vínculo errado aqui dá um
+         número errado com cara de conferido. */
+      const alvo = trNorm(t.descricao);
+      const candidatos = Object.keys(real).filter(k =>
+        k === alvo || (alvo.length >= 8 && k.indexOf(alvo) > -1) || (k.length >= 8 && alvo.indexOf(k) > -1));
+      if (candidatos.length === 1) { chave = candidatos[0]; vinculo = 'automático'; }
+      else if (candidatos.length > 1) vinculo = 'ambíguo';
+    }
+
+    const r = chave ? real[chave] : null;
+    if (r) realUsado.add(chave);
+    const qtdReal = r ? r.qtd : null;
+    linhas.push({
+      item: t.item, itemPlanilha: t.itemPlanilha, descricao: t.descricao,
+      unidadeItem: t.unidadeItem, teorico: t.consumido,
+      material: r ? r.descricao : (t.materialEstoque || ''),
+      unidadeMaterial: r ? r.un : '',
+      real: qtdReal, vinculo,
+      diferenca: qtdReal === null ? null : qtdReal - t.consumido,
+      desvio: (qtdReal === null || t.consumido <= 0) ? null : (qtdReal - t.consumido) / t.consumido,
+      // Unidade diferente dos dois lados: a diferença existe, mas não é
+      // comparável. Melhor gritar do que somar maçã com laranja.
+      unidadeDiverge: !!(r && trNorm(t.unidadeItem) && trNorm(r.un) && trNorm(t.unidadeItem) !== trNorm(r.un)),
+    });
+  });
+
+  // Material que saiu do almoxarifado e não tem serviço teórico nenhum
+  // apontado contra ele — o caso mais caro de todos.
+  const semTeorico = Object.values(real).filter(r => !realUsado.has(r.chave))
+    .sort((a, b) => b.qtd - a.qtd);
+
+  linhas.sort((a, b) => Math.abs(b.desvio || 0) - Math.abs(a.desvio || 0)
+                     || b.teorico - a.teorico);
+
+  const comparaveis = linhas.filter(x => x.real !== null && !x.unidadeDiverge);
+  return {
+    linhas, semTeorico,
+    totais: {
+      itens: linhas.length,
+      vinculados: linhas.filter(x => x.real !== null).length,
+      declarados: linhas.filter(x => x.vinculo === 'declarado').length,
+      automaticos: linhas.filter(x => x.vinculo === 'automático').length,
+      semVinculo: linhas.filter(x => x.real === null).length,
+      acima: comparaveis.filter(x => x.desvio > 0.1).length,
+      abaixo: comparaveis.filter(x => x.desvio < -0.1).length,
+      saidasOrfas: semTeorico.length,
+    },
+  };
+}
+
+function renderTeoricoReal() {
+  const mesesSet = new Set();
+  (STATE.rdoavanco || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d) mesesSet.add(getLocalISODate(d).slice(0, 7));
+  });
+  saidasDoPeriodo('').forEach(s => { if (s.dataISO) mesesSet.add(String(s.dataISO).slice(0, 7)); });
+  const meses = [...mesesSet].filter(Boolean).sort().reverse();
+  const labelMes = m => {
+    const d = new Date(m + '-01T12:00:00');
+    const l = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  };
+
+  const { linhas, semTeorico, totais } = consumoTeoricoReal(TR_MES);
+  const temSaidas = saidasDoPeriodo(TR_MES).length > 0;
+
+  const corVinculo = v => v === 'declarado' ? 'var(--grn)'
+    : v === 'automático' ? 'var(--ylw-d, var(--ylw))' : 'var(--muted)';
+
+  const aviso = !temSaidas ? `
+    <div class="card stagger-item">
+      <div class="card-body" style="font-size:12px;color:var(--muted);line-height:1.6">
+        Nenhuma saída de almoxarifado registrada ${TR_MES ? 'em ' + escHtml(labelMes(TR_MES)) : 'nesta obra'}.
+        A metade <strong>real</strong> desta tela vem da aba <strong>Saídas</strong> da tela de Notas —
+        sem ela, só o teórico existe e não há o que comparar.
+      </div>
+    </div>` : (totais.automaticos ? `
+    <div class="card stagger-item" style="border-left:3px solid var(--ylw)">
+      <div class="card-body" style="font-size:12px;color:var(--muted);line-height:1.6">
+        <strong>${totais.automaticos} vínculo(s) foram feitos pela descrição</strong>, não declarados.
+        Para travar o de-para, preencha a coluna <span class="t-mono">Material Estoque</span> na aba
+        Coeficientes com o nome exato do material da nota — é a mesma aba onde já está o coeficiente.
+      </div>
+    </div>` : '');
+
+  return `
+  <div class="card stagger-item">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Consumo teórico × real${TR_MES ? ' — ' + escHtml(labelMes(TR_MES)) : ''}</div>
+        <div class="card-title-sub">Avanço × coeficientes contra as saídas do almoxarifado — perda, retrabalho e RDO no pacote errado</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select onchange="setTeoricoRealMes(this.value)" style="padding:6px 10px;border:1px solid var(--border-strong);border-radius:var(--r-sm);background:var(--bg);font-family:inherit;font-size:12px;font-weight:500">
+          <option value="">Obra inteira</option>
+          ${meses.map(m => `<option value="${m}" ${TR_MES === m ? 'selected' : ''}>${escHtml(labelMes(m))}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="exportarTeoricoRealCSV()">${ic('baixar')} CSV</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
+        ${[['Itens com consumo', totais.itens, ''],
+           ['Vinculados', totais.vinculados, ''],
+           ['Acima do teórico', totais.acima, totais.acima ? 'var(--red)' : ''],
+           ['Abaixo do teórico', totais.abaixo, totais.abaixo ? 'var(--ylw-d, var(--ylw))' : ''],
+           ['Saídas sem serviço', totais.saidasOrfas, totais.saidasOrfas ? 'var(--red)' : '']]
+          .map(([r, v, cor]) => `<div>
+            <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${r}</div>
+            <div style="font-size:22px;font-weight:700${cor ? ';color:' + cor : ''}">${v}</div>
+          </div>`).join('')}
+      </div>
+    </div>
+  </div>
+
+  ${aviso}
+
+  <div class="card stagger-item">
+    <div class="card-body flush">
+      ${linhas.length === 0 ? `<div class="empty"><div class="empty-icon">${ic('balanca')}</div><div class="empty-title">Nada a comparar neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade para a tela derivar o consumo teórico.</div></div>` : `
+      <div class="tabela-rolagem" style="overflow-x:auto">
+      <table class="t"><thead><tr>
+        <th>Item contratual</th><th>Material no estoque</th><th>Vínculo</th>
+        <th class="t-num">Teórico</th><th class="t-num">Real (saídas)</th>
+        <th class="t-num">Diferença</th><th class="t-num">Desvio</th>
+      </tr></thead><tbody>
+      ${linhas.map(x => {
+        const grave = x.desvio !== null && Math.abs(x.desvio) > 0.1;
+        return `<tr${grave && !x.unidadeDiverge ? ' style="background:rgba(220,80,70,.06)"' : ''}>
+          <td class="t-mono" style="font-size:12px"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha ? `<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>` : ''}
+            <div style="font-size:11px;color:var(--muted);font-weight:400">${escHtml(x.descricao)}</div></td>
+          <td style="font-size:12px">${x.material ? escHtml(x.material) : '<span style="color:var(--muted)">—</span>'}
+            ${x.unidadeDiverge ? `<div style="font-size:10px;color:var(--red)">unidades diferentes: ${escHtml(x.unidadeItem)} × ${escHtml(x.unidadeMaterial)}</div>` : ''}</td>
+          <td style="font-size:11px;color:${corVinculo(x.vinculo)}">${escHtml(x.vinculo)}</td>
+          <td class="t-num">${fmtNum(x.teorico)} <span style="font-size:10px;color:var(--muted)">${escHtml(x.unidadeItem)}</span></td>
+          <td class="t-num">${x.real === null ? '<span style="color:var(--muted)">—</span>' : fmtNum(x.real) + ' <span style="font-size:10px;color:var(--muted)">' + escHtml(x.unidadeMaterial) + '</span>'}</td>
+          <td class="t-num"${grave ? ' style="font-weight:700"' : ''}>${x.diferenca === null ? '—' : (x.diferenca > 0 ? '+' : '') + fmtNum(x.diferenca)}</td>
+          <td class="t-num"${grave ? ' style="color:var(--red);font-weight:700"' : ''}>${x.desvio === null ? '—' : (x.desvio > 0 ? '+' : '') + fmtPct(x.desvio)}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>
+      </div>`}
+    </div>
+  </div>
+
+  ${semTeorico.length ? `
+  <div class="card stagger-item" style="border-left:3px solid var(--red)">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Saiu do almoxarifado sem serviço correspondente</div>
+        <div class="card-title-sub">${semTeorico.length} material(is) com saída e nenhum item contratual vinculado no período</div>
+      </div>
+    </div>
+    <div class="card-body flush">
+      <table class="t"><thead><tr><th>Material</th><th>Unid</th><th class="t-num">Saiu</th><th class="t-num">Lançamentos</th></tr></thead>
+      <tbody>${semTeorico.map(r => `<tr>
+        <td style="font-size:12px">${escHtml(r.descricao)}</td>
+        <td class="t-mono">${escHtml(r.un)}</td>
+        <td class="t-num"><strong>${fmtNum(r.qtd)}</strong></td>
+        <td class="t-num" style="color:var(--muted)">${r.lancamentos}</td>
+      </tr>`).join('')}</tbody></table>
+    </div>
+  </div>` : ''}`;
+}
+
+window.exportarTeoricoRealCSV = function () {
+  const { linhas, semTeorico } = consumoTeoricoReal(TR_MES);
+  if (!linhas.length && !semTeorico.length) { toast('Nada a exportar neste período.', 'info'); return; }
+  const dec = n => (n === null || n === undefined) ? ''
+    : String((Math.round(n * 100) / 100).toFixed(2)).replace('.', ',');
+  const asp = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const out = [['Codigo', 'Item_Planilha', 'Descricao_Item', 'Unid_Item', 'Material_Estoque', 'Unid_Material',
+                'Vinculo', 'Teorico', 'Real', 'Diferenca', 'Desvio_pct', 'Unidades_divergem', 'Periodo']
+               .map(asp).join(';')];
+  linhas.forEach(x => out.push([
+    x.item, x.itemPlanilha, x.descricao, x.unidadeItem, x.material, x.unidadeMaterial, x.vinculo,
+    dec(x.teorico), x.real === null ? '' : dec(x.real), dec(x.diferenca),
+    x.desvio === null ? '' : dec(x.desvio * 100), x.unidadeDiverge ? 'SIM' : '',
+    TR_MES || 'obra inteira',
+  ].map(asp).join(';')));
+  if (semTeorico.length) {
+    out.push('');
+    out.push(asp('SAIDAS SEM SERVICO CORRESPONDENTE'));
+    out.push(['Material', 'Unid', 'Saiu', 'Lancamentos'].map(asp).join(';'));
+    semTeorico.forEach(r => out.push([r.descricao, r.un, dec(r.qtd), r.lancamentos].map(asp).join(';')));
+  }
+  const blob = new Blob(['﻿' + out.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `teorico-real-${OBRA.id}-${TR_MES || 'total'}.csv`;
+  a.click();
+  toast('CSV de teórico × real gerado.', 'success', 3500);
+};
 
 // ====================================================================
 // VIEW: HISTÓRICO (com tabs Serviços | RDOs Diários)
@@ -9785,14 +10867,41 @@ function renderHistorico() {
 
 // Filtros do histórico de serviços (não afetam edição/exclusão: o índice
 // canônico do registro no array revertido é preservado em cada linha).
-let HIST_FILTRO = { mes: '', frente: '', apontador: '' };
+/* `data` é o dia EXATO (o mês sozinho não alcança um lançamento específico
+   numa obra de 669 dias) e `busca` casa ID, estaca, pacote e observação —
+   que é como as pessoas procuram: pela estaca, não pela data. `limite` é a
+   paginação, no lugar do corte cego que existia em 100. */
+let HIST_FILTRO = { mes: '', frente: '', apontador: '', data: '', busca: '' };
+const HIST_PAGINA = 100;
+let HIST_LIMITE = HIST_PAGINA;
+
+window.histMostrarMais = function () {
+  HIST_LIMITE += HIST_PAGINA;
+  transitionTo(render);
+};
 
 window.setHistFiltro = function(campo, valor) {
   HIST_FILTRO[campo] = valor;
+  HIST_LIMITE = HIST_PAGINA;   // filtro novo recomeça a paginação
   transitionTo(render);
 };
+/* A busca livre é digitada: re-renderizar a cada tecla derrubaria o foco no
+   meio da palavra. Guarda o valor, espera parar de digitar e só então
+   redesenha, devolvendo o cursor para onde estava. */
+let _histBuscaTimer = null;
+window.setHistBusca = function(valor) {
+  HIST_FILTRO.busca = valor;
+  HIST_LIMITE = HIST_PAGINA;
+  clearTimeout(_histBuscaTimer);
+  _histBuscaTimer = setTimeout(() => {
+    transitionTo(render);
+    const el = document.getElementById('histBusca');
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, 350);
+};
 window.limparHistFiltro = function() {
-  HIST_FILTRO = { mes: '', frente: '', apontador: '' };
+  HIST_FILTRO = { mes: '', frente: '', apontador: '', data: '', busca: '' };
+  HIST_LIMITE = HIST_PAGINA;
   transitionTo(render);
 };
 
@@ -9830,7 +10939,9 @@ function renderHistoricoServicos() {
     const l = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
     return l.charAt(0).toUpperCase() + l.slice(1);
   };
-  const filtroAtivo = HIST_FILTRO.mes || HIST_FILTRO.frente || HIST_FILTRO.apontador;
+  const filtroAtivo = HIST_FILTRO.mes || HIST_FILTRO.frente || HIST_FILTRO.apontador
+                   || HIST_FILTRO.data || HIST_FILTRO.busca;
+  const termo = String(HIST_FILTRO.busca || '').trim().toLowerCase();
 
   // Mantém o índice canônico (posição no array revertido) e filtra depois,
   // para que os botões editar/apagar continuem apontando o registro certo.
@@ -9841,10 +10952,27 @@ function renderHistoricoServicos() {
         const d = parseISODate(getCSVField(r, 'Data'));
         if (!d || getLocalISODate(d).slice(0, 7) !== HIST_FILTRO.mes) return false;
       }
+      // Dia exato. Num contrato de 669 dias, "maio" ainda são 200 lançamentos.
+      if (HIST_FILTRO.data) {
+        const d = parseISODate(getCSVField(r, 'Data'));
+        if (!d || getLocalISODate(d) !== HIST_FILTRO.data) return false;
+      }
       if (HIST_FILTRO.apontador && getCSVField(r, 'Apontador') !== HIST_FILTRO.apontador) return false;
       if (HIST_FILTRO.frente) {
         const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
         if (frenteDoPacote(pid) !== HIST_FILTRO.frente) return false;
+      }
+      /* Busca livre. Quem procura um lançamento procura pela ESTACA ("E118"),
+         pelo pacote, por um trecho da observação — quase nunca pela data.
+         Antes não havia como chegar nele: a tela cortava nos 100 mais
+         recentes e o corte era aplicado DEPOIS do filtro. */
+      if (termo) {
+        const alvo = [
+          getCSVField(r, 'ID'), getCSVField(r, 'Pacote_ID'), getCSVField(r, 'Pacote_Nome'),
+          getCSVField(r, 'Local_Estaca'), getCSVField(r, 'Observações') || getCSVField(r, 'Observacoes'),
+          getCSVField(r, 'Equipe'), getCSVField(r, 'Apontador'), getCSVField(r, 'Data'),
+        ].join(' ').toLowerCase();
+        if (!alvo.includes(termo)) return false;
       }
       return true;
     });
@@ -9864,6 +10992,11 @@ function renderHistoricoServicos() {
         <option value="">Todos os apontadores</option>
         ${apontadores.map(a => `<option value="${escHtml(a)}" ${HIST_FILTRO.apontador===a?'selected':''}>${escHtml(a)}</option>`).join('')}
       </select>
+      <input type="date" value="${escHtml(HIST_FILTRO.data)}" onchange="setHistFiltro('data', this.value)"
+             title="Um dia exato" style="padding:6px 9px;font-size:13px;border:1px solid var(--border-strong);border-radius:6px">
+      <input type="search" id="histBusca" value="${escHtml(HIST_FILTRO.busca)}" oninput="setHistBusca(this.value)"
+             placeholder="Buscar estaca, pacote, observação…" autocomplete="off"
+             style="padding:6px 9px;font-size:13px;border:1px solid var(--border-strong);border-radius:6px;min-width:190px;flex:1">
       ${filtroAtivo ? `<div class="filter-clear" onclick="limparHistFiltro()">Limpar ${ic('fechar')}</div><span style="font-size:11px;color:var(--muted)">${visiveis.length} de ${rdos.length}</span>` : ''}
     </div>`;
 
@@ -9873,7 +11006,7 @@ function renderHistoricoServicos() {
   } else if (visiveis.length === 0) {
     bodyContent = '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum serviço com esses filtros</div><div class="empty-sub">Ajuste ou limpe os filtros acima.</div></div>';
   } else {
-    const tableRows = visiveis.slice(0, 100).map(({ r, i: idx }) => {
+    const tableRows = visiveis.slice(0, HIST_LIMITE).map(({ r, i: idx }) => {
       const id         = getCSVField(r, 'ID') || '';
       const dataVal    = getCSVField(r, 'Data') || '';
       const turno      = getCSVField(r, 'Turno') || 'Diurno';
@@ -10010,7 +11143,18 @@ function renderHistoricoServicos() {
         </tr>`;
     }).join('');
 
-    const moreText = visiveis.length > 100 ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${visiveis.length}${filtroAtivo?' (filtrados)':''}</td></tr>` : '';
+    /* PAGINAÇÃO DE VERDADE. Antes o corte era cego em 100 e não havia como
+       chegar no resto: o Histórico é a única tela de onde se edita e se apaga
+       um lançamento, então tudo que passasse dos 100 mais recentes ficava sem
+       conserto. E o corte era aplicado DEPOIS do filtro, então filtrar também
+       não destravava. */
+    const restam = visiveis.length - Math.min(HIST_LIMITE, visiveis.length);
+    const moreText = visiveis.length > HIST_LIMITE ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;padding:14px">
+        <button class="btn btn-outline btn-sm" onclick="histMostrarMais()">Mostrar mais ${Math.min(HIST_PAGINA, restam)}</button>
+        <div style="color:var(--muted);font-size:11px;margin-top:6px">mostrando ${Math.min(HIST_LIMITE, visiveis.length)} de ${visiveis.length}${filtroAtivo?' (filtrados)':''}</div>
+      </td></tr>` : (visiveis.length > HIST_PAGINA
+        ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">mostrando todos os ${visiveis.length}${filtroAtivo?' (filtrados)':''}</td></tr>`
+        : '');
 
     bodyContent = `
       <table class="t t-cartoes">
@@ -10808,7 +11952,8 @@ function dadosRDOExport(fromSheet, data) {
     clima_tarde: getCSVField(fromSheet, 'Clima_Tarde') || '',
     clima_noite: getCSVField(fromSheet, 'Clima_Noite') || '',
     visitas: getCSVField(fromSheet, 'Visitas') || '',
-    ocorrencias: getCSVField(fromSheet, 'Ocorrencias') || '',
+    ocorrencias: ocorrenciasComParalisacoes(
+      getCSVField(fromSheet, 'Ocorrencias') || '', paralisacoesDoDia(fromSheet)),
     observacoes_gerais: getCSVField(fromSheet, 'Observacoes_Gerais') || '',
     efetivo_diurno: efetJson.padrao_diurno || {},
     efetivo_noturno: efetJson.padrao_noturno || {},
@@ -12209,18 +13354,154 @@ window.buscarClima = async function () {
   }
 };
 
+/* ====================================================================
+   PARALISAÇÃO ESTRUTURADA
+   --------------------------------------------------------------------
+   A coluna `paralisado_motivo` existe na planilha desde sempre e o app
+   SEMPRE a gravava vazia. Parada de obra virava, na melhor das hipóteses,
+   uma frase solta no campo "Ocorrências" — texto livre que não soma, não
+   filtra e não vira anexo de pleito.
+
+   Aqui a parada passa a ter forma: motivo de uma lista fechada, hora de
+   início e fim, frente afetada, e quanto efetivo e equipamento ficou
+   parado. Com isso a tela de Dias Improdutivos deixa de inferir a causa
+   pelo clima e passa a citar o que o apontador registrou — que é
+   exatamente o que a fiscalização cobra num pedido de prorrogação.
+
+   A lista é fechada de propósito: 40 apontadores escrevendo "chuva",
+   "Chuva", "chuveu muito" e "chva" dão quatro motivos diferentes na hora
+   de somar. "Outro" existe para o que não couber, com descrição livre ao
+   lado.
+   ==================================================================== */
+const MOTIVOS_PARALISACAO = [
+  'Chuva',
+  'Pista impraticável após chuva',
+  'Interferência de concessionária',
+  'Falta de projeto ou definição',
+  'Área não liberada / desapropriação',
+  'Falta de licença ou autorização',
+  'Falta de material',
+  'Equipamento quebrado ou indisponível',
+  'Falta de frente de serviço',
+  'Determinação da fiscalização',
+  'Acidente ou ocorrência de segurança',
+  'Interferência de trânsito ou evento',
+  'Falta de energia',
+  'Falta de efetivo',
+  'Outro',
+];
+
+/* Motivos que sustentam pleito de prazo — parada que NÃO é responsabilidade
+   da construtora. Falta de material ou equipamento quebrado é problema da
+   obra: entra no relatório, mas não conta como dia improdutivo pleiteável. */
+const MOTIVOS_PLEITEAVEIS = [
+  'Chuva', 'Pista impraticável após chuva', 'Interferência de concessionária',
+  'Falta de projeto ou definição', 'Área não liberada / desapropriação',
+  'Falta de licença ou autorização', 'Determinação da fiscalização',
+  'Interferência de trânsito ou evento',
+];
+
+function paralisacaoVazia() {
+  return { motivo: 'Chuva', inicio: '', fim: '', frente: '', efetivo: '', equip: '', obs: '' };
+}
+
+/* Horas paradas de um registro. O turno noturno atravessa a meia-noite:
+   22:00 → 02:00 são 4 horas, não menos vinte. */
+function horasParalisacao(p) {
+  const emMin = s => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(s == null ? '' : s).trim());
+    if (!m) return null;
+    const h = +m[1], mi = +m[2];
+    return (h >= 0 && h < 24 && mi >= 0 && mi < 60) ? h * 60 + mi : null;
+  };
+  const a = emMin(p && p.inicio), b = emMin(p && p.fim);
+  if (a === null || b === null) return null;
+  let dif = b - a;
+  if (dif < 0) dif += 24 * 60;
+  return dif / 60;
+}
+
+/* Só entra na planilha (e na conta) o registro que tem motivo. Linha em
+   branco que o apontador abriu e não preencheu é descartada. */
+function paralisacoesValidas(lista) {
+  return (lista || []).filter(p => p && String(p.motivo || '').trim());
+}
+
+/* Uma linha por parada, legível por quem lê o RDO impresso. */
+function textoParalisacao(p) {
+  const h = horasParalisacao(p);
+  return [
+    String(p.motivo || '').trim(),
+    (p.inicio && p.fim) ? `${p.inicio}–${p.fim}${h !== null ? ' (' + fmtNum(h, 1) + ' h)' : ''}` : '',
+    p.frente ? 'frente: ' + String(p.frente).trim() : '',
+    num(p.efetivo) > 0 ? num(p.efetivo) + ' na mão de obra parada' : '',
+    num(p.equip) > 0 ? num(p.equip) + ' equip. parado' : '',
+    String(p.obs || '').trim(),
+  ].filter(Boolean).join(' · ');
+}
+
+function resumoParalisacoes(lista) {
+  const v = paralisacoesValidas(lista);
+  if (!v.length) return '';
+  return 'PARALISAÇÕES: ' + v.map(textoParalisacao).join(' | ');
+}
+
+/* O RDO impresso precisa dizer que a obra parou. Em vez de mexer no desenho
+   do PDF (que é o documento oficial e não pode mudar de forma), a parada entra
+   no bloco "Ocorrências e observações do dia" que já existe.
+
+   Isto é montado NA HORA de gerar o PDF, nunca gravado — se fosse gravado no
+   campo de ocorrências, ao reabrir o RDO o texto voltaria para o formulário e
+   o próximo "salvar" o duplicaria. */
+function ocorrenciasComParalisacoes(base, lista) {
+  const r = resumoParalisacoes(lista);
+  return [base, r].filter(x => x && String(x).trim()).join('   ·   ');
+}
+
+/* As paralisações de uma linha da aba RDO_Diario, nos dois turnos. Linha
+   gravada antes desta coluna existir devolve as duas listas vazias — o app
+   inteiro continua funcionando sobre o histórico que já está lá. */
+function paralisacoesDaLinha(reg) {
+  const bruto = getCSVField(reg, 'Paralisacoes_JSON') || getCSVField(reg, 'paralisacoes_json') || '';
+  if (!bruto) return { diurno: [], noturno: [] };
+  try {
+    const o = JSON.parse(bruto);
+    return { diurno: Array.isArray(o.diurno) ? o.diurno : [],
+             noturno: Array.isArray(o.noturno) ? o.noturno : [] };
+  } catch (e) { return { diurno: [], noturno: [] }; }
+}
+
+/* Os dois turnos juntos, já filtrados, com o turno marcado em cada item. */
+function paralisacoesDoDia(reg) {
+  const p = paralisacoesDaLinha(reg);
+  return paralisacoesValidas(p.diurno).map(x => Object.assign({ turno: 'Diurno' }, x))
+    .concat(paralisacoesValidas(p.noturno).map(x => Object.assign({ turno: 'Noturno' }, x)));
+}
+
 // ====================================================================
 // ESTADO DO RDO DIÁRIO V4 E LÓGICA DE TURNOS
 // ====================================================================
 let DIARIO_V4 = null;
-let DIARIO_TURNO_ATIVO = null; 
+let DIARIO_TURNO_ATIVO = null;
 
 function loadDiarioV4(data) {
   try {
     const raw = localStorage.getItem(lsObra('teotonio_rdo_diario_v4_' + data));
-    if (raw) return JSON.parse(raw);
+    if (raw) return normalizarDiarioV4(JSON.parse(raw));
   } catch(e) {}
   return null;
+}
+
+/* Rascunho gravado antes de existir paralisação não tem o campo. Sem isto,
+   o primeiro `td.paralisacoes.map` estoura a tela de quem estava com um
+   rascunho aberto no celular — justamente quem não pode perder o turno. */
+function normalizarDiarioV4(d) {
+  if (!d) return d;
+  ['diurno', 'noturno'].forEach(t => {
+    if (!d[t]) return;
+    if (!Array.isArray(d[t].paralisacoes)) d[t].paralisacoes = [];
+  });
+  return d;
 }
 
 function saveDiarioV4(d) {
@@ -12239,10 +13520,12 @@ function defaultDiarioV4(data) {
     clima_noite: 'Bom',
     diurno: {
       apontador: '', efetivo: {}, equipamentos: {}, customIndireto: [], customDireto: [], customEquip: [],
+      paralisacoes: [],
       visitas: '', ocorrencias: '', observacoes: '', preenchido: false,
     },
     noturno: {
       apontador: '', efetivo: {}, equipamentos: {}, customIndireto: [], customDireto: [], customEquip: [],
+      paralisacoes: [],
       visitas: '', ocorrencias: '', observacoes: '', preenchido: false,
     },
   };
@@ -12261,7 +13544,8 @@ function carregarDiarioDaSheet(data) {
   const rawEquip = getCSVField(sheetRow, 'Equipamentos_JSON') || getCSVField(sheetRow, 'equipamentos_json') || '{}';
   try { efetivoJson = JSON.parse(rawEfetivo); } catch(e) {}
   try { equipJson = JSON.parse(rawEquip); } catch(e) {}
-  
+  const paralJson = paralisacoesDaLinha(sheetRow);
+
   const d = defaultDiarioV4(data);
   d.clima_manha = getCSVField(sheetRow, 'Clima_Manha') || getCSVField(sheetRow, 'clima_manha') || 'Bom';
   d.clima_tarde = getCSVField(sheetRow, 'Clima_Tarde') || getCSVField(sheetRow, 'clima_tarde') || 'Bom';
@@ -12277,7 +13561,8 @@ function carregarDiarioDaSheet(data) {
   d.diurno.customIndireto = efetivoJson.customIndireto_diurno || [];
   d.diurno.customDireto = efetivoJson.customDireto_diurno || [];
   d.diurno.customEquip = equipJson.custom_diurno || [];
-  d.diurno.visitas = getCSVField(sheetRow, 'Visitas_Diurno') || getCSVField(sheetRow, 'visitas_diurno') || getCSVField(sheetRow, 'Visitas') || getCSVField(sheetRow, 'visitas') || '';
+  d.diurno.paralisacoes = paralJson.diurno || [];
+  d.diurno.visitas =getCSVField(sheetRow, 'Visitas_Diurno') || getCSVField(sheetRow, 'visitas_diurno') || getCSVField(sheetRow, 'Visitas') || getCSVField(sheetRow, 'visitas') || '';
   d.diurno.ocorrencias = getCSVField(sheetRow, 'Ocorrencias_Diurno') || getCSVField(sheetRow, 'ocorrencias_diurno') || getCSVField(sheetRow, 'Ocorrencias') || getCSVField(sheetRow, 'ocorrencias') || '';
   d.diurno.observacoes = getCSVField(sheetRow, 'Obs_Diurno') || getCSVField(sheetRow, 'obs_diurno') || getCSVField(sheetRow, 'Observacoes_Gerais') || getCSVField(sheetRow, 'observacoes_gerais') || '';
   d.diurno.preenchido = !!d.diurno.apontador;
@@ -12289,7 +13574,8 @@ function carregarDiarioDaSheet(data) {
   d.noturno.customIndireto = efetivoJson.customIndireto_noturno || [];
   d.noturno.customDireto = efetivoJson.customDireto_noturno || [];
   d.noturno.customEquip = equipJson.custom_noturno || [];
-  d.noturno.visitas = getCSVField(sheetRow, 'Visitas_Noturno') || getCSVField(sheetRow, 'visitas_noturno') || '';
+  d.noturno.paralisacoes = paralJson.noturno || [];
+  d.noturno.visitas =getCSVField(sheetRow, 'Visitas_Noturno') || getCSVField(sheetRow, 'visitas_noturno') || '';
   d.noturno.ocorrencias = getCSVField(sheetRow, 'Ocorrencias_Noturno') || getCSVField(sheetRow, 'ocorrencias_noturno') || '';
   d.noturno.observacoes = getCSVField(sheetRow, 'Obs_Noturno') || getCSVField(sheetRow, 'obs_noturno') || '';
   d.noturno.preenchido = !!d.noturno.apontador;
@@ -12503,6 +13789,8 @@ function renderFormularioTurno() {
       </div>
     </div>
     
+    ${renderParalisacoesV4(td, turnoLabel, cor)}
+
     <div class="card stagger-item" style="animation-delay:.25s">
       <div class="card-header">
         <div>
@@ -12585,6 +13873,90 @@ function renderEfetivoV4(titulo, categorias, td, prefix, corBorda) {
   `;
 }
 
+/* O cartão de paralisações do turno. Nasce vazio: obra que trabalhou o turno
+   inteiro não precisa clicar em nada. */
+function renderParalisacoesV4(td, turnoLabel, corBorda) {
+  const lista = td.paralisacoes || [];
+  const frentes = [...new Set((STATE.pacotes || [])
+    .map(p => String(getCSVField(p, 'Frente') || '').trim()).filter(Boolean))].sort();
+  const totalH = lista.reduce((s, p) => s + (horasParalisacao(p) || 0), 0);
+
+  const linha = (p, i) => `
+    <div style="border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:10px;position:relative;background:var(--bg)">
+      <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+        <div class="field" style="grid-column:1/-1">
+          <label>Motivo da parada</label>
+          <select data-paralis4="${i}|motivo">
+            ${MOTIVOS_PARALISACAO.map(m => `<option ${p.motivo === m ? 'selected' : ''}>${escHtml(m)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Início</label>
+          <input type="time" data-paralis4="${i}|inicio" value="${escHtml(p.inicio || '')}">
+        </div>
+        <div class="field">
+          <label>Fim</label>
+          <input type="time" data-paralis4="${i}|fim" value="${escHtml(p.fim || '')}">
+        </div>
+        <div class="field">
+          <label>Frente afetada</label>
+          <input type="text" list="frentesParalis" data-paralis4="${i}|frente" value="${escHtml(p.frente || '')}" placeholder="ex: Drenagem">
+        </div>
+        <div class="field">
+          <label>Efetivo parado</label>
+          <input type="number" min="0" data-paralis4="${i}|efetivo" value="${escHtml(p.efetivo || '')}" placeholder="0">
+        </div>
+        <div class="field">
+          <label>Equip. parado</label>
+          <input type="number" min="0" data-paralis4="${i}|equip" value="${escHtml(p.equip || '')}" placeholder="0">
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Detalhe ${p.motivo === 'Outro' ? '(obrigatório para "Outro")' : '(opcional)'}</label>
+          <input type="text" data-paralis4="${i}|obs" value="${escHtml(p.obs || '')}" placeholder="ex: Enel não removeu o poste da est. 112">
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px">
+        ${horasParalisacao(p) === null
+          ? 'Preencha início e fim para contar as horas paradas.'
+          : '<strong>' + fmtNum(horasParalisacao(p), 1) + ' h</strong> paradas' +
+            (MOTIVOS_PLEITEAVEIS.indexOf(p.motivo) === -1
+              ? ' · motivo interno da obra, não sustenta pleito de prazo'
+              : ' · motivo que sustenta pleito de prazo')}
+      </div>
+      <button class="btn-remove-custom" onclick="removerParalisacaoV4(${i})" title="Remover">×</button>
+    </div>`;
+
+  return `
+    <datalist id="frentesParalis">${frentes.map(f => `<option value="${escHtml(f)}">`).join('')}</datalist>
+    <div class="card stagger-item" style="animation-delay:.22s">
+      <div class="card-header" style="border-left:3px solid ${corBorda}">
+        <div>
+          <div class="card-title">Paralisações do turno ${turnoLabel}</div>
+          <div class="card-title-sub">${lista.length
+            ? lista.length + ' registro(s)' + (totalH > 0 ? ' · ' + fmtNum(totalH, 1) + ' h paradas no turno' : '')
+            : 'Só preencha se a obra parou — motivo, horário e frente viram anexo de pleito'}</div>
+        </div>
+        <button class="btn btn-sm btn-outline" onclick="adicionarParalisacaoV4()">+ Paralisação</button>
+      </div>
+      ${lista.length ? `<div class="card-body">${lista.map(linha).join('')}</div>` : ''}
+    </div>`;
+}
+
+window.adicionarParalisacaoV4 = function () {
+  const td = DIARIO_V4[DIARIO_TURNO_ATIVO];
+  if (!Array.isArray(td.paralisacoes)) td.paralisacoes = [];
+  td.paralisacoes.push(paralisacaoVazia());
+  saveDiarioV4(DIARIO_V4);
+  transitionTo(render);
+};
+
+window.removerParalisacaoV4 = function (i) {
+  const td = DIARIO_V4[DIARIO_TURNO_ATIVO];
+  (td.paralisacoes || []).splice(i, 1);
+  saveDiarioV4(DIARIO_V4);
+  transitionTo(render);
+};
+
 function attachRDODiarioV4Form() {
   const dataInput = document.querySelector('[data-diario4-data]');
   if (dataInput) {
@@ -12625,6 +13997,20 @@ function attachRDODiarioV4Form() {
       td.equipamentos[el.dataset.equip4] = el.value;
       saveDiarioV4(DIARIO_V4);
     };
+  });
+
+  /* Paralisação. Trocar o MOTIVO redesenha o cartão (é o motivo que decide se
+     o detalhe é obrigatório e se a parada sustenta pleito); os outros campos
+     só gravam, senão o cursor sairia da caixa a cada tecla digitada. */
+  document.querySelectorAll('[data-paralis4]').forEach(el => {
+    const [i, campo] = el.dataset.paralis4.split('|');
+    const grava = () => {
+      if (!Array.isArray(td.paralisacoes) || !td.paralisacoes[i]) return;
+      td.paralisacoes[i][campo] = el.value;
+      saveDiarioV4(DIARIO_V4);
+    };
+    if (campo === 'motivo') el.onchange = () => { grava(); transitionTo(render); };
+    else el.oninput = el.onchange = grava;
   });
   
   document.querySelectorAll('[data-equipcustom4]').forEach(el => {
@@ -12700,7 +14086,16 @@ async function salvarDiarioV4() {
   if (!td.apontador || !td.apontador.trim()) {
     toast('Apontador obrigatório pra salvar', 'error', 0); return;
   }
-  
+
+  /* "Outro" sem descrição não é motivo — é uma parada sem causa registrada,
+     que na hora do pleito não sustenta nada. Barra antes de subir. */
+  const outroSemTexto = paralisacoesValidas(td.paralisacoes)
+    .some(p => p.motivo === 'Outro' && !String(p.obs || '').trim());
+  if (outroSemTexto) {
+    toast('Paralisação com motivo "Outro" precisa do detalhe escrito — sem ele a parada não sustenta pleito.', 'error', 8000);
+    return;
+  }
+
   const btn = document.getElementById('btnSalvarDiarioV4');
   const original = btn.innerHTML;
   btn.disabled = true;
@@ -12728,7 +14123,19 @@ async function salvarDiarioV4() {
     custom_diurno: (d.diurno.customEquip || []).filter(e => e.label && e.label.trim()),
     custom_noturno: (d.noturno.customEquip || []).filter(e => e.label && e.label.trim()),
   };
-  
+  const paralisacoesJSON = {
+    diurno: paralisacoesValidas(d.diurno.paralisacoes),
+    noturno: paralisacoesValidas(d.noturno.paralisacoes),
+  };
+  const totalParalis = paralisacoesJSON.diurno.length + paralisacoesJSON.noturno.length;
+  /* A coluna `paralisado_motivo` da planilha existe desde o começo e o app
+     sempre a gravou vazia. Agora ela recebe o resumo legível — quem lê a
+     planilha direto (ou uma automação antiga) vê a parada sem precisar
+     entender o JSON ao lado. */
+  const motivosResumo = paralisacoesValidas(
+    paralisacoesJSON.diurno.concat(paralisacoesJSON.noturno)).map(p => p.motivo).join(' / ');
+
+
   const params = {
     action: existe ? 'updateRDODiario' : 'addRDODiario',
     obra: OBRA.id,          // de qual obra é este diário (todas na mesma aba)
@@ -12745,6 +14152,8 @@ async function salvarDiarioV4() {
     tem_turno_noturno: d.noturno.preenchido ? 'true' : 'false',
     efetivo_json: JSON.stringify(efetivoJSON),
     equipamentos_json: JSON.stringify(equipJSON),
+    paralisacoes_json: JSON.stringify(paralisacoesJSON),
+    paralisado_motivo: motivosResumo,
   };
   
   const descricaoFila = `RDO Diário · turno ${t} · ${d.data}`;
@@ -12759,7 +14168,8 @@ async function salvarDiarioV4() {
     // sempre, e por isso "existe rascunho" não podia significar nada. Agora
     // significa: rascunho presente = trabalho que ainda NÃO subiu.
     clearDiarioV4(d.data);
-    toast(`Turno ${t.toUpperCase()} salvo`, 'success', 4000);
+    toast(`Turno ${t.toUpperCase()} salvo` +
+          (totalParalis ? ` · ${totalParalis} paralisação(ões) registrada(s)` : ''), 'success', 4000);
     setTimeout(() => carregarTudo(), 1500);
     btn.disabled = false;
     btn.innerHTML = original;
@@ -12818,7 +14228,9 @@ function _gerarPDFDiario(data) {
       apontador_noturno: v4.noturno.apontador || '',
       clima_manha: v4.clima_manha, clima_tarde: v4.clima_tarde, clima_noite: v4.clima_noite,
       visitas: [v4.diurno.visitas, v4.noturno.visitas].filter(x=>x).join(' / ') || '',
-      ocorrencias: [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / ') || '',
+      ocorrencias: ocorrenciasComParalisacoes(
+        [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / '),
+        (v4.diurno.paralisacoes || []).concat(v4.noturno.paralisacoes || [])),
       observacoes_gerais: [v4.diurno.observacoes, v4.noturno.observacoes].filter(x=>x).join(' / ') || '',
       efetivo_diurno: v4.diurno.efetivo || {},
       efetivo_noturno: v4.noturno.efetivo || {},
@@ -12860,7 +14272,9 @@ function _gerarPDFDiario(data) {
       clima_tarde: getCSVField(fromSheet, 'Clima_Tarde') || getCSVField(fromSheet, 'clima_tarde') || '',
       clima_noite: getCSVField(fromSheet, 'Clima_Noite') || getCSVField(fromSheet, 'clima_noite') || '',
       visitas: getCSVField(fromSheet, 'Visitas') || getCSVField(fromSheet, 'visitas') || '',
-      ocorrencias: getCSVField(fromSheet, 'Ocorrencias') || getCSVField(fromSheet, 'ocorrencias') || '',
+      ocorrencias: ocorrenciasComParalisacoes(
+        getCSVField(fromSheet, 'Ocorrencias') || getCSVField(fromSheet, 'ocorrencias') || '',
+        paralisacoesDoDia(fromSheet)),
       observacoes_gerais: getCSVField(fromSheet, 'Observacoes_Gerais') || getCSVField(fromSheet, 'observacoes_gerais') || '',
       efetivo_diurno: efetivoDiurno,
       efetivo_noturno: efetivoNoturno,
@@ -13619,7 +15033,9 @@ async function _gerarPDFInterno(data, turnoFocus) {
       apontador_noturno: v4.noturno.apontador || '',
       clima_manha: v4.clima_manha, clima_tarde: v4.clima_tarde, clima_noite: v4.clima_noite,
       visitas: [v4.diurno.visitas, v4.noturno.visitas].filter(x=>x).join(' / ') || '',
-      ocorrencias: [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / ') || '',
+      ocorrencias: ocorrenciasComParalisacoes(
+        [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / '),
+        (v4.diurno.paralisacoes || []).concat(v4.noturno.paralisacoes || [])),
       observacoes_gerais: [v4.diurno.observacoes, v4.noturno.observacoes].filter(x=>x).join(' / ') || '',
       efetivo_diurno: v4.diurno.efetivo || {},
       efetivo_noturno: v4.noturno.efetivo || {},
@@ -13654,7 +15070,8 @@ async function _gerarPDFInterno(data, turnoFocus) {
       clima_tarde: getCSVField(fromSheet, 'Clima_Tarde') || '',
       clima_noite: getCSVField(fromSheet, 'Clima_Noite') || '',
       visitas: getCSVField(fromSheet, 'Visitas') || '',
-      ocorrencias: getCSVField(fromSheet, 'Ocorrencias') || '',
+      ocorrencias: ocorrenciasComParalisacoes(
+      getCSVField(fromSheet, 'Ocorrencias') || '', paralisacoesDoDia(fromSheet)),
       observacoes_gerais: getCSVField(fromSheet, 'Observacoes_Gerais') || '',
       efetivo_diurno: efetivoDiurnoInt,
       efetivo_noturno: efetivoNoturnoInt,
