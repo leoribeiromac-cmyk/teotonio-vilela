@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=30"></script>
-<script src="dados/ruas-de-terra.js?v=30"></script>
+<script src="dados/ranario.js?v=31"></script>
+<script src="dados/ruas-de-terra.js?v=31"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=30"></script>
+<script src="dados/teotonio-muros.js?v=31"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=30"></script>
-<script src="js/nf/adaptador.js?v=30"></script>
-<script src="js/nf/notas.js?v=30"></script>
-<script src="js/equip/equipamentos.js?v=30"></script>
+<script src="js/ui/icones.js?v=31"></script>
+<script src="js/nf/adaptador.js?v=31"></script>
+<script src="js/nf/notas.js?v=31"></script>
+<script src="js/equip/equipamentos.js?v=31"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -5281,11 +5281,62 @@ function calcularConsumoItens(avanco) {
         out[chave] = {
           item, itemPlanilha, descricao: desc,
           unidadeItem: getCSVField(c, 'Unid Item') || '',
+          /* QUANTIDADE CONTRATUAL — coluna OPCIONAL `Qtd Contratual` na aba
+             Coeficientes. Ela já existe na Planilha Geral do .xlsm; aqui só
+             precisa ser publicada. Sem ela fica 0 e a tela se comporta como
+             antes: nenhuma linha some, nenhuma conta muda. Com ela, a prévia
+             passa a saber o SALDO — que é o que impede exportar acima do
+             contrato sem ninguém ver. */
+          qtdContratual: 0,
           consumido: 0, pacotes: []
         };
       }
+      /* Se mais de uma linha da matriz aponta o mesmo item, vale a MAIOR
+         quantidade contratual declarada: divergência entre elas é erro de
+         digitação na planilha, e pegar a maior evita acusar estouro falso. */
+      const qc = num(getCSVField(c, 'Qtd Contratual') || getCSVField(c, 'Qtd_Contratual'));
+      if (qc > out[chave].qtdContratual) out[chave].qtdContratual = qc;
       out[chave].consumido += consumo;
       out[chave].pacotes.push(`${getCSVField(a.pacote, 'Pacote')} × ${coef}`);
+    });
+  });
+  return out;
+}
+
+/* --------------------------------------------------------------------
+   O CONSUMO DE UM MÊS, COM ACUMULADO E SALDO
+   --------------------------------------------------------------------
+   A prévia mostrava só o consumido no período e mais nada: sem quantidade
+   contratual, sem acumulado dos meses anteriores, sem saldo. Dava para
+   exportar acima do contrato sem um aviso — e é essa prévia que vira a
+   coluna do mês na Planilha Geral.
+
+   Aqui os três números aparecem juntos: o que foi consumido NO MÊS, o que
+   já vinha ANTES dele, e quanto sobra do contrato depois dos dois.
+   -------------------------------------------------------------------- */
+function consumoComSaldo(mes) {
+  const doMes = calcularConsumoItens(calcularAvancoPorPacote(rdosDoMes(mes), STATE.pacotes));
+  // "Antes" = tudo que foi executado até o fim do mês anterior. Sem filtro de
+  // mês (obra inteira) não existe "antes": o próprio período já é tudo.
+  const anteriores = mes
+    ? calcularConsumoItens(calcularAvancoPorPacote(
+        (STATE.rdoavanco || []).filter(r => {
+          const d = parseISODate(getCSVField(r, 'Data'));
+          return d && getLocalISODate(d).slice(0, 7) < mes;
+        }), STATE.pacotes))
+    : {};
+
+  const out = {};
+  Object.keys(doMes).forEach(k => {
+    const x = doMes[k];
+    const antes = anteriores[k] ? anteriores[k].consumido : 0;
+    const acumulado = antes + x.consumido;
+    out[k] = Object.assign({}, x, {
+      anterior: antes,
+      acumulado,
+      saldo: x.qtdContratual > 0 ? x.qtdContratual - acumulado : null,
+      pctContrato: x.qtdContratual > 0 ? acumulado / x.qtdContratual : null,
+      estourou: x.qtdContratual > 0 && acumulado > x.qtdContratual + 0.0001,
     });
   });
   return out;
@@ -9978,21 +10029,32 @@ function avisoDuplicadasMedicao() {
 }
 
 window.exportarMedicaoCSV = function() {
-  const consumo = consumoMedicao();
+  const consumo = consumoComSaldo(MEDICAO_MES);
   const lista = Object.values(consumo).filter(x => x.consumido > 0)
     // Mesmo código em capítulos diferentes: o nº do item desempata, para as
     // duas linhas saírem sempre na mesma ordem de uma exportação à outra.
     .sort((a, b) => String(a.item).localeCompare(String(b.item), 'pt-BR', { numeric: true })
                  || String(a.itemPlanilha || '').localeCompare(String(b.itemPlanilha || ''), 'pt-BR', { numeric: true }));
   if (lista.length === 0) { toast('Nada a exportar neste período.', 'info'); return; }
-  const header = ['Item_Planilha', 'Codigo', 'Descricao', 'Unid', 'Qtd_Consumida', 'Periodo', 'Pacotes_Origem'];
+  // decimal com vírgula, sem separador de milhar — cola direto no Excel pt-BR
+  const dec = n => (n === null || n === undefined) ? ''
+    : String((Math.round(n * 100) / 100).toFixed(2)).replace('.', ',');
+  /* As colunas de contrato só entram quando a aba Coeficientes declara
+     `Qtd Contratual`. Sem ela o CSV sai idêntico ao de antes — quem já tem
+     uma planilha montada em cima deste arquivo não perde as colunas. */
+  const temContrato = lista.some(x => x.qtdContratual > 0);
+  const header = ['Item_Planilha', 'Codigo', 'Descricao', 'Unid', 'Qtd_Consumida']
+    .concat(temContrato ? ['Acum_Anterior', 'Acumulado', 'Qtd_Contratual', 'Saldo', 'Pct_Contrato', 'Acima_do_Contrato'] : [])
+    .concat(['Periodo', 'Pacotes_Origem']);
   const rows = lista.map(x => [
-    x.itemPlanilha || '', x.item, x.descricao, x.unidadeItem,
-    // decimal com vírgula, sem separador de milhar — cola direto no Excel pt-BR
-    String((Math.round(x.consumido * 100) / 100).toFixed(2)).replace('.', ','),
+    x.itemPlanilha || '', x.item, x.descricao, x.unidadeItem, dec(x.consumido),
+  ].concat(temContrato ? [
+    dec(x.anterior), dec(x.acumulado), x.qtdContratual > 0 ? dec(x.qtdContratual) : '',
+    dec(x.saldo), x.pctContrato === null ? '' : dec(x.pctContrato * 100), x.estourou ? 'SIM' : '',
+  ] : []).concat([
     MEDICAO_MES || 'obra inteira',
     x.pacotes.join(' + ')
-  ].map(v => `"${String(v).replace(/"/g, '""')}"`));
+  ]).map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`));
   const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -10005,8 +10067,12 @@ window.exportarMedicaoCSV = function() {
 };
 
 function renderMedicao(){
-  const consumo=consumoMedicao();
+  const consumo=consumoComSaldo(MEDICAO_MES);
   const lista=Object.values(consumo).filter(x=>x.consumido>0).sort((a,b)=>b.consumido-a.consumido);
+  // Só faz sentido mostrar saldo se ALGUM item declarou quantidade contratual.
+  // Sem a coluna publicada, a tabela fica exatamente como era.
+  const temContrato = lista.some(x => x.qtdContratual > 0);
+  const estourados = lista.filter(x => x.estourou);
 
   const mesesSet = new Set();
   STATE.rdoavanco.forEach(r => {
@@ -10020,7 +10086,24 @@ function renderMedicao(){
     return l.charAt(0).toUpperCase() + l.slice(1);
   };
 
-  return avisoDuplicadasMedicao() + `<div class="card stagger-item">
+  /* ITEM ACIMA DO CONTRATO. Antes a prévia deixava exportar quantidade acima
+     do contratado sem um aviso — e é dela que sai a coluna do mês da Planilha
+     Geral. Não bloqueia: medir acima do contrato acontece de verdade e é o
+     que dispara aditivo. Mas tem de estar na cara de quem fecha o mês. */
+  const avisoEstouro = estourados.length ? `<div class="card stagger-item" style="border-left:3px solid var(--red)">
+    <div class="card-body">
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px">
+        ${estourados.length} item acima da quantidade contratual</div>
+      <div style="font-size:12px;color:var(--muted);line-height:1.5">
+        O acumulado da obra já passou do contratado. Confira antes de fechar o mês —
+        quantidade acima do contrato pede aditivo, não medição.<br>
+        ${estourados.slice(0, 8).map(x => `<span class="t-mono" style="font-size:11px">${escHtml(x.item)}${x.itemPlanilha ? ' (' + escHtml(x.itemPlanilha) + ')' : ''}: ${fmtNum(x.acumulado)} de ${fmtNum(x.qtdContratual)} ${escHtml(x.unidadeItem)}</span>`).join('<br>')}
+        ${estourados.length > 8 ? '<br>…' : ''}
+      </div>
+    </div>
+  </div>` : '';
+
+  return avisoDuplicadasMedicao() + avisoEstouro + `<div class="card stagger-item">
     <div class="card-header">
       <div><div class="card-title">Prévia de medição — consumo por item contratual</div><div class="card-title-sub">RDOs × matriz de coeficientes · filtre o mês da medição e exporte o CSV para conferir contra a Planilha Geral</div></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -10034,11 +10117,11 @@ function renderMedicao(){
     </div>
     <div class="card-body flush">
       ${lista.length===0?`<div class="empty"><div class="empty-icon">${ic('medicao')}</div><div class="empty-title">Nada consumido neste período</div><div class="empty-sub">Lance RDOs com pacote e quantidade (ou mude o mês do filtro) para ver os itens contratuais derivados.</div></div>`:`
-      <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">Consumido</th><th>Pacotes</th></tr></thead>
+      <table class="t"><thead><tr><th>Código</th><th>Descrição</th><th>Unid</th><th class="t-num">No período</th>${temContrato ? '<th class="t-num">Acum. anterior</th><th class="t-num">Acumulado</th><th class="t-num">Contratual</th><th class="t-num">Saldo</th><th class="t-num">% contrato</th>' : ''}<th>Pacotes</th></tr></thead>
       <!-- Tudo que vem da planilha passa por escHtml: o código, a descrição e a
            unidade do item são digitados à mão na aba Coeficientes, e um "<" ali
            quebrava a tabela da medição (ou pior, injetava marcação na tela). -->
-      <tbody>${lista.map((x,i)=>`<tr><td class="t-mono"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${escHtml(x.descricao)}</td><td class="t-mono">${escHtml(x.unidadeItem)}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td><td style="font-size:11px;color:var(--muted)">${escHtml(x.pacotes.join(' + '))}</td></tr>`).join('')}</tbody>
+      <tbody>${lista.map((x,i)=>`<tr${x.estourou?' style="background:rgba(220,80,70,.08)"':''}><td class="t-mono"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${escHtml(x.descricao)}</td><td class="t-mono">${escHtml(x.unidadeItem)}</td><td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td>${temContrato?`<td class="t-num" style="color:var(--muted)">${x.anterior?fmtNum(x.anterior):'—'}</td><td class="t-num">${fmtNum(x.acumulado)}</td><td class="t-num t-mono">${x.qtdContratual>0?fmtNum(x.qtdContratual):'—'}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.saldo===null?'—':fmtNum(x.saldo)}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.pctContrato===null?'—':fmtPct(x.pctContrato)}</td>`:''}<td style="font-size:11px;color:var(--muted)">${escHtml(x.pacotes.join(' + '))}</td></tr>`).join('')}</tbody>
       </table>`}
     </div>
   </div>`;
