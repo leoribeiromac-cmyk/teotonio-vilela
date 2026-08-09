@@ -1517,10 +1517,18 @@ function upsertRDODiario(p, deveExistir) {
 
   garantirColuna(aba, 'obra');   // antes de ler o cabeçalho, para já vir nele
   garantirColuna(aba, 'numero_rdo');  // o número que a fiscalização lê, por obra
-  // Paralisação estruturada (motivo, horário, frente, efetivo e equipamento
-  // parados). A coluna `paralisado_motivo` da aba de avanço guarda o resumo
-  // legível; esta guarda o registro que a tela de Dias Improdutivos soma.
+  /* Paralisação estruturada (motivo, horário, frente, efetivo e equipamento
+     parados). São DUAS colunas com papéis diferentes:
+       `paralisacoes_json`  o registro que a tela de Dias Improdutivos soma;
+       `paralisado_motivo`  o resumo legível, para quem lê a planilha direto.
+
+     A segunda precisa ser garantida aqui. `upsertRDODiario` grava por NOME DE
+     COLUNA: parâmetro que não encontra coluna correspondente é descartado sem
+     erro nenhum. Sem esta linha, o motivo da parada era digitado pelo
+     apontador, subia na requisição e sumia em silêncio na planilha — o mesmo
+     modo de falha que esta versão inteira foi feita para acabar. */
   garantirColuna(aba, 'paralisacoes_json');
+  garantirColuna(aba, 'paralisado_motivo');
     var cab = cabecalhoNormalizado(aba);
     var iData = idxColuna(cab, 'data');
     var iTurno = idxColuna(cab, 'turno');
