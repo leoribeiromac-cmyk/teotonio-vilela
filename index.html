@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=28"></script>
-<script src="dados/ruas-de-terra.js?v=28"></script>
+<script src="dados/ranario.js?v=29"></script>
+<script src="dados/ruas-de-terra.js?v=29"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=28"></script>
+<script src="dados/teotonio-muros.js?v=29"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=28"></script>
-<script src="js/nf/adaptador.js?v=28"></script>
-<script src="js/nf/notas.js?v=28"></script>
-<script src="js/equip/equipamentos.js?v=28"></script>
+<script src="js/ui/icones.js?v=29"></script>
+<script src="js/nf/adaptador.js?v=29"></script>
+<script src="js/nf/notas.js?v=29"></script>
+<script src="js/equip/equipamentos.js?v=29"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -3877,19 +3877,19 @@ const PERFIS = {
   administrativo: {
     nome: 'Administrativo',
     desc: 'Escritório — acompanha, confere e exporta',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
     pode: ['exportar', 'relatorio', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'saidaEstoque']
   },
   engenharia: {
     nome: 'Engenharia',
     desc: 'Engenheiro da obra — lança, confere e analisa',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
     pode: ['lancarServico', 'lancarDiario', 'editar', 'exportar', 'relatorio', 'analiseIA', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque']
   },
   diretoria: {
     nome: 'Diretoria',
     desc: 'Consulta — acompanha sem lançar',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'analista', 'historico', 'galeria', 'projetos', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'analista', 'historico', 'galeria', 'projetos', 'notas'],
     pode: ['exportar', 'relatorio', 'analiseIA']
   },
   admin: { nome: 'Administrador', desc: 'Acesso completo', telas: '*', pode: '*' }
@@ -3947,7 +3947,7 @@ function podeEditar(reg) { return podeExcluir(reg) || pode('editar'); }
 function telaBloqueada(tela) {
   const nomes = {
     executivo: 'o Painel Executivo', avancofisico: 'o Avanço Físico', cronograma: 'o Cronograma',
-    medicao: 'o Apoio à Medição', analista: 'o Analista IA', rdo: 'o lançamento de serviços',
+    medicao: 'o Apoio à Medição', improdutivos: 'os Dias Improdutivos', analista: 'o Analista IA', rdo: 'o lançamento de serviços',
     rdodiario: 'o RDO Diário', historico: 'o Histórico', usuarios: 'a gestão de usuários',
     equip: 'os Equipamentos', galeria: 'a Galeria de Fotos', notas: 'as Notas Fiscais',
     projetos: 'os Projetos'
@@ -5405,6 +5405,7 @@ function renderShell() {
           { id: 'avancofisico', icone: 'avanco',     texto: 'Avanço Físico' },
           { id: 'cronograma',   icone: 'cronograma', texto: 'Cronograma' },
           { id: 'medicao',      icone: 'medicao',    texto: 'Apoio Medição' },
+          { id: 'improdutivos', icone: 'nuvem',      texto: 'Dias Improdutivos' },
           { id: 'analista',     icone: 'ia',         texto: 'Analista IA' },
         ])}
 
@@ -5619,6 +5620,7 @@ function render() {
     avancofisico: ['Avanço Físico', 'Pacotes, mapa de estacas e produtividade'],
     cronograma: ['Cronograma', 'Planejamento reverso · quando iniciar cada saldo'],
     medicao: ['Apoio à Medição', 'Consumo derivado por item contratual'],
+    improdutivos: ['Dias Improdutivos', 'Chuva medida × clima apontado × serviço lançado'],
     analista: ['Analista IA', 'Resumo inteligente da obra'],
     rdo: ['Lançar Serviço', 'Registra serviços executados · grava em RDO_Avanco'],
     rdodiario: ['RDO Diário', 'Cabeçalho do dia · efetivo, equipamentos, clima'],
@@ -5656,6 +5658,7 @@ function render() {
   else if (STATE.currentPage === 'avancofisico') pageEl.innerHTML = renderAvancoFisico();
   else if (STATE.currentPage === 'cronograma') pageEl.innerHTML = renderCronograma();
   else if (STATE.currentPage === 'medicao') pageEl.innerHTML = renderMedicao();
+  else if (STATE.currentPage === 'improdutivos') pageEl.innerHTML = renderImprodutivos();
   else if (STATE.currentPage === 'analista') pageEl.innerHTML = renderAnalistaIA();
   else if (STATE.currentPage === 'rdo') { pageEl.innerHTML = renderRDO(); attachRDOForm(); }
   else if (STATE.currentPage === 'rdodiario') { pageEl.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
@@ -9759,6 +9762,214 @@ function renderMedicao(){
   </div>`;
 }
 
+/* ====================================================================
+   VIEW: DIAS IMPRODUTIVOS — o pleito de prazo que já estava pago
+   --------------------------------------------------------------------
+   O gatilho `registrarClimaAuto()` do Code.gs grava TODO DIA, na aba
+   RDO_Diario, as colunas `Chuva_mm_Auto` e `Clima_Fonte` — chuva medida
+   por estação oficial, que o README chama de "contraprova objetiva, base
+   para pleitos de prazo".
+
+   O app nunca leu nenhuma das duas. O milímetro medido estava guardado há
+   meses e não aparecia em tela nenhuma, não entrava no RDO e não virava
+   documento. Esta tela é só a leitura do que já existe.
+
+   Reúne, por mês: o clima apontado pelo apontador nos três períodos, a
+   chuva MEDIDA com a fonte, se houve RDO, quantos serviços foram lançados
+   e quais equipamentos pararam por chuva. No pé, os totais que o pleito
+   precisa citar.
+   ==================================================================== */
+let IMPROD_MES = '';
+window.setImprodMes = function (m) { IMPROD_MES = m; transitionTo(render); };
+
+/* Chuva medida na estação, em mm, para uma data. '' quando o robô ainda não
+   passou por aquele dia (a coluna nasce vazia no histórico anterior a ele). */
+function chuvaMedidaDe(reg) {
+  const v = getCSVField(reg, 'Chuva_mm_Auto') || getCSVField(reg, 'chuva_mm_auto');
+  if (v === '' || v == null) return null;
+  const n = num(v);
+  return isFinite(n) ? n : null;
+}
+function fonteClimaDe(reg) {
+  return getCSVField(reg, 'Clima_Fonte') || getCSVField(reg, 'clima_fonte') || '';
+}
+
+/* Um dia é IMPRODUTIVO quando é dia útil, não teve serviço lançado, e há
+   uma causa registrada — chuva medida, clima de chuva apontado, ou parada
+   de equipamento por chuva. Sem causa registrada ele entra como "sem RDO",
+   que é outra conversa (é falha de apontamento, não pleito). */
+function calcDiasImprodutivos(mes) {
+  const porData = {};
+  (STATE.rdodiario || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d) porData[getLocalISODate(d)] = r;
+  });
+  const servicosPorData = {};
+  (STATE.rdoavanco || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (!d) return;
+    const k = getLocalISODate(d);
+    servicosPorData[k] = (servicosPorData[k] || 0) + 1;
+  });
+  // paradas de equipamento por chuva, do módulo js/equip
+  const paradasChuva = {};
+  try {
+    ((window.EQUIP && EQUIP.apontamentos) || []).forEach(a => {
+      const k = String(normalizarDataCSV(a.data) || '').slice(0, 10);
+      if (!k) return;
+      const txt = JSON.stringify(a).toLowerCase();
+      if (txt.includes('chuva')) paradasChuva[k] = (paradasChuva[k] || 0) + 1;
+    });
+  } catch (e) {}
+
+  const ano = parseInt(mes.slice(0, 4), 10);
+  const m = parseInt(mes.slice(5, 7), 10);
+  if (!ano || !m) return { dias: [], totais: {} };
+  const ultimo = new Date(ano, m, 0).getDate();
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+
+  const dias = [];
+  for (let dia = 1; dia <= ultimo; dia++) {
+    const d = new Date(ano, m - 1, dia);
+    if (d > hoje) break;
+    const iso = getLocalISODate(d);
+    const reg = porData[iso];
+    const chuvaMm = reg ? chuvaMedidaDe(reg) : null;
+    const climas = reg ? [getCSVField(reg, 'Clima_Manha'), getCSVField(reg, 'Clima_Tarde'), getCSVField(reg, 'Clima_Noite')]
+      .map(x => String(x || '').trim()).filter(Boolean) : [];
+    const climaChuvoso = climas.some(c => /chuva|garoa/i.test(c));
+    const servicos = servicosPorData[iso] || 0;
+    const util = ehDiaUtil(d);
+    const temCausa = (chuvaMm != null && chuvaMm > 0) || climaChuvoso || (paradasChuva[iso] > 0);
+    dias.push({
+      iso, d, util,
+      diaSemana: ['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'][d.getDay()],
+      temRDO: !!reg, climas, climaChuvoso,
+      chuvaMm, fonte: reg ? fonteClimaDe(reg) : '',
+      servicos, paradasChuva: paradasChuva[iso] || 0,
+      improdutivo: util && servicos === 0 && temCausa,
+      semRDO: util && !reg,
+    });
+  }
+  const totais = {
+    diasUteis: dias.filter(x => x.util).length,
+    improdutivos: dias.filter(x => x.improdutivo).length,
+    semRDO: dias.filter(x => x.semRDO).length,
+    comChuvaMedida: dias.filter(x => x.chuvaMm != null && x.chuvaMm > 0).length,
+    mmAcumulado: dias.reduce((s, x) => s + (x.chuvaMm || 0), 0),
+    semMedicao: dias.filter(x => x.util && x.chuvaMm == null).length,
+  };
+  return { dias, totais };
+}
+
+function renderImprodutivos() {
+  const mesesSet = new Set();
+  (STATE.rdodiario || []).concat(STATE.rdoavanco || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d) mesesSet.add(getLocalISODate(d).slice(0, 7));
+  });
+  const meses = [...mesesSet].sort().reverse();
+  if (!IMPROD_MES) IMPROD_MES = meses[0] || getLocalISODate(new Date()).slice(0, 7);
+
+  const { dias, totais } = calcDiasImprodutivos(IMPROD_MES);
+  const labelMes = m => {
+    const d = new Date(m + '-01T12:00:00');
+    const l = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
+    return l.charAt(0).toUpperCase() + l.slice(1);
+  };
+
+  const semNenhumaMedicao = totais.semMedicao === totais.diasUteis && totais.diasUteis > 0;
+
+  return `
+  <div class="card stagger-item">
+    <div class="card-header">
+      <div>
+        <div class="card-title">Dias improdutivos — ${escHtml(labelMes(IMPROD_MES))}</div>
+        <div class="card-title-sub">Chuva medida por estação oficial × clima apontado × serviço lançado — a base de um pleito de prazo</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select onchange="setImprodMes(this.value)" style="padding:6px 10px;border:1px solid var(--border-strong);border-radius:var(--r-sm);background:var(--bg);font-family:inherit;font-size:12px;font-weight:500">
+          ${meses.map(m => `<option value="${m}" ${IMPROD_MES === m ? 'selected' : ''}>${escHtml(labelMes(m))}</option>`).join('')}
+        </select>
+        <button class="btn btn-outline btn-sm" onclick="exportarImprodutivosCSV()">${ic('baixar')} CSV</button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px">
+        ${[['Dias úteis', totais.diasUteis, ''],
+           ['Improdutivos', totais.improdutivos, 'var(--red)'],
+           ['Com chuva medida', totais.comChuvaMedida, ''],
+           ['Chuva acumulada', fmtNum(totais.mmAcumulado) + ' mm', ''],
+           ['Dias úteis sem RDO', totais.semRDO, totais.semRDO ? 'var(--red)' : '']]
+          .map(([r, v, cor]) => `<div>
+            <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${r}</div>
+            <div style="font-size:22px;font-weight:700${cor ? ';color:' + cor : ''}">${v}</div>
+          </div>`).join('')}
+      </div>
+      ${semNenhumaMedicao ? `<div style="margin-top:14px;font-size:12px;color:var(--muted);border-left:2px solid var(--border);padding-left:12px">
+        Nenhum dia do mês tem chuva medida. O robô <span class="t-mono">registrarClimaAuto</span> grava
+        <span class="t-mono">Chuva_mm_Auto</span> às 05h — se a coluna está vazia, ele ainda não rodou neste período
+        (rode <span class="t-mono">configurarGatilhos()</span> no editor do Apps Script).
+      </div>` : ''}
+    </div>
+  </div>
+
+  <div class="card stagger-item">
+    <div class="card-body flush">
+      <div class="tabela-rolagem" style="overflow-x:auto">
+      <table class="t"><thead><tr>
+        <th>Data</th><th>Dia</th><th class="t-num">Chuva medida</th><th>Fonte</th>
+        <th>Clima apontado</th><th class="t-num">Serviços</th><th class="t-num">Equip. parado</th><th>Situação</th>
+      </tr></thead><tbody>
+      ${dias.map(x => {
+        const sit = x.improdutivo ? '<span style="color:var(--red);font-weight:600">Improdutivo</span>'
+                  : x.semRDO ? '<span style="color:var(--wrn,#d69e2e);font-weight:600">Sem RDO</span>'
+                  : !x.util ? '<span style="color:var(--muted)">Não útil</span>'
+                  : '<span style="color:var(--grn,#2f855a)">Produtivo</span>';
+        return `<tr${x.improdutivo ? ' style="background:rgba(220,80,70,.06)"' : ''}>
+          <td class="t-mono">${escHtml(x.iso.split('-').reverse().join('/'))}</td>
+          <td style="font-size:12px">${escHtml(x.diaSemana)}</td>
+          <td class="t-num t-mono">${x.chuvaMm == null ? '<span style="color:var(--muted)">—</span>' : fmtNum(x.chuvaMm) + ' mm'}</td>
+          <td style="font-size:11px;color:var(--muted)">${escHtml(x.fonte || '—')}</td>
+          <td style="font-size:12px${x.climaChuvoso ? ';font-weight:600' : ''}">${escHtml(x.climas.join(' · ') || '—')}</td>
+          <td class="t-num">${x.servicos || '<span style="color:var(--muted)">0</span>'}</td>
+          <td class="t-num">${x.paradasChuva || '<span style="color:var(--muted)">—</span>'}</td>
+          <td>${sit}</td>
+        </tr>`;
+      }).join('')}
+      </tbody></table>
+      </div>
+    </div>
+  </div>`;
+}
+
+window.exportarImprodutivosCSV = function () {
+  const { dias, totais } = calcDiasImprodutivos(IMPROD_MES);
+  const dec = n => String(n).replace('.', ',');
+  const linhas = [['Data', 'Dia da semana', 'Dia util', 'Chuva medida (mm)', 'Fonte',
+                   'Clima apontado', 'Servicos lancados', 'Equip. parado por chuva', 'Situacao'].join(';')];
+  dias.forEach(x => linhas.push([
+    x.iso, x.diaSemana, x.util ? 'sim' : 'nao',
+    x.chuvaMm == null ? '' : dec(x.chuvaMm), x.fonte,
+    x.climas.join(' / '), x.servicos, x.paradasChuva,
+    x.improdutivo ? 'IMPRODUTIVO' : x.semRDO ? 'SEM RDO' : x.util ? 'produtivo' : 'nao util',
+  ].map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(';')));
+  linhas.push('');
+  linhas.push(['TOTAIS', '', '', '', '', '', '', '', ''].join(';'));
+  linhas.push(['Dias uteis', totais.diasUteis].join(';'));
+  linhas.push(['Dias improdutivos', totais.improdutivos].join(';'));
+  linhas.push(['Dias com chuva medida', totais.comChuvaMedida].join(';'));
+  linhas.push(['Chuva acumulada (mm)', dec(totais.mmAcumulado)].join(';'));
+  linhas.push(['Dias uteis sem RDO', totais.semRDO].join(';'));
+
+  const blob = new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `dias-improdutivos-${OBRA.id}-${IMPROD_MES}.csv`;
+  a.click();
+  toast('CSV de dias improdutivos gerado.', 'success', 3500);
+};
+
 // ====================================================================
 // VIEW: HISTÓRICO (com tabs Serviços | RDOs Diários)
 // ====================================================================
@@ -9785,14 +9996,41 @@ function renderHistorico() {
 
 // Filtros do histórico de serviços (não afetam edição/exclusão: o índice
 // canônico do registro no array revertido é preservado em cada linha).
-let HIST_FILTRO = { mes: '', frente: '', apontador: '' };
+/* `data` é o dia EXATO (o mês sozinho não alcança um lançamento específico
+   numa obra de 669 dias) e `busca` casa ID, estaca, pacote e observação —
+   que é como as pessoas procuram: pela estaca, não pela data. `limite` é a
+   paginação, no lugar do corte cego que existia em 100. */
+let HIST_FILTRO = { mes: '', frente: '', apontador: '', data: '', busca: '' };
+const HIST_PAGINA = 100;
+let HIST_LIMITE = HIST_PAGINA;
+
+window.histMostrarMais = function () {
+  HIST_LIMITE += HIST_PAGINA;
+  transitionTo(render);
+};
 
 window.setHistFiltro = function(campo, valor) {
   HIST_FILTRO[campo] = valor;
+  HIST_LIMITE = HIST_PAGINA;   // filtro novo recomeça a paginação
   transitionTo(render);
 };
+/* A busca livre é digitada: re-renderizar a cada tecla derrubaria o foco no
+   meio da palavra. Guarda o valor, espera parar de digitar e só então
+   redesenha, devolvendo o cursor para onde estava. */
+let _histBuscaTimer = null;
+window.setHistBusca = function(valor) {
+  HIST_FILTRO.busca = valor;
+  HIST_LIMITE = HIST_PAGINA;
+  clearTimeout(_histBuscaTimer);
+  _histBuscaTimer = setTimeout(() => {
+    transitionTo(render);
+    const el = document.getElementById('histBusca');
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, 350);
+};
 window.limparHistFiltro = function() {
-  HIST_FILTRO = { mes: '', frente: '', apontador: '' };
+  HIST_FILTRO = { mes: '', frente: '', apontador: '', data: '', busca: '' };
+  HIST_LIMITE = HIST_PAGINA;
   transitionTo(render);
 };
 
@@ -9830,7 +10068,9 @@ function renderHistoricoServicos() {
     const l = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
     return l.charAt(0).toUpperCase() + l.slice(1);
   };
-  const filtroAtivo = HIST_FILTRO.mes || HIST_FILTRO.frente || HIST_FILTRO.apontador;
+  const filtroAtivo = HIST_FILTRO.mes || HIST_FILTRO.frente || HIST_FILTRO.apontador
+                   || HIST_FILTRO.data || HIST_FILTRO.busca;
+  const termo = String(HIST_FILTRO.busca || '').trim().toLowerCase();
 
   // Mantém o índice canônico (posição no array revertido) e filtra depois,
   // para que os botões editar/apagar continuem apontando o registro certo.
@@ -9841,10 +10081,27 @@ function renderHistoricoServicos() {
         const d = parseISODate(getCSVField(r, 'Data'));
         if (!d || getLocalISODate(d).slice(0, 7) !== HIST_FILTRO.mes) return false;
       }
+      // Dia exato. Num contrato de 669 dias, "maio" ainda são 200 lançamentos.
+      if (HIST_FILTRO.data) {
+        const d = parseISODate(getCSVField(r, 'Data'));
+        if (!d || getLocalISODate(d) !== HIST_FILTRO.data) return false;
+      }
       if (HIST_FILTRO.apontador && getCSVField(r, 'Apontador') !== HIST_FILTRO.apontador) return false;
       if (HIST_FILTRO.frente) {
         const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
         if (frenteDoPacote(pid) !== HIST_FILTRO.frente) return false;
+      }
+      /* Busca livre. Quem procura um lançamento procura pela ESTACA ("E118"),
+         pelo pacote, por um trecho da observação — quase nunca pela data.
+         Antes não havia como chegar nele: a tela cortava nos 100 mais
+         recentes e o corte era aplicado DEPOIS do filtro. */
+      if (termo) {
+        const alvo = [
+          getCSVField(r, 'ID'), getCSVField(r, 'Pacote_ID'), getCSVField(r, 'Pacote_Nome'),
+          getCSVField(r, 'Local_Estaca'), getCSVField(r, 'Observações') || getCSVField(r, 'Observacoes'),
+          getCSVField(r, 'Equipe'), getCSVField(r, 'Apontador'), getCSVField(r, 'Data'),
+        ].join(' ').toLowerCase();
+        if (!alvo.includes(termo)) return false;
       }
       return true;
     });
@@ -9864,6 +10121,11 @@ function renderHistoricoServicos() {
         <option value="">Todos os apontadores</option>
         ${apontadores.map(a => `<option value="${escHtml(a)}" ${HIST_FILTRO.apontador===a?'selected':''}>${escHtml(a)}</option>`).join('')}
       </select>
+      <input type="date" value="${escHtml(HIST_FILTRO.data)}" onchange="setHistFiltro('data', this.value)"
+             title="Um dia exato" style="padding:6px 9px;font-size:13px;border:1px solid var(--border-strong);border-radius:6px">
+      <input type="search" id="histBusca" value="${escHtml(HIST_FILTRO.busca)}" oninput="setHistBusca(this.value)"
+             placeholder="Buscar estaca, pacote, observação…" autocomplete="off"
+             style="padding:6px 9px;font-size:13px;border:1px solid var(--border-strong);border-radius:6px;min-width:190px;flex:1">
       ${filtroAtivo ? `<div class="filter-clear" onclick="limparHistFiltro()">Limpar ${ic('fechar')}</div><span style="font-size:11px;color:var(--muted)">${visiveis.length} de ${rdos.length}</span>` : ''}
     </div>`;
 
@@ -9873,7 +10135,7 @@ function renderHistoricoServicos() {
   } else if (visiveis.length === 0) {
     bodyContent = '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum serviço com esses filtros</div><div class="empty-sub">Ajuste ou limpe os filtros acima.</div></div>';
   } else {
-    const tableRows = visiveis.slice(0, 100).map(({ r, i: idx }) => {
+    const tableRows = visiveis.slice(0, HIST_LIMITE).map(({ r, i: idx }) => {
       const id         = getCSVField(r, 'ID') || '';
       const dataVal    = getCSVField(r, 'Data') || '';
       const turno      = getCSVField(r, 'Turno') || 'Diurno';
@@ -10010,7 +10272,18 @@ function renderHistoricoServicos() {
         </tr>`;
     }).join('');
 
-    const moreText = visiveis.length > 100 ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">Mostrando 100 mais recentes de ${visiveis.length}${filtroAtivo?' (filtrados)':''}</td></tr>` : '';
+    /* PAGINAÇÃO DE VERDADE. Antes o corte era cego em 100 e não havia como
+       chegar no resto: o Histórico é a única tela de onde se edita e se apaga
+       um lançamento, então tudo que passasse dos 100 mais recentes ficava sem
+       conserto. E o corte era aplicado DEPOIS do filtro, então filtrar também
+       não destravava. */
+    const restam = visiveis.length - Math.min(HIST_LIMITE, visiveis.length);
+    const moreText = visiveis.length > HIST_LIMITE ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;padding:14px">
+        <button class="btn btn-outline btn-sm" onclick="histMostrarMais()">Mostrar mais ${Math.min(HIST_PAGINA, restam)}</button>
+        <div style="color:var(--muted);font-size:11px;margin-top:6px">mostrando ${Math.min(HIST_LIMITE, visiveis.length)} de ${visiveis.length}${filtroAtivo?' (filtrados)':''}</div>
+      </td></tr>` : (visiveis.length > HIST_PAGINA
+        ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">mostrando todos os ${visiveis.length}${filtroAtivo?' (filtrados)':''}</td></tr>`
+        : '');
 
     bodyContent = `
       <table class="t t-cartoes">
