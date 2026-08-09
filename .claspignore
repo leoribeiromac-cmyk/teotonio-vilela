@@ -1,0 +1,13 @@
+# O QUE VAI PARA O APPS SCRIPT
+#
+# O repositório inteiro NÃO é o projeto do Apps Script: o backend são dois
+# arquivos e o manifesto. Sem esta lista, `clasp push` tentaria mandar o
+# index.html de 800 KB, a pasta vendor e as pranchas junto.
+#
+# A sintaxe é a do clasp: primeiro exclui tudo, depois reabre exceção para
+# o que deve subir. A ordem importa.
+**/**
+
+!Code.gs
+!limpar_duplicados.gs
+!appsscript.json

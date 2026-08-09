@@ -76,6 +76,79 @@ O modelo de dados central: **pacotes físicos (P01–P36)** lançados no campo �
 > quando a coluna está vazia, e o próprio `upsertRDODiario` preenche a linha
 > assim que ela for tocada.
 
+## Implantar o backend sozinho
+
+Colar o `Code.gs` no editor e lembrar de **Implantar → Nova versão** é o passo
+mais fácil de esquecer da publicação. E quando ele é esquecido não aparece erro
+nenhum: o código fica salvo, o app continua chamando a versão velha, e a
+diferença só aparece quando alguém repara que uma funcionalidade "não veio".
+
+Dá para automatizar. São **dois caminhos** — escolha um.
+
+### Antes dos dois: a preparação (1×)
+
+1. Instale o `clasp`: `npm install -g @google/clasp@2.4.2`
+2. Ligue a API: acesse **https://script.google.com/home/usersettings** e ative
+   *API Google Apps Script*.
+3. Entre na conta: `clasp login`
+4. Descubra o **id do projeto**: no editor do Apps Script, ⚙ **Configurações do
+   projeto → IDs → ID do script**.
+5. Na raiz do repositório, crie o `.clasp.json` (ele é ignorado pelo git):
+   ```json
+   {"scriptId":"COLE-O-ID-AQUI","rootDir":"."}
+   ```
+6. **Traga o manifesto de verdade**: `clasp pull` — ele baixa o
+   `appsscript.json` do projeto (fuso, escopos de OAuth, configuração do app da
+   web). **Comite esse arquivo.** Ele nunca deve ser inventado: um manifesto
+   chutado reconfigura o backend em produção.
+   > Se o `clasp pull` trouxer algum `.gs` que não está no repositório, comite
+   > também — senão a implantação apagaria esse arquivo.
+7. Descubra o **id da implantação**: `clasp deployments`. Copie o id daquela
+   que é o app da web (a que corresponde à URL `/exec` que o app usa).
+
+> ⚠ **O id da implantação é o detalhe que mais importa.** `clasp deploy` sem
+> ele **não dá erro**: cria uma implantação nova, com uma URL `/exec` nova, e
+> devolve sucesso. O app continua falando com a URL antiga. Por isso os dois
+> caminhos abaixo **param** se o id faltar, em vez de publicar no vazio.
+
+### Caminho A — da sua máquina (a credencial não sai daqui)
+
+Guarde o id da implantação em `.appscript-deployment-id` (uma linha, também
+ignorado pelo git) e rode:
+
+```bash
+./ferramentas/implantar-appscript.sh                # implanta
+./ferramentas/implantar-appscript.sh --so-conferir  # confere e não publica
+```
+
+Antes de subir qualquer coisa ele confere a sintaxe do `Code.gs` e verifica se
+a implantação apagaria algum arquivo do projeto.
+
+### Caminho B — sozinho, a cada merge na main
+
+O fluxo `.github/workflows/implantar-appscript.yml` faz push + implantação
+quando o `Code.gs` muda na `main`. Precisa de **três segredos** em
+*Settings → Secrets and variables → Actions*:
+
+| Segredo | De onde sai |
+|---|---|
+| `CLASPRC_JSON` | o conteúdo inteiro do `~/.clasprc.json`, criado pelo `clasp login` |
+| `APPSCRIPT_SCRIPT_ID` | passo 4 acima |
+| `APPSCRIPT_DEPLOYMENT_ID` | passo 7 acima |
+
+Sem os três, o fluxo **não falha** — ele avisa que não está configurado e
+encerra, e o `Code.gs` segue sendo colado à mão.
+
+> ⚠ **Pese esta escolha.** O `CLASPRC_JSON` é um token de acesso à sua conta
+> Google: quem conseguir lê-lo consegue mexer nos seus projetos do Apps
+> Script. Guardado como segredo do GitHub ele não aparece nos registros, mas
+> passa a existir fora da sua máquina. Se isso incomodar, fique no caminho A —
+> ele resolve o mesmo esquecimento sem tirar a credencial do seu computador.
+
+`tests/implantacao.test.js` trava as armadilhas dos dois caminhos: implantação
+sempre com `-i`, conferência antes de apagar arquivo, manifesto vindo do
+projeto, e a credencial apagada no fim (inclusive quando a implantação falha).
+
 ## Colunas opcionais da planilha (o que liga cada tela nova)
 
 Nenhuma delas é obrigatória: sem a coluna, a tela correspondente continua
