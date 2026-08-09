@@ -1,0 +1,162 @@
+# IMPLANTAR O BACKEND NO APPS SCRIPT
+#
+# Colar o Code.gs à mão no editor e lembrar de "Nova versão → Implantar" é o
+# passo mais fácil de esquecer da publicação — e quando ele é esquecido o
+# código fica salvo mas o app continua chamando a versão velha, sem nenhum
+# sinal de que algo ficou para trás.
+#
+# Este fluxo faz os dois passos sozinho quando o Code.gs muda na main.
+#
+# ---------------------------------------------------------------------------
+# TRÊS CUIDADOS QUE ESTÃO CODIFICADOS AQUI, e por quê:
+#
+# 1. A MESMA URL. `clasp deploy` SEM `-i` cria uma implantação NOVA, com uma
+#    URL /exec nova — e o app inteiro aponta para a antiga. Seria uma obra
+#    parada por um deploy "bem-sucedido". Por isso o ID da implantação é
+#    obrigatório: sem ele o fluxo para, em vez de criar uma segunda.
+#
+# 2. NÃO APAGAR CÓDIGO. `clasp push -f` deixa o projeto igual à pasta local:
+#    arquivo que existe no Apps Script e não existe no repositório é APAGADO.
+#    Antes de empurrar, o fluxo baixa o projeto atual e compara — se achar um
+#    arquivo que só existe lá, ele para e diz o nome.
+#
+# 3. NÃO MEXER NO MANIFESTO. `appsscript.json` guarda fuso, escopos de OAuth e
+#    a configuração do app da web ("executar como", "quem tem acesso"). Ele
+#    tem de vir do projeto de verdade, via `clasp pull`, e nunca ser inventado
+#    aqui. Sem o arquivo no repositório, o fluxo para e explica.
+#
+# CONFIGURAÇÃO (1×) — ver README, seção "Implantar o backend sozinho".
+# Sem os segredos, este fluxo não falha: ele avisa que não está configurado e
+# encerra, para não deixar a lista de execuções vermelha por algo opcional.
+name: implantar-appscript
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Code.gs'
+      - 'limpar_duplicados.gs'
+      - 'appsscript.json'
+      - '.claspignore'
+      - '.github/workflows/implantar-appscript.yml'
+  workflow_dispatch:
+    inputs:
+      descricao:
+        description: 'Descrição da versão (aparece na lista de implantações)'
+        required: false
+        default: ''
+
+# Duas implantações ao mesmo tempo disputariam o mesmo projeto. A segunda
+# espera a primeira terminar.
+concurrency:
+  group: appscript
+  cancel-in-progress: false
+
+jobs:
+  implantar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Está configurado?
+        id: cfg
+        env:
+          CLASPRC: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ secrets.APPSCRIPT_SCRIPT_ID }}
+          DEPLOY_ID: ${{ secrets.APPSCRIPT_DEPLOYMENT_ID }}
+        run: |
+          faltando=""
+          [ -n "$CLASPRC" ]   || faltando="$faltando CLASPRC_JSON"
+          [ -n "$SCRIPT_ID" ] || faltando="$faltando APPSCRIPT_SCRIPT_ID"
+          [ -n "$DEPLOY_ID" ] || faltando="$faltando APPSCRIPT_DEPLOYMENT_ID"
+          if [ -n "$faltando" ]; then
+            echo "pronto=nao" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Implantação automática desligada::Faltam os segredos:$faltando — ver o README, seção \"Implantar o backend sozinho\". O Code.gs continua sendo colado à mão."
+          else
+            echo "pronto=sim" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: O manifesto tem de vir do projeto de verdade
+        if: steps.cfg.outputs.pronto == 'sim'
+        run: |
+          if [ ! -f appsscript.json ]; then
+            echo "::error title=Falta o appsscript.json::Ele guarda fuso, escopos e a configuração do app da web. Rode 'clasp pull' uma vez e comite o arquivo — inventar um aqui reconfiguraria o backend em produção."
+            exit 1
+          fi
+
+      - name: Instalar o clasp
+        if: steps.cfg.outputs.pronto == 'sim'
+        # Versão presa: a 3.x mudou o lugar do arquivo de credencial e a
+        # sintaxe dos comandos. Atualizar exige revisar este arquivo inteiro.
+        run: npm install -g @google/clasp@2.4.2
+
+      - name: Credencial e projeto
+        if: steps.cfg.outputs.pronto == 'sim'
+        env:
+          CLASPRC: ${{ secrets.CLASPRC_JSON }}
+          SCRIPT_ID: ${{ secrets.APPSCRIPT_SCRIPT_ID }}
+        run: |
+          printf '%s' "$CLASPRC" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          # `fileExtension: gs` é o que faz o clasp escrever .gs em vez de .js
+          # ao baixar. Sem isso, o projeto volta como Code.js e a conferência
+          # do passo seguinte acha que o Code.gs do repositório sumiu.
+          printf '{"scriptId":"%s","rootDir":".","fileExtension":"gs"}\n' "$SCRIPT_ID" > .clasp.json
+          clasp --version
+
+      - name: Nenhum arquivo do projeto vai ser apagado
+        if: steps.cfg.outputs.pronto == 'sim'
+        env:
+          SCRIPT_ID: ${{ secrets.APPSCRIPT_SCRIPT_ID }}
+        run: |
+          # Baixa o projeto que está no ar, numa pasta à parte, e compara com
+          # o que o repositório tem. `clasp push -f` apaga o que sobrar.
+          mkdir -p /tmp/atual
+          printf '{"scriptId":"%s","rootDir":".","fileExtension":"gs"}\n' "$SCRIPT_ID" > /tmp/atual/.clasp.json
+          ( cd /tmp/atual && clasp pull )
+
+          # Compara pelo NOME SEM EXTENSÃO. No Apps Script o arquivo não tem
+          # extensão — quem põe é o clasp ao baixar, e ele escreve .js ou .gs
+          # conforme a configuração. Comparar "Code.gs" com "Code.js" daria
+          # falso alarme e travaria toda implantação, sem nada de errado.
+          sobrando=""
+          for f in /tmp/atual/*.gs /tmp/atual/*.js /tmp/atual/*.html; do
+            [ -e "$f" ] || continue
+            nome=$(basename "$f")
+            raiz="${nome%.*}"
+            achou=0
+            for ext in gs js html; do
+              [ -e "$GITHUB_WORKSPACE/$raiz.$ext" ] && achou=1
+            done
+            [ "$achou" = "1" ] || sobrando="$sobrando $nome"
+          done
+
+          if [ -n "$sobrando" ]; then
+            echo "::error title=A implantação apagaria código::Estes arquivos existem no Apps Script e NÃO existem no repositório:$sobrando. Traga-os para o repositório (clasp pull) antes de ligar a implantação automática."
+            exit 1
+          fi
+          echo "Conferido: nada do projeto seria apagado."
+
+      - name: Empurrar o código
+        if: steps.cfg.outputs.pronto == 'sim'
+        run: clasp push -f
+
+      - name: Publicar a versão (mesma URL de sempre)
+        if: steps.cfg.outputs.pronto == 'sim'
+        env:
+          DEPLOY_ID: ${{ secrets.APPSCRIPT_DEPLOYMENT_ID }}
+          DESCRICAO: ${{ github.event.inputs.descricao }}
+        run: |
+          # O -i é o que mantém a URL /exec. Sem ele, nasceria uma implantação
+          # nova e o app continuaria falando com a antiga.
+          desc="${DESCRICAO:-$(git log -1 --pretty=%s)}"
+          clasp deploy -i "$DEPLOY_ID" -d "$desc"
+          echo "Implantado na mesma URL, versão: $desc"
+
+      - name: Limpar a credencial
+        if: always()
+        run: rm -f "$HOME/.clasprc.json" /tmp/atual/.clasprc.json .clasp.json

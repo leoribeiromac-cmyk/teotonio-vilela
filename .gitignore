@@ -1,3 +1,9 @@
 node_modules/
 tests/jornada.json
 tests/tela-*.png
+
+# Credencial do Google (clasp) e id do projeto — NUNCA versionar:
+# o .clasprc.json contém o token que dá acesso aos seus Apps Script.
+.clasprc.json
+.clasp.json
+.appscript-deployment-id
