@@ -144,6 +144,39 @@ jobs:
           fi
           echo "Conferido: nada do projeto seria apagado."
 
+          # ---------------------------------------------------------------
+          # É ESTE PROJETO MESMO?
+          # ---------------------------------------------------------------
+          # A conferência acima olha NOMES de arquivo. Só que uma conta do
+          # Google costuma ter vários projetos do Apps Script, e todos chamam
+          # o arquivo principal de `Code.gs`. Um scriptId trocado passa por
+          # ela sem levantar nada — e o push substitui um backend inteiro por
+          # outro, apagando um sistema que funcionava.
+          #
+          # Isto não é hipótese: na primeira configuração desta automação o
+          # scriptId apontava para o projeto "Equipamentos Teotonio - Base",
+          # cujo Code.gs tem 13 KB. O deste repositório tem 148 KB. Os nomes
+          # batiam, e só a leitura do conteúdo denunciou a troca.
+          #
+          # A marca é uma constante que existe no backend deste repositório e
+          # que nenhum outro projeto teria. Conferida dos DOIS lados: se
+          # alguém a renomear no Code.gs, esta guarda falha alto em vez de
+          # deixar de proteger em silêncio.
+          MARCA='NOME_ABA_DIARIO'
+          if ! grep -q "$MARCA" "$GITHUB_WORKSPACE/Code.gs"; then
+            echo "::error title=A marca de identificação sumiu do Code.gs::A guarda procura '$MARCA' para confirmar que o projeto remoto é este backend, e ela não está mais no arquivo local. Atualize a marca neste fluxo (e em ferramentas/implantar-appscript.sh) para algo que exista no Code.gs atual."
+            exit 1
+          fi
+          if [ -e /tmp/atual/Code.gs ] || [ -e /tmp/atual/Code.js ]; then
+            if ! grep -qs "$MARCA" /tmp/atual/Code.gs /tmp/atual/Code.js; then
+              echo "::error title=O scriptId aponta para OUTRO projeto::O Code.gs que está no Apps Script não contém '$MARCA' — ou seja, não é o backend deste repositório. Publicar aqui APAGARIA esse outro projeto. Confira APPSCRIPT_SCRIPT_ID: ele tem de ser o do projeto cujo /exec o index.html chama."
+              exit 1
+            fi
+            echo "Conferido: o projeto remoto é o backend deste repositório."
+          else
+            echo "Projeto remoto sem Code.gs — tratando como projeto novo."
+          fi
+
       - name: Empurrar o código
         if: steps.cfg.outputs.pronto == 'sim'
         run: clasp push -f

@@ -126,8 +126,24 @@ Dá para automatizar. São **dois caminhos** — escolha um.
    >
    > A 3.x aceita `clasp login --redirect-port 8888`, que fixa a porta em vez
    > de sortear uma — deixa o `curl` acima previsível.
-4. Descubra o **id do projeto**: no editor do Apps Script, ⚙ **Configurações do
-   projeto → IDs → ID do script**.
+4. Descubra o **id do projeto** — e confira que é o **projeto certo**.
+
+   > ⚠ Uma conta do Google costuma ter vários projetos do Apps Script, e todos
+   > chamam o arquivo principal de `Code.gs`. Na primeira configuração desta
+   > automação o id apontava para "Equipamentos Teotonio - Base" (um `Code.gs`
+   > de 13 KB) em vez do backend do RDO (148 KB). Publicar ali teria
+   > **substituído um backend inteiro pelo outro**.
+   >
+   > O jeito seguro de achar o certo: o `index.html` traz a URL que o app
+   > chama, em `CONFIG.appsScript` — algo como
+   > `https://script.google.com/macros/s/<ID-DA-IMPLANTAÇÃO>/exec`. O projeto
+   > procurado é o que tem **essa** implantação no `clasp deployments`.
+   >
+   > Confirmação rápida: o `clasp pull` do projeto certo traz um `Code.gs` com
+   > mais de 140 KB, contendo `NOME_ABA_DIARIO` e `function upsertRDODiario`.
+
+   Com o projeto certo aberto: ⚙ **Configurações do projeto → IDs → ID do
+   script**.
 5. Na raiz do repositório, crie o `.clasp.json` (ele é ignorado pelo git):
    ```json
    {"scriptId":"COLE-O-ID-AQUI","rootDir":".","fileExtension":"gs"}

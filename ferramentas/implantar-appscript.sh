@@ -60,8 +60,28 @@ for f in "$TMP"/*.gs "$TMP"/*.js "$TMP"/*.html; do
   [ "$achou" = "1" ] || SOBRANDO="$SOBRANDO $nome"
 done
 [ -z "$SOBRANDO" ] || erro "Estes arquivos existem no Apps Script e não no repositório:$SOBRANDO
-   'clasp push -f' apagaria os três. Traga-os com 'clasp pull' e comite antes de implantar."
+   'clasp push -f' apagaria todos. Traga-os com 'clasp pull' e comite antes de implantar."
 feito "Nada seria apagado."
+
+# É ESTE PROJETO MESMO? A conferência acima olha NOMES, e toda conta do Google
+# tem vários projetos do Apps Script chamando o arquivo principal de Code.gs.
+# Um scriptId trocado passa por ela sem levantar nada — e o push substitui um
+# backend inteiro por outro. Aconteceu de verdade na primeira configuração
+# desta automação: o id apontava para "Equipamentos Teotonio - Base".
+passo "Conferindo se o projeto remoto é o backend deste repositório…"
+MARCA='NOME_ABA_DIARIO'
+grep -q "$MARCA" Code.gs || erro "A marca '$MARCA' não está mais no Code.gs local.
+   Ela é o que confirma a identidade do projeto remoto. Atualize a marca aqui e
+   no .github/workflows/implantar-appscript.yml para algo que exista no arquivo."
+if [ -e "$TMP/Code.gs" ] || [ -e "$TMP/Code.js" ]; then
+  grep -qs "$MARCA" "$TMP/Code.gs" "$TMP/Code.js" || erro "O scriptId aponta para OUTRO projeto.
+   O Code.gs que está no Apps Script não contém '$MARCA' — não é o backend deste
+   repositório. Publicar apagaria esse outro projeto. Confira o scriptId no
+   .clasp.json: tem de ser o do projeto cujo /exec o index.html chama."
+  feito "É o backend certo."
+else
+  feito "Projeto remoto sem Code.gs — tratando como projeto novo."
+fi
 
 passo "Conferindo a sintaxe do Code.gs…"
 for arq in Code.gs limpar_duplicados.gs; do

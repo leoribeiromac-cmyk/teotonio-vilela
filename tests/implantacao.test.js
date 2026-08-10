@@ -113,6 +113,44 @@ console.log('\nCode.gs E Code.js SÃO O MESMO ARQUIVO');
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
+console.log('\nÉ ESTE PROJETO MESMO?');
+{
+  /* Aconteceu na primeira configuração desta automação: o scriptId apontava
+     para "Equipamentos Teotonio - Base" (Code.gs de 13 KB), não para o backend
+     do RDO (148 KB). A conferência de NOMES não pega — os dois projetos têm
+     Code.gs e appsscript.json — e o push teria trocado um backend inteiro pelo
+     outro, apagando um sistema que funcionava. Só ler o CONTEÚDO denuncia. */
+  const MARCA = 'NOME_ABA_DIARIO';
+  ok('a marca de identificação existe no Code.gs deste repositório',
+     ler('Code.gs').indexOf(MARCA) > -1, MARCA);
+  ok('o fluxo confere a marca no projeto remoto',
+     fluxo.indexOf(MARCA) > -1 && /OUTRO projeto/.test(fluxo));
+  ok('o script local também', script.indexOf(MARCA) > -1 && /OUTRO projeto/.test(script));
+  ok('e os dois falham alto se a marca sumir do Code.gs local',
+     /marca de identificação sumiu|marca '\$MARCA' não está mais/.test(fluxo + script));
+
+  // Roda a lógica de verdade contra os dois casos.
+  const { execFileSync } = require('child_process');
+  const os = require('os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'proj-'));
+  const certo = path.join(tmp, 'certo'), errado = path.join(tmp, 'errado');
+  fs.mkdirSync(certo); fs.mkdirSync(errado);
+  fs.writeFileSync(path.join(certo, 'Code.gs'), 'var ' + MARCA + " = 'RDO_Diario';");
+  fs.writeFileSync(path.join(errado, 'Code.gs'), '// Motor do app de Equipamentos');
+
+  const testa = dir => {
+    try {
+      execFileSync('bash', ['-c',
+        `if [ -e ${dir}/Code.gs ] || [ -e ${dir}/Code.js ]; then ` +
+        `grep -qs '${MARCA}' ${dir}/Code.gs ${dir}/Code.js || exit 1; fi`]);
+      return 'passa';
+    } catch (e) { return 'bloqueia'; }
+  };
+  ok('o backend certo passa', testa(certo) === 'passa');
+  ok('o projeto de Equipamentos é BLOQUEADO', testa(errado) === 'bloqueia');
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
 console.log('\nNÃO SOBRESCREVER O MANIFESTO COM UM INVENTADO');
 {
   // appsscript.json guarda fuso, escopos de OAuth e a configuração do app da
