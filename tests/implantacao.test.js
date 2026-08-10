@@ -24,19 +24,36 @@ const claspignore = ler('.claspignore');
 
 console.log('\nA MESMA URL DE SEMPRE');
 {
-  // Toda chamada de `clasp deploy`, nos dois arquivos, tem de trazer -i.
+  /* O fonte do clasp (core/project.js) diz, na própria implementação:
+       "If no deploymentId is provided, create a new deployment."
+     Ou seja: `clasp deploy` sem id NÃO falha — ele cria uma implantação nova,
+     com URL /exec nova, e devolve sucesso. O app continua falando com a
+     antiga, e ninguém percebe até a obra reclamar.
+
+     `clasp redeploy <id>` não tem esse buraco: o id é argumento obrigatório,
+     então a ausência dele PARA o comando. Entre um comando que falha e um que
+     publica no lugar errado dizendo que deu certo, o que falha é o seguro. */
   const chamadas = [];
   [['fluxo', fluxo], ['script', script]].forEach(([onde, txt]) => {
     txt.split('\n').forEach((linha, i) => {
       // Só linha de comando: comentário que fala de deploy não conta.
       const semComentario = linha.replace(/^\s*#.*/, '');
-      if (/\bclasp\s+deploy\b/.test(semComentario)) chamadas.push({ onde, n: i + 1, linha: semComentario.trim() });
+      if (/\bclasp\s+(deploy|redeploy|create-deployment|update-deployment)\b/.test(semComentario)) {
+        chamadas.push({ onde, n: i + 1, linha: semComentario.trim() });
+      }
     });
   });
-  ok('achou as chamadas de clasp deploy', chamadas.length === 2, JSON.stringify(chamadas.map(c => c.onde)));
-  const semId = chamadas.filter(c => !/\s-i\s/.test(c.linha));
-  ok('toda implantação reusa o id existente (-i)', semId.length === 0,
-     JSON.stringify(semId.map(c => c.onde + ':' + c.n + ' ' + c.linha)));
+  ok('achou as chamadas de implantação', chamadas.length === 2, JSON.stringify(chamadas.map(c => c.onde)));
+
+  const inseguras = chamadas.filter(c =>
+    // `redeploy <id>` é seguro por construção; `deploy` só com -i explícito.
+    !/\bclasp\s+(redeploy|update-deployment)\s+"?\$/.test(c.linha) && !/\s-i\s/.test(c.linha));
+  ok('nenhuma implantação pode criar uma URL nova', inseguras.length === 0,
+     JSON.stringify(inseguras.map(c => c.onde + ':' + c.n + ' ' + c.linha)));
+
+  const bareDeploy = chamadas.filter(c => /\bclasp\s+(deploy|create-deployment)\b/.test(c.linha));
+  ok('e ninguém usa o `deploy` cru (o que cria implantação nova)',
+     bareDeploy.length === 0, JSON.stringify(bareDeploy.map(c => c.onde + ':' + c.linha)));
 }
 
 console.log('\nNÃO PUBLICAR SEM SABER PARA ONDE');
@@ -96,6 +113,64 @@ console.log('\nCode.gs E Code.js SÃO O MESMO ARQUIVO');
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
+console.log('\nÉ ESTE PROJETO MESMO?');
+{
+  /* Aconteceu na primeira configuração desta automação: o scriptId apontava
+     para "Equipamentos Teotonio - Base" (Code.gs de 13 KB), não para o backend
+     do RDO (148 KB). A conferência de NOMES não pega — os dois projetos têm
+     Code.gs e appsscript.json — e o push teria trocado um backend inteiro pelo
+     outro, apagando um sistema que funcionava. Só ler o CONTEÚDO denuncia. */
+  const MARCA = 'NOME_ABA_DIARIO';
+  ok('a marca de identificação existe no Code.gs deste repositório',
+     ler('Code.gs').indexOf(MARCA) > -1, MARCA);
+  ok('o fluxo confere a marca no projeto remoto',
+     fluxo.indexOf(MARCA) > -1 && /OUTRO projeto/.test(fluxo));
+  ok('o script local também', script.indexOf(MARCA) > -1 && /OUTRO projeto/.test(script));
+  ok('e os dois falham alto se a marca sumir do Code.gs local',
+     /marca de identificação sumiu|marca '\$MARCA' não está mais/.test(fluxo + script));
+
+  // Roda a lógica de verdade contra os dois casos.
+  const { execFileSync } = require('child_process');
+  const os = require('os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'proj-'));
+  const certo = path.join(tmp, 'certo'), errado = path.join(tmp, 'errado');
+  fs.mkdirSync(certo); fs.mkdirSync(errado);
+  fs.writeFileSync(path.join(certo, 'Code.gs'), 'var ' + MARCA + " = 'RDO_Diario';");
+  fs.writeFileSync(path.join(errado, 'Code.gs'), '// Motor do app de Equipamentos');
+
+  const testa = dir => {
+    try {
+      execFileSync('bash', ['-c',
+        `arquivos=$(ls ${dir}/*.gs ${dir}/*.js 2>/dev/null || true); ` +
+        `if [ -n "$arquivos" ]; then grep -qs '${MARCA}' $arquivos || exit 1; fi`]);
+      return 'passa';
+    } catch (e) { return 'bloqueia'; }
+  };
+  ok('o backend certo passa', testa(certo) === 'passa');
+  ok('o projeto de Equipamentos é BLOQUEADO', testa(errado) === 'bloqueia');
+
+  /* O arquivo do projeto real chama-se `Código.gs`, com acento. Uma guarda que
+     procurasse o nome literal `Code.gs` não acharia nada e se declararia
+     "projeto novo" — passando sem conferir, justamente no caso que ela existe
+     para pegar. Por isso ela varre TODOS os arquivos de script. */
+  const acentuado = path.join(tmp, 'acentuado');
+  fs.mkdirSync(acentuado);
+  fs.writeFileSync(path.join(acentuado, 'Código.gs'), 'var ' + MARCA + " = 'RDO_Diario';");
+  ok('arquivo remoto com acento no nome ainda é conferido', testa(acentuado) === 'passa');
+
+  const acentuadoErrado = path.join(tmp, 'acentuado-errado');
+  fs.mkdirSync(acentuadoErrado);
+  fs.writeFileSync(path.join(acentuadoErrado, 'Código.gs'), '// Motor do app de Equipamentos');
+  ok('e com acento E conteúdo errado continua bloqueado',
+     testa(acentuadoErrado) === 'bloqueia');
+
+  // Projeto sem script nenhum é projeto novo — esse passa de propósito.
+  const vazio = path.join(tmp, 'vazio');
+  fs.mkdirSync(vazio);
+  ok('projeto sem nenhum arquivo de script passa (é projeto novo)', testa(vazio) === 'passa');
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
 console.log('\nNÃO SOBRESCREVER O MANIFESTO COM UM INVENTADO');
 {
   // appsscript.json guarda fuso, escopos de OAuth e a configuração do app da
@@ -133,8 +208,20 @@ console.log('\nA VERSÃO DO CLASP ESTÁ PRESA');
 {
   // A 3.x mudou o lugar do arquivo de credencial e a sintaxe dos comandos:
   // "instalar a última" quebraria a implantação num dia qualquer, sozinho.
-  ok('o fluxo instala uma versão exata', /@google\/clasp@\d+\.\d+\.\d+/.test(fluxo),
-     (fluxo.match(/@google\/clasp@[^\s]*/) || [''])[0]);
+  const noFluxo = (fluxo.match(/@google\/clasp@(\d+\.\d+\.\d+)/) || [])[1];
+  ok('o fluxo instala uma versão exata', !!noFluxo, noFluxo);
+
+  /* E o README tem de mandar instalar A MESMA. Quem faz o login segue o
+     README; quem implanta é o fluxo. Se as duas divergirem, a credencial é
+     gerada por uma versão e lida por outra — e isso não aparece no login,
+     só na primeira implantação de verdade. */
+  const readme = ler('README.md');
+  const noReadme = [...readme.matchAll(/@google\/clasp@(\d+\.\d+\.\d+)/g)].map(m => m[1]);
+  ok('o README manda instalar a mesma versão do fluxo',
+     noReadme.length > 0 && noReadme.every(v => v === noFluxo),
+     'fluxo=' + noFluxo + ' README=' + JSON.stringify(noReadme));
+  ok('e avisa para conferir com clasp --version',
+     /clasp --version/.test(readme));
 }
 
 console.log(falhas === 0 ? '\nTudo certo.\n' : `\n${falhas} FALHA(S)\n`);

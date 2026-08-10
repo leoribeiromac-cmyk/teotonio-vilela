@@ -87,12 +87,63 @@ Dá para automatizar. São **dois caminhos** — escolha um.
 
 ### Antes dos dois: a preparação (1×)
 
-1. Instale o `clasp`: `npm install -g @google/clasp@2.4.2`
+1. Instale o `clasp`: `npm install -g @google/clasp@3.3.0`
+
+   Confira com `clasp --version` que veio **3.3.0 mesmo**. A versão importa: o
+   formato do `~/.clasprc.json` mudou entre a 2.x (chaves `token` +
+   `oauth2ClientSettings`) e a 3.x (chave `tokens`). Credencial gerada por uma
+   versão e lida por outra **não falha no login** — falha na primeira
+   implantação de verdade, que é o pior momento para descobrir. O fluxo do
+   GitHub instala a 3.3.0; se a sua for outra, gere a credencial de novo com
+   `npx @google/clasp@3.3.0 login`. (O Cloud Shell já traz o `clasp`
+   pré-instalado, e o `npm install -g` pode não sobrescrever.)
 2. Ligue a API: acesse **https://script.google.com/home/usersettings** e ative
    *API Google Apps Script*.
 3. Entre na conta: `clasp login`
-4. Descubra o **id do projeto**: no editor do Apps Script, ⚙ **Configurações do
-   projeto → IDs → ID do script**.
+
+   > **Se o `clasp` estiver numa máquina remota** (Google Cloud Shell, um
+   > servidor por SSH), o login falha com `ERR_CONNECTION_REFUSED`: o Google
+   > devolve a autorização para `http://localhost:PORTA`, e esse "localhost" é
+   > a máquina remota, não a sua. O `--no-localhost` **não resolve mais** — o
+   > Google desativou esse fluxo em 2023.
+   >
+   > O contorno é entregar o código por dentro. Com o `clasp login` **rodando
+   > e esperando**, autorize no navegador, copie a URL inteira da página de
+   > erro e, numa segunda aba do terminal, rode:
+   >
+   > ```bash
+   > curl "http://127.0.0.1:PORTA/?iss=...COLE-A-URL-INTEIRA..."
+   > ```
+   >
+   > A **porta é sorteada a cada login** — leia a que aparece no
+   > `redirect_uri` do link, não presuma um número. As aspas são obrigatórias:
+   > sem elas o terminal corta a URL no primeiro `&`.
+   >
+   > O texto de sucesso muda conforme a versão (`Authorization successful.` na
+   > 2.x, `You are logged in as ...` em versões mais novas). Para conferir:
+   > `clasp show-authorized-user` na 3.x (`clasp login --status` é da 2.x e não
+   > existe mais).
+   >
+   > A 3.x aceita `clasp login --redirect-port 8888`, que fixa a porta em vez
+   > de sortear uma — deixa o `curl` acima previsível.
+4. Descubra o **id do projeto** — e confira que é o **projeto certo**.
+
+   > ⚠ Uma conta do Google costuma ter vários projetos do Apps Script, e todos
+   > chamam o arquivo principal de `Code.gs`. Na primeira configuração desta
+   > automação o id apontava para "Equipamentos Teotonio - Base" (um `Code.gs`
+   > de 13 KB) em vez do backend do RDO (148 KB). Publicar ali teria
+   > **substituído um backend inteiro pelo outro**.
+   >
+   > O jeito seguro de achar o certo: o `index.html` traz a URL que o app
+   > chama, em `CONFIG.appsScript` — algo como
+   > `https://script.google.com/macros/s/<ID-DA-IMPLANTAÇÃO>/exec`. O projeto
+   > procurado é o que tem **essa** implantação no `clasp deployments`.
+   >
+   > Confirmação rápida: o `clasp pull` do projeto certo traz um `Code.gs` com
+   > mais de 140 KB, contendo `NOME_ABA_DIARIO` e `function upsertRDODiario`.
+
+   Com o projeto certo aberto: ⚙ **Configurações do projeto → IDs → ID do
+   script**.
 5. Na raiz do repositório, crie o `.clasp.json` (ele é ignorado pelo git):
    ```json
    {"scriptId":"COLE-O-ID-AQUI","rootDir":".","fileExtension":"gs"}
@@ -106,12 +157,30 @@ Dá para automatizar. São **dois caminhos** — escolha um.
    chutado reconfigura o backend em produção.
    > Se o `clasp pull` trouxer algum `.gs` que não está no repositório, comite
    > também — senão a implantação apagaria esse arquivo.
+
+   > ⚠ **Os nomes dos arquivos têm de bater.** No projeto da Teotônio o arquivo
+   > principal chama-se **`Código.gs`**, com acento, enquanto o repositório
+   > guarda **`Code.gs`**. Para o `clasp` são dois arquivos diferentes: o push
+   > criaria um `Code` novo e **apagaria** o `Código`.
+   >
+   > A conferência bloqueia isso antes de acontecer, mas a implantação só passa
+   > a funcionar quando os nomes coincidirem. O caminho mais simples é
+   > **renomear no editor do Apps Script**: painel da esquerda → ⋮ ao lado de
+   > `Código` → *Renomear* → `Code`. Renomear arquivo não mexe em função
+   > nenhuma, e a versão já implantada continua no ar até a próxima publicação.
 7. Descubra o **id da implantação**: `clasp deployments`. Copie o id daquela
    que é o app da web (a que corresponde à URL `/exec` que o app usa).
 
 > ⚠ **O id da implantação é o detalhe que mais importa.** `clasp deploy` sem
-> ele **não dá erro**: cria uma implantação nova, com uma URL `/exec` nova, e
-> devolve sucesso. O app continua falando com a URL antiga. Por isso os dois
+> ele **não dá erro** — está escrito no próprio fonte do clasp
+> (`core/project.js`): *"If no deploymentId is provided, create a new
+> deployment."* Ele cria uma implantação nova, com uma URL `/exec` nova, e
+> devolve sucesso. O app continua falando com a URL antiga.
+>
+> Por isso a automação usa `clasp redeploy <id>`, e não `clasp deploy -i`: no
+> `redeploy` o id é argumento **obrigatório**, então a falta dele para o
+> comando. Entre um comando que falha e um que publica no lugar errado
+> dizendo que deu certo, o que falha é o seguro. Por isso os dois
 > caminhos abaixo **param** se o id faltar, em vez de publicar no vazio.
 
 ### Caminho A — da sua máquina (a credencial não sai daqui)

@@ -90,9 +90,12 @@ jobs:
 
       - name: Instalar o clasp
         if: steps.cfg.outputs.pronto == 'sim'
-        # Versão presa: a 3.x mudou o lugar do arquivo de credencial e a
-        # sintaxe dos comandos. Atualizar exige revisar este arquivo inteiro.
-        run: npm install -g @google/clasp@2.4.2
+        # Versão presa, e presa NESTA: o formato do ~/.clasprc.json mudou entre
+        # a 2.x (chaves `token` + `oauth2ClientSettings`) e a 3.x (chave
+        # `tokens`). Credencial gerada por uma versão e lida por outra não
+        # falha no login — falha aqui, na implantação. Trocar este número exige
+        # gerar a credencial de novo com a mesma versão.
+        run: npm install -g @google/clasp@3.3.0
 
       - name: Credencial e projeto
         if: steps.cfg.outputs.pronto == 'sim'
@@ -141,6 +144,44 @@ jobs:
           fi
           echo "Conferido: nada do projeto seria apagado."
 
+          # ---------------------------------------------------------------
+          # É ESTE PROJETO MESMO?
+          # ---------------------------------------------------------------
+          # A conferência acima olha NOMES de arquivo. Só que uma conta do
+          # Google costuma ter vários projetos do Apps Script, e todos chamam
+          # o arquivo principal de `Code.gs`. Um scriptId trocado passa por
+          # ela sem levantar nada — e o push substitui um backend inteiro por
+          # outro, apagando um sistema que funcionava.
+          #
+          # Isto não é hipótese: na primeira configuração desta automação o
+          # scriptId apontava para o projeto "Equipamentos Teotonio - Base",
+          # cujo Code.gs tem 13 KB. O deste repositório tem 148 KB. Os nomes
+          # batiam, e só a leitura do conteúdo denunciou a troca.
+          #
+          # A marca é uma constante que existe no backend deste repositório e
+          # que nenhum outro projeto teria. Conferida dos DOIS lados: se
+          # alguém a renomear no Code.gs, esta guarda falha alto em vez de
+          # deixar de proteger em silêncio.
+          MARCA='NOME_ABA_DIARIO'
+          if ! grep -q "$MARCA" "$GITHUB_WORKSPACE/Code.gs"; then
+            echo "::error title=A marca de identificação sumiu do Code.gs::A guarda procura '$MARCA' para confirmar que o projeto remoto é este backend, e ela não está mais no arquivo local. Atualize a marca neste fluxo (e em ferramentas/implantar-appscript.sh) para algo que exista no Code.gs atual."
+            exit 1
+          fi
+          # Varre TODOS os arquivos de script baixados, não um nome fixo. No
+          # projeto real o arquivo se chama `Código.gs`, com acento — procurar
+          # por `Code.gs` fazia esta guarda se declarar "projeto novo" e passar
+          # sem conferir nada, justamente no caso que ela existe para pegar.
+          arquivos=$(ls /tmp/atual/*.gs /tmp/atual/*.js 2>/dev/null || true)
+          if [ -n "$arquivos" ]; then
+            if ! grep -qs "$MARCA" $arquivos; then
+              echo "::error title=O scriptId aponta para OUTRO projeto::Nenhum arquivo do projeto remoto contém '$MARCA' — não é o backend deste repositório. Publicar aqui APAGARIA esse outro projeto. Confira APPSCRIPT_SCRIPT_ID: ele tem de ser o do projeto cujo /exec o index.html chama."
+              exit 1
+            fi
+            echo "Conferido: o projeto remoto é o backend deste repositório."
+          else
+            echo "Projeto remoto sem nenhum arquivo de script — tratando como projeto novo."
+          fi
+
       - name: Empurrar o código
         if: steps.cfg.outputs.pronto == 'sim'
         run: clasp push -f
@@ -151,10 +192,18 @@ jobs:
           DEPLOY_ID: ${{ secrets.APPSCRIPT_DEPLOYMENT_ID }}
           DESCRICAO: ${{ github.event.inputs.descricao }}
         run: |
-          # O -i é o que mantém a URL /exec. Sem ele, nasceria uma implantação
-          # nova e o app continuaria falando com a antiga.
+          # `redeploy` (não `deploy`) porque o id é ARGUMENTO OBRIGATÓRIO dele:
+          # sem o id ele para com erro. Já o `deploy`, se o id não chegar,
+          # cria uma implantação NOVA — com URL /exec nova — e devolve
+          # sucesso. Está no fonte do clasp, em project.js:
+          #   "If no deploymentId is provided, create a new deployment."
+          # Entre um comando que falha e um que publica no lugar errado
+          # dizendo que deu certo, o que falha é o seguro.
+          #
+          # Sem -V, o clasp cria uma versão nova do código e aponta a
+          # implantação existente para ela — que é exatamente o que se quer.
           desc="${DESCRICAO:-$(git log -1 --pretty=%s)}"
-          clasp deploy -i "$DEPLOY_ID" -d "$desc"
+          clasp redeploy "$DEPLOY_ID" -d "$desc"
           echo "Implantado na mesma URL, versão: $desc"
 
       - name: Limpar a credencial
