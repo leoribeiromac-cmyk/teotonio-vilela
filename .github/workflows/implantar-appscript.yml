@@ -55,10 +55,16 @@ concurrency:
 jobs:
   implantar:
     runs-on: ubuntu-latest
+    # Este fluxo carrega uma credencial do Google, e o repositório é PÚBLICO.
+    # O token do GitHub aqui só precisa ler o próprio repositório: sem escrita,
+    # sem pacotes, sem issues. Se algum dia este arquivo for alterado por
+    # engano, o estrago fica menor.
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '20'
 
