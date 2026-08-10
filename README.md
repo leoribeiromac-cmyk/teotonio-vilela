@@ -208,14 +208,29 @@ quando o `Code.gs` muda na `main`. Precisa de **três segredos** em
 | `APPSCRIPT_SCRIPT_ID` | passo 4 acima |
 | `APPSCRIPT_DEPLOYMENT_ID` | passo 7 acima |
 
-Para copiar o conteúdo da credencial:
+Para copiar o conteúdo da credencial, **não use `cat`**. Abra o arquivo num
+editor, com a página do segredo do GitHub já aberta ao lado, e leve o conteúdo
+direto de um para o outro:
 
 ```bash
-cat ~/.clasprc.json          # Mac/Linux
-type %USERPROFILE%\.clasprc.json   # Windows
+cloudshell edit ~/.clasprc.json   # Google Cloud Shell
+open -e ~/.clasprc.json           # Mac
+notepad %USERPROFILE%\.clasprc.json   # Windows
 ```
 
 Copie **tudo**, incluindo as chaves `{` `}`, e cole no valor do segredo.
+
+> ⚠ **Isto aconteceu de verdade nesta obra.** O `cat` imprime a credencial no
+> terminal, e terminal é o que a gente copia e cola em conversa quando algo dá
+> errado — foi exatamente assim que o token foi parar num histórico de chat e
+> precisou ser revogado.
+>
+> A regra é simples: **o conteúdo do `~/.clasprc.json` vai do arquivo para o
+> campo do segredo, e para mais lugar nenhum.** Não para uma conversa, não para
+> um assistente, não para um e-mail, nem "só para conferir". Se ele aparecer em
+> qualquer lugar que não seja esse campo, revogue em
+> https://myaccount.google.com/permissions e gere outro — leva 5 minutos e o
+> app não sente nada, porque essa credencial só serve para publicar.
 
 Depois de criar os três, teste sem esperar merge nenhum: aba **Actions →
 implantar-appscript → Run workflow**. Se algo estiver errado, o próprio fluxo
