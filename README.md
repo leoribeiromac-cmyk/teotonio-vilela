@@ -606,6 +606,19 @@ formulário ele só fazia a lista aparecer em duplicata para o apontador poder
 escolher a rua no fim do nome. Trocar de rua limpa o serviço e as estacas:
 são de outra rua, e a numeração de uma não vale na outra.
 
+### O nome curto na tela, a descrição do contrato embaixo
+
+O nome do serviço na lista é **curto de propósito** — "Tubo de concreto armado
+Ø60 (PA-2)" cabe na tela do celular e diz o que é. O que está no orçamento
+("FORNECIMENTO E ASSENTAMENTO DE TUBOS DE CONCRETO ARMADO, DIÂMETRO 60CM -
+TIPO PA-2") continua em `descricaoOrig`, e aparece inteiro logo abaixo do
+serviço escolhido: é por ele que a fiscalização mede.
+
+O que se corta do nome é condição comercial do orçamento ("com fornecimento
+de agregado", "sem transporte", "exceto fornecimento") e dimensão que não
+distingue nada. O que fica é o que identifica o serviço no canteiro:
+material, bitola, fck, tipo.
+
 ### Camada: área × espessura
 
 O contrato paga a camada em **m³**, mas quem executa mede **m²**: ninguém
