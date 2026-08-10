@@ -686,6 +686,16 @@ body.proj-cheia-ativa{overflow:hidden}
   color:var(--sidebar-text);opacity:.6;
 }
 .sidebar-credito b{color:var(--sidebar-active);opacity:.85;font-weight:600}
+/* Link do manual: a única saída do app para fora dele. Fica junto do crédito
+   porque é material de apoio, não uma tela do sistema. */
+.sidebar-manual{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  margin-top:8px;padding:7px 8px;border-radius:8px;
+  border:1px solid var(--sidebar-border);background:rgba(255,255,255,.04);
+  color:var(--sidebar-text);text-decoration:none;font-size:11px;font-weight:600;
+  letter-spacing:.04em;text-transform:uppercase;
+}
+.sidebar-manual:hover{background:var(--sidebar-hover-bg);color:var(--sidebar-active)}
 
 /* ---- seletor de tema (claro / escuro / sistema) ---- */
 .tema-seletor{
@@ -5598,6 +5608,8 @@ function renderShell() {
           ${podeVer('executivo') ? `<button class="btn-refresh btn-apresentar" onclick="abrirApresentacao()"
             title="Mostrar a obra em tela cheia (ESC sai)">${ic('apresentar')} APRESENTAR</button>` : ''}
           ${seletorTema()}
+          <a class="sidebar-manual" href="manual.html" target="_blank" rel="noopener"
+             title="Apresentação e manual de uso do sistema">${ic('livro')} Manual do sistema</a>
           <div class="sidebar-credito">Criado e desenvolvido por <b>Leonardo Maciel</b></div>
         </div>
       </aside>
