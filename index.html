@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=35"></script>
-<script src="dados/ruas-de-terra.js?v=35"></script>
+<script src="dados/ranario.js?v=36"></script>
+<script src="dados/ruas-de-terra.js?v=36"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=35"></script>
+<script src="dados/teotonio-muros.js?v=36"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=35"></script>
-<script src="js/nf/adaptador.js?v=35"></script>
-<script src="js/nf/notas.js?v=35"></script>
-<script src="js/equip/equipamentos.js?v=35"></script>
+<script src="js/ui/icones.js?v=36"></script>
+<script src="js/nf/adaptador.js?v=36"></script>
+<script src="js/nf/notas.js?v=36"></script>
+<script src="js/equip/equipamentos.js?v=36"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -5239,6 +5239,10 @@ function cadastroDoArquivo(qual) {
       'Unidade Física': s.un || '',
       'Qtd Estimada': ptNum(s.qtdPrev),
       'Produtividade': ptNum(s.produtividade),
+      // Camada medida em volume, mas executada e conferida em ÁREA: o
+      // apontador informa m² e espessura, e o app faz o m³ do contrato.
+      'Medir Por': s.medirPor || '',
+      'Espessura': ptNum(s.espessura),
       'Status': 'Ativo',
       'Descricao Orcamento': s.descricaoOrig || ''
     }));
@@ -12829,7 +12833,8 @@ function defaultDraft() {
     apontador,
     observacaoGeral: '',
     servicos: [
-      { frente: '', pacoteId: '', sentido: eixoPadrao(), estacaIni: '', estacaFim: '', lado: '', quantidade: '', equipe: '', observacao: '' }
+      { frente: '', pacoteId: '', sentido: eixoPadrao(), estacaIni: '', estacaFim: '', lado: '',
+        quantidade: '', area: '', espCm: '', equipe: '', observacao: '' }
     ],
     outrosServicos: []
   };
@@ -12989,45 +12994,88 @@ function eixoDoPacote(pac) {
   return e ? e.id : '';
 }
 
+/* A espessura de projeto do pacote, em centímetros — que é como a
+   espessura se fala no canteiro ("15 cm"), embora o cadastro guarde em
+   metros, como o resto do projeto. */
+function espessuraPadraoCm(pac) {
+  const m = num(getCSVField(pac, 'Espessura'));
+  return m > 0 ? Math.round(m * 1000) / 10 : '';
+}
+
+/* A quantidade que vai para a planilha, na unidade do contrato. Em
+   camada ela não é digitada: sai de área × espessura. Uma função só,
+   porque a validação, a dica de saldo e a gravação têm de concordar —
+   se divergirem, o app barra um lançamento que ia dar certo, ou grava
+   quantidade diferente da que mostrou na tela. */
+function qtdDoServico(s) {
+  const pac = STATE.pacotes.find(p => getCSVField(p, 'ID') === s.pacoteId);
+  if (pac && getCSVField(pac, 'Medir Por') === 'area') {
+    const area = numCampo(s.area);
+    const esp = numCampo((s.espCm === '' || s.espCm == null) ? espessuraPadraoCm(pac) : s.espCm);
+    return (area > 0 && esp > 0) ? area * esp / 100 : 0;
+  }
+  return numCampo(s.quantidade);
+}
+
+/* A obra separa os serviços por rua? (o cadastro traz a coluna `Rua`) */
+function pacotesSeparadosPorEixo() {
+  return (STATE.pacotes || []).some(p => getCSVField(p, 'Rua'));
+}
+
 /* Em que eixo este serviço do rascunho está. Uma fonte só, usada pelo
    formulário, pela validação e pela hora de gravar — se cada um decidisse
-   por conta, a tela mostraria uma rua e o lançamento sairia com outra. */
+   por conta, a tela mostraria uma rua e o lançamento sairia com outra.
+
+   A RUA é escolhida ANTES do serviço e manda. O pacote só resolve o eixo
+   em rascunho antigo, gravado quando a rua ainda vinha depois. */
 function eixoDoServico(s) {
-  const pac = STATE.pacotes.find(p => getCSVField(p, 'ID') === s.pacoteId);
-  const auto = eixoDoPacote(pac);
-  if (auto) return auto;
-  return eixoPorId(s.sentido) ? String(s.sentido).toUpperCase() : eixoPadrao();
+  if (eixoPorId(s.sentido)) return String(s.sentido).toUpperCase();
+  const auto = eixoDoPacote(STATE.pacotes.find(p => getCSVField(p, 'ID') === s.pacoteId));
+  return auto || eixoPadrao();
+}
+
+/* O nome do pacote sem o " — Rua" do fim. O sufixo existe no cadastro
+   porque o mesmo serviço aparece uma vez por rua e as telas de avanço e
+   medição precisam distinguir os dois. No formulário ele só atrapalha: a
+   rua já está escolhida logo acima, e a lista mostrava cada serviço em
+   duplicata só para o apontador poder escolher a rua no fim do nome. */
+function nomeCurtoDoPacote(p, eixo) {
+  const nome = getCSVField(p, 'Pacote') || '';
+  const rua = getCSVField(p, 'Rua') || '';
+  if (!rua || !eixo) return nome;
+  const sufixo = ' — ' + rua;
+  return nome.endsWith(sufixo) ? nome.slice(0, -sufixo.length) : nome;
 }
 
 function renderServicoRow(s, idx, frentes) {
-  const pacotesDaFrente = s.frente ?
-    STATE.pacotes.filter(p => getCSVField(p, 'Frente') === s.frente && getCSVField(p, 'Status') !== 'Histórico') :
-    [];
+  const eixos = eixosDaObraAtiva();
+  const sentido = eixoDoServico(s);
+  const faixa = eixoPorId(sentido);
+  const porRua = pacotesSeparadosPorEixo() && !!faixa;
+
+  /* Escolhida a rua, a lista de serviços é só a dela. */
+  const pacotesDaFrente = s.frente
+    ? STATE.pacotes.filter(p =>
+        getCSVField(p, 'Frente') === s.frente &&
+        getCSVField(p, 'Status') !== 'Histórico' &&
+        (!porRua || String(getCSVField(p, 'Rua') || '').trim().toLowerCase() === faixa.label.trim().toLowerCase()))
+    : [];
   const pacoteSelecionado = STATE.pacotes.find(p => getCSVField(p, 'ID') === s.pacoteId);
   const unidade = pacoteSelecionado ? (getCSVField(pacoteSelecionado, 'Unidade Física') || '') : '';
 
-  const eixos = eixosDaObraAtiva();
-  const eixoAuto = eixoDoPacote(pacoteSelecionado);
-  const sentido = eixoDoServico(s);
-  const faixa = eixoPorId(sentido);
   const estacasUsar = [];
   if (faixa) for (let i = faixa.ini; i <= faixa.fim; i++) estacasUsar.push('E' + i);
 
   /* Obra sem estaqueamento declarado não pergunta estaca nenhuma — o
      campo ficaria com uma lista vazia e a validação exigiria preencher
      o impossível. */
-  const campoEixo = !eixos.length ? '' : (eixoAuto ? `
-        <div class="field">
-          <label>${escHtml(CONFIG.eixoRotulo)}</label>
-          <div style="padding:9px 11px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);font-size:13px">${escHtml(faixa ? faixa.label : eixoAuto)}</div>
-          <div style="font-size:11px;margin-top:3px;color:var(--muted)">definido pelo serviço escolhido</div>
-        </div>` : `
+  const campoEixo = !eixos.length ? '' : `
         <div class="field">
           <label>${escHtml(CONFIG.eixoRotulo)}</label>
           <select data-svc="${idx}" data-field="sentido">
             ${eixos.map(x => `<option value="${escHtml(x.id)}" ${sentido===x.id?'selected':''}>${escHtml(x.label)} (E${x.ini}–E${x.fim})</option>`).join('')}
           </select>
-        </div>`);
+        </div>`;
 
   const camposEstaca = !eixos.length ? '' : `
         <div class="field">
@@ -13058,37 +13106,62 @@ function renderServicoRow(s, idx, frentes) {
           </select>
         </div>`;
 
-  return `
-    <div class="servico-row" data-idx="${idx}">
-      <span class="row-num">SERVIÇO ${idx + 1}</span>
-      ${idx > 0 ? `<button class="btn-remove" onclick="removerServico(${idx})" title="Remover">×</button>` : ''}
-      <div class="form-grid" style="margin-top:6px">
+  /* Camada se executa e se confere em ÁREA — "300 m² de macadame", não
+     "45 m³". O contrato paga o volume, então o app pergunta o que o
+     apontador tem na trena e faz a conta; a espessura já vem do projeto
+     e só se mexe nela quando o executado sai da espessura de projeto. */
+  const porArea = pacoteSelecionado && getCSVField(pacoteSelecionado, 'Medir Por') === 'area';
+  const espPadrao = porArea ? espessuraPadraoCm(pacoteSelecionado) : '';
+  const espAtual = (s.espCm === '' || s.espCm == null) ? espPadrao : s.espCm;
+  const dicaSaldo = () => {
+    // Quanto resta do pacote, e aviso quando a quantidade passa disso
+    // (não bloqueia o envio).
+    if (!s.pacoteId) return '';
+    const av = calcularAvancoPorPacote();
+    const a = av[s.pacoteId];
+    if (!a || a.qtdEstimada <= 0) return '';
+    const saldo = Math.max(0, a.qtdEstimada - a.qtdExecutada);
+    const estoura = qtdDoServico(s) > saldo + 0.001;
+    // Em camada, o saldo em m³ não diz nada para quem está com a trena na
+    // mão: vai junto quanta ÁREA ainda cabe, na espessura de projeto.
+    const espSaldo = porArea ? numCampo(espAtual) : 0;
+    const emArea = espSaldo > 0 ? ` · ${fmtNum(saldo * 100 / espSaldo)} m² a ${fmtNum(espSaldo, 1)} cm` : '';
+    let dica = `<div style="font-size:11px;margin-top:3px;color:${estoura ? 'var(--red)' : 'var(--muted)'}">${estoura ? 'acima do ' : ''}saldo do pacote: ${fmtNum(saldo)} ${escHtml(unidade)}${emArea}</div>`;
+    /* Etapa passando na frente da anterior. NÃO bloqueia: a etapa
+       anterior pode ter sido executada antes do app existir, ou num mês
+       que ninguém digitou. Mas avisar é o que impede o avanço de virar
+       ficção — fuste lançado onde não há sapata mede um serviço que não
+       foi feito. */
+    const ant = etapaAnteriorDe(s.pacoteId);
+    const aAnt = ant ? av[ant] : null;
+    if (aAnt) {
+      const depois = a.qtdExecutada + qtdDoServico(s);
+      if (depois > aAnt.qtdExecutada + 0.001) {
+        const nomeAnt = getCSVField(aAnt.pacote, 'Pacote') || ant;
+        dica += `<div style="font-size:11px;margin-top:2px;color:var(--ylw)">passa a etapa anterior — ${escHtml(nomeAnt)} está em ${fmtNum(aAnt.qtdExecutada)} ${escHtml(unidade)}</div>`;
+      }
+    }
+    return dica;
+  };
+
+  const campoQuantidade = porArea ? `
         <div class="field">
-          <label>Frente</label>
-          <select data-svc="${idx}" data-field="frente">
-            <option value="">— escolher —</option>
-            ${frentes.map(f => `<option value="${escHtml(f)}" ${s.frente===f?'selected':''}>${escHtml(f)}</option>`).join('')}
-          </select>
+          <label>Área executada (m²)</label>
+          <input type="text" inputmode="decimal" data-numeric data-svc="${idx}" data-field="area"
+                 value="${escHtml(String(s.area == null ? '' : s.area))}" placeholder="0" autocomplete="off">
         </div>
         <div class="field">
-          <label>Pacote / Serviço</label>
-          <select data-svc="${idx}" data-field="pacoteId" ${!s.frente ? 'disabled' : ''}>
-            <option value="">${s.frente ? '— escolher pacote —' : '↑ escolha a frente primeiro'}</option>
-            ${pacotesDaFrente.map(p => `<option value="${escHtml(getCSVField(p, 'ID'))}" ${s.pacoteId===getCSVField(p, 'ID')?'selected':''}>${escHtml(getCSVField(p, 'Pacote'))} (${escHtml(getCSVField(p, 'Unidade Física')||'')})</option>`).join('')}
-          </select>
-          ${(() => {
-            /* A observação do pacote é a única coisa no cadastro que diz o que
-               ele quer dizer na prática — "Espessura 15cm", "Est. 129+15 a
-               136+10, canteiro central". Ficava só na planilha, onde ninguém
-               no canteiro olha, e o apontador tinha de adivinhar pelo nome
-               qual dos quatro trechos de muro é o que está na frente dele. */
-            const obs = pacoteSelecionado ? String(getCSVField(pacoteSelecionado, 'Observação') || '').trim() : '';
-            return obs ? `<div style="font-size:11px;margin-top:3px;color:var(--muted)">${escHtml(obs)}</div>` : '';
-          })()}
+          <label>Espessura (cm)</label>
+          <input type="text" inputmode="decimal" data-numeric data-svc="${idx}" data-field="espCm"
+                 value="${escHtml(String(espAtual))}" placeholder="0" autocomplete="off">
+          ${espPadrao !== '' ? `<div style="font-size:11px;margin-top:3px;color:var(--muted)">projeto: ${fmtNum(espPadrao, 1)} cm</div>` : ''}
         </div>
-        ${campoEixo}
-        ${camposEstaca}
-        ${campoLado}
+        <div class="field">
+          <label>Quantidade ${unidade ? `(${unidade})` : ''}</label>
+          <div id="qtd-${idx}" class="t-mono" style="padding:9px 11px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);font-size:13px">${fmtNum(qtdDoServico(s), 3)}</div>
+          <div style="font-size:11px;margin-top:3px;color:var(--muted)">área × espessura</div>
+          ${dicaSaldo()}
+        </div>` : `
         <div class="field">
           <label>Quantidade ${unidade ? `(${unidade})` : ''}</label>
           <!-- type=text + inputmode=decimal, e NÃO type=number: com type=number
@@ -13100,33 +13173,41 @@ function renderServicoRow(s, idx, frentes) {
           <input type="text" inputmode="decimal" data-numeric data-svc="${idx}" data-field="quantidade"
                  value="${escHtml(String(s.quantidade == null ? '' : s.quantidade))}" placeholder="0"
                  autocomplete="off">
+          ${dicaSaldo()}
+        </div>`;
+
+  return `
+    <div class="servico-row" data-idx="${idx}">
+      <span class="row-num">SERVIÇO ${idx + 1}</span>
+      ${idx > 0 ? `<button class="btn-remove" onclick="removerServico(${idx})" title="Remover">×</button>` : ''}
+      <div class="form-grid" style="margin-top:6px">
+        ${campoEixo}
+        <div class="field">
+          <label>Frente</label>
+          <select data-svc="${idx}" data-field="frente">
+            <option value="">— escolher —</option>
+            ${frentes.map(f => `<option value="${escHtml(f)}" ${s.frente===f?'selected':''}>${escHtml(f)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field" style="grid-column:1/-1">
+          <label>Pacote / Serviço</label>
+          <select data-svc="${idx}" data-field="pacoteId" ${!s.frente ? 'disabled' : ''}>
+            <option value="">${s.frente ? '— escolher pacote —' : '↑ escolha a frente primeiro'}</option>
+            ${pacotesDaFrente.map(p => `<option value="${escHtml(getCSVField(p, 'ID'))}" ${s.pacoteId===getCSVField(p, 'ID')?'selected':''}>${escHtml(nomeCurtoDoPacote(p, porRua ? faixa : null))} (${escHtml(getCSVField(p, 'Unidade Física')||'')})</option>`).join('')}
+          </select>
           ${(() => {
-            // Dica de saldo: mostra quanto resta do pacote e avisa se a
-            // quantidade digitada passa disso (não bloqueia o envio).
-            if (!s.pacoteId) return '';
-            const av = calcularAvancoPorPacote();
-            const a = av[s.pacoteId];
-            if (!a || a.qtdEstimada <= 0) return '';
-            const saldo = Math.max(0, a.qtdEstimada - a.qtdExecutada);
-            const estoura = numCampo(s.quantidade) > saldo + 0.001;
-            let dica = `<div style="font-size:11px;margin-top:3px;color:${estoura ? 'var(--red)' : 'var(--muted)'}">${estoura ? 'acima do ' : ''}saldo do pacote: ${fmtNum(saldo)} ${escHtml(unidade)}</div>`;
-            /* Etapa passando na frente da anterior. NÃO bloqueia: a etapa
-               anterior pode ter sido executada antes do app existir, ou num
-               mês que ninguém digitou. Mas avisar é o que impede o avanço
-               de virar ficção — fuste lançado onde não há sapata mede um
-               serviço que não foi feito. */
-            const ant = etapaAnteriorDe(s.pacoteId);
-            const aAnt = ant ? av[ant] : null;
-            if (aAnt) {
-              const depois = a.qtdExecutada + numCampo(s.quantidade);
-              if (depois > aAnt.qtdExecutada + 0.001) {
-                const nomeAnt = getCSVField(aAnt.pacote, 'Pacote') || ant;
-                dica += `<div style="font-size:11px;margin-top:2px;color:var(--ylw)">passa a etapa anterior — ${escHtml(nomeAnt)} está em ${fmtNum(aAnt.qtdExecutada)} ${escHtml(unidade)}</div>`;
-              }
-            }
-            return dica;
+            /* A observação do pacote é a única coisa no cadastro que diz o que
+               ele quer dizer na prática — "Espessura 15cm", "Est. 129+15 a
+               136+10, canteiro central". Ficava só na planilha, onde ninguém
+               no canteiro olha, e o apontador tinha de adivinhar pelo nome
+               qual dos quatro trechos de muro é o que está na frente dele. */
+            const obs = pacoteSelecionado ? String(getCSVField(pacoteSelecionado, 'Observação') || '').trim() : '';
+            return obs ? `<div style="font-size:11px;margin-top:3px;color:var(--muted)">${escHtml(obs)}</div>` : '';
           })()}
         </div>
+        ${camposEstaca}
+        ${campoLado}
+        ${campoQuantidade}
         <div class="field">
           <label>Equipe / Subcontratado</label>
           <input type="text" data-svc="${idx}" data-field="equipe" value="${escHtml(s.equipe)}" placeholder="ex: Sena Obras">
@@ -13220,9 +13301,20 @@ function svcInputHandler(ev) {
     rerenderServicoRow(idx);
   }
   if (field === 'sentido') {
-    STATE.draft.servicos[idx].estacaIni = '';
-    STATE.draft.servicos[idx].estacaFim = '';
+    /* Trocar de rua troca a lista de serviços: os serviços são um por rua,
+       e o que estava escolhido é da rua anterior. As estacas também saem —
+       a numeração de uma rua não vale na outra. */
+    const svc = STATE.draft.servicos[idx];
+    svc.pacoteId = '';
+    svc.estacaIni = '';
+    svc.estacaFim = '';
     rerenderServicoRow(idx);
+  }
+  if (field === 'area' || field === 'espCm') {
+    /* Sem re-render: o apontador está DIGITANDO nestes campos, e redesenhar
+       a linha tira o foco dele a cada tecla. Só o total é reescrito. */
+    const alvo = document.getElementById('qtd-' + idx);
+    if (alvo) alvo.textContent = fmtNum(qtdDoServico(STATE.draft.servicos[idx]), 3);
   }
   saveDraft(STATE.draft);
 }
@@ -13255,7 +13347,7 @@ function adicionarServico() {
     // o lado costuma ser o mesmo da linha anterior: a equipe está naquele
     // lado da rua o dia inteiro
     lado: (ultimo && ultimo.lado) ? ultimo.lado : '',
-    quantidade: '', equipe: '', observacao: ''
+    quantidade: '', area: '', espCm: '', equipe: '', observacao: ''
   });
   saveDraft(STATE.draft);
   transitionTo(render);
@@ -13282,7 +13374,7 @@ window.copiarServicosDeOntem = function() {
   });
   if (doDia.length === 0) { toast('O último dia (' + fmtData(ultimaData) + ') só teve serviços avulsos.', 'info'); return; }
 
-  const jaTemDados = STATE.draft.servicos.some(s => s.pacoteId || numCampo(s.quantidade) > 0);
+  const jaTemDados = STATE.draft.servicos.some(s => s.pacoteId || qtdDoServico(s) > 0);
   if (jaTemDados && !confirm('Substituir os serviços já preenchidos neste rascunho pelos ' + doDia.length + ' serviços de ' + fmtData(ultimaData) + '?')) return;
 
   STATE.draft.servicos = doDia.map(r => {
@@ -13297,7 +13389,9 @@ window.copiarServicosDeOntem = function() {
       estacaIni: est.length ? est[0].rot : '',
       estacaFim: est.length ? est[est.length - 1].rot : '',
       lado: lerLadoDaVia(loc),
-      quantidade: '',
+      // a produção do dia é sempre digitada de novo — só a espessura de
+      // projeto volta preenchida, porque ela é do serviço e não do dia
+      quantidade: '', area: '', espCm: '',
       equipe: getCSVField(r, 'Equipe') || getCSVField(r, 'Subcontratado') || '',
       observacao: ''
     };
@@ -13356,7 +13450,7 @@ function validarRDO(d) {
   if (!d.data) erros.push('Data é obrigatória');
   if (!d.apontador.trim()) erros.push('Apontador é obrigatório');
 
-  const servicosValidos = d.servicos.filter(s => s.pacoteId && numCampo(s.quantidade) > 0);
+  const servicosValidos = d.servicos.filter(s => s.pacoteId && qtdDoServico(s) > 0);
   const outrosValidos = (d.outrosServicos || []).filter(o => o.descricao && o.descricao.trim());
 
   if (servicosValidos.length === 0 && outrosValidos.length === 0) {
@@ -13368,7 +13462,7 @@ function validarRDO(d) {
   if (temEstacas()) {
     for (let i = 0; i < d.servicos.length; i++) {
       const s = d.servicos[i];
-      if (s.pacoteId && numCampo(s.quantidade) > 0) {
+      if (s.pacoteId && qtdDoServico(s) > 0) {
         if (!s.estacaIni || !s.estacaFim) {
           erros.push(`Serviço ${i+1}: estaca início e fim obrigatórias`);
           break;
@@ -13397,7 +13491,7 @@ function destacarCamposRDO(d) {
   if (!d.apontador || !d.apontador.trim()) marcar('[data-draft="apontador"]');
   for (let i = 0; i < d.servicos.length; i++) {
     const s = d.servicos[i];
-    if (temEstacas() && s.pacoteId && numCampo(s.quantidade) > 0) {
+    if (temEstacas() && s.pacoteId && qtdDoServico(s) > 0) {
       if (!s.estacaIni) marcar(`[data-svc="${i}"][data-field="estacaIni"]`);
       if (!s.estacaFim) marcar(`[data-svc="${i}"][data-field="estacaFim"]`);
       if ((CONFIG.lados || []).length && !s.lado) marcar(`[data-svc="${i}"][data-field="lado"]`);
@@ -13419,7 +13513,7 @@ async function salvarRDO() {
     return;
   }
   
-  const servicosValidos = d.servicos.filter(s => s.pacoteId && numCampo(s.quantidade) > 0);
+  const servicosValidos = d.servicos.filter(s => s.pacoteId && qtdDoServico(s) > 0);
   const outrosValidos = (d.outrosServicos || []).filter(o => o.descricao && o.descricao.trim());
 
   const btn = document.getElementById('btnSalvarRDO');
@@ -13433,10 +13527,18 @@ async function salvarRDO() {
   const fotosDoLote = {};   // { '<id do serviço>': [{thumb, full}] }
 
   const batchPacotes = d.servicos
-    .filter(s => s.pacoteId && numCampo(s.quantidade) > 0)
+    .filter(s => s.pacoteId && qtdDoServico(s) > 0)
     .map(s => {
       const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === s.pacoteId);
-      const obsCompleta = [d.observacaoGeral, s.observacao].filter(x => x && x.trim()).join(' · ');
+      /* Em camada, o que o apontador mediu foi a ÁREA — o volume é conta.
+         A conta vai junto na observação: sem ela, quem confere a medição
+         recebe "45,00 m³" e não tem como refazer o número. */
+      let memoria = '';
+      if (p && getCSVField(p, 'Medir Por') === 'area') {
+        const esp = (s.espCm === '' || s.espCm == null) ? espessuraPadraoCm(p) : s.espCm;
+        memoria = `${fmtNum(numCampo(s.area), 2)} m² × ${fmtNum(numCampo(esp), 1)} cm`;
+      }
+      const obsCompleta = [d.observacaoGeral, s.observacao, memoria].filter(x => x && String(x).trim()).join(' · ');
       // O eixo vai gravado entre parênteses: é ele que diz de qual rua (ou
       // de qual sentido da avenida) é a estaca lida depois. O lado da via,
       // quando a obra o pede, vem logo em seguida: "E4 a E7 (AGR) LD".
@@ -13461,7 +13563,7 @@ async function salvarRDO() {
         turno: d.turno || 'Diurno',
         pacote_id: s.pacoteId,
         pacote_nome: p ? getCSVField(p, 'Pacote') : '',
-        quantidade: numCampo(s.quantidade),
+        quantidade: qtdDoServico(s),
         unidade: p ? (getCSVField(p, 'Unidade Física')||'') : '',
         local_estaca: localEstaca,
         equipe: s.equipe,
