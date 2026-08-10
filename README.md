@@ -208,14 +208,29 @@ quando o `Code.gs` muda na `main`. Precisa de **três segredos** em
 | `APPSCRIPT_SCRIPT_ID` | passo 4 acima |
 | `APPSCRIPT_DEPLOYMENT_ID` | passo 7 acima |
 
-Para copiar o conteúdo da credencial:
+Para copiar o conteúdo da credencial, **não use `cat`**. Abra o arquivo num
+editor, com a página do segredo do GitHub já aberta ao lado, e leve o conteúdo
+direto de um para o outro:
 
 ```bash
-cat ~/.clasprc.json          # Mac/Linux
-type %USERPROFILE%\.clasprc.json   # Windows
+cloudshell edit ~/.clasprc.json   # Google Cloud Shell
+open -e ~/.clasprc.json           # Mac
+notepad %USERPROFILE%\.clasprc.json   # Windows
 ```
 
 Copie **tudo**, incluindo as chaves `{` `}`, e cole no valor do segredo.
+
+> ⚠ **Isto aconteceu de verdade nesta obra.** O `cat` imprime a credencial no
+> terminal, e terminal é o que a gente copia e cola em conversa quando algo dá
+> errado — foi exatamente assim que o token foi parar num histórico de chat e
+> precisou ser revogado.
+>
+> A regra é simples: **o conteúdo do `~/.clasprc.json` vai do arquivo para o
+> campo do segredo, e para mais lugar nenhum.** Não para uma conversa, não para
+> um assistente, não para um e-mail, nem "só para conferir". Se ele aparecer em
+> qualquer lugar que não seja esse campo, revogue em
+> https://myaccount.google.com/permissions e gere outro — leva 5 minutos e o
+> app não sente nada, porque essa credencial só serve para publicar.
 
 Depois de criar os três, teste sem esperar merge nenhum: aba **Actions →
 implantar-appscript → Run workflow**. Se algo estiver errado, o próprio fluxo
@@ -225,10 +240,29 @@ Sem os três, o fluxo **não falha** — ele avisa que não está configurado e
 encerra, e o `Code.gs` segue sendo colado à mão.
 
 > ⚠ **Pese esta escolha.** O `CLASPRC_JSON` é um token de acesso à sua conta
-> Google: quem conseguir lê-lo consegue mexer nos seus projetos do Apps
-> Script. Guardado como segredo do GitHub ele não aparece nos registros, mas
-> passa a existir fora da sua máquina. Se isso incomodar, fique no caminho A —
-> ele resolve o mesmo esquecimento sem tirar a credencial do seu computador.
+> Google, com escopos amplos (Drive, Apps Script, Cloud). Guardado como segredo
+> do GitHub ele não aparece nos registros, mas passa a existir fora da sua
+> máquina. Se isso incomodar, fique no caminho A — ele resolve o mesmo
+> esquecimento sem tirar a credencial do seu computador.
+>
+> **Este repositório é público**, então vale ser preciso sobre o que isso muda
+> — e o que não muda:
+>
+> - Segredo **não** é código: fica cifrado e não aparece no que qualquer um
+>   lê. O GitHub também mascara o valor nos registros de execução.
+> - Fluxo disparado por *pull request* vindo de um fork **não recebe segredo
+>   nenhum** — é regra do GitHub. E este fluxo nem escuta `pull_request`: só
+>   `push` na `main` e execução manual, que exigem acesso de escrita.
+> - O fluxo nunca imprime a credencial, e a apaga no fim mesmo quando a
+>   implantação falha.
+> - O que sobra de risco é o de sempre: quem tiver acesso de escrita ao
+>   repositório, ou à sua conta do GitHub, alcança o segredo. **Rotacione** o
+>   token quando não precisar mais dele — revogar em
+>   https://myaccount.google.com/permissions desliga a automação e não afeta o
+>   app em nada.
+>
+> Quem cola esse valor é **você**. Não peça a um assistente para ler o arquivo
+> e colar por você: credencial viva não deve passar por intermediário nenhum.
 
 `tests/implantacao.test.js` trava as armadilhas dos dois caminhos: implantação
 sempre com `-i`, conferência antes de apagar arquivo, manifesto vindo do
