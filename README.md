@@ -594,6 +594,29 @@ Quando o pacote sabe em que rua está (coluna `Rua` do cadastro, que é o caso
 das Ruas de Terra), o eixo do lançamento **vem do pacote** e não é perguntado —
 não há como registrar a produção de uma rua no estaqueamento da outra.
 
+### Croqui: onde fica a estaca
+
+O mapa em grade responde *quanto* foi feito na estaca 7. Quem lê o painel sem
+ter estado no canteiro precisa antes saber *onde fica* a estaca 7 — e isso é a
+**Planta de estaqueamento**, no topo do Avanço Físico: a planta do executivo
+com uma bolha em cada estaca, cinza sem lançamento e laranja (mais escura,
+mais RDOs) com produção. Clicar numa bolha lista o que foi lançado ali.
+
+As posições **não são estimadas**: são as coordenadas dos rótulos de estaca que
+o projetista escreveu no desenho, lidas do PDF vetorial por
+`ferramentas/croqui-estacas.py`. O script recorta a planta, gera o `.webp` em
+`projetos/<obra>/` e imprime o bloco `croquis` para colar no cadastro:
+
+```bash
+python ferramentas/croqui-estacas.py           # gera imagem + coordenadas
+python ferramentas/croqui-estacas.py --check   # só confere a sequência
+```
+
+Ele **recusa** gerar se faltar o rótulo de alguma estaca da faixa — croqui com
+estaca faltando é pior que croqui nenhum. A folha usada como base precisa ser
+uma planta com os rótulos em texto: na Astrogildo a de pavimentação virou curva
+no PDF, e a base é a de terraplenagem, que desenha a mesma via.
+
 ## Fila offline
 
 Lançamento feito sem sinal espera no aparelho e sobe sozinho quando a conexão
@@ -704,6 +727,7 @@ agregando por código, como sempre foi.
 | `manifest.json` / `sw.js` / `icon-*.png` / `favicon.svg` | PWA — a marca é a avenida em perspectiva |
 | `pacotes.csv` | Snapshot de referência da aba Pacotes |
 | `dados/teotonio-muros.js` | Pacotes e coeficientes dos muros de contenção, enquanto a planilha não os tem (ver acima) |
+| `ferramentas/croqui-estacas.py` | Gera o croqui de estaqueamento (planta + posição de cada estaca) a partir da prancha em PDF |
 | `docs/muros-planilha.csv` | As mesmas linhas prontas para colar nas abas `Pacotes` e `Coeficientes` |
 | `js/ui/icones.js` | Conjunto de ícones do app — traço único na grade de 24, cor herdada do tema. Cobre navegação, ações e frentes de serviço (`icFrente()` escolhe pelo nome da frente) |
 | `vendor/` | Bibliotecas servidas pelo próprio site (ver abaixo) |

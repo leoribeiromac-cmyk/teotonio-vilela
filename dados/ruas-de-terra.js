@@ -47,6 +47,57 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     { "id": "AGR", "label": "Agrimensor Sugaya",  "ini": 0, "fim": 12, "extensaoM": 240 },
     { "id": "AST", "label": "Astrogildo Pereira", "ini": 0, "fim": 18, "extensaoM": 360 }
   ],
+
+  /* Croqui de estaqueamento: a planta da rua e a posição de cada estaca
+     SOBRE ela. O mapa em grade diz quanto foi feito na estaca 7; isto diz
+     onde fica a estaca 7. As coordenadas (fração da imagem, 0–1) são as dos
+     rótulos que o projetista escreveu no desenho — não são estimadas.
+     Gerado por `ferramentas/croqui-estacas.py`, que refaz imagem e números
+     juntos a partir da prancha; não editar à mão. */
+  "croquis": [
+    { "eixo": "AGR", "arquivo": "projetos/ruas-de-terra/estaqueamento-agr.webp", "prancha": "CT-AS-101-1001-0F-DE", "disciplina": "Pavimentação", "largura": 1699, "altura": 598,
+      "estacas": [
+        {"n":0,"x":0.0464,"y":0.1319}, {"n":1,"x":0.1186,"y":0.2221}, {"n":2,"x":0.1985,"y":0.2603}, {"n":3,"x":0.2791,"y":0.2936},
+        {"n":4,"x":0.3598,"y":0.322}, {"n":5,"x":0.4407,"y":0.3473}, {"n":6,"x":0.5217,"y":0.3728}, {"n":7,"x":0.6026,"y":0.3998},
+        {"n":8,"x":0.6835,"y":0.4268}, {"n":9,"x":0.7644,"y":0.4552}, {"n":10,"x":0.8391,"y":0.5386}, {"n":11,"x":0.8965,"y":0.704},
+        {"n":12,"x":0.9536,"y":0.8681}
+      ] },
+    { "eixo": "AST", "arquivo": "projetos/ruas-de-terra/estaqueamento-ast.webp", "prancha": "CT-AP-103-1001-0F-DE", "disciplina": "Terraplenagem", "largura": 1702, "altura": 930,
+      "estacas": [
+        {"n":0,"x":0.1015,"y":0.8924}, {"n":1,"x":0.0588,"y":0.7995}, {"n":2,"x":0.0645,"y":0.6805}, {"n":3,"x":0.0999,"y":0.5818},
+        {"n":4,"x":0.1616,"y":0.5421}, {"n":5,"x":0.2266,"y":0.5438}, {"n":6,"x":0.2899,"y":0.5618}, {"n":7,"x":0.3532,"y":0.5797},
+        {"n":8,"x":0.4165,"y":0.5975}, {"n":9,"x":0.4796,"y":0.6152}, {"n":10,"x":0.5427,"y":0.6332}, {"n":11,"x":0.6028,"y":0.6186},
+        {"n":12,"x":0.6509,"y":0.5468}, {"n":13,"x":0.6972,"y":0.466}, {"n":14,"x":0.7438,"y":0.3855}, {"n":15,"x":0.7902,"y":0.3047},
+        {"n":16,"x":0.8366,"y":0.2241}, {"n":17,"x":0.886,"y":0.1471}, {"n":18,"x":0.9412,"y":0.1076}
+      ] }
+  ],
+
+  /* As pranchas do executivo, na tela Projetos. São PDFs (não pirâmide de
+     quadrados como a da Teotônio): A1 de rua curta abre direto no PDF.js
+     sem travar o celular. `ref` é o que a fiscalização usa para se referir
+     à folha. */
+  "projetos": [
+    { "grupo": "Agrimensor Sugaya", "disciplina": "Pavimentação", "escala": "1:500",
+      "ref": "Rua Agrimensor Sugaya — est. 0 a 12 (240,00 m)",
+      "cod": "CT-AS-101-1001-0F-DE",
+      "arquivo": "projetos/ruas-de-terra/agrimensor-pavimentacao.pdf" },
+    { "grupo": "Agrimensor Sugaya", "disciplina": "Drenagem", "escala": "1:500",
+      "ref": "Rua Agrimensor Sugaya — est. 0 a 12",
+      "cod": "CT-AS-102-1001-0F-DE",
+      "arquivo": "projetos/ruas-de-terra/agrimensor-drenagem.pdf" },
+    { "grupo": "Astrogildo Pereira", "disciplina": "Pavimentação", "escala": "1:500",
+      "ref": "Rua Astrogildo Pereira — est. 0 a 18 (360,00 m)",
+      "cod": "CT-AP-101-1001-0G-DE",
+      "arquivo": "projetos/ruas-de-terra/astrogildo-pavimentacao.pdf" },
+    { "grupo": "Astrogildo Pereira", "disciplina": "Drenagem", "escala": "1:500",
+      "ref": "Rua Astrogildo Pereira — est. 0 a 18",
+      "cod": "CT-AP-102-1001-0G-DE",
+      "arquivo": "projetos/ruas-de-terra/astrogildo-drenagem.pdf" },
+    { "grupo": "Astrogildo Pereira", "disciplina": "Terraplenagem", "escala": "1:500",
+      "ref": "Rua Astrogildo Pereira — planta e perfil, est. 0 a 18",
+      "cod": "CT-AP-103-1001-0F-DE",
+      "arquivo": "projetos/ruas-de-terra/astrogildo-terraplenagem.pdf" }
+  ],
   "frentes": [
     {
       "id": 1,
@@ -142,38 +193,11 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     }
   ],
   "coeficientes": [],
-  "projetos": [
-    {
-      "rua": "Agrimensor Sugaya",
-      "disciplina": "Pavimentação",
-      "cod": "CT-AS-101-1001-0F-DE",
-      "arquivo": "projetos/agrimensor/agrimensor-pavimentacao.pdf"
-    },
-    {
-      "rua": "Agrimensor Sugaya",
-      "disciplina": "Drenagem",
-      "cod": "CT-AS-102-1001-0F-DE",
-      "arquivo": "projetos/agrimensor/agrimensor-drenagem.pdf"
-    },
-    {
-      "rua": "Astrogildo Pereira",
-      "disciplina": "Pavimentação",
-      "cod": "CT-AP-101-1001-0G-DE",
-      "arquivo": "projetos/astrogildo/astrogildo-pavimentacao.pdf"
-    },
-    {
-      "rua": "Astrogildo Pereira",
-      "disciplina": "Drenagem",
-      "cod": "CT-AP-102-1001-0G-DE",
-      "arquivo": "projetos/astrogildo/astrogildo-drenagem.pdf"
-    },
-    {
-      "rua": "Astrogildo Pereira",
-      "disciplina": "Terraplenagem",
-      "cod": "CT-AP-103-1001-0F-DE",
-      "arquivo": "projetos/astrogildo/astrogildo-terraplenagem.pdf"
-    }
-  ],
+  /* As pranchas estão lá em cima, junto com os croquis. Aqui havia uma
+     segunda lista `projetos`, herdada da conversão do app "Gestor": ela
+     apontava para `projetos/agrimensor/…` e `projetos/astrogildo/…`, que
+     nunca existiram neste repositório, e por ser a última do objeto era
+     ela que valia — a tela Projetos desta obra abria só com erro 404. */
   "servicos": [
     {
       "rua": "Agrimensor Sugaya",

@@ -907,6 +907,39 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   writing-mode:vertical-rl;transform:rotate(180deg);
 }
 
+/* ===== CROQUI DE ESTAQUEAMENTO =====
+   A planta da rua com uma bolha em cada estaca. O fundo é branco fixo, e
+   não var(--surface): é um desenho de projeto, com as cores da legenda
+   (vermelho o pavimento, amarelo o passeio) — no tema escuro, um fundo
+   escuro embaixo dele deixaria a planta ilegível. */
+.croqui{
+  position:relative;background:#fff;border:1px solid var(--border);
+  border-radius:var(--r);overflow:hidden;line-height:0;
+}
+.croqui img{width:100%;height:auto;display:block}
+.croqui-pt{
+  position:absolute;transform:translate(-50%,-50%);
+  width:22px;height:22px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;
+  line-height:1;cursor:pointer;border:1.5px solid #fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);
+  transition:transform calc(.15s * var(--anim-speed));
+}
+.croqui-pt:hover{transform:translate(-50%,-50%) scale(1.25);z-index:3}
+.croqui-pt.on{outline:2.5px solid var(--acc);outline-offset:2px;z-index:4}
+.croqui-legenda{
+  display:flex;gap:16px;flex-wrap:wrap;align-items:center;
+  font-size:11px;color:var(--muted);margin-top:8px;
+}
+.croqui-legenda i{
+  width:11px;height:11px;border-radius:50%;display:inline-block;
+  margin-right:5px;vertical-align:-1px;border:1px solid #fff;
+}
+@media(max-width:700px){
+  .croqui-pt{width:18px;height:18px;font-size:8px}
+}
+
 /* ===================== FORM ===================== */
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:700px){.form-grid{grid-template-columns:1fr}}
@@ -9569,6 +9602,8 @@ function renderAvancoFisico() {
   });
   
   return `
+    ${renderCroquiEstacas()}
+
     <div class="card stagger-item">
       <div class="card-header">
         <div>
@@ -9624,6 +9659,124 @@ function renderAvancoFisico() {
             `).join('')}
           </tbody>
         </table>
+      </div>
+    </div>
+  `;
+}
+
+/* ------------------------------------------------------------------
+   CROQUI DE ESTAQUEAMENTO
+   ------------------------------------------------------------------
+   O mapa em grade responde "quanto foi feito na estaca 7". Este responde
+   "onde fica a estaca 7" — que é a pergunta de quem lê o painel sem ter
+   estado no canteiro. O fundo é a própria planta do executivo, e cada
+   bolha está na coordenada que o projetista escreveu no desenho (ver
+   `ferramentas/croqui-estacas.py`); nada aqui é posição estimada.
+
+   Obra sem `croquis` no cadastro simplesmente não mostra o bloco.
+   ------------------------------------------------------------------ */
+const CROQUI = { sel: null };   // { eixo, num } da estaca aberta
+
+window.croquiSelecionar = function (eixo, num) {
+  const igual = CROQUI.sel && CROQUI.sel.eixo === eixo && CROQUI.sel.num === num;
+  CROQUI.sel = igual ? null : { eixo: eixo, num: num };   // clicar de novo fecha
+  const box = document.getElementById('croquiBloco');
+  if (box) box.outerHTML = renderCroquiEstacas();
+};
+
+/* Os lançamentos que citam esta estaca, do mais recente para trás. */
+function lancamentosNaEstaca(eixo, num) {
+  return (STATE.rdoavanco || []).filter(r => {
+    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    if (!pid || pid === 'OUTRO') return false;
+    return lerLocalEstaca(getCSVField(r, 'Local_Estaca'))
+      .some(e => e.eixo === eixo && e.num === num);
+  }).sort((a, b) => String(getCSVField(b, 'Data')).localeCompare(String(getCSVField(a, 'Data'))));
+}
+
+function renderCroquiEstacas() {
+  const croquis = (OBRA.croquis || []).filter(c => eixoPorId(c.eixo));
+  if (!croquis.length) return '';
+
+  const est = calcAvancoPorEstaca(STATE.rdoavanco || [], STATE.pacotes || []);
+  const maxLanc = Math.max(1, ...Object.values(est).map(e => e.lancamentos));
+
+  const bolha = (c, e) => {
+    const dado = est[chaveEstaca(e.n, c.eixo)];
+    const lanc = dado ? dado.lancamentos : 0;
+    const pacs = dado ? dado.pacotes.size : 0;
+    // Cinza = ninguém lançou nada ali ainda. Com produção, a cor escurece
+    // com o número de RDOs — é a mesma escala do mapa em grade.
+    const cor = lanc === 0
+      ? 'background:oklch(0.72 0 0 / .55);color:#fff'
+      : `background:oklch(${(0.86 - Math.min(lanc / maxLanc, 1) * 0.36).toFixed(2)} 0.17 38);color:#fff`;
+    const sel = CROQUI.sel && CROQUI.sel.eixo === c.eixo && CROQUI.sel.num === e.n ? ' on' : '';
+    const t = lanc === 0
+      ? `E${e.n} · sem lançamento`
+      : `E${e.n} · ${lanc} RDO${lanc !== 1 ? 's' : ''} · ${pacs} pacote${pacs !== 1 ? 's' : ''}`;
+    return `<div class="croqui-pt${sel}" style="left:${(e.x * 100).toFixed(2)}%;top:${(e.y * 100).toFixed(2)}%;${cor}"
+                 title="${escHtml(t)}" onclick="croquiSelecionar('${escHtml(c.eixo)}', ${e.n})">${e.n}</div>`;
+  };
+
+  const detalhe = () => {
+    if (!CROQUI.sel) return '';
+    const eixo = eixoPorId(CROQUI.sel.eixo);
+    const linhas = lancamentosNaEstaca(CROQUI.sel.eixo, CROQUI.sel.num);
+    const titulo = `Estaca E${CROQUI.sel.num} · ${escHtml(eixo ? eixo.label : CROQUI.sel.eixo)}`;
+    if (!linhas.length) {
+      return `<div style="margin-top:12px;padding:12px 14px;background:var(--bg);border-radius:var(--r);font-size:13px;color:var(--muted)">
+        <strong style="color:var(--text)">${titulo}</strong> — nenhum serviço lançado nesta estaca ainda.</div>`;
+    }
+    return `<div style="margin-top:12px;padding:12px 14px;background:var(--bg);border-radius:var(--r)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">${titulo} — ${linhas.length} lançamento${linhas.length > 1 ? 's' : ''}</div>
+      ${linhas.slice(0, 12).map(r => {
+        const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+        const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid);
+        const un = p ? (getCSVField(p, 'Unidade Física') || '') : '';
+        return `<div style="display:flex;gap:10px;font-size:12px;padding:3px 0;border-top:1px solid var(--border)">
+          <span class="t-mono" style="color:var(--muted);white-space:nowrap">${escHtml(fmtData(getCSVField(r, 'Data')))}</span>
+          <span style="flex:1">${escHtml(p ? getCSVField(p, 'Pacote') : (getCSVField(r, 'Pacote_Nome') || pid))}</span>
+          <span class="t-mono" style="white-space:nowrap">${fmtNum(num(getCSVField(r, 'Quantidade')), 2)} ${escHtml(un)}</span>
+        </div>`;
+      }).join('')}
+      ${linhas.length > 12 ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${linhas.length - 12} mais — veja no Histórico</div>` : ''}
+    </div>`;
+  };
+
+  return `
+    <div class="card stagger-item" id="croquiBloco">
+      <div class="card-header">
+        <div>
+          <div class="card-title">${ic('mapa')} Planta de estaqueamento</div>
+          <div class="card-title-sub">Onde fica cada estaca, na planta do projeto · clique numa estaca para ver o que foi lançado nela</div>
+        </div>
+      </div>
+      <div class="card-body">
+        ${croquis.map(c => {
+          const eixo = eixoPorId(c.eixo);
+          return `
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+            ${escHtml(eixo.label)} · E${eixo.ini}–E${eixo.fim}
+            <span style="text-transform:none;font-weight:400"> — prancha ${escHtml(c.prancha || '')}${c.disciplina ? ' (' + escHtml(c.disciplina) + ')' : ''}</span>
+          </div>
+          <!-- O aspect-ratio fica no CONTÊINER, não só na imagem: se a planta
+               não carregar (primeira abertura sem sinal, antes do cache do
+               service worker), a caixa guarda a forma e as estacas continuam
+               no lugar certo, cada uma na sua fração. -->
+          <div class="croqui" style="aspect-ratio:${c.largura} / ${c.altura}">
+            <img src="${escHtml(c.arquivo)}" width="${c.largura}" height="${c.altura}"
+                 alt="Planta da ${escHtml(eixo.label)} com o estaqueamento">
+            ${(c.estacas || []).map(e => bolha(c, e)).join('')}
+          </div>
+        </div>`;
+        }).join('')}
+        <div class="croqui-legenda">
+          <span><i style="background:oklch(0.72 0 0 / .55)"></i>sem lançamento</span>
+          <span><i style="background:oklch(0.78 0.17 38)"></i>com produção</span>
+          <span><i style="background:oklch(0.50 0.17 38)"></i>mais RDOs</span>
+        </div>
+        ${detalhe()}
       </div>
     </div>
   `;
