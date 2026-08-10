@@ -17,9 +17,22 @@ O modelo de dados central: **pacotes físicos (P01–P36)** lançados no campo �
 
 ## Publicar alterações do backend (`Code.gs`)
 
+**Isto é automático desde a versão 49.** `Code.gs` alterado na `main` dispara o
+fluxo `implantar-appscript`, que empurra o código e republica na **mesma**
+implantação — a URL `/exec` não muda. Não precisa abrir o editor do Apps
+Script. Ver "Implantar o backend sozinho", mais abaixo, para como está montado.
+
+Primeira execução de verdade: `Redeployed @49`, com as três conferências
+passando (nada apagado, projeto certo, manifesto presente).
+
+<details>
+<summary>À mão, se a automação estiver desligada ou fora do ar</summary>
+
 1. Abra a planilha → Extensões → Apps Script.
 2. Cole o conteúdo de `Code.gs` por cima do existente e salve.
 3. **Implantar → Gerenciar implantações → ✏ editar → Nova versão → Implantar.** A URL `/exec` não muda.
+
+</details>
 
 > ### ⚠ Nesta versão, rode `migrarObraNasAbasDeRDO()` uma vez
 >
