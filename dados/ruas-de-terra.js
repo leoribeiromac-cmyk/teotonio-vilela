@@ -43,6 +43,10 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
      `id` é o que fica GRAVADO no lançamento, entre parênteses
      ("E4 a E7 (AGR)"). Trocar um id depois cega o histórico já lançado. */
   "eixoRotulo": "Rua",
+  /* Pede o lado da via em cada lançamento (LD / LE / LD-LE, como cotam as
+     memórias de cálculo). Meia pista é meio serviço: sem isso, "guia da E4
+     à E7" tanto pode ser 60 m como 120 m. */
+  "lados": true,
   "eixos": [
     { "id": "AGR", "label": "Agrimensor Sugaya",  "ini": 0, "fim": 12, "extensaoM": 240 },
     { "id": "AST", "label": "Astrogildo Pereira", "ini": 0, "fim": 18, "extensaoM": 360 }

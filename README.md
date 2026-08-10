@@ -590,6 +590,22 @@ Quem não declara `eixos` continua funcionando: a Teotônio cai nos seus
 (rua → nº de estacas). Obra **sem** estaqueamento nenhum não pergunta estaca
 no lançamento, e as telas de mapa e de avenida 3D não aparecem para ela.
 
+**Trecho é trecho, não duas pontas.** `E0 a E4` conta como cinco estacas —
+o trecho foi executado inteiro, e a quantidade é dividida entre elas. Sem
+isso, E1, E2 e E3 apareciam apagadas no mapa como se nada tivesse sido feito
+ali. Estacas soltas continuam soltas: `E10, E12` são duas, não três — o que
+manda é o separador (`a`, `até`, `-`).
+
+### Lado da via
+
+`lados: true` no cadastro põe no lançamento o campo **Lado da via** (LD / LE /
+LD/LE, o vocabulário das memórias de cálculo), obrigatório onde aparece, e o
+lado fica no fim do campo gravado: `"E4 a E7 (AGR) LD"`. Meia pista é meio
+serviço — sem o lado, "guia da E4 à E7" tanto pode ser 60 m como 120 m, e a
+conferência da medição não separa o que já foi medido do que falta no outro
+lado. A obra pode declarar a própria lista em vez de `true`. Sem a chave, o
+campo não existe — é o caso da Teotônio, cujo formulário segue o de sempre.
+
 Quando o pacote sabe em que rua está (coluna `Rua` do cadastro, que é o caso
 das Ruas de Terra), o eixo do lançamento **vem do pacote** e não é perguntado —
 não há como registrar a produção de uma rua no estaqueamento da outra.
