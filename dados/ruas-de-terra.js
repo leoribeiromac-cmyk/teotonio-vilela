@@ -24,7 +24,11 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
   "objeto": "Pavimentação das ruas Agrimensor Sugaya e Astrogildo Pereira",
   "valorGlobal": 3585081.43,
   "prazoMeses": 6,
-  "inicioISO": "2026-07-01",
+  /* Data da ordem de início. É daqui que saem a janela do contrato
+     (12/08/2026 a 12/02/2027, com os 6 meses de prazo), a curva prevista e
+     o "status vs cronograma" do Painel Executivo. Até 10/08/2026 estava
+     01/07/2026, que era provisório da conversão da obra. */
+  "inicioISO": "2026-08-12",
   "fonte": "arquivo",
   "ruas": [
     "Agrimensor Sugaya",
