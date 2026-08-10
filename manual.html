@@ -4,14 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Manual do Sistema — Ruas de Terra 4 · Gestor Engenharia</title>
-<meta name="description" content="Apresentação e manual de uso do sistema de controle de obra — apontadores, administrativo e engenharia. Implantação na Ruas de Terra 4.">
+<meta name="description" content="Como usar o sistema de controle de obra: apontador, administrativo e engenharia. Implantação na Ruas de Terra 4.">
 <link rel="icon" href="favicon.svg">
 <meta name="theme-color" content="#1a1612">
 <!--
-  MANUAL DO SISTEMA — página independente, servida pelo próprio GitHub Pages.
-  Mesmas fontes, mesmas cores e o MESMO conjunto de ícones do app (js/ui/icones.js):
-  quem lê o manual tem de reconhecer o desenho quando abrir o sistema.
-  Nada de CDN — o manual precisa abrir no canteiro, como o app.
+  MANUAL DO SISTEMA — feito para ser lido NO CELULAR, em pé, no canteiro.
+  Por isso: telas recortadas com marcação numerada em vez de parágrafo
+  descrevendo campo; tabela nenhuma (vira lista de cartões); e o que é
+  consulta fica dobrado num <details>, para a página não virar parede.
+  Fontes do vendor/ e ícones do js/ui/icones.js: nada de CDN, como no app.
 -->
 <style>
 @font-face{font-family:'Space Grotesk';font-style:normal;font-weight:400;font-display:swap;
@@ -27,1131 +28,810 @@
 @font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:600;font-display:swap;
   src:url('vendor/fontes/jetbrains-mono-latin-600-normal.woff2') format('woff2')}
 
-/* ---- paleta: a mesma do app (claro por padrão, escuro por preferência) ---- */
 :root{
-  --bg:#f5f3ef; --bg-2:#eeebe5; --surface:#ffffff; --surface-2:#fafaf7;
-  --border:#e4e0d8; --border-strong:#ccc8bf;
-  --text:#1a1712; --text-2:#3a3530; --muted:#7a7570;
+  --bg:#f5f3ef; --surface:#ffffff; --surface-2:#faf9f6;
+  --border:#e4e0d8; --border-2:#ccc8bf;
+  --text:#1a1712; --text-2:#3a3530; --muted:#78736d;
   --dark:#1a1612;
-  --pri:oklch(0.45 0.14 240); --pri-l:oklch(0.95 0.03 240);
-  --acc:oklch(0.62 0.18 38);  --acc-l:oklch(0.96 0.04 38); --acc-d:oklch(0.48 0.18 38);
-  --grn:oklch(0.52 0.14 150); --grn-l:oklch(0.95 0.04 150);
-  --blu:oklch(0.52 0.16 250); --blu-l:oklch(0.95 0.04 250);
-  --ylw:oklch(0.62 0.13 85);  --ylw-l:oklch(0.97 0.05 85);
-  --red:oklch(0.55 0.19 20);  --red-l:oklch(0.96 0.04 20);
-  --r:12px; --r-sm:6px; --r-lg:18px;
-  --sh:0 1px 3px rgba(0,0,0,.05),0 2px 10px rgba(0,0,0,.05);
-  --sh-lg:0 18px 44px rgba(0,0,0,.14);
-  --max:1120px;
+  --acc:oklch(0.58 0.18 38); --acc-l:oklch(0.96 0.035 38); --acc-txt:oklch(0.46 0.17 38);
+  --grn:oklch(0.50 0.14 150); --grn-l:oklch(0.95 0.04 150);
+  --blu:oklch(0.48 0.15 250); --blu-l:oklch(0.95 0.035 250);
+  --ylw:oklch(0.56 0.13 80);  --ylw-l:oklch(0.96 0.05 85);
+  --red:oklch(0.53 0.19 22);  --red-l:oklch(0.96 0.04 22);
+  --r:14px; --r-lg:20px;
+  --sh:0 1px 2px rgba(0,0,0,.04),0 4px 16px rgba(0,0,0,.05);
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --bg:#14120e; --bg-2:#1c1813; --surface:#211d17; --surface-2:#2a251e;
-    --border:#332d24; --border-strong:#463f33;
-    --text:#f2ede3; --text-2:#d8d1c4; --muted:#948b7c;
-    --dark:#0f0d0a;
-    --pri:oklch(0.68 0.13 240); --pri-l:oklch(0.30 0.06 240);
-    --acc:oklch(0.72 0.16 38);  --acc-l:oklch(0.30 0.07 38); --acc-d:oklch(0.80 0.14 38);
-    --grn:oklch(0.74 0.14 150); --grn-l:oklch(0.29 0.06 150);
-    --blu:oklch(0.72 0.14 250); --blu-l:oklch(0.29 0.06 250);
-    --ylw:oklch(0.82 0.14 85);  --ylw-l:oklch(0.31 0.07 85);
-    --red:oklch(0.70 0.17 20);  --red-l:oklch(0.30 0.08 20);
-    --sh:0 1px 3px rgba(0,0,0,.35),0 2px 10px rgba(0,0,0,.35);
-    --sh-lg:0 18px 44px rgba(0,0,0,.5);
+    --bg:#14120e; --surface:#211d17; --surface-2:#1b1712;
+    --border:#332d24; --border-2:#4a4237;
+    --text:#f2ede3; --text-2:#dcd5c8; --muted:#9c9384;
+    --dark:#0d0b08;
+    --acc:oklch(0.72 0.16 38); --acc-l:oklch(0.28 0.06 38); --acc-txt:oklch(0.80 0.14 38);
+    --grn:oklch(0.74 0.14 150); --grn-l:oklch(0.27 0.05 150);
+    --blu:oklch(0.72 0.13 250); --blu-l:oklch(0.27 0.05 250);
+    --ylw:oklch(0.82 0.13 85);  --ylw-l:oklch(0.29 0.06 85);
+    --red:oklch(0.72 0.16 22);  --red-l:oklch(0.28 0.07 22);
+    --sh:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.35);
   }
 }
 :root[data-theme="dark"]{
-  --bg:#14120e; --bg-2:#1c1813; --surface:#211d17; --surface-2:#2a251e;
-  --border:#332d24; --border-strong:#463f33;
-  --text:#f2ede3; --text-2:#d8d1c4; --muted:#948b7c;
-  --dark:#0f0d0a;
-  --pri:oklch(0.68 0.13 240); --pri-l:oklch(0.30 0.06 240);
-  --acc:oklch(0.72 0.16 38);  --acc-l:oklch(0.30 0.07 38); --acc-d:oklch(0.80 0.14 38);
-  --grn:oklch(0.74 0.14 150); --grn-l:oklch(0.29 0.06 150);
-  --blu:oklch(0.72 0.14 250); --blu-l:oklch(0.29 0.06 250);
-  --ylw:oklch(0.82 0.14 85);  --ylw-l:oklch(0.31 0.07 85);
-  --red:oklch(0.70 0.17 20);  --red-l:oklch(0.30 0.08 20);
-  --sh:0 1px 3px rgba(0,0,0,.35),0 2px 10px rgba(0,0,0,.35);
-  --sh-lg:0 18px 44px rgba(0,0,0,.5);
+  --bg:#14120e; --surface:#211d17; --surface-2:#1b1712;
+  --border:#332d24; --border-2:#4a4237;
+  --text:#f2ede3; --text-2:#dcd5c8; --muted:#9c9384;
+  --dark:#0d0b08;
+  --acc:oklch(0.72 0.16 38); --acc-l:oklch(0.28 0.06 38); --acc-txt:oklch(0.80 0.14 38);
+  --grn:oklch(0.74 0.14 150); --grn-l:oklch(0.27 0.05 150);
+  --blu:oklch(0.72 0.13 250); --blu-l:oklch(0.27 0.05 250);
+  --ylw:oklch(0.82 0.13 85);  --ylw-l:oklch(0.29 0.06 85);
+  --red:oklch(0.72 0.16 22);  --red-l:oklch(0.28 0.07 22);
+  --sh:0 1px 2px rgba(0,0,0,.4),0 4px 16px rgba(0,0,0,.35);
 }
 
 *{box-sizing:border-box}
-html{scroll-behavior:smooth;scroll-padding-top:76px}
+html{scroll-behavior:smooth;scroll-padding-top:70px;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--text);
   font-family:'Space Grotesk',system-ui,-apple-system,sans-serif;
-  font-size:16px;line-height:1.62;-webkit-font-smoothing:antialiased}
+  font-size:17px;line-height:1.55;-webkit-font-smoothing:antialiased}
 img{max-width:100%;display:block}
-a{color:var(--acc-d,var(--acc));text-underline-offset:3px}
-code,.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.88em}
-svg.ic{width:1em;height:1em;vertical-align:-.12em;flex:none}
+h1,h2,h3{text-wrap:balance;letter-spacing:-.02em;margin:0}
+p{margin:0}
+ul{margin:0;padding:0;list-style:none}
+code,.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:.86em}
+svg.ic{width:1em;height:1em;flex:none}
+:focus-visible{outline:3px solid var(--acc);outline-offset:2px;border-radius:6px}
 
-.wrap{max-width:var(--max);margin:0 auto;padding:0 22px}
-section{padding:60px 0;border-top:1px solid var(--border)}
-section:first-of-type{border-top:0}
+.env{max-width:760px;margin:0 auto;padding:0 18px}
+.bloco{padding:44px 0;display:flex;flex-direction:column;gap:18px}
+.bloco+.bloco{border-top:1px solid var(--border)}
 
-/* ---------- barra de navegação ---------- */
-.topo{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 88%,transparent);
-  backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
-.topo-in{max-width:var(--max);margin:0 auto;padding:9px 22px;display:flex;align-items:center;gap:14px}
-.marca{display:flex;align-items:center;gap:9px;font-weight:700;font-size:14px;white-space:nowrap}
-.marca span.tag{background:var(--acc);color:#fff;font-size:10px;font-weight:700;letter-spacing:.08em;
-  padding:3px 7px;border-radius:5px;text-transform:uppercase}
-.topo nav{margin-left:auto;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
-.topo nav::-webkit-scrollbar{display:none}
-.topo nav a{color:var(--muted);text-decoration:none;font-size:13px;font-weight:500;
-  padding:7px 10px;border-radius:8px;white-space:nowrap}
-.topo nav a:hover{background:var(--surface-2);color:var(--text)}
-.btn-tema{flex:none;background:var(--surface);border:1px solid var(--border);color:var(--text);
-  border-radius:8px;width:34px;height:34px;display:grid;place-items:center;cursor:pointer;font-size:15px}
+/* ---------- barra ---------- */
+.barra{position:sticky;top:0;z-index:60;background:color-mix(in srgb,var(--bg) 90%,transparent);
+  backdrop-filter:blur(14px);border-bottom:1px solid var(--border)}
+.barra-in{max-width:760px;margin:0 auto;padding:10px 18px;display:flex;align-items:center;gap:10px}
+.logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:15px;min-width:0}
+.logo b{background:var(--acc);color:#fff;font-size:10px;letter-spacing:.09em;padding:4px 7px;
+  border-radius:5px;text-transform:uppercase;flex:none}
+.logo span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt-icone{margin-left:auto;flex:none;background:var(--surface);border:1px solid var(--border);
+  color:var(--text);border-radius:10px;width:38px;height:38px;display:grid;place-items:center;
+  cursor:pointer;font-size:16px}
 
 /* ---------- capa ---------- */
-.capa{background:var(--dark);color:#f2ede3;padding:0;border:0}
-.capa .wrap{padding-top:64px;padding-bottom:56px}
-.capa .kicker{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.09);
-  border:1px solid rgba(255,255,255,.14);color:#fff;font-size:11px;font-weight:700;
-  letter-spacing:.1em;text-transform:uppercase;padding:6px 12px;border-radius:999px}
-.capa h1{font-size:clamp(32px,6vw,58px);line-height:1.06;margin:22px 0 0;letter-spacing:-.02em;font-weight:700}
-.capa h1 em{font-style:normal;color:oklch(0.72 0.16 38)}
-.capa .sub{font-size:clamp(16px,2.2vw,20px);color:rgba(242,237,227,.72);max-width:46em;margin:18px 0 0}
-.ficha{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;
-  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.12);border-radius:var(--r);
-  overflow:hidden;margin-top:38px}
-.ficha div{background:var(--dark);padding:15px 17px}
-.ficha dt{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:rgba(242,237,227,.5);
-  font-weight:700;margin:0}
-.ficha dd{margin:5px 0 0;font-size:17px;font-weight:600;font-family:'JetBrains Mono',monospace}
-.ficha dd small{font-family:'Space Grotesk';font-weight:400;font-size:13px;color:rgba(242,237,227,.6);display:block}
+.capa{background:var(--dark);color:#f4efe6;padding:34px 0 30px;display:flex;flex-direction:column;gap:16px}
+.capa .selo{align-self:flex-start;display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;
+  letter-spacing:.1em;text-transform:uppercase;color:oklch(0.78 0.14 38);
+  background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);
+  padding:6px 11px;border-radius:999px}
+.capa h1{font-size:clamp(30px,8.4vw,46px);line-height:1.04;font-weight:700}
+.capa h1 em{font-style:normal;color:oklch(0.74 0.16 38)}
+.capa .diz{font-size:17px;color:rgba(244,239,230,.75)}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{font-size:12.5px;font-weight:600;padding:6px 11px;border-radius:999px;
+  background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13);color:rgba(244,239,230,.9);
+  font-family:'JetBrains Mono',monospace}
 
-/* ---------- tipografia de seção ---------- */
-.num{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--acc);
-  letter-spacing:.14em;display:block;margin-bottom:10px}
-h2{font-size:clamp(24px,3.6vw,36px);line-height:1.16;letter-spacing:-.015em;margin:0 0 14px;font-weight:700}
-h3{font-size:19px;margin:34px 0 10px;font-weight:600;letter-spacing:-.01em}
-h4{font-size:15px;margin:0 0 6px;font-weight:600}
-.lead{font-size:clamp(17px,2vw,19px);color:var(--text-2);max-width:44em;margin:0 0 12px}
-p{margin:0 0 14px;max-width:44em}
-ul,ol{max-width:44em;padding-left:22px;margin:0 0 14px}
-li{margin:0 0 7px}
-strong{font-weight:600}
-.muted{color:var(--muted)}
+/* ---------- títulos ---------- */
+.olho{font-family:'JetBrains Mono',monospace;font-size:11.5px;font-weight:600;color:var(--acc-txt);
+  letter-spacing:.16em;text-transform:uppercase}
+h2{font-size:clamp(25px,6.4vw,34px);line-height:1.12;font-weight:700}
+h3{font-size:19px;font-weight:600}
+.diz{font-size:17px;color:var(--text-2)}
+.mini{font-size:14px;color:var(--muted);line-height:1.5}
 
-/* ---------- blocos ---------- */
-.grade{display:grid;gap:16px}
-.g2{grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
-.g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
-.g4{grid-template-columns:repeat(auto-fit,minmax(195px,1fr))}
-.cartao{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
-  padding:20px 22px;box-shadow:var(--sh)}
-.cartao h4{display:flex;align-items:center;gap:9px}
-.cartao p:last-child{margin-bottom:0}
-.cartao .ic-box{width:34px;height:34px;border-radius:9px;background:var(--acc-l);color:var(--acc-d);
-  display:grid;place-items:center;font-size:19px;margin-bottom:12px}
+/* ---------- números de venda ---------- */
+.numeros{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.numero{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:15px 16px;box-shadow:var(--sh)}
+.numero b{display:block;font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:600;
+  line-height:1;letter-spacing:-.03em;color:var(--acc-txt);font-variant-numeric:tabular-nums}
+.numero span{display:block;font-size:13.5px;color:var(--muted);margin-top:7px;line-height:1.35}
 
-.antes-depois{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
-.ad{border-radius:var(--r);padding:18px 20px;border:1px solid var(--border)}
-.ad h4{font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px}
-.ad.hoje{background:var(--red-l);border-color:color-mix(in srgb,var(--red) 35%,transparent)}
-.ad.hoje h4{color:var(--red)}
-.ad.novo{background:var(--grn-l);border-color:color-mix(in srgb,var(--grn) 35%,transparent)}
-.ad.novo h4{color:var(--grn)}
-.ad ul{margin:0;padding-left:18px;font-size:15px}
+/* ---------- antes / depois ---------- */
+.par{display:grid;gap:10px}
+.lado{border-radius:var(--r);padding:15px 17px;border:1px solid var(--border)}
+.lado.a{background:var(--red-l);border-color:color-mix(in srgb,var(--red) 30%,transparent)}
+.lado.b{background:var(--grn-l);border-color:color-mix(in srgb,var(--grn) 30%,transparent)}
+.lado h3{font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:9px}
+.lado.a h3{color:var(--red)} .lado.b h3{color:var(--grn)}
+.lado li{font-size:15.5px;line-height:1.45;padding-left:20px;position:relative;margin-bottom:7px}
+.lado li:last-child{margin-bottom:0}
+.lado.a li::before{content:'✕';position:absolute;left:0;color:var(--red);font-weight:700;font-size:13px}
+.lado.b li::before{content:'✓';position:absolute;left:0;color:var(--grn);font-weight:700;font-size:14px}
 
-.destaque{border-left:3px solid var(--acc);background:var(--acc-l);padding:16px 20px;
-  border-radius:0 var(--r) var(--r) 0;margin:22px 0}
-.destaque p:last-child{margin-bottom:0}
-.destaque.aviso{border-left-color:var(--ylw);background:var(--ylw-l)}
-.destaque.ok{border-left-color:var(--grn);background:var(--grn-l)}
-.destaque.info{border-left-color:var(--blu);background:var(--blu-l)}
-.destaque h4{margin-bottom:8px;display:flex;align-items:center;gap:8px}
+/* ---------- escolha do papel ---------- */
+.papeis{display:grid;gap:11px}
+.papel{display:flex;align-items:center;gap:14px;text-decoration:none;color:inherit;
+  background:var(--surface);border:1px solid var(--border);border-left:5px solid var(--acc);
+  border-radius:var(--r);padding:16px 18px;box-shadow:var(--sh)}
+.papel:active{transform:scale(.99)}
+.papel.adm{border-left-color:var(--blu)} .papel.eng{border-left-color:var(--grn)}
+.papel .qual{flex:1;min-width:0}
+.papel b{display:block;font-size:19px;font-weight:700}
+.papel span{display:block;font-size:14px;color:var(--muted);line-height:1.35}
+.papel .seta{color:var(--muted);font-size:22px;flex:none}
 
-/* ---------- números ---------- */
-.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:26px 0}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:17px 19px}
-.kpi b{display:block;font-family:'JetBrains Mono',monospace;font-size:30px;line-height:1.1;
-  font-weight:600;letter-spacing:-.02em}
-.kpi span{display:block;font-size:12.5px;color:var(--muted);margin-top:6px;line-height:1.4}
-
-/* ---------- passos ---------- */
-ol.passos{list-style:none;padding:0;counter-reset:p;max-width:none}
-ol.passos>li{counter-increment:p;position:relative;padding:0 0 0 52px;margin:0 0 24px}
-ol.passos>li::before{content:counter(p);position:absolute;left:0;top:-2px;width:34px;height:34px;
-  border-radius:10px;background:var(--acc);color:#fff;display:grid;place-items:center;
-  font-family:'JetBrains Mono',monospace;font-weight:600;font-size:15px}
-ol.passos>li h4{margin-bottom:4px;font-size:16.5px}
-ol.passos>li p{margin-bottom:6px}
-
-/* ---------- telas ---------- */
-figure{margin:0}
-.tela{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+/* ---------- passo com tela marcada ---------- */
+.passo{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-lg);
   overflow:hidden;box-shadow:var(--sh)}
-.tela img{width:100%;border-bottom:1px solid var(--border)}
-.tela figcaption{padding:13px 17px;font-size:13.5px;color:var(--text-2);line-height:1.5}
-.tela figcaption b{display:block;color:var(--text);margin-bottom:2px;font-size:14px}
-.tela-cel{max-width:300px;margin:0 auto;border-radius:20px;background:var(--dark);padding:8px;
-  box-shadow:var(--sh-lg)}
-.tela-cel img{border-radius:13px;border:0}
-.legenda{font-size:12.5px;color:var(--muted);margin-top:9px;text-align:center;max-width:300px;
-  margin-left:auto;margin-right:auto}
-.exemplo{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+.passo>header{display:flex;align-items:center;gap:12px;padding:16px 18px;
+  border-bottom:1px solid var(--border);background:var(--surface-2)}
+.passo>header .n{width:34px;height:34px;border-radius:10px;background:var(--acc);color:#fff;
+  display:grid;place-items:center;font-family:'JetBrains Mono',monospace;font-weight:600;
+  font-size:16px;flex:none}
+.passo>header b{font-size:17.5px;font-weight:700;display:block;line-height:1.2}
+.passo>header span{font-size:13.5px;color:var(--muted)}
+.passo .corpo{padding:16px 18px;display:flex;flex-direction:column;gap:14px}
+
+/* A marcação numerada mora numa CALHA à esquerda, fora da imagem: em cima do
+   campo ela tapava justamente a palavra que o apontador precisa reconhecer. */
+.foto{--calha:32px;position:relative;max-width:340px;margin:0 auto;width:100%;padding-left:var(--calha)}
+.foto img{width:100%;border-radius:12px;border:1px solid var(--border-2);background:#fff}
+.pin{position:absolute;left:calc(var(--calha) / 2);transform:translate(-50%,-50%);
+  width:26px;height:26px;border-radius:50%;background:var(--acc);color:#fff;display:grid;
+  place-items:center;font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;
+  box-shadow:0 2px 6px rgba(0,0,0,.25)}
+.faixa{position:absolute;left:var(--calha);right:0;border:2px dashed var(--red);border-radius:10px;
+  background:color-mix(in srgb,var(--red) 12%,transparent);display:grid;place-items:center;
+  align-content:start}
+/* o rótulo monta em cima da borda tracejada, como legenda de fieldset — no meio
+   da faixa ele tapava o campo que a pessoa precisa reconhecer para pular */
+.faixa em{font-style:normal;background:var(--red);color:#fff;font-size:10.5px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;padding:4px 9px;border-radius:6px;text-align:center;
+  transform:translateY(-50%)}
+.chaves{display:flex;flex-direction:column;gap:9px}
+.chave{display:flex;gap:11px;align-items:flex-start;font-size:15.5px;line-height:1.45}
+.chave i{font-style:normal;width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;
+  display:grid;place-items:center;font-size:13px;font-weight:700;flex:none;margin-top:1px;
+  font-family:'JetBrains Mono',monospace}
+.chave.x i{background:var(--red)}
+.chave b{font-weight:600}
+
+/* ---------- avisos ---------- */
+.nota{border-radius:var(--r);padding:14px 16px;font-size:15.5px;line-height:1.48;
+  border:1px solid var(--border);background:var(--surface-2)}
+.nota b{display:block;margin-bottom:4px;font-size:15px}
+.nota.al{background:var(--ylw-l);border-color:color-mix(in srgb,var(--ylw) 38%,transparent)}
+.nota.al b{color:var(--ylw)}
+.nota.ok{background:var(--grn-l);border-color:color-mix(in srgb,var(--grn) 32%,transparent)}
+.nota.ok b{color:var(--grn)}
+.nota.in{background:var(--blu-l);border-color:color-mix(in srgb,var(--blu) 32%,transparent)}
+.nota.in b{color:var(--blu)}
+
+/* ---------- cartão com tela ---------- */
+.tela{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;box-shadow:var(--sh);margin:0;position:relative}
+.tela img{width:100%;border-bottom:1px solid var(--border);cursor:zoom-in}
+/* Tela de computador reduzida à largura do celular fica ilegível. Um toque
+   abre em tamanho de leitura, com arrasto — melhor que pedir para a pessoa
+   apertar os olhos ou ir buscar um notebook. */
+.ampliar{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.66);color:#fff;font-size:9.5px;
+  font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:5px 9px;border-radius:6px;
+  pointer-events:none;display:flex;align-items:center;gap:5px}
+@media (min-width:760px){.ampliar{display:none}}
+.lupa{position:fixed;inset:0;z-index:100;background:rgba(8,6,4,.985);display:none;
+  overflow:auto;-webkit-overflow-scrolling:touch;padding:52px 0}
+.lupa[data-aberta]{display:block}
+.lupa img{width:max(100%,940px);max-width:none;cursor:zoom-out}
+.lupa button{position:fixed;top:10px;right:12px;z-index:101;background:var(--surface);
+  border:1px solid var(--border-2);color:var(--text);border-radius:10px;width:40px;height:40px;
+  font-size:20px;cursor:pointer;font-family:inherit;line-height:1}
+.tela figcaption{padding:13px 16px;font-size:15px;line-height:1.45;color:var(--text-2)}
+.tela figcaption b{display:block;color:var(--text);font-size:16px;margin-bottom:3px}
+.selo-ex{font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
   background:var(--surface-2);border:1px solid var(--border);color:var(--muted);
-  padding:3px 7px;border-radius:5px;margin-left:8px;vertical-align:2px}
+  padding:2px 6px;border-radius:5px;vertical-align:2px;margin-left:6px}
 
-/* ---------- tabela ---------- */
-.tab-rolagem{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r);background:var(--surface)}
-table{border-collapse:collapse;width:100%;font-size:14.5px;min-width:560px}
-th{text-align:left;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
-  padding:12px 15px;border-bottom:1px solid var(--border);white-space:nowrap;font-weight:700}
-td{padding:12px 15px;border-bottom:1px solid var(--border);vertical-align:top}
-tr:last-child td{border-bottom:0}
-td.sim{color:var(--grn);font-weight:600}
-td.nao{color:var(--muted)}
+/* ---------- listas em cartão (no lugar de tabela) ---------- */
+.linhas{display:flex;flex-direction:column;gap:9px}
+.linha{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px 16px;box-shadow:var(--sh)}
+.linha b{display:block;font-size:16px;font-weight:600;margin-bottom:3px}
+.linha span{display:block;font-size:14.5px;color:var(--muted);line-height:1.45}
+.linha .quem{display:inline-block;margin-top:8px;font-size:11px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;background:var(--acc-l);color:var(--acc-txt);padding:4px 9px;border-radius:6px}
 
-/* ---------- perfis ---------- */
-.perfil{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;
-  display:flex;flex-direction:column;box-shadow:var(--sh)}
-.perfil header{padding:18px 20px;color:#fff;background:var(--dark)}
-.perfil.campo header{background:oklch(0.48 0.16 38)}
-.perfil.adm header{background:oklch(0.42 0.10 240)}
-.perfil.eng header{background:oklch(0.40 0.10 165)}
-.perfil header b{display:block;font-size:19px}
-.perfil header span{font-size:13px;opacity:.8}
-.perfil .corpo{padding:18px 20px;flex:1}
-.perfil ul{padding-left:18px;margin:0;font-size:14.5px}
+/* ---------- dobra ---------- */
+details{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  box-shadow:var(--sh);overflow:hidden}
+summary{padding:15px 16px;font-size:16.5px;font-weight:600;cursor:pointer;list-style:none;
+  display:flex;align-items:center;gap:10px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:'+';margin-left:auto;font-size:22px;color:var(--muted);
+  font-family:'JetBrains Mono',monospace;line-height:1}
+details[open] summary::after{content:'–'}
+details[open] summary{border-bottom:1px solid var(--border)}
+.dentro{padding:14px 16px;display:flex;flex-direction:column;gap:12px;font-size:15.5px;line-height:1.5}
+.dentro .qa b{display:block;font-weight:600;margin-bottom:2px}
+.dentro .qa span{color:var(--text-2)}
 
-/* ---------- cartão de bolso ---------- */
-.bolso{background:var(--surface);border:2px dashed var(--border-strong);border-radius:var(--r);
-  padding:26px 28px}
-.bolso h3{margin-top:0}
-.bolso ol{font-size:15px}
+/* ---------- regras ---------- */
+.regras{display:grid;gap:9px}
+.regra{display:flex;gap:12px;align-items:flex-start;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r);padding:13px 15px;box-shadow:var(--sh)}
+.regra i{font-style:normal;font-family:'JetBrains Mono',monospace;font-weight:600;font-size:15px;
+  color:var(--acc-txt);flex:none;width:22px;text-align:center;margin-top:1px}
+.regra p{font-size:15.5px;line-height:1.45}
+.regra p b{font-weight:600}
 
-.fim{padding:44px 0 60px;color:var(--muted);font-size:13.5px;text-align:center;border-top:1px solid var(--border)}
+/* ---------- checklist ---------- */
+.check{display:flex;gap:12px;align-items:flex-start;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;box-shadow:var(--sh)}
+.check .cx{width:22px;height:22px;border-radius:6px;border:2px solid var(--border-2);flex:none;margin-top:2px}
+.check b{display:block;font-size:16px;font-weight:600;margin-bottom:2px}
+.check span{font-size:14.5px;color:var(--muted);line-height:1.45}
 
-@media (max-width:640px){
-  section{padding:44px 0}
-  .capa .wrap{padding-top:44px;padding-bottom:40px}
-  .topo nav{display:none}
+/* ---------- bolso ---------- */
+.bolso{background:var(--surface);border:2px dashed var(--border-2);border-radius:var(--r-lg);padding:20px}
+.bolso ol{margin:0;padding-left:22px;display:flex;flex-direction:column;gap:9px;font-size:16px;line-height:1.45}
+.bolso ol b{font-weight:600}
+.bt{display:inline-flex;align-items:center;gap:8px;background:var(--acc);color:#fff;border:0;
+  border-radius:11px;padding:13px 22px;font-family:inherit;font-size:16px;font-weight:600;cursor:pointer}
+
+.rodape{padding:34px 0 46px;color:var(--muted);font-size:13.5px;text-align:center;
+  border-top:1px solid var(--border);line-height:1.55}
+
+/* ---------- telas maiores ---------- */
+@media (min-width:760px){
+  body{font-size:17.5px}
+  .env{padding:0 28px}
+  .bloco{padding:60px 0;gap:22px}
+  .capa{padding:56px 0 48px}
+  .numeros{grid-template-columns:repeat(4,1fr)}
+  .par{grid-template-columns:1fr 1fr}
+  .papeis{grid-template-columns:repeat(3,1fr)}
+  .papel{flex-direction:column;align-items:flex-start;gap:6px}
+  .papel .seta{display:none}
+  .passo .corpo{flex-direction:row-reverse;align-items:flex-start;gap:22px}
+  .passo .corpo .chaves{flex:1}
+  .passo .corpo .foto{flex:0 0 300px;margin:0}
+  .regras{grid-template-columns:1fr 1fr}
 }
 
-/* ---------- impressão ---------- */
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *{animation:none!important;transition:none!important}
+}
+
 @media print{
   :root{--bg:#fff;--surface:#fff;--surface-2:#fff;--text:#000;--text-2:#222;--muted:#555;
-    --border:#bbb;--sh:none;--sh-lg:none}
-  .topo,.btn-tema,.nao-imprimir{display:none!important}
-  body{font-size:11.5pt}
-  section{padding:18px 0;break-inside:auto}
-  .capa{background:#fff;color:#000}
-  .capa h1{color:#000}.capa .sub{color:#333}
-  .ficha div{background:#fff;border:1px solid #bbb}
-  .ficha dt,.ficha dd small{color:#555}.ficha dd{color:#000}
-  .cartao,.tela,.perfil,.bolso{break-inside:avoid;box-shadow:none}
-  h2,h3{break-after:avoid}
+    --border:#bbb;--border-2:#999;--sh:none}
+  .barra,.bt,.so-tela{display:none!important}
+  body{font-size:11pt}
+  .bloco{padding:14px 0}
+  .capa{background:#fff;color:#000}.capa h1,.capa .diz{color:#000}
+  .chip{background:#fff;border:1px solid #999;color:#000}
+  details{break-inside:avoid}details:not([open]) .dentro{display:block}
+  .passo,.tela,.linha,.regra,.bolso{break-inside:avoid}
   a{color:#000;text-decoration:none}
 }
 </style>
 </head>
 <body>
 
-<div class="topo nao-imprimir">
-  <div class="topo-in">
-    <div class="marca"><span class="tag">Gestor Engenharia</span> Manual do Sistema</div>
-    <nav>
-      <a href="#porque">Por quê</a>
-      <a href="#fluxo">Como funciona</a>
-      <a href="#papeis">Quem faz o quê</a>
-      <a href="#comecar">Primeiro acesso</a>
-      <a href="#campo">Apontador</a>
-      <a href="#escritorio">Administrativo</a>
-      <a href="#engenharia">Engenharia</a>
-      <a href="#telas">As telas</a>
-      <a href="#regras">Regras de ouro</a>
-      <a href="#implantacao">Implantação</a>
-      <a href="#faq">Dúvidas</a>
-    </nav>
-    <button class="btn-tema" id="btnTema" title="Alternar claro/escuro" aria-label="Alternar tema"></button>
+<div class="barra so-tela">
+  <div class="barra-in">
+    <span class="logo"><b>Gestor</b> <span>Manual do Sistema</span></span>
+    <button class="bt-icone" id="btTema" aria-label="Alternar claro e escuro" title="Claro / escuro"></button>
   </div>
 </div>
 
-<!-- ============================================================ CAPA -->
-<section class="capa">
-  <div class="wrap">
-    <div class="kicker">Ata 079/SMSUB/COGEL · Implantação</div>
-    <h1>A obra medida <em>no dia em que ela acontece</em>.</h1>
-    <p class="sub">
-      Este é o sistema de controle da Gestor Engenharia — o mesmo que roda na duplicação da
-      Av. Teotônio Vilela — agora na <strong>Ruas de Terra 4</strong>. Do apontamento no celular,
-      dentro da vala, até a prévia da medição por item do orçamento: uma digitação só, um número só,
-      a mesma verdade para o campo, o escritório e a fiscalização.
+<!-- ══════════════════════════════════ CAPA -->
+<header class="capa">
+  <div class="env" style="display:flex;flex-direction:column;gap:16px">
+    <span class="selo">Ruas de Terra 4 · Ata 079/SMSUB/COGEL</span>
+    <h1>Você mede a obra <em>no dia em que ela acontece</em>.</h1>
+    <p class="diz">
+      O apontador lança no celular, na frente de serviço. O escritório vê na hora.
+      A medição já sai pronta. Uma digitação só.
     </p>
-    <dl class="ficha">
-      <div><dt>Obra</dt><dd>Ruas de Terra 4<small>Agrimensor Sugaya · Astrogildo Pereira</small></dd></div>
-      <div><dt>Contrato</dt><dd>079<small>Ata SMSUB/COGEL</small></dd></div>
-      <div><dt>Valor</dt><dd>3,58 mi<small>R$ 3.585.081,43</small></dd></div>
-      <div><dt>Prazo</dt><dd>6 meses<small>início contratual 01/07/2026</small></dd></div>
-      <div><dt>Escopo</dt><dd>56<small>serviços do orçamento, em 6 frentes</small></dd></div>
-    </dl>
+    <div class="chips">
+      <span class="chip">2 ruas</span>
+      <span class="chip">56 serviços</span>
+      <span class="chip">6 frentes</span>
+      <span class="chip">6 meses</span>
+      <span class="chip">R$ 3,58 mi</span>
+    </div>
   </div>
-</section>
+</header>
 
-<!-- ============================================================ POR QUÊ -->
-<section id="porque">
-  <div class="wrap">
-    <span class="num">01 — POR QUE ESTE SISTEMA EXISTE</span>
-    <h2>Obra não se perde na execução. Se perde no registro.</h2>
-    <p class="lead">
-      O serviço foi feito. O problema é provar, 45 dias depois, <em>o que</em> foi feito,
-      <em>quanto</em>, <em>onde</em> e <em>em que dia</em> — com um caderno molhado, um grupo de
-      WhatsApp com 400 mensagens e a memória de quem estava lá.
-    </p>
+<!-- ══════════════════════════════════ O QUE MUDA -->
+<section class="bloco">
+  <div class="env" style="display:flex;flex-direction:column;gap:18px">
+    <div>
+      <span class="olho">O que muda</span>
+      <h2>Obra não se perde na execução. Se perde no registro.</h2>
+    </div>
 
-    <div class="antes-depois" style="margin:30px 0">
-      <div class="ad hoje">
-        <h4>Sem sistema</h4>
+    <div class="par">
+      <div class="lado a">
+        <h3>Hoje, no papel</h3>
         <ul>
-          <li>O avanço só aparece quando alguém senta para somar — quase sempre no fim do mês.</li>
-          <li>RDO preenchido de memória três dias depois. Chuva "lembrada", não medida.</li>
-          <li>Medição montada às pressas: item esquecido é item não recebido.</li>
-          <li>Foto do serviço no celular de quem tirou. Some com o aparelho.</li>
-          <li>Ninguém sabe, hoje, se a obra está adiantada ou atrasada.</li>
+          <li>O avanço só aparece no fim do mês</li>
+          <li>RDO preenchido de memória, 3 dias depois</li>
+          <li>Item esquecido é item não recebido</li>
+          <li>Foto some junto com o celular</li>
         </ul>
       </div>
-      <div class="ad novo">
-        <h4>Com o sistema</h4>
+      <div class="lado b">
+        <h3>Com o sistema</h3>
         <ul>
-          <li>O apontador lança no celular, na frente de serviço. Leva menos de 1 minuto por serviço.</li>
-          <li>RDO oficial sai em PDF, numerado por obra, com efetivo, equipamento e clima do dia.</li>
-          <li>A prévia da medição por item do orçamento fica pronta o mês inteiro, não no dia 30.</li>
-          <li>Foto entra junto com o serviço, guardada em pasta privada, ligada ao pacote e à data.</li>
-          <li>Painel diz o avanço de hoje, o ritmo dos últimos 14 dias e a data provável de término.</li>
+          <li>Avanço de hoje, ritmo e data provável de término</li>
+          <li>RDO oficial em PDF, com chuva medida por estação</li>
+          <li>Prévia da medição pronta o mês inteiro</li>
+          <li>Foto amarrada ao serviço, à data e ao pacote</li>
         </ul>
       </div>
     </div>
 
-    <h3>O que isso vale, em concreto</h3>
-    <div class="kpis">
-      <div class="kpi"><b>&lt; 1 min</b><span>para lançar um serviço no celular, com foto</span></div>
-      <div class="kpi"><b>0</b><span>digitações repetidas: o mesmo lançamento vira avanço, RDO e medição</span></div>
-      <div class="kpi"><b>100%</b><span>funciona sem sinal — a fila sobe sozinha quando a conexão volta</span></div>
-      <div class="kpi"><b>1</b><span>fonte de verdade: painel, apresentação e medição saem da mesma conta</span></div>
+    <div class="numeros">
+      <div class="numero"><b>&lt;1min</b><span>para lançar um serviço com foto</span></div>
+      <div class="numero"><b>0</b><span>digitação repetida entre campo e medição</span></div>
+      <div class="numero"><b>100%</b><span>funciona sem sinal no canteiro</span></div>
+      <div class="numero"><b>1</b><span>número só, igual para todo mundo</span></div>
     </div>
 
-    <div class="destaque">
-      <h4>O argumento que fecha a discussão</h4>
-      <p>
-        Pleito de prazo por chuva se ganha com <strong>prova</strong>. O sistema guarda, dia a dia, o clima
-        apontado pelo turno <em>e</em> a chuva medida pela estação oficial do INMET, lado a lado, com o
-        serviço que foi (ou não foi) lançado naquele dia. Isso é a tela <strong>Dias Improdutivos</strong> —
-        e ela só existe se alguém preencher o RDO todo dia. É por isso que o apontamento diário não é
-        burocracia: é o ativo mais barato que a obra produz.
-      </p>
+    <div class="nota in">
+      <b>Por que o RDO diário não é burocracia</b>
+      Pleito de prazo se ganha com prova. O sistema guarda, dia a dia, o clima que o turno apontou
+      <em>e</em> a chuva medida pela estação oficial, do lado do serviço que foi (ou não foi) lançado.
     </div>
   </div>
 </section>
 
-<!-- ============================================================ FLUXO -->
-<section id="fluxo">
-  <div class="wrap">
-    <span class="num">02 — COMO FUNCIONA</span>
-    <h2>Uma digitação, três produtos.</h2>
-    <p class="lead">
-      Não há "sistema do campo" e "planilha do escritório". Há um lançamento só, feito uma vez,
-      por quem viu o serviço acontecer. Todo o resto é consequência.
-    </p>
-
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
-                padding:22px;margin:26px 0;overflow-x:auto;box-shadow:var(--sh)">
-      <svg viewBox="0 0 980 330" style="width:100%;min-width:660px;height:auto;font-family:'Space Grotesk',sans-serif"
-           role="img" aria-label="Fluxo: apontador lança no celular, o dado vai para a planilha e vira painel, RDO oficial e prévia de medição">
-        <defs>
-          <marker id="seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
-            <path d="M0 0 L10 5 L0 10 z" fill="var(--muted)"/>
-          </marker>
-        </defs>
-        <!-- campo -->
-        <rect x="8" y="96" width="196" height="128" rx="14" fill="var(--acc-l)" stroke="var(--acc)" stroke-width="1.5"/>
-        <text x="28" y="128" font-size="12" font-weight="700" fill="var(--acc-d)" letter-spacing="1.4">NO CANTEIRO</text>
-        <text x="28" y="156" font-size="17" font-weight="600" fill="var(--text)">Apontador</text>
-        <text x="28" y="180" font-size="13" fill="var(--text-2)">Lançar Serviço · RDO Diário</text>
-        <text x="28" y="200" font-size="13" fill="var(--text-2)">Fotos · Equipamentos</text>
-        <!-- fila -->
-        <rect x="236" y="120" width="132" height="80" rx="12" fill="var(--surface-2)" stroke="var(--border-strong)" stroke-width="1.5" stroke-dasharray="5 4"/>
-        <text x="252" y="150" font-size="12" font-weight="700" fill="var(--muted)" letter-spacing="1.2">SEM SINAL</text>
-        <text x="252" y="174" font-size="15" font-weight="600" fill="var(--text)">Fila no aparelho</text>
-        <text x="252" y="192" font-size="12" fill="var(--muted)">sobe sozinha depois</text>
-        <!-- planilha -->
-        <rect x="400" y="96" width="186" height="128" rx="14" fill="var(--dark)"/>
-        <text x="420" y="128" font-size="12" font-weight="700" fill="oklch(0.72 0.16 38)" letter-spacing="1.4">BASE ÚNICA</text>
-        <text x="420" y="156" font-size="17" font-weight="600" fill="#f2ede3">Planilha da obra</text>
-        <text x="420" y="180" font-size="13" fill="rgba(242,237,227,.72)">1 linha = 1 serviço,</text>
-        <text x="420" y="198" font-size="13" fill="rgba(242,237,227,.72)">com data, pacote e autor</text>
-        <!-- saídas -->
-        <rect x="640" y="14" width="330" height="86" rx="12" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
-        <text x="662" y="44" font-size="15" font-weight="600" fill="var(--text)">Painel Executivo &amp; Avanço Físico</text>
-        <text x="662" y="66" font-size="12.5" fill="var(--muted)">avanço ponderado, ritmo de 14 dias,</text>
-        <text x="662" y="84" font-size="12.5" fill="var(--muted)">projeção de término, frentes em risco</text>
-
-        <rect x="640" y="118" width="330" height="86" rx="12" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
-        <text x="662" y="148" font-size="15" font-weight="600" fill="var(--text)">RDO oficial (PDF / Excel)</text>
-        <text x="662" y="170" font-size="12.5" fill="var(--muted)">numerado por obra, com efetivo,</text>
-        <text x="662" y="188" font-size="12.5" fill="var(--muted)">equipamento, clima e paralisações</text>
-
-        <rect x="640" y="222" width="330" height="86" rx="12" fill="var(--surface)" stroke="var(--border)" stroke-width="1.5"/>
-        <text x="662" y="252" font-size="15" font-weight="600" fill="var(--text)">Prévia da medição</text>
-        <text x="662" y="274" font-size="12.5" fill="var(--muted)">consumo por item do orçamento,</text>
-        <text x="662" y="292" font-size="12.5" fill="var(--muted)">com saldo do contrato e CSV p/ conferir</text>
-
-        <!-- ligações -->
-        <path d="M204 160 H232" stroke="var(--muted)" stroke-width="1.6" fill="none" marker-end="url(#seta)"/>
-        <path d="M368 160 H396" stroke="var(--muted)" stroke-width="1.6" fill="none" marker-end="url(#seta)"/>
-        <path d="M586 148 H612 V57 H636" stroke="var(--muted)" stroke-width="1.6" fill="none" marker-end="url(#seta)"/>
-        <path d="M586 160 H636" stroke="var(--muted)" stroke-width="1.6" fill="none" marker-end="url(#seta)"/>
-        <path d="M586 172 H612 V265 H636" stroke="var(--muted)" stroke-width="1.6" fill="none" marker-end="url(#seta)"/>
-      </svg>
+<!-- ══════════════════════════════════ PAPÉIS -->
+<section class="bloco" id="papeis">
+  <div class="env" style="display:flex;flex-direction:column;gap:16px">
+    <div>
+      <span class="olho">Comece por aqui</span>
+      <h2>Qual é o seu papel?</h2>
+      <p class="diz" style="margin-top:8px">Toque no seu. Você só precisa da sua parte.</p>
     </div>
+    <nav class="papeis">
+      <a class="papel" href="#apontador">
+        <span class="qual"><b>Apontador</b><span>3 coisas por dia, no celular</span></span>
+        <span class="seta">›</span>
+      </a>
+      <a class="papel adm" href="#administrativo">
+        <span class="qual"><b>Administrativo</b><span>acompanha, confere e exporta</span></span>
+        <span class="seta">›</span>
+      </a>
+      <a class="papel eng" href="#engenharia">
+        <span class="qual"><b>Engenharia</b><span>corrige, mede e fecha o mês</span></span>
+        <span class="seta">›</span>
+      </a>
+    </nav>
 
-    <div class="grade g3">
-      <div class="cartao">
-        <h4>O pacote é a unidade</h4>
-        <p>Cada um dos 56 serviços do orçamento vira um <strong>pacote</strong> na tela. O apontador não digita
-        descrição de item nem código: escolhe a frente, escolhe o pacote e digita a quantidade que mediu com a trena.</p>
+    <details>
+      <summary>Primeiro acesso — 5 minutos, uma vez só</summary>
+      <div class="dentro">
+        <div class="qa"><b>1. Abra no celular</b>
+          <span class="mono">leoribeiromac-cmyk.github.io/teotonio-vilela/</span></div>
+        <div class="qa"><b>2. Instale na tela inicial</b>
+          <span>Android/Chrome: menu ⋮ → <em>Instalar aplicativo</em>. iPhone/Safari: Compartilhar →
+          <em>Adicionar à Tela de Início</em>. Instalado, abre em tela cheia e <b>abre sem sinal</b>.</span></div>
+        <div class="qa"><b>3. Escolha a obra</b>
+          <span>Seletor <em>Obra</em>, no alto do menu → Ruas de Terra 4. Fica guardado.</span></div>
+        <div class="qa"><b>4. Entre com o seu usuário</b>
+          <span>Botão <em>Entrar</em>, no rodapé do menu. A sessão não expira sozinha: só sai quem clica em Sair.</span></div>
+        <div class="qa"><b>5. Ajuste o tema</b>
+          <span>Claro para sol na tela, Escuro para turno da noite. É por aparelho.</span></div>
       </div>
-      <div class="cartao">
-        <h4>A conversão é do sistema</h4>
-        <p>Quem transforma "38,50 m de guia assentada" em quantidade de item contratual é a
-        <strong>matriz de coeficientes</strong>, não o apontador. Ele erra menos porque tem menos o que decidir.</p>
-      </div>
-      <div class="cartao">
-        <h4>Nada se apaga sem rastro</h4>
-        <p>Cada linha guarda quem lançou e quando. Apagar só o administrador ou quem lançou — e a tentativa
-        recusada fica registrada na <strong>Auditoria</strong>. A regra vale no servidor, não só no botão.</p>
-      </div>
-    </div>
+    </details>
   </div>
 </section>
 
-<!-- ============================================================ PAPÉIS -->
-<section id="papeis">
-  <div class="wrap">
-    <span class="num">03 — QUEM FAZ O QUÊ</span>
-    <h2>Três papéis, três rotinas, um só sistema.</h2>
-    <p class="lead">
-      Cada pessoa entra com o seu usuário e vê apenas as telas do seu perfil. Ninguém precisa aprender
-      o sistema inteiro — precisa aprender a sua parte, que é pequena.
-    </p>
+<!-- ══════════════════════════════════ APONTADOR -->
+<section class="bloco" id="apontador">
+  <div class="env" style="display:flex;flex-direction:column;gap:18px">
+    <div>
+      <span class="olho">Apontador</span>
+      <h2>Três coisas por dia. Sempre as mesmas.</h2>
+    </div>
 
-    <div class="grade g3" style="margin:28px 0">
-      <div class="perfil campo">
-        <header><b>Apontador</b><span>perfil <span class="mono">Campo</span></span></header>
-        <div class="corpo">
-          <p style="font-size:14px;color:var(--muted);margin-bottom:10px">Todo dia, no celular, na frente de serviço:</p>
-          <ul>
-            <li><strong>Lançar Serviço</strong> — o que sua equipe executou, com quantidade e foto</li>
-            <li><strong>RDO Diário</strong> — efetivo, equipamento, clima e paralisações do turno</li>
-            <li><strong>Equipamentos</strong> — hora de máquina, paradas e assinatura do operador</li>
-            <li><strong>Notas Fiscais</strong> — fotografar a nota do material que chegou</li>
-            <li>Consulta: Histórico, Avanço Físico, Galeria e Projetos</li>
-          </ul>
+    <article class="passo">
+      <header>
+        <span class="n">1</span>
+        <span><b>Identificação</b><span>uma vez, no começo do lançamento</span></span>
+      </header>
+      <div class="corpo">
+        <div class="foto">
+          <img src="docs/manual/p-identificacao.png" alt="Cartão de identificação do lançamento: data, turno e nome do apontador" loading="lazy">
+          <span class="pin" style="top:24.8%">1</span>
+          <span class="pin" style="top:42.3%">2</span>
+          <span class="pin" style="top:59.5%">3</span>
+        </div>
+        <div class="chaves">
+          <div class="chave"><i>1</i><span><b>Data</b> — já vem com hoje. Esqueceu ontem? Troque a data e lance normal.</span></div>
+          <div class="chave"><i>2</i><span><b>Turno</b> — diurno ou noturno.</span></div>
+          <div class="chave"><i>3</i><span><b>Seu nome</b> — digite uma vez; fica guardado no aparelho.</span></div>
         </div>
       </div>
-      <div class="perfil adm">
-        <header><b>Administrativo</b><span>perfil <span class="mono">Administrativo</span></span></header>
-        <div class="corpo">
-          <p style="font-size:14px;color:var(--muted);margin-bottom:10px">No escritório, acompanha e organiza — não lança serviço:</p>
-          <ul>
-            <li><strong>Painel Executivo</strong> — como a obra está hoje, sem pedir para ninguém</li>
-            <li><strong>Histórico</strong> — confere o que o campo lançou, exporta CSV</li>
-            <li><strong>Apoio à Medição</strong> — monta a prévia e exporta para conferir com a Planilha Geral</li>
-            <li><strong>Dias Improdutivos</strong> — a base do pleito de prazo</li>
-            <li><strong>Notas Fiscais</strong> — estoque, saídas, histórico de preço por material</li>
-          </ul>
+    </article>
+
+    <article class="passo">
+      <header>
+        <span class="n">2</span>
+        <span><b>Lançar Serviço</b><span>uma linha por pacote executado</span></span>
+      </header>
+      <div class="corpo">
+        <div class="foto">
+          <img src="docs/manual/p-servico.png" alt="Linha de serviço: frente, pacote, quantidade, equipe e observação" loading="lazy">
+          <span class="pin" style="top:7.2%">1</span>
+          <span class="pin" style="top:16.5%">2</span>
+          <span class="faixa" style="top:21.5%;height:27.5%"><em>não use nesta obra</em></span>
+          <span class="pin" style="top:53.4%">3</span>
+          <span class="pin" style="top:65%">4</span>
+          <span class="pin" style="top:74%">5</span>
+          <span class="pin" style="top:86.5%">6</span>
+        </div>
+        <div class="chaves">
+          <div class="chave"><i>1</i><span><b>Frente</b> — Drenagem, Pavimentação, Calçada…</span></div>
+          <div class="chave"><i>2</i><span><b>Pacote</b> — só abre depois da frente. O nome já traz a rua.</span></div>
+          <div class="chave x"><i>✕</i><span><b>Sentido e estaca</b> — vazios nesta obra. Pule.</span></div>
+          <div class="chave"><i>3</i><span><b>Quantidade</b> — com <b>vírgula</b>: 38,50. Embaixo aparece o saldo que falta no pacote.</span></div>
+          <div class="chave"><i>4</i><span><b>Equipe</b> — quem executou.</span></div>
+          <div class="chave"><i>5</i><span><b>Observação</b> — o trecho: “da esquina até o nº 240”.</span></div>
+          <div class="chave"><i>6</i><span><b>Foto</b> — até 3. Abre a câmera direto e sai carimbada com data e hora.</span></div>
         </div>
       </div>
-      <div class="perfil eng">
-        <header><b>Engenharia</b><span>perfil <span class="mono">Engenharia</span></span></header>
-        <div class="corpo">
-          <p style="font-size:14px;color:var(--muted);margin-bottom:10px">Responde pela obra: tudo o que os dois fazem, mais o que decide:</p>
-          <ul>
-            <li><strong>Corrigir</strong> lançamento de terceiro (o campo só corrige o próprio)</li>
-            <li><strong>Fechar a medição</strong> do mês — congela o que foi apresentado</li>
-            <li><strong>Teórico × Real</strong> — consumo derivado × saída de material do almoxarifado</li>
-            <li><strong>Cronograma</strong> reverso — quando cada saldo precisa começar</li>
-            <li><strong>Analista IA</strong> e <strong>Modo Apresentação</strong> para a reunião de obra</li>
-          </ul>
+    </article>
+
+    <div class="nota al">
+      <b>Se aparecer “acima do saldo do pacote”, pare</b>
+      Ou o pacote está errado, ou a quantidade tem um zero a mais. Nos dois casos a medição sai errada.
+    </div>
+
+    <article class="passo">
+      <header>
+        <span class="n">3</span>
+        <span><b>RDO Diário</b><span>uma vez por dia, por turno</span></span>
+      </header>
+      <div class="corpo">
+        <div class="foto">
+          <img src="docs/manual/p-clima.png" alt="Cartão de identificação do RDO diário, com clima e o botão de buscar chuva registrada" loading="lazy">
+          <span class="pin" style="top:83.9%">★</span>
+        </div>
+        <div class="chaves">
+          <div class="chave"><i>1</i><span><b>Escolha o turno</b> — a tela mostra se ele já foi preenchido.</span></div>
+          <div class="chave"><i>★</i><span><b>Buscar chuva registrada</b> — preenche os três períodos pela estação oficial. Dá para corrigir depois.</span></div>
+          <div class="chave"><i>2</i><span><b>Efetivo</b> — indireto e direto, por quantidade.</span></div>
+          <div class="chave"><i>3</i><span><b>Equipamentos</b> do turno.</span></div>
+          <div class="chave"><i>4</i><span><b>Paralisações</b> — motivo, horário e o que ficou parado. É isto que sustenta pleito.</span></div>
         </div>
       </div>
+    </article>
+
+    <div class="nota ok">
+      <b>Sem sinal? Lance do mesmo jeito.</b>
+      Fica numa fila dentro do aparelho — fotos junto — e sobe sozinho quando a conexão voltar.
+      <b style="display:inline;color:inherit">Não lance duas vezes</b> “por garantia”: o sistema não duplica.
     </div>
 
-    <h3>Quem enxerga o quê</h3>
-    <div class="tab-rolagem">
-      <table>
-        <thead><tr><th>Tela</th><th>Campo</th><th>Administrativo</th><th>Engenharia</th><th>Diretoria</th></tr></thead>
-        <tbody>
-          <tr><td>Lançar Serviço · RDO Diário</td><td class="sim">lança</td><td class="nao">—</td><td class="sim">lança</td><td class="nao">—</td></tr>
-          <tr><td>Histórico</td><td class="sim">vê</td><td class="sim">vê</td><td class="sim">vê e corrige</td><td class="sim">vê</td></tr>
-          <tr><td>Painel Executivo · Cronograma</td><td class="nao">—</td><td class="sim">vê</td><td class="sim">vê</td><td class="sim">vê</td></tr>
-          <tr><td>Avanço Físico</td><td class="sim">vê</td><td class="sim">vê</td><td class="sim">vê</td><td class="sim">vê</td></tr>
-          <tr><td>Apoio à Medição</td><td class="nao">—</td><td class="sim">vê e exporta</td><td class="sim">fecha o mês</td><td class="sim">vê</td></tr>
-          <tr><td>Dias Improdutivos · Teórico × Real</td><td class="nao">—</td><td class="sim">vê</td><td class="sim">vê</td><td class="sim">vê</td></tr>
-          <tr><td>Equipamentos</td><td class="sim">aponta</td><td class="sim">aponta e cadastra</td><td class="sim">aponta e cadastra</td><td class="nao">—</td></tr>
-          <tr><td>Notas Fiscais · Estoque</td><td class="sim">lança</td><td class="sim">lança</td><td class="sim">lança</td><td class="sim">vê</td></tr>
-          <tr><td>Galeria de Fotos · Projetos</td><td class="sim">vê</td><td class="sim">vê</td><td class="sim">vê</td><td class="sim">vê</td></tr>
-          <tr><td>Analista IA</td><td class="nao">—</td><td class="nao">—</td><td class="sim">usa</td><td class="sim">usa</td></tr>
-          <tr><td>Usuários</td><td class="nao">—</td><td class="nao">—</td><td class="nao">—</td><td class="nao">—</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <p class="muted" style="font-size:13.5px;margin-top:10px">
-      Só o perfil <strong>Administrador</strong> gerencia usuários — cria, troca senha, define o perfil e
-      escolhe quais obras cada pessoa enxerga.
-    </p>
-
-    <div class="destaque aviso">
-      <h4>Quem apaga o quê</h4>
-      <p>
-        O administrador apaga qualquer registro. Todos os demais apagam <strong>apenas o que lançaram</strong>.
-        A engenharia pode <em>corrigir</em> lançamento de terceiro (é ela que fecha a medição), mas não apagar.
-        Esconder o botão não seria segurança: a regra é aplicada no servidor, e toda tentativa recusada
-        vai para a aba de Auditoria com nome e hora.
-      </p>
-    </div>
-  </div>
-</section>
-
-<!-- ============================================================ PRIMEIRO ACESSO -->
-<section id="comecar">
-  <div class="wrap">
-    <span class="num">04 — PRIMEIRO ACESSO</span>
-    <h2>Cinco minutos, uma vez só.</h2>
-
-    <ol class="passos">
-      <li>
-        <h4>Abrir o endereço no celular</h4>
-        <p><span class="mono" style="background:var(--surface-2);border:1px solid var(--border);padding:3px 8px;border-radius:6px;display:inline-block">leoribeiromac-cmyk.github.io/teotonio-vilela/</span></p>
-        <p class="muted">Não há loja de aplicativos, não há instalador, não há atualização para baixar.
-        É um endereço — e ele está sempre na última versão.</p>
-      </li>
-      <li>
-        <h4>Instalar na tela inicial (importante)</h4>
-        <p><strong>Android/Chrome:</strong> menu ⋮ → <em>Adicionar à tela inicial</em> / <em>Instalar aplicativo</em>.<br>
-           <strong>iPhone/Safari:</strong> botão Compartilhar → <em>Adicionar à Tela de Início</em>.</p>
-        <p class="muted">Instalado, o sistema abre em tela cheia, sem barra de navegador, e <strong>abre sem sinal</strong>.
-        Quem usa pelo navegador perde metade da vantagem no canteiro.</p>
-      </li>
-      <li>
-        <h4>Escolher a obra</h4>
-        <p>No alto do menu lateral há o seletor <strong>Obra</strong>. Escolha <strong>Ruas de Terra 4</strong>.
-        A escolha fica guardada no aparelho — só se troca de novo quando você quiser.</p>
-      </li>
-      <li>
-        <h4>Entrar com o seu usuário</h4>
-        <p>Botão <strong>Entrar</strong>, no rodapé do menu. Usuário e senha são os que o administrador criou para você.
-        A sessão <strong>não expira sozinha</strong>: só sai quem clica em <em>Sair</em>.</p>
-        <p class="muted">Sem login o sistema abre em modo consulta (painéis e avanço). Lançar serviço, RDO,
-        equipamento e nota exige estar identificado — é o que dá dono a cada registro.</p>
-      </li>
-      <li>
-        <h4>Deixar o tema do jeito que você enxerga</h4>
-        <p>No rodapé do menu: <strong>Claro</strong> (melhor sob sol forte), <strong>Escuro</strong> (turno da noite,
-        barracão) ou <strong>Sistema</strong>. É por aparelho.</p>
-      </li>
-    </ol>
-
-    <div class="destaque info">
-      <h4>Quando aparecer "Nova versão do sistema disponível"</h4>
-      <p>Clique em <strong>Atualizar</strong> quando não estiver no meio de um preenchimento. O sistema
-      nunca troca de versão sozinho enquanto você digita — foi feito assim justamente para não perder
-      um RDO aberto na tela.</p>
-    </div>
-  </div>
-</section>
-
-<!-- ============================================================ CAMPO -->
-<section id="campo">
-  <div class="wrap">
-    <span class="num">05 — A ROTINA DO APONTADOR</span>
-    <h2>Três coisas por dia. Sempre as mesmas.</h2>
-    <p class="lead">
-      Se o apontador fizer só isto, todo dia, o resto do sistema funciona sozinho:
-      <strong>lançar os serviços</strong>, <strong>preencher o RDO Diário</strong> e
-      <strong>apontar a hora das máquinas</strong>.
-    </p>
-
-    <div class="grade g2" style="margin:30px 0 10px;align-items:start">
-      <div>
-        <h3 style="margin-top:0">1. Lançar Serviço — durante o dia, ou ao fim dele</h3>
-        <ol class="passos" style="margin-top:16px">
-          <li>
-            <h4>Confira data, turno e o seu nome</h4>
-            <p>A data já vem preenchida com hoje. O nome fica gravado no aparelho — digite uma vez só.</p>
-          </li>
-          <li>
-            <h4>Escolha a Frente e depois o Pacote</h4>
-            <p>A lista de pacotes só abre depois da frente — é o que evita escolher "Aterro" dentro de Drenagem.
-            O nome do pacote já traz a rua: <em>"Assentamento de guias — Agrimensor Sugaya"</em>.</p>
-          </li>
-          <li>
-            <h4>Digite a quantidade medida</h4>
-            <p>Na unidade que aparece ao lado do campo (m, m², m³, un). <strong>Use vírgula</strong>: 38,50.
-            Embaixo do campo o sistema mostra o <strong>saldo do pacote</strong> — quanto ainda falta — e avisa
-            em vermelho se a quantidade passar disso.</p>
-          </li>
-          <li>
-            <h4>Equipe e observação</h4>
-            <p>Equipe/subcontratado identifica quem executou. A observação é onde vai o trecho:
-            <em>"da esquina até o nº 240"</em>, <em>"lado par"</em>.</p>
-          </li>
-          <li>
-            <h4>Foto — até 3 por serviço</h4>
-            <p><strong>Tirar foto</strong> abre a câmera traseira direto. A imagem é reduzida no aparelho,
-            sobe para a pasta privada da obra no Drive e fica amarrada àquele serviço e àquela data.
-            Foto de obra mostra placa, rosto e endereço: por isso nunca vira link público.</p>
-          </li>
-          <li>
-            <h4>Adicionar outro serviço, e enviar</h4>
-            <p>Um botão adiciona a próxima linha. Cada linha vira um lançamento. Se o dia foi igual ao anterior,
-            <strong>Copiar do último dia</strong> repete frente, pacote e equipe — só a quantidade fica em branco,
-            de propósito.</p>
-          </li>
-        </ol>
+    <details>
+      <summary>Mais três coisas que você faz no celular</summary>
+      <div class="dentro">
+        <div class="qa"><b>Hora de máquina</b>
+          <span>Tela <em>Equipamentos</em>: turno, operador, início/fim, paradas com motivo, horímetro,
+          combustível e a assinatura do operador colhida no dedo.</span></div>
+        <div class="qa"><b>Nota fiscal — fotografe, não digite</b>
+          <span><em>Notas Fiscais → Nova nota fiscal → fotografar.</em> O sistema lê a chave de acesso e abre
+          a conferência preenchida; o que ficou incerto vem marcado em amarelo.</span></div>
+        <div class="qa"><b>Projetos — a prancha no bolso</b>
+          <span>Pavimentação e drenagem das duas ruas abrem dentro do app, com zoom. Antes de discutir
+          cota no rádio, abra a prancha.</span></div>
       </div>
-      <div>
-        <figure class="tela-cel">
-          <img src="docs/manual/m-lancar-preenchido.png" alt="Tela Lançar Serviço no celular, com frente, pacote, quantidade e botões de foto" loading="lazy">
-        </figure>
-        <p class="legenda">Lançar Serviço no celular <span class="exemplo">exemplo</span><br>
-          Repare no <em>saldo do pacote</em> logo abaixo da quantidade: 41,67 m restantes.</p>
-      </div>
-    </div>
+    </details>
 
-    <div class="destaque aviso">
-      <h4>Nesta obra, ignore "Sentido da via" e "Estaca"</h4>
-      <p>
-        Esses três campos existem para a Av. Teotônio Vilela, que é numerada por estacas. Na Ruas de Terra 4
-        eles aparecem <strong>vazios</strong> e não devem ser preenchidos — a localização do serviço vai na
-        <strong>Observação</strong>, e a rua já vem no nome do pacote. Deixe como está e siga para a quantidade.
-      </p>
-    </div>
-
-    <h3>2. RDO Diário — uma vez por dia, por turno</h3>
-    <div class="grade g2" style="align-items:start;margin-top:16px">
-      <div>
-        <p>
-          O RDO Diário é o documento que a fiscalização assina. Ele é <strong>separado</strong> do lançamento de
-          serviço de propósito: serviço é quantidade, RDO é o dia (quem estava, com o quê, sob que clima).
-        </p>
-        <ol style="margin-top:14px">
-          <li>Escolha a <strong>data</strong> e o <strong>turno</strong> (Diurno/Noturno). A tela mostra se aquele turno já foi preenchido.</li>
-          <li><strong>Clima</strong> de manhã, tarde e noite. O botão <strong>Buscar chuva registrada</strong> preenche os três
-              pela chuva medida na estação oficial — e o valor continua editável: quem esteve na obra sabe mais
-              que o pluviômetro a alguns quilômetros.</li>
-          <li><strong>Efetivo</strong>: indireto (encarregado, técnico…) e direto (pedreiro, servente, operador…), por quantidade.</li>
-          <li><strong>Equipamentos</strong> do turno, por quantidade — e os personalizados, se houver.</li>
-          <li><strong>Paralisações</strong>: motivo, horário, frente, efetivo e equipamento parados. É isto que sustenta pleito.</li>
-          <li><strong>Observações</strong> do turno e enviar. O PDF oficial sai do Histórico, numerado por obra a partir do nº 1.</li>
-        </ol>
-      </div>
-      <div>
-        <figure class="tela-cel">
-          <img src="docs/manual/m-rdo-diario.png" alt="Tela RDO Diário no celular, com escolha de data e de turno" loading="lazy">
-        </figure>
-        <p class="legenda">RDO Diário — escolha do turno <span class="exemplo">exemplo</span><br>
-          "Não preenchido" some assim que o turno é salvo.</p>
-      </div>
-    </div>
-
-    <h3>3. Equipamentos — hora de máquina</h3>
-    <p>
-      Data, turno, operador, início e fim, <strong>paradas com motivo</strong> (que descontam da hora trabalhada),
-      horímetro inicial e final, combustível e a <strong>assinatura do operador</strong>, colhida no dedo na
-      própria tela. Hora de máquina é medição: entra em relatório e em cobrança de locadora — por isso cada
-      apontamento registra quem lançou, e só o administrador ou quem lançou pode apagar.
-    </p>
-
-    <h3>4. Nota fiscal — fotografar, não digitar</h3>
-    <p>
-      Chegou material? <strong>Notas Fiscais → Nova nota fiscal → fotografar</strong>. O sistema lê a chave de acesso
-      (do PDF ou do código de barras), busca os dados oficiais e abre a tela de conferência já preenchida.
-      O que a leitura não teve certeza vem <strong>marcado em amarelo com "confira"</strong>. Reenviar a mesma nota
-      não dá entrada em dobro.
-    </p>
-
-    <h3>5. Projetos — a prancha no bolso</h3>
-    <div class="grade g2" style="align-items:start;margin-top:16px">
-      <div>
-        <p>
-          As pranchas do executivo abrem <strong>dentro do sistema</strong>, nunca no leitor de PDF do aparelho —
-          abrir em app externo tira o apontador do sistema e, sem sinal, muitas vezes nem abre.
-        </p>
-        <p>
-          Na Ruas de Terra 4 estão publicadas as pranchas de <strong>pavimentação</strong> e <strong>drenagem</strong>
-          das duas ruas: a lista mostra a disciplina e o código do carimbo, e o visor tem zoom
-          (<span class="mono">–</span> / <span class="mono">+</span> / <em>Ajustar</em>), além de <em>Abrir</em> e
-          <em>Baixar</em> o arquivo original.
-        </p>
-        <p class="muted">
-          Antes de discutir cota, espessura ou largura de passeio no rádio, abra a prancha. Ela está no mesmo
-          aparelho em que você lança o serviço.
-        </p>
-      </div>
-      <div>
-        <figure class="tela-cel">
-          <img src="docs/manual/m-projetos.png" alt="Prancha de pavimentação aberta dentro do sistema, no celular" loading="lazy">
-        </figure>
-        <p class="legenda">Projetos no celular — prancha CT-AS-101 (pavimentação da Agrimensor Sugaya),
-          desenhada dentro do app.</p>
-      </div>
-    </div>
-
-    <div class="destaque ok">
-      <h4>Sem sinal? Lance do mesmo jeito.</h4>
-      <p>
-        O que você enviar sem internet fica numa fila <strong>dentro do aparelho</strong> — inclusive as fotos — e sobe
-        sozinho quando a conexão voltar. Você vê o contador de pendentes na própria tela de lançamento.
-        Não lance de novo "por garantia": o sistema reconhece o reenvio e não duplica.
-        <strong>Só não desinstale o aplicativo com a fila cheia.</strong>
-      </p>
-    </div>
-  </div>
-</section>
-
-<!-- ============================================================ ESCRITÓRIO -->
-<section id="escritorio">
-  <div class="wrap">
-    <span class="num">06 — O ADMINISTRATIVO</span>
-    <h2>De onde sai o número que você vai repetir na reunião.</h2>
-
-    <div class="grade g2" style="margin:26px 0;align-items:start">
-      <figure class="tela">
-        <img src="docs/manual/painel-executivo.png" alt="Painel Executivo com Central de Campo, avanço ponderado e leitura da semana" loading="lazy">
-        <figcaption><b>Painel Executivo <span class="exemplo">exemplo</span></b>
-          Avanço ponderado em dias-equivalentes, posição contra o cronograma, ritmo de 7/14/30 dias e a
-          data provável de término no ritmo atual. Filtros de mês e frente valem para a tela inteira.</figcaption>
-      </figure>
-      <div>
-        <h3 style="margin-top:0">Central de Campo — o cartão de hoje</h3>
-        <p>
-          No alto do painel, <strong>fora dos filtros</strong>: é sempre hoje. Mostra o que já foi registrado no dia
-          (serviços, RDO Diário, apontamento de equipamento) e o que falta.
-        </p>
-        <p>
-          É o item mais útil do dia para o administrativo: às 16h ele responde <em>"quem ainda não lançou?"</em>.
-          Sem isso, o RDO que ninguém preencheu só aparece semanas depois, quando não dá mais para lembrar.
-        </p>
-        <h3>Rotina sugerida</h3>
-        <ul>
-          <li><strong>Toda manhã</strong> — Central de Campo: confira se o dia anterior fechou (serviços + RDO).</li>
-          <li><strong>Toda sexta</strong> — Histórico: filtre a semana, confira quantidades estranhas, exporte o CSV.</li>
-          <li><strong>Todo dia 25</strong> — Apoio à Medição: gere a prévia do mês e confronte com a Planilha Geral.</li>
-          <li><strong>Sempre que chover</strong> — Dias Improdutivos: confira se o dia ficou marcado com a causa certa.</li>
-        </ul>
-      </div>
-    </div>
-
-    <div class="grade g2" style="align-items:start">
-      <figure class="tela">
-        <img src="docs/manual/historico.png" alt="Tela Histórico com a lista de serviços lançados e filtros" loading="lazy">
-        <figcaption><b>Histórico <span class="exemplo">exemplo</span></b>
-          Tudo o que o campo lançou, com filtro por mês, frente, apontador e data, busca livre por pacote ou
-          observação, exportação em CSV e o botão de apagar duplicatas. Aqui também se gera o PDF do RDO oficial.</figcaption>
-      </figure>
-      <figure class="tela">
-        <img src="docs/manual/notas-fiscais.png" alt="Tela de Notas Fiscais com abas de notas, estoque, preços e painel" loading="lazy">
-        <figcaption><b>Notas Fiscais · Estoque · Preços <span class="exemplo">exemplo</span></b>
-          Entrada por foto da nota, estoque por lote (saldo é o que <em>ainda tem</em>, não o que chegou),
-          saída de material e histórico de preço por material — menor, médio, maior e o fornecedor mais barato.</figcaption>
-      </figure>
-    </div>
-  </div>
-</section>
-
-<!-- ============================================================ ENGENHARIA -->
-<section id="engenharia">
-  <div class="wrap">
-    <span class="num">07 — A ENGENHARIA</span>
-    <h2>Da quantidade lançada ao item medido.</h2>
-
-    <figure class="tela" style="margin:26px 0">
-      <img src="docs/manual/apoio-medicao.png" alt="Tela Apoio à Medição com a prévia por item contratual" loading="lazy">
-      <figcaption><b>Apoio à Medição — prévia por item do orçamento <span class="exemplo">exemplo</span></b>
-        Cada linha é um item do orçamento, com a quantidade derivada dos lançamentos do período e os pacotes
-        que a produziram. O seletor escolhe o mês; <strong>CSV p/ conferência</strong> exporta com separador
-        <span class="mono">;</span> e vírgula decimal, pronto para confrontar com a coluna do mês da Planilha Geral.</figcaption>
-    </figure>
-
-    <div class="grade g2">
-      <div class="cartao">
-        <h4>Fechar a medição do mês</h4>
-        <p>Escolha o mês → <strong>Fechar medição do mês</strong>. Isso <em>congela</em> o que foi apresentado à
-        fiscalização. Lançamento retroativo continua sendo aceito depois — ele só deixa de reescrever o passado
-        em silêncio, porque a tela passa a mostrar as colunas <strong>Medido</strong> e <strong>Diferença</strong>.
-        Só engenharia e administrador fecham. Reabrir não apaga: marca como reaberto.</p>
-      </div>
-      <div class="cartao">
-        <h4>Saldo de contrato e aviso de estouro</h4>
-        <p>Com a quantidade contratual cadastrada, a prévia mostra o <strong>saldo</strong> e o <strong>% do contrato</strong>
-        por item — e destaca o item que passou do contratado. Item acima do contrato pede <em>aditivo</em>,
-        não medição: descobrir isso no dia 25 é diferente de descobrir na glosa.</p>
-      </div>
-      <div class="cartao">
-        <h4>Teórico × Real</h4>
-        <p>Compara o consumo <em>derivado</em> dos coeficientes com a <strong>saída real</strong> do almoxarifado.
-        Onde os dois se afastam há erro de apontamento, perda ou desvio — e é melhor saber pelo sistema.</p>
-      </div>
-      <div class="cartao">
-        <h4>Cronograma reverso</h4>
-        <p>A partir do término alvo, o sistema recua o saldo restante pela produtividade e diz
-        <strong>quando cada pacote precisa começar</strong> e em que ritmo, contando só dias úteis.
-        Ordena por urgência dentro de cada frente.</p>
-      </div>
-      <div class="cartao">
-        <h4>Analista IA</h4>
-        <p>Resumo executivo da semana e recomendações, gerado com a chave que você configura em
-        <strong>⚙ Configurar IA</strong>. Sem chave, o sistema segue funcionando — só não escreve o resumo.</p>
-      </div>
-      <div class="cartao">
-        <h4>Modo Apresentação</h4>
-        <p>Botão <strong>APRESENTAR</strong>, no rodapé do menu. A obra vira uma sequência de telas grandes, em tela
-        cheia, que passam sozinhas a cada 9 s (← → trocam, espaço pausa, ESC sai). Os números saem das
-        <em>mesmas funções</em> do painel — não é um relatório à parte que possa divergir.</p>
-      </div>
-    </div>
-
-    <div class="grade g2" style="margin-top:26px;align-items:start">
-      <figure class="tela">
-        <img src="docs/manual/dias-improdutivos.png" alt="Tela Dias Improdutivos: chuva medida contra clima apontado" loading="lazy">
-        <figcaption><b>Dias Improdutivos <span class="exemplo">exemplo</span></b>
-          Chuva medida × clima apontado × serviço lançado, dia a dia. Um dia útil sem serviço lançado e com
-          causa registrada vira dia improdutivo — a matéria-prima do pleito de prazo.</figcaption>
-      </figure>
-      <figure class="tela">
-        <img src="docs/manual/cronograma.png" alt="Tela Cronograma com o motor de planejamento reverso" loading="lazy">
-        <figcaption><b>Cronograma <span class="exemplo">exemplo</span></b>
-          Saldo restante por pacote, término alvo, produtividade e início necessário. Enquanto a produtividade
-          de cada serviço não for cadastrada, a coluna fica "Livre" e o ritmo não é calculado.</figcaption>
-      </figure>
-    </div>
-  </div>
-</section>
-
-<!-- ============================================================ TELAS -->
-<section id="telas">
-  <div class="wrap">
-    <span class="num">08 — AS TELAS, UMA A UMA</span>
-    <h2>Mapa rápido do menu.</h2>
-    <p class="lead">O menu é dividido em quatro grupos. Você só vê os itens do seu perfil.</p>
-
-    <div class="tab-rolagem" style="margin-top:24px">
-      <table>
-        <thead><tr><th style="width:190px">Tela</th><th>Para que serve</th><th style="width:150px">Quem mais usa</th></tr></thead>
-        <tbody>
-          <tr><td><strong>Painel Executivo</strong></td><td>Como a obra está hoje: avanço ponderado, posição contra o cronograma, ritmo, projeção de término, frentes em risco e a Central de Campo do dia.</td><td>Administrativo · Engenharia</td></tr>
-          <tr><td><strong>Avanço Físico</strong></td><td>Avanço detalhado por pacote — executado, estimado, % e a data do último lançamento. É onde se vê o serviço parado.</td><td>Todos</td></tr>
-          <tr><td><strong>Cronograma</strong></td><td>Planejamento reverso: quando cada saldo precisa começar para caber no prazo.</td><td>Engenharia</td></tr>
-          <tr><td><strong>Apoio à Medição</strong></td><td>Prévia da medição por item do orçamento, saldo do contrato, CSV de conferência e fechamento do mês.</td><td>Engenharia · Administrativo</td></tr>
-          <tr><td><strong>Dias Improdutivos</strong></td><td>Chuva medida × clima apontado × serviço do dia. Base do pleito de prazo.</td><td>Engenharia</td></tr>
-          <tr><td><strong>Teórico × Real</strong></td><td>Consumo derivado dos coeficientes contra a saída de material do almoxarifado.</td><td>Engenharia</td></tr>
-          <tr><td><strong>Analista IA</strong></td><td>Resumo executivo e recomendações da semana.</td><td>Engenharia · Diretoria</td></tr>
-          <tr><td><strong>Lançar Serviço</strong></td><td>O que foi executado: frente, pacote, quantidade, equipe, observação e até 3 fotos.</td><td>Apontador</td></tr>
-          <tr><td><strong>RDO Diário</strong></td><td>O dia: efetivo, equipamentos, clima, paralisações e observações, por turno.</td><td>Apontador</td></tr>
-          <tr><td><strong>Histórico</strong></td><td>Tudo o que foi lançado, com filtros, busca, correção, exportação e o PDF do RDO oficial.</td><td>Todos</td></tr>
-          <tr><td><strong>Equipamentos</strong></td><td>Frota própria e locada, hora de máquina, paradas, horímetro, combustível e assinatura do operador.</td><td>Apontador · Administrativo</td></tr>
-          <tr><td><strong>Galeria de Fotos</strong></td><td>Registro fotográfico por pacote e por mês. Só abre as imagens para quem está logado.</td><td>Todos</td></tr>
-          <tr><td><strong>Projetos</strong></td><td>As pranchas do executivo abertas <em>dentro</em> do sistema, com zoom e leitura offline.</td><td>Apontador · Engenharia</td></tr>
-          <tr><td><strong>Notas Fiscais</strong></td><td>Entrada por foto da nota, estoque com lote, saídas, histórico de preço e divergências.</td><td>Administrativo · Apontador</td></tr>
-          <tr><td><strong>Usuários</strong></td><td>Criar pessoa, definir perfil, trocar senha e escolher quais obras ela enxerga.</td><td>Administrador</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="grade g2" style="margin-top:26px">
-      <figure class="tela">
-        <img src="docs/manual/avanco-fisico.png" alt="Tela Avanço Físico com a tabela por pacote" loading="lazy">
-        <figcaption><b>Avanço Físico <span class="exemplo">exemplo</span></b>
-          Os 56 pacotes agrupados por frente, com executado, estimado, avanço e data do último lançamento.</figcaption>
-      </figure>
-      <figure class="tela">
-        <img src="docs/manual/equipamentos.png" alt="Tela de Equipamentos com a frota e o apontamento de horas" loading="lazy">
-        <figcaption><b>Equipamentos <span class="exemplo">exemplo</span></b>
-          Frota da obra e apontamento de hora de máquina. Equipamento que sai da obra é <em>desativado</em>,
-          nunca excluído — o histórico de horas continua valendo.</figcaption>
-      </figure>
-    </div>
-
-    <figure class="tela" style="margin-top:16px">
-      <img src="docs/manual/projetos.png" alt="Tela Projetos com a prancha de pavimentação desenhada dentro do sistema" loading="lazy">
-      <figcaption><b>Projetos — as pranchas do executivo, dentro do sistema</b>
-        Lista por disciplina com o código do carimbo, visor com zoom, e os botões Abrir e Baixar o PDF original.
-        Todos os perfis enxergam esta tela — inclusive o Campo, que é quem mais precisa saber o que construir.</figcaption>
+    <figure class="tela">
+      <img src="docs/manual/m-projetos.png" alt="Prancha de pavimentação desenhada dentro do aplicativo, no celular" loading="lazy">
+      <figcaption><b>A prancha abre dentro do app</b>
+        CT-AS-101 — pavimentação da Agrimensor Sugaya. Sem sair do sistema, sem leitor de PDF do aparelho.</figcaption>
     </figure>
   </div>
 </section>
 
-<!-- ============================================================ REGRAS -->
-<section id="regras">
-  <div class="wrap">
-    <span class="num">09 — REGRAS DE OURO</span>
-    <h2>Sete regras que evitam 90% dos problemas.</h2>
-
-    <div class="grade g2" style="margin-top:26px">
-      <div class="cartao"><h4>1 · Lance no dia</h4>
-        <p>Quantidade lembrada de memória três dias depois é chute. Lançamento retroativo é possível — e às vezes
-        necessário —, mas quem lança no dia mede com a trena, não com a lembrança.</p></div>
-      <div class="cartao"><h4>2 · Vírgula, nunca ponto</h4>
-        <p>Quantidade se escreve <span class="mono">38,50</span>. O ponto é separador de milhar no formato brasileiro,
-        e <span class="mono">22.26</span> pode virar 2 226.</p></div>
-      <div class="cartao"><h4>3 · Um pacote, uma linha</h4>
-        <p>Dois serviços diferentes no mesmo dia são duas linhas. Somar tudo numa linha só esconde
-        qual frente andou.</p></div>
-      <div class="cartao"><h4>4 · Confira o saldo antes de enviar</h4>
-        <p>Se o sistema avisar "acima do saldo do pacote", pare. Ou o pacote está errado, ou a quantidade tem
-        um zero a mais — nas duas hipóteses a medição vai sair errada.</p></div>
-      <div class="cartao"><h4>5 · RDO todo dia, inclusive no dia parado</h4>
-        <p>Dia de chuva sem RDO é dia perdido para o pleito. O dia parado precisa estar registrado
-        <em>com o motivo</em> — é isso que a fiscalização aceita depois.</p></div>
-      <div class="cartao"><h4>6 · Foto vale por mil discussões</h4>
-        <p>Serviço enterrado (fundo de vala, lastro, reaterro) só existe depois se tiver foto.
-        São 3 por serviço, e elas ficam ligadas ao pacote e à data.</p></div>
-      <div class="cartao"><h4>7 · Não apague — corrija</h4>
-        <p>Errou a quantidade? <strong>Histórico → editar</strong>. Apagar e relançar quebra a rastreabilidade e,
-        se a medição do mês já foi fechada, muda um número que a fiscalização já viu.</p></div>
-      <div class="cartao"><h4>+ Nunca compartilhe o seu login</h4>
-        <p>O nome que fica no registro é o do usuário que enviou. Login emprestado é registro com dono errado —
-        e no RDO isso é assinatura de quem não estava lá.</p></div>
+<!-- ══════════════════════════════════ ADMINISTRATIVO -->
+<section class="bloco" id="administrativo">
+  <div class="env" style="display:flex;flex-direction:column;gap:18px">
+    <div>
+      <span class="olho">Administrativo</span>
+      <h2>De onde sai o número que você repete na reunião.</h2>
     </div>
 
-    <h3>Erros comuns, e o que fazer</h3>
-    <div class="tab-rolagem">
-      <table>
-        <thead><tr><th style="width:34%">Aconteceu</th><th>O que fazer</th></tr></thead>
-        <tbody>
-          <tr><td>Lancei no pacote errado</td><td>Histórico → localize a linha → editar → troque o pacote. Só o dono, a engenharia e o administrador conseguem.</td></tr>
-          <tr><td>Lancei duas vezes o mesmo serviço</td><td>Histórico → apagar a duplicata (você apaga o que você lançou). Se forem muitas, use <strong>Apagar duplicatas</strong>.</td></tr>
-          <tr><td>Enviei e não apareceu</td><td>Provavelmente está na fila offline. Verifique o contador de pendentes e a bolinha de sincronização no menu. <strong>Não reenvie.</strong></td></tr>
-          <tr><td>"Sessão expirada"</td><td>Saia e entre de novo. O que estava digitado no rascunho de Lançar Serviço é restaurado.</td></tr>
-          <tr><td>"Seu acesso de Campo não abre esta tela"</td><td>É o perfil, não um defeito. Fale com o administrador se você precisa mesmo daquela tela.</td></tr>
-          <tr><td>O painel mostra número diferente do meu</td><td>Puxe <strong>ATUALIZAR</strong> no menu. O sistema recarrega a cada 5 minutos; o botão força agora.</td></tr>
-          <tr><td>Esqueci de lançar ontem</td><td>Lance hoje com a <strong>data de ontem</strong>. A data do lançamento é a que vale, não a de digitação.</td></tr>
-        </tbody>
-      </table>
+    <figure class="tela">
+      <img src="docs/manual/p-central.png" alt="Cartão Central de Campo mostrando o que já foi registrado hoje" loading="lazy">
+      <figcaption><b>Central de Campo — é sempre hoje<span class="selo-ex">exemplo</span></b>
+        No alto do Painel, fora dos filtros. Mostra o que já foi registrado no dia e o que falta.
+        Às 16h ela responde “quem ainda não lançou?”.</figcaption>
+    </figure>
+
+    <figure class="tela">
+      <img src="docs/manual/p-hero.png" alt="Bloco de avanço ponderado, ritmo e projeção de término no Painel Executivo" loading="lazy">
+      <figcaption><b>Painel Executivo<span class="selo-ex">exemplo</span></b>
+        Avanço ponderado, posição contra o cronograma, ritmo de 7/14/30 dias e a data provável de término
+        no ritmo atual.</figcaption>
+    </figure>
+
+    <h3>A sua rotina</h3>
+    <div class="linhas">
+      <div class="linha"><b>Toda manhã</b><span>Central de Campo: o dia anterior fechou? (serviços + RDO)</span></div>
+      <div class="linha"><b>Toda sexta</b><span>Histórico: filtre a semana, confira quantidade estranha, exporte o CSV</span></div>
+      <div class="linha"><b>Todo dia 25</b><span>Apoio à Medição: gere a prévia e confronte com a Planilha Geral</span></div>
+      <div class="linha"><b>Sempre que chover</b><span>Dias Improdutivos: confira se o dia ficou com a causa certa</span></div>
+    </div>
+
+    <figure class="tela">
+      <img src="docs/manual/historico.png" alt="Tela Histórico com lista de serviços lançados e filtros" loading="lazy">
+      <figcaption><b>Histórico<span class="selo-ex">exemplo</span></b>
+        Tudo que o campo lançou, com filtro por mês, frente, apontador e busca livre. Daqui saem o CSV
+        e o PDF do RDO oficial.</figcaption>
+    </figure>
+
+    <details>
+      <summary>Notas fiscais, estoque e preço</summary>
+      <div class="dentro">
+        <span>Entrada por foto da nota; estoque por lote (saldo é o que <em>ainda tem</em>, não o que chegou);
+        saída de material; e histórico de preço por material — menor, médio, maior e o fornecedor mais barato.</span>
+        <figure class="tela" style="box-shadow:none">
+          <img src="docs/manual/notas-fiscais.png" alt="Tela de Notas Fiscais com abas de notas, estoque, preços e painel" loading="lazy">
+        </figure>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════ ENGENHARIA -->
+<section class="bloco" id="engenharia">
+  <div class="env" style="display:flex;flex-direction:column;gap:18px">
+    <div>
+      <span class="olho">Engenharia</span>
+      <h2>Da quantidade lançada ao item medido.</h2>
+    </div>
+
+    <figure class="tela">
+      <img src="docs/manual/apoio-medicao.png" alt="Prévia de medição por item contratual, com quantidade do período e pacotes de origem" loading="lazy">
+      <figcaption><b>Apoio à Medição<span class="selo-ex">exemplo</span></b>
+        Uma linha por item do orçamento, com a quantidade derivada dos lançamentos do período e os pacotes
+        que a produziram. <b style="display:inline">CSV p/ conferência</b> exporta pronto para bater com a
+        Planilha Geral.</figcaption>
+    </figure>
+
+    <div class="linhas">
+      <div class="linha"><b>Fechar a medição do mês</b>
+        <span>Congela o que foi apresentado. Lançamento retroativo continua entrando — só deixa de reescrever
+        o passado calado, porque aparecem as colunas <em>Medido</em> e <em>Diferença</em>.</span>
+        <span class="quem">só engenharia e admin</span></div>
+      <div class="linha"><b>Saldo de contrato</b>
+        <span>Saldo e % por item, com aviso quando passa do contratado. Item acima do contrato pede aditivo,
+        não medição — melhor descobrir no dia 25 que na glosa.</span></div>
+      <div class="linha"><b>Teórico × Real</b>
+        <span>Consumo derivado dos coeficientes contra a saída real do almoxarifado. Onde os dois se afastam
+        há erro de apontamento, perda ou desvio.</span></div>
+      <div class="linha"><b>Cronograma reverso</b>
+        <span>A partir do término alvo, diz quando cada pacote precisa começar e em que ritmo, só em dias úteis.</span></div>
+      <div class="linha"><b>Modo Apresentação</b>
+        <span>Botão APRESENTAR: a obra em telas cheias que passam sozinhas a cada 9 s. Os números saem das
+        mesmas contas do Painel — não é relatório à parte.</span></div>
+    </div>
+
+    <figure class="tela">
+      <img src="docs/manual/dias-improdutivos.png" alt="Tela Dias Improdutivos comparando chuva medida, clima apontado e serviço lançado" loading="lazy">
+      <figcaption><b>Dias Improdutivos<span class="selo-ex">exemplo</span></b>
+        Chuva medida × clima apontado × serviço do dia. Dia útil sem serviço e com causa registrada vira dia
+        improdutivo — a matéria-prima do pleito.</figcaption>
+    </figure>
+
+    <details>
+      <summary>Quem enxerga e quem apaga o quê</summary>
+      <div class="dentro">
+        <div class="qa"><b>Campo</b><span>Lança serviço, RDO, equipamento e nota. Vê Histórico, Avanço Físico,
+          Galeria e Projetos.</span></div>
+        <div class="qa"><b>Administrativo</b><span>Painel, Cronograma, Apoio à Medição, Improdutivos,
+          Teórico × Real, Histórico, Equipamentos e Notas. Não lança serviço.</span></div>
+        <div class="qa"><b>Engenharia</b><span>Tudo da obra: lança, corrige lançamento de terceiro, analisa,
+          exporta e fecha a medição.</span></div>
+        <div class="qa"><b>Diretoria</b><span>Só consulta.</span></div>
+        <div class="qa"><b>Administrador</b><span>Tudo, e é o único que gerencia usuários.</span></div>
+        <div class="qa"><b>Apagar</b><span>O administrador, ou a própria pessoa que lançou — e a regra vale no
+          servidor, não só no botão. Tentativa recusada fica registrada na Auditoria com nome e hora.</span></div>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════ REGRAS -->
+<section class="bloco" id="regras">
+  <div class="env" style="display:flex;flex-direction:column;gap:16px">
+    <div>
+      <span class="olho">Regras de ouro</span>
+      <h2>Sete linhas que evitam quase todo problema.</h2>
+    </div>
+    <div class="regras">
+      <div class="regra"><i>1</i><p><b>Lance no dia.</b> Quantidade lembrada 3 dias depois é chute.</p></div>
+      <div class="regra"><i>2</i><p><b>Vírgula, nunca ponto.</b> 38,50 — o ponto é separador de milhar.</p></div>
+      <div class="regra"><i>3</i><p><b>Um pacote, uma linha.</b> Somar tudo esconde qual frente andou.</p></div>
+      <div class="regra"><i>4</i><p><b>Confira o saldo</b> antes de enviar.</p></div>
+      <div class="regra"><i>5</i><p><b>RDO todo dia</b>, inclusive no dia parado — com o motivo.</p></div>
+      <div class="regra"><i>6</i><p><b>Foto no que fica enterrado.</b> Vala, lastro, reaterro.</p></div>
+      <div class="regra"><i>7</i><p><b>Não apague — corrija.</b> Histórico → editar.</p></div>
+      <div class="regra"><i>+</i><p><b>Nunca empreste o login.</b> No RDO, isso é assinatura de quem não estava lá.</p></div>
+    </div>
+
+    <details>
+      <summary>Deu errado — o que fazer</summary>
+      <div class="dentro">
+        <div class="qa"><b>Lancei no pacote errado</b><span>Histórico → editar → troque o pacote.</span></div>
+        <div class="qa"><b>Lancei duas vezes</b><span>Histórico → apagar a duplicata. Muitas? <em>Apagar duplicatas</em>.</span></div>
+        <div class="qa"><b>Enviei e não apareceu</b><span>Está na fila offline. Veja o contador de pendentes. Não reenvie.</span></div>
+        <div class="qa"><b>“Sessão expirada”</b><span>Saia e entre de novo — o rascunho é restaurado.</span></div>
+        <div class="qa"><b>“Seu acesso não abre esta tela”</b><span>É o perfil, não defeito. Fale com o administrador.</span></div>
+        <div class="qa"><b>O painel mostra número diferente</b><span>Puxe ATUALIZAR no menu.</span></div>
+        <div class="qa"><b>Esqueci de lançar ontem</b><span>Lance hoje com a data de ontem. Vale a data do serviço.</span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>Dúvidas frequentes</summary>
+      <div class="dentro">
+        <div class="qa"><b>Preciso de internet no canteiro?</b><span>Não para lançar. Só para ver dado novo dos outros e subir a fila.</span></div>
+        <div class="qa"><b>Gasta muito dado?</b><span>Pouco. O app fica no aparelho e as fotos são reduzidas antes de subir.</span></div>
+        <div class="qa"><b>Funciona em iPhone?</b><span>Sim, pelo Safari, adicionando à Tela de Início.</span></div>
+        <div class="qa"><b>Posso lançar por outra pessoa?</b><span>Pode, mas com o <em>seu</em> login — o registro fica no seu nome.</span></div>
+        <div class="qa"><b>Perdi o celular</b><span>O que foi enviado está na base. Avise o administrador para trocar sua senha.</span></div>
+        <div class="qa"><b>Quem vê as fotos?</b><span>Só quem está logado. Nunca viram link público.</span></div>
+        <div class="qa"><b>Substitui o RDO em papel?</b><span>O RDO oficial sai em PDF para imprimir e assinar. Acaba o rascunho que alguém digitava depois.</span></div>
+        <div class="qa"><b>E a obra da Teotônio?</b><span>Continua no mesmo sistema. O seletor <em>Obra</em> troca entre as duas.</span></div>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════ IMPLANTAÇÃO -->
+<section class="bloco" id="implantacao">
+  <div class="env" style="display:flex;flex-direction:column;gap:16px">
+    <div>
+      <span class="olho">Antes do dia 1</span>
+      <h2>Quatro pendências, todas de escritório.</h2>
+      <p class="diz" style="margin-top:8px">A obra já está cadastrada: 2 ruas, 6 frentes e os 56 serviços do
+        orçamento com as quantidades previstas.</p>
+    </div>
+
+    <div class="linhas">
+      <div class="check"><span class="cx"></span><div>
+        <b>Usuários e perfis</b><span>Cada apontador, o administrativo e a engenharia, com acesso à obra. Sem isso ninguém lança.</span></div></div>
+      <div class="check"><span class="cx"></span><div>
+        <b>Matriz de coeficientes</b><span>É o de-para entre pacote e item do orçamento. Vazia, o Apoio à Medição abre sem nenhuma linha. Aqui é quase 1:1.</span></div></div>
+      <div class="check"><span class="cx"></span><div>
+        <b>Produtividade por serviço</b><span>Sem ela o Cronograma não calcula início necessário nem ritmo.</span></div></div>
+      <div class="check"><span class="cx"></span><div>
+        <b>Prancha de terraplenagem</b><span>Pavimentação e drenagem das duas ruas já estão no ar. Falta a CT-AP-103 da Astrogildo.</span></div></div>
+    </div>
+
+    <details>
+      <summary>O plano das quatro primeiras semanas</summary>
+      <div class="dentro">
+        <div class="qa"><b>Semana 0 — preparar</b><span>Resolver as quatro pendências acima. Instalar nos celulares
+          e conferir que cada um entra com o próprio login e vê a obra certa.</span></div>
+        <div class="qa"><b>Semana 1 — treinar no real</b><span>30 minutos com os apontadores, celular na mão.
+          A engenharia confere todos os lançamentos no fim do dia e corrige <em>junto</em> com quem lançou.</span></div>
+        <div class="qa"><b>Semana 2 — a Central de Campo vira a régua</b><span>Meta pública: todo dia útil com
+          serviço lançado e RDO preenchido.</span></div>
+        <div class="qa"><b>Semanas 3 e 4 — a primeira medição</b><span>Gerar a prévia, exportar o CSV e conferir
+          item a item contra a planilha feita à mão. Depois, fechar o mês no sistema.</span></div>
+      </div>
+    </details>
+
+    <div class="nota ok">
+      <b>Critério de sucesso do primeiro mês</b>
+      Não é “todo mundo usando”. É a medição sair da prévia do sistema, e a conferência à mão só confirmar.
+    </div>
+
+    <div class="nota al">
+      <b>Duas telas que não valem nesta obra</b>
+      Em <em>Avanço Físico</em>, os mapas por estaca aparecem vazios (são da Teotônio, que é numerada por
+      estacas). E em <em>Lançar Serviço</em>, Sentido e Estaca ficam sem opção — o apontador deve pular.
     </div>
   </div>
 </section>
 
-<!-- ============================================================ IMPLANTAÇÃO -->
-<section id="implantacao">
-  <div class="wrap">
-    <span class="num">10 — IMPLANTAÇÃO NA RUAS DE TERRA 4</span>
-    <h2>O que precisa estar pronto antes do primeiro lançamento.</h2>
-    <p class="lead">
-      A obra já está cadastrada no sistema: 2 ruas, 6 frentes e os 56 serviços do orçamento com as
-      quantidades previstas. Faltam quatro ajustes de cadastro — todos de escritório, nenhum de campo.
-    </p>
-
-    <div class="tab-rolagem" style="margin:24px 0">
-      <table>
-        <thead><tr><th style="width:210px">O que falta</th><th>Por que importa</th><th style="width:130px">Quem faz</th></tr></thead>
-        <tbody>
-          <tr>
-            <td><strong>Usuários e perfis</strong></td>
-            <td>Criar cada apontador, o administrativo e a engenharia, com perfil correto e acesso à obra
-                Ruas de Terra 4. Sem isso ninguém lança.</td>
-            <td>Administrador</td>
-          </tr>
-          <tr>
-            <td><strong>Matriz de coeficientes</strong></td>
-            <td>É o de-para entre pacote executado e item do orçamento. Enquanto estiver vazia, o
-                <em>Apoio à Medição</em> abre sem nenhuma linha. Nesta obra a matriz é quase 1:1 — cada
-                serviço do orçamento é um pacote —, então é um cadastro rápido, mas é indispensável.</td>
-            <td>Engenharia</td>
-          </tr>
-          <tr>
-            <td><strong>Produtividade por serviço</strong></td>
-            <td>Sem ela o <em>Cronograma</em> não calcula início necessário nem ritmo: a coluna fica "Livre"
-                e a tela não ajuda a decidir nada.</td>
-            <td>Engenharia</td>
-          </tr>
-          <tr>
-            <td><strong>Prancha de terraplenagem</strong></td>
-            <td>As pranchas de pavimentação e drenagem das duas ruas já estão publicadas e abrem dentro do
-                sistema. Falta apenas a <strong>terraplenagem da Astrogildo Pereira</strong>
-                (<span class="mono">CT-AP-103-1001-0F-DE</span>), que está listada em <em>Projetos</em> mas
-                ainda sem arquivo.</td>
-            <td>Engenharia</td>
-          </tr>
-        </tbody>
-      </table>
+<!-- ══════════════════════════════════ CARTÃO -->
+<section class="bloco" id="bolso">
+  <div class="env" style="display:flex;flex-direction:column;gap:16px">
+    <div>
+      <span class="olho">Cartão de bolso</span>
+      <h2>Imprima e cole no barracão.</h2>
     </div>
-
-    <div class="destaque aviso">
-      <h4>Duas telas que dependem de cadastro da Teotônio e não valem aqui</h4>
-      <p>
-        Em <strong>Avanço Físico</strong>, os blocos "Mapa de avanço por estaca" e "Tempo × estaca" aparecem
-        vazios com a explicação de que a obra não usa estacas numeradas — está correto, é o comportamento
-        esperado. E em <strong>Lançar Serviço</strong>, os campos <em>Sentido da via</em>, <em>Estaca início</em>
-        e <em>Estaca fim</em> ficam sem opção: oriente o apontador a ignorá-los e usar a Observação.
-      </p>
-    </div>
-
-    <h3>Plano das quatro primeiras semanas</h3>
-    <ol class="passos" style="margin-top:18px">
-      <li>
-        <h4>Semana 0 — preparar (escritório)</h4>
-        <p>Cadastrar usuários, matriz de coeficientes e produtividades. Publicar as pranchas.
-        Instalar o sistema nos celulares dos apontadores e conferir que cada um entra com o próprio login
-        e enxerga a obra certa.</p>
-      </li>
-      <li>
-        <h4>Semana 1 — treinar em cima do real</h4>
-        <p>Uma conversa de 30 minutos com os apontadores usando este manual e o celular na mão.
-        Na primeira semana, a engenharia confere <strong>todos</strong> os lançamentos no fim do dia e corrige
-        junto com quem lançou — corrigir na frente da pessoa ensina; corrigir escondido cria retrabalho eterno.</p>
-      </li>
-      <li>
-        <h4>Semana 2 — a Central de Campo vira a régua</h4>
-        <p>O administrativo abre o Painel toda manhã e cobra o que ficou pendente do dia anterior.
-        Meta simples e pública: <strong>todo dia útil com serviço lançado e RDO preenchido</strong>.</p>
-      </li>
-      <li>
-        <h4>Semana 3 e 4 — fechar a primeira medição pelo sistema</h4>
-        <p>Gerar a prévia em <em>Apoio à Medição</em>, exportar o CSV e conferir <strong>item a item</strong> contra a
-        planilha feita à mão. Diferença encontrada agora é aprendizado; diferença encontrada na glosa é prejuízo.
-        Conferido, feche a medição do mês no sistema.</p>
-      </li>
-    </ol>
-
-    <div class="destaque ok">
-      <h4>Critério de sucesso do primeiro mês</h4>
-      <p>
-        Não é "todo mundo usando o sistema". É: <strong>a medição do mês sai da prévia do sistema</strong>, e o
-        que foi conferido à mão apenas confirma. No dia em que isso acontece, a digitação dupla acaba —
-        e é ela que consome as tardes do fim do mês.
-      </p>
-    </div>
-  </div>
-</section>
-
-<!-- ============================================================ FAQ -->
-<section id="faq">
-  <div class="wrap">
-    <span class="num">11 — DÚVIDAS FREQUENTES</span>
-    <h2>O que sempre perguntam.</h2>
-
-    <div class="grade g2" style="margin-top:26px">
-      <div class="cartao"><h4>Preciso de internet no canteiro?</h4>
-        <p>Não para lançar. O sistema abre e grava sem sinal; a fila sobe sozinha quando a conexão volta.
-        Internet só é necessária para <em>ver</em> dado novo dos outros e para subir a fila.</p></div>
-      <div class="cartao"><h4>Gasta muito dado do meu plano?</h4>
-        <p>Pouco. O sistema fica guardado no aparelho e só busca o que mudou. As fotos são reduzidas antes de subir.</p></div>
-      <div class="cartao"><h4>Funciona em iPhone?</h4>
-        <p>Sim, pelo Safari — instalando pela opção <em>Adicionar à Tela de Início</em>. Android é pelo Chrome.</p></div>
-      <div class="cartao"><h4>Meu celular é fraco. Trava?</h4>
-        <p>O sistema foi feito para 4G ruim e aparelho simples: as partes pesadas (PDF, Excel, gráficos)
-        só são baixadas na primeira vez que fazem falta.</p></div>
-      <div class="cartao"><h4>Posso lançar por outra pessoa?</h4>
-        <p>Pode lançar o serviço de outra equipe, mas <strong>com o seu login</strong> — o registro fica com o seu nome,
-        que é quem responde por ele. Nunca use o login de outra pessoa.</p></div>
-      <div class="cartao"><h4>E se eu perder o celular?</h4>
-        <p>Nada se perde: o dado enviado está na base da obra, não no aparelho. Avise o administrador para
-        trocar a sua senha. Só o que estiver na fila offline, ainda não enviado, se perde com o aparelho.</p></div>
-      <div class="cartao"><h4>Quem vê as fotos da obra?</h4>
-        <p>Só quem está logado no sistema. As imagens ficam em pasta privada e nunca viram link público —
-        foto de obra mostra placa, rosto e endereço.</p></div>
-      <div class="cartao"><h4>Isso substitui o RDO em papel?</h4>
-        <p>O RDO oficial sai do sistema em PDF, numerado por obra, para impressão e assinatura.
-        O que acaba é o <em>rascunho</em> em papel que alguém digitava depois.</p></div>
-      <div class="cartao"><h4>E a obra da Teotônio?</h4>
-        <p>Continua no mesmo sistema. As duas obras convivem: o seletor <strong>Obra</strong>, no alto do menu,
-        troca entre elas, e cada pessoa vê só as obras que o administrador liberou.</p></div>
-      <div class="cartao"><h4>Quem eu procuro quando algo não funciona?</h4>
-        <p>A engenharia da obra primeiro — a maioria dos "erros" é cadastro faltando (pacote, coeficiente,
-        permissão). O que for defeito do sistema, ela encaminha.</p></div>
-    </div>
-  </div>
-</section>
-
-<!-- ============================================================ CARTÃO -->
-<section id="bolso">
-  <div class="wrap">
-    <span class="num">12 — CARTÃO DE BOLSO</span>
-    <h2>Imprima e cole no barracão.</h2>
-    <p class="lead nao-imprimir">Uma folha. É o que o apontador precisa saber de cor.</p>
-
-    <div class="bolso" style="margin-top:24px">
-      <h3>Ruas de Terra 4 — a rotina do apontador</h3>
+    <div class="bolso">
+      <h3 style="margin-bottom:12px">Ruas de Terra 4 — a rotina do apontador</h3>
       <ol>
-        <li><strong>Todo dia, na frente de serviço</strong> — abra o app, confira a data e o turno.</li>
-        <li><strong>Lançar Serviço</strong>: Frente → Pacote → Quantidade (com <strong>vírgula</strong>) → Equipe → Foto.
-            Uma linha por pacote. Ignore Sentido/Estaca: use a Observação para dizer o trecho.</li>
-        <li>Se aparecer <strong>"acima do saldo do pacote"</strong>, pare e confira antes de enviar.</li>
-        <li><strong>RDO Diário</strong>, uma vez por turno: clima (use <em>Buscar chuva registrada</em>), efetivo,
-            equipamentos, paralisações com motivo e horário.</li>
-        <li><strong>Equipamentos</strong>: horas de máquina, paradas e assinatura do operador.</li>
-        <li><strong>Chegou material?</strong> Fotografe a nota em Notas Fiscais. Não digite.</li>
-        <li><strong>Sem sinal:</strong> lance mesmo assim. Sobe sozinho depois. <strong>Não lance duas vezes.</strong></li>
-        <li><strong>Errou?</strong> Histórico → editar. Não apague e relance.</li>
-        <li><strong>Dia parado conta.</strong> Chuva, falta de material, interferência: registre o motivo no RDO.</li>
+        <li><b>Lançar Serviço:</b> Frente → Pacote → Quantidade <b>com vírgula</b> → Equipe → Foto. Uma linha por pacote.</li>
+        <li><b>Pule</b> Sentido e Estaca. O trecho vai na Observação.</li>
+        <li><b>“Acima do saldo”?</b> Pare e confira antes de enviar.</li>
+        <li><b>RDO Diário</b>, 1× por turno: clima (use <em>Buscar chuva registrada</em>), efetivo, equipamentos, paralisações com motivo.</li>
+        <li><b>Equipamentos:</b> horas, paradas e assinatura do operador.</li>
+        <li><b>Chegou material?</b> Fotografe a nota. Não digite.</li>
+        <li><b>Sem sinal:</b> lance mesmo assim. Sobe sozinho. Não lance duas vezes.</li>
+        <li><b>Errou?</b> Histórico → editar. Não apague e relance.</li>
+        <li><b>Dia parado conta:</b> registre o motivo no RDO.</li>
       </ol>
-      <p style="margin-bottom:0;font-size:14px;color:var(--muted)">
-        Dúvida de cadastro (pacote que não existe, quantidade que não bate): fale com a engenharia da obra.
-      </p>
     </div>
-
-    <p style="margin-top:22px" class="nao-imprimir">
-      <button onclick="window.print()" style="background:var(--acc);color:#fff;border:0;border-radius:9px;
-        padding:11px 20px;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer">
-        Imprimir este manual</button>
-    </p>
+    <p class="so-tela"><button class="bt" onclick="window.print()">Imprimir o manual</button></p>
   </div>
 </section>
 
-<footer class="fim">
-  <div class="wrap">
-    <p style="margin:0 auto">
-      <strong>Sistema de Controle de Obras — Gestor Engenharia</strong><br>
-      Ruas de Terra 4 (Ata 079/SMSUB/COGEL) · Av. Senador Teotônio Vilela (Contrato 084/SPOBRAS/2024)<br>
-      Criado e desenvolvido por Leonardo Maciel · As telas deste manual usam dados de exemplo.
-    </p>
+<footer class="rodape">
+  <div class="env">
+    <strong>Sistema de Controle de Obras — Gestor Engenharia</strong><br>
+    Ruas de Terra 4 · Ata 079/SMSUB/COGEL<br>
+    Criado e desenvolvido por Leonardo Maciel · as telas usam dados de exemplo
   </div>
 </footer>
 
 <script src="js/ui/icones.js?v=34"></script>
 <script>
-/* Tema: segue o aparelho até alguém escolher. A escolha fica no aparelho,
-   com a mesma chave do app — quem põe o app em claro lê o manual em claro. */
+/* Tema: segue o aparelho até alguém escolher; a escolha usa a mesma chave do
+   app, então quem põe o sistema em claro lê o manual em claro. */
 (function () {
-  var LS = 'teotonio_tema_v1';
-  var btn = document.getElementById('btnTema');
-  function escuroAgora() {
+  var LS = 'teotonio_tema_v1', bt = document.getElementById('btTema');
+  function escuro() {
     var t = document.documentElement.getAttribute('data-theme');
-    if (t) return t === 'dark';
-    return matchMedia('(prefers-color-scheme: dark)').matches;
+    return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
   }
   function pintar() {
-    if (typeof ic === 'function') btn.innerHTML = ic(escuroAgora() ? 'sol' : 'lua', 17);
-    else btn.textContent = escuroAgora() ? '☼' : '☾';
+    bt.innerHTML = (typeof ic === 'function') ? ic(escuro() ? 'sol' : 'lua', 18) : (escuro() ? '☼' : '☾');
   }
   try {
-    var salvo = localStorage.getItem(LS);
-    if (salvo === 'dark' || salvo === 'light') document.documentElement.setAttribute('data-theme', salvo);
+    var s = localStorage.getItem(LS);
+    if (s === 'dark' || s === 'light') document.documentElement.setAttribute('data-theme', s);
   } catch (e) {}
-  btn.addEventListener('click', function () {
-    var novo = escuroAgora() ? 'light' : 'dark';
+  bt.addEventListener('click', function () {
+    var novo = escuro() ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', novo);
     try { localStorage.setItem(LS, novo); } catch (e) {}
     pintar();
   });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', pintar);
   pintar();
+})();
 
-  /* Ícones nos títulos dos cartões que pedem um: só depois que o conjunto
-     do app carregou. Sem ele, o texto continua completo — nada some. */
-  if (typeof ic === 'function') {
-    var mapa = { 'ic-obra': 'obra', 'ic-alerta': 'alerta', 'ic-check': 'checkCirculo', 'ic-info': 'info' };
-    Object.keys(mapa).forEach(function (cls) {
-      [].forEach.call(document.getElementsByClassName(cls), function (el) {
-        el.insertAdjacentHTML('afterbegin', ic(mapa[cls], 18));
-      });
+/* Lupa: as telas de computador não cabem legíveis em 390 px. Um toque abre a
+   imagem em tamanho de leitura, com arrasto; ESC ou outro toque fecha. */
+(function () {
+  var lupa = document.createElement('div');
+  lupa.className = 'lupa';
+  lupa.innerHTML = '<button type="button" aria-label="Fechar">✕</button><img alt="">';
+  document.body.appendChild(lupa);
+  var img = lupa.querySelector('img');
+
+  function fechar() { lupa.removeAttribute('data-aberta'); document.body.style.overflow = ''; }
+  lupa.addEventListener('click', fechar);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') fechar(); });
+
+  document.querySelectorAll('.tela').forEach(function (fig) {
+    var alvo = fig.querySelector('img');
+    if (!alvo) return;
+    // Só a tela de COMPUTADOR precisa de aviso: a de celular já cabe inteira.
+    function marcar() {
+      if (alvo.naturalWidth <= alvo.naturalHeight || fig.querySelector('.ampliar')) return;
+      var etiqueta = document.createElement('span');
+      etiqueta.className = 'ampliar';
+      etiqueta.textContent = 'toque para ampliar';
+      fig.appendChild(etiqueta);
+    }
+    if (alvo.complete && alvo.naturalWidth) marcar(); else alvo.addEventListener('load', marcar);
+
+    alvo.addEventListener('click', function () {
+      img.src = alvo.currentSrc || alvo.src;
+      img.alt = alvo.alt;
+      // Foto de celular abre inteira; folha de computador (deitada) abre em
+      // tamanho de leitura e a pessoa arrasta — encolher é o que a torna ilegível.
+      img.style.width = alvo.naturalWidth > alvo.naturalHeight ? 'max(100%, 940px)' : '100%';
+      lupa.setAttribute('data-aberta', '');
+      lupa.scrollTop = 0;
+      document.body.style.overflow = 'hidden';
     });
-  }
+  });
 })();
 </script>
 </body>
