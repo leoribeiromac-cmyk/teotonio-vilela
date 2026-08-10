@@ -596,6 +596,31 @@ isso, E1, E2 e E3 apareciam apagadas no mapa como se nada tivesse sido feito
 ali. Estacas soltas continuam soltas: `E10, E12` são duas, não três — o que
 manda é o separador (`a`, `até`, `-`).
 
+### A rua vem antes do serviço
+
+Numa obra em que o cadastro traz a coluna `Rua`, o lançamento começa pela
+**rua**, e a lista de serviços passa a ser só a dela — sem o `— Nome da Rua`
+no fim de cada nome. O sufixo continua no cadastro (as telas de avanço e de
+medição precisam distinguir a mesma "base de brita" das duas ruas), mas no
+formulário ele só fazia a lista aparecer em duplicata para o apontador poder
+escolher a rua no fim do nome. Trocar de rua limpa o serviço e as estacas:
+são de outra rua, e a numeração de uma não vale na outra.
+
+### Camada: área × espessura
+
+O contrato paga a camada em **m³**, mas quem executa mede **m²**: ninguém
+sai do canteiro dizendo "fizemos 45 m³ de macadame". O serviço marcado com
+`medirPor: 'area'` no cadastro pergunta **área executada** e **espessura**
+(já preenchida com a de projeto, `espessura` em metros), e o app faz o m³ que
+vai para a planilha. A conta vai na observação do lançamento —
+`300,00 m² × 15,0 cm` — senão quem confere a medição recebe "45,00 m³" sem ter
+como refazer o número. O saldo do pacote também aparece em área: *saldo:
+255,10 M3 · 1.700,65 m² a 15,0 cm*.
+
+Serviço em m³ que **não** é camada (escavação de vala, reenchimento, aterro)
+continua com a quantidade digitada direto: ali o volume não é área vezes
+espessura, e fingir que é só produziria número errado com aparência de conta.
+
 ### Lado da via
 
 `lados: true` no cadastro põe no lançamento o campo **Lado da via** (LD / LE /

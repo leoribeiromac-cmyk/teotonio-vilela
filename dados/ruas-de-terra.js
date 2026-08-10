@@ -241,7 +241,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Base de concreto fck=15,00mpa para guias, sarjetas ou sarjetões",
       "descricaoOrig": "INC.27 - BASE DE CONCRETO FCK=15,00MPA PARA GUIAS, SARJETAS OU SARJETÕES",
       "un": "M3",
-      "qtdPrev": 43.52
+      "qtdPrev": 43.52,
+      "medirPor": "area",
+      "espessura": 0.1
     },
     {
       "rua": "Agrimensor Sugaya",
@@ -249,7 +251,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Construção de sarjeta ou sarjetão de concreto - fck= 20,0mpa",
       "descricaoOrig": "INC.27 - CONSTRUÇÃO DE SARJETA OU SARJETÃO DE CONCRETO - FCK= 20,0MPA",
       "un": "M3",
-      "qtdPrev": 34.56
+      "qtdPrev": 34.56,
+      "medirPor": "area",
+      "espessura": 0.15
     },
     {
       "rua": "Agrimensor Sugaya",
@@ -257,7 +261,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Base de macadame hidráulico",
       "descricaoOrig": "BASE DE MACADAME HIDRÁULICO",
       "un": "M3",
-      "qtdPrev": 255.097
+      "qtdPrev": 255.097,
+      "medirPor": "area",
+      "espessura": 0.15
     },
     {
       "rua": "Agrimensor Sugaya",
@@ -265,7 +271,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Base de macadame betuminoso",
       "descricaoOrig": "BASE DE MACADAME BETUMINOSO",
       "un": "M3",
-      "qtdPrev": 255.097
+      "qtdPrev": 255.097,
+      "medirPor": "area",
+      "espessura": 0.15
     },
     {
       "rua": "Agrimensor Sugaya",
@@ -273,7 +281,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Reforço do sub-leito/sub-base de solo melhorado com agregado recicl…",
       "descricaoOrig": "REFORÇO DO SUB-LEITO/SUB-BASE DE SOLO MELHORADO COM AGREGADO RECICLADO 10% EM VOLUME, COM FORNECIMENTO DE AGREGADO",
       "un": "M3",
-      "qtdPrev": 340.13
+      "qtdPrev": 340.13,
+      "medirPor": "area",
+      "espessura": 0.2
     },
     {
       "rua": "Agrimensor Sugaya",
@@ -297,7 +307,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Revestimento de pré-misturado à quente (sem transporte)",
       "descricaoOrig": "INA.01 - REVESTIMENTO DE PRÉ-MISTURADO À QUENTE (SEM TRANSPORTE)",
       "un": "M3",
-      "qtdPrev": 170.065
+      "qtdPrev": 170.065,
+      "medirPor": "area",
+      "espessura": 0.1
     },
     {
       "rua": "Agrimensor Sugaya",
@@ -305,23 +317,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Passeio de concreto armado, fck=25mpa",
       "descricaoOrig": "NC.27 - PASSEIO DE CONCRETO ARMADO, FCK=25MPA, INCLUINDO PREPARO DA CAIXA E LASTRO DE BRITA",
       "un": "M3",
-      "qtdPrev": 48.229
-    },
-    {
-      "rua": "Agrimensor Sugaya",
-      "capId": 3,
-      "servico": "Acabamento de piso de concreto tipo bambolê",
-      "descricaoOrig": "ACABAMENTO DE PISO DE CONCRETO TIPO BAMBOLÊ",
-      "un": "M2",
-      "qtdPrev": 602.86
-    },
-    {
-      "rua": "Agrimensor Sugaya",
-      "capId": 4,
-      "servico": "Demolição de pavimento de concreto, sarjeta ou sarjetão",
-      "descricaoOrig": "DEMOLIÇÃO DE PAVIMENTO DE CONCRETO, SARJETA OU SARJETÃO, INCLUI CARGA EM CAMINHÃO",
-      "un": "M2",
-      "qtdPrev": 1318.2
+      "qtdPrev": 48.229,
+      "medirPor": "area",
+      "espessura": 0.08
     },
     {
       "rua": "Agrimensor Sugaya",
@@ -330,14 +328,6 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "descricaoOrig": "DEMOLIÇÃO DE PAVIMENTO ASFÁLTICO, INCLUSIVE CAPA, INCLUI CARGA NO CAMINHÃO",
       "un": "M2",
       "qtdPrev": 320.0
-    },
-    {
-      "rua": "Agrimensor Sugaya",
-      "capId": 4,
-      "servico": "Demolição mecanizada de concreto armado",
-      "descricaoOrig": "DEMOLIÇÃO MECANIZADA DE CONCRETO ARMADO",
-      "un": "M3",
-      "qtdPrev": 86.4
     },
     {
       "rua": "Agrimensor Sugaya",
@@ -393,7 +383,8 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Lastro de brita e pó de pedra",
       "descricaoOrig": "IHD.23 - LASTRO DE BRITA E PÓ DE PEDRA",
       "un": "M3",
-      "qtdPrev": 59.395
+      "qtdPrev": 59.395,
+      "medirPor": "area"
     },
     {
       "rua": "Agrimensor Sugaya",
@@ -426,14 +417,6 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "descricaoOrig": "CHAMINÉ DE POÇO DE VISITA COM ALVENARIA DE UM TIJOLO COMUM",
       "un": "M",
       "qtdPrev": 16.0
-    },
-    {
-      "rua": "Agrimensor Sugaya",
-      "capId": 7,
-      "servico": "Fornecimento de tampão de ferro fundido dúctil classe mínima 400 (4…",
-      "descricaoOrig": "FORNECIMENTO DE TAMPÃO DE FERRO FUNDIDO DÚCTIL CLASSE MÍNIMA 400 (40T) D=600MM - NBR 10160 ARTICULADO - P/ GAL. ÁGUAS PLUV.",
-      "un": "UN",
-      "qtdPrev": 8.0
     },
     {
       "rua": "Agrimensor Sugaya",
@@ -489,7 +472,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Base de concreto fck=15,00mpa para guias, sarjetas ou sarjetões",
       "descricaoOrig": "INC.27 - BASE DE CONCRETO FCK=15,00MPA PARA GUIAS, SARJETAS OU SARJETÕES",
       "un": "M3",
-      "qtdPrev": 62.531
+      "qtdPrev": 62.531,
+      "medirPor": "area",
+      "espessura": 0.1
     },
     {
       "rua": "Astrogildo Pereira",
@@ -497,7 +482,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Construção de sarjeta ou sarjetão de concreto - fck= 20,0mpa",
       "descricaoOrig": "INC.27 - CONSTRUÇÃO DE SARJETA OU SARJETÃO DE CONCRETO - FCK= 20,0MPA",
       "un": "M3",
-      "qtdPrev": 51.262
+      "qtdPrev": 51.262,
+      "medirPor": "area",
+      "espessura": 0.15
     },
     {
       "rua": "Astrogildo Pereira",
@@ -505,7 +492,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Base de macadame hidráulico",
       "descricaoOrig": "BASE DE MACADAME HIDRÁULICO",
       "un": "M3",
-      "qtdPrev": 447.66
+      "qtdPrev": 447.66,
+      "medirPor": "area",
+      "espessura": 0.15
     },
     {
       "rua": "Astrogildo Pereira",
@@ -513,7 +502,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Base de macadame betuminoso",
       "descricaoOrig": "BASE DE MACADAME BETUMINOSO",
       "un": "M3",
-      "qtdPrev": 447.66
+      "qtdPrev": 447.66,
+      "medirPor": "area",
+      "espessura": 0.15
     },
     {
       "rua": "Astrogildo Pereira",
@@ -521,7 +512,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Reforço do sub-leito/sub-base de solo melhorado com agregado recicl…",
       "descricaoOrig": "REFORÇO DO SUB-LEITO/SUB-BASE DE SOLO MELHORADO COM AGREGADO RECICLADO 10% EM VOLUME, COM FORNECIMENTO DE AGREGADO",
       "un": "M3",
-      "qtdPrev": 596.88
+      "qtdPrev": 596.88,
+      "medirPor": "area",
+      "espessura": 0.2
     },
     {
       "rua": "Astrogildo Pereira",
@@ -545,7 +538,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Revestimento de pré-misturado à quente (sem transporte)",
       "descricaoOrig": "INA.01 - REVESTIMENTO DE PRÉ-MISTURADO À QUENTE (SEM TRANSPORTE)",
       "un": "M3",
-      "qtdPrev": 298.44
+      "qtdPrev": 298.44,
+      "medirPor": "area",
+      "espessura": 0.1
     },
     {
       "rua": "Astrogildo Pereira",
@@ -553,23 +548,9 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Passeio de concreto armado, fck=25mpa",
       "descricaoOrig": "NC.27 - PASSEIO DE CONCRETO ARMADO, FCK=25MPA, INCLUINDO PREPARO DA CAIXA E LASTRO DE BRITA",
       "un": "M3",
-      "qtdPrev": 69.026
-    },
-    {
-      "rua": "Astrogildo Pereira",
-      "capId": 3,
-      "servico": "Acabamento de piso de concreto tipo bambolê",
-      "descricaoOrig": "ACABAMENTO DE PISO DE CONCRETO TIPO BAMBOLÊ",
-      "un": "M2",
-      "qtdPrev": 862.83
-    },
-    {
-      "rua": "Astrogildo Pereira",
-      "capId": 4,
-      "servico": "Demolição de pavimento de concreto, sarjeta ou sarjetão",
-      "descricaoOrig": "DEMOLIÇÃO DE PAVIMENTO DE CONCRETO, SARJETA OU SARJETÃO, INCLUI CARGA EM CAMINHÃO",
-      "un": "M2",
-      "qtdPrev": 862.83
+      "qtdPrev": 69.026,
+      "medirPor": "area",
+      "espessura": 0.08
     },
     {
       "rua": "Astrogildo Pereira",
@@ -578,14 +559,6 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "descricaoOrig": "DEMOLIÇÃO DE PAVIMENTO ASFÁLTICO, INCLUSIVE CAPA, INCLUI CARGA NO CAMINHÃO",
       "un": "M2",
       "qtdPrev": 2984.4
-    },
-    {
-      "rua": "Astrogildo Pereira",
-      "capId": 4,
-      "servico": "Demolição mecanizada de concreto armado",
-      "descricaoOrig": "DEMOLIÇÃO MECANIZADA DE CONCRETO ARMADO",
-      "un": "M3",
-      "qtdPrev": 68.335
     },
     {
       "rua": "Astrogildo Pereira",
@@ -609,7 +582,8 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "servico": "Lastro de brita e pó de pedra",
       "descricaoOrig": "IHD.23 - LASTRO DE BRITA E PÓ DE PEDRA",
       "un": "M3",
-      "qtdPrev": 86.4
+      "qtdPrev": 86.4,
+      "medirPor": "area"
     },
     {
       "rua": "Astrogildo Pereira",
@@ -626,14 +600,6 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       "descricaoOrig": "CHAMINÉ DE POÇO DE VISITA COM ALVENARIA DE UM TIJOLO COMUM",
       "un": "M",
       "qtdPrev": 18.0
-    },
-    {
-      "rua": "Astrogildo Pereira",
-      "capId": 7,
-      "servico": "Fornecimento de tampão de ferro fundido dúctil classe mínima 400 (4…",
-      "descricaoOrig": "FORNECIMENTO DE TAMPÃO DE FERRO FUNDIDO DÚCTIL CLASSE MÍNIMA 400 (40T) D=600MM - NBR 10160 ARTICULADO - P/ GAL. ÁGUAS PLUV.",
-      "un": "UN",
-      "qtdPrev": 9.0
     },
     {
       "rua": "Astrogildo Pereira",
