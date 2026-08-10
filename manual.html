@@ -280,6 +280,26 @@ details[open] summary{border-bottom:1px solid var(--border)}
   *{animation:none!important;transition:none!important}
 }
 
+
+/* ---------- carrossel de telas de celular ---------- */
+/* Duas fotos de celular lado a lado num aparelho de 390 px dão 170 px cada:
+   ilegível. Então elas deitam numa faixa que se arrasta, uma de cada vez. */
+.carrossel{display:flex;gap:12px;overflow-x:auto;scroll-snap-type:x mandatory;
+  margin:0 -18px;padding:2px 18px 8px;scrollbar-width:thin}
+.cel{flex:0 0 216px;scroll-snap-align:center;display:flex;flex-direction:column;gap:8px}
+.cel img{width:100%;border-radius:14px;border:1px solid var(--border-2);background:#fff;cursor:zoom-in}
+.cel b{font-size:14.5px;font-weight:600;line-height:1.25}
+.cel span{font-size:12.5px;color:var(--muted);line-height:1.35;margin-top:-4px}
+.arraste{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+@media (min-width:760px){
+  .carrossel{margin:0;padding:2px 0 8px}
+  .cel{flex:0 0 232px}
+}
+/* ---------- título curto acima de uma tela ---------- */
+.rot{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.rot b{font-size:17.5px;font-weight:700}
+.rot span{font-size:14.5px;color:var(--muted)}
+
 @media print{
   :root{--bg:#fff;--surface:#fff;--surface-2:#fff;--text:#000;--text-2:#222;--muted:#555;
     --border:#bbb;--border-2:#999;--sh:none}
@@ -307,7 +327,7 @@ details[open] summary{border-bottom:1px solid var(--border)}
 <header class="capa">
   <div class="env" style="display:flex;flex-direction:column;gap:14px">
     <span class="selo">Ruas de Terra 4</span>
-    <h1>A obra medida <em>no dia</em>.</h1>
+    <h1>O sistema, tela por tela.</h1>
     <p class="diz">Lança no celular, na frente de serviço. A medição sai pronta.</p>
     <div class="chips">
       <span class="chip">2 ruas</span><span class="chip">56 serviços</span>
@@ -316,54 +336,22 @@ details[open] summary{border-bottom:1px solid var(--border)}
   </div>
 </header>
 
-<!-- ══════════════════════════════════ NÚMEROS -->
-<section class="bloco">
-  <div class="env" style="display:flex;flex-direction:column;gap:16px">
-    <div class="numeros">
-      <div class="numero"><b>&lt;1min</b><span>por serviço, com foto</span></div>
-      <div class="numero"><b>0</b><span>digitação repetida</span></div>
-      <div class="numero"><b>100%</b><span>funciona sem sinal</span></div>
-      <div class="numero"><b>1</b><span>número para todo mundo</span></div>
-    </div>
-
-    <nav class="papeis">
-      <a class="papel" href="#apontador">
-        <span class="qual"><b>Apontador</b><span>3 passos por dia</span></span><span class="seta">›</span></a>
-      <a class="papel adm" href="#escritorio">
-        <span class="qual"><b>Administrativo</b><span>acompanha e confere</span></span><span class="seta">›</span></a>
-      <a class="papel eng" href="#engenharia">
-        <span class="qual"><b>Engenharia</b><span>mede e fecha o mês</span></span><span class="seta">›</span></a>
-    </nav>
-
-    <details>
-      <summary>Primeiro acesso</summary>
-      <div class="dentro">
-        <div class="qa"><b>1.</b><span class="mono">leoribeiromac-cmyk.github.io/teotonio-vilela/</span></div>
-        <div class="qa"><b>2. Instale na tela inicial.</b><span>Chrome: ⋮ → Instalar aplicativo.
-          iPhone: Compartilhar → Adicionar à Tela de Início. Aí abre sem sinal.</span></div>
-        <div class="qa"><b>3. Escolha a obra</b><span>no alto do menu: Ruas de Terra 4.</span></div>
-        <div class="qa"><b>4. Entre</b><span>com o seu usuário, no rodapé do menu.</span></div>
-      </div>
-    </details>
-  </div>
-</section>
-
-<!-- ══════════════════════════════════ APONTADOR -->
+<!-- ══════════════════════════════════ PASSO A PASSO -->
 <section class="bloco" id="apontador">
   <div class="env" style="display:flex;flex-direction:column;gap:16px">
     <div>
-      <span class="olho">Apontador</span>
-      <h2>Todo dia, três passos.</h2>
+      <span class="olho">Apontador · o lançamento</span>
+      <h2>Três telas por dia.</h2>
     </div>
 
     <article class="passo">
-      <header><span class="n">1</span><span><b>Quem e quando</b></span></header>
+      <header><span class="n">1</span><span><b>Identificação</b></span></header>
       <div class="corpo">
         <div class="foto" style="--calha:0px">
           <img src="docs/manual/p-identificacao.png" alt="Cartão de identificação: data, turno e nome do apontador" loading="lazy">
         </div>
         <div class="chaves">
-          <div class="chave"><i>i</i><span>A data já vem hoje. O seu nome, uma vez só.</span></div>
+          <div class="chave"><i>i</i><span>Data já vem hoje. Nome, uma vez só.</span></div>
         </div>
       </div>
     </article>
@@ -373,19 +361,20 @@ details[open] summary{border-bottom:1px solid var(--border)}
       <div class="corpo">
         <div class="foto">
           <img src="docs/manual/p-servico.png" alt="Linha de serviço: frente, pacote, quantidade, equipe, observação e fotos" loading="lazy">
-          <span class="pin" style="top:7.2%">1</span>
-          <span class="pin" style="top:16.5%">2</span>
-          <span class="faixa" style="top:21.5%;height:27.5%"><em>não use nesta obra</em></span>
-          <span class="pin" style="top:53.4%">3</span>
-          <span class="pin" style="top:65%">4</span>
-          <span class="pin" style="top:74%">5</span>
-          <span class="pin" style="top:86.5%">6</span>
+          <span class="pin" style="top:10%">1</span>
+          <span class="pin" style="top:22.8%">2</span>
+          <span class="pin" style="top:35.4%">3</span>
+          <span class="pin" style="top:51.6%">4</span>
+          <span class="pin" style="top:64%">5</span>
+          <span class="pin" style="top:73.3%">6</span>
         </div>
         <div class="chaves">
-          <div class="chave x"><i>✕</i><span>Sentido e estaca: <b>pule</b></span></div>
-          <div class="chave"><i>3</i><span>Quantidade <b>com vírgula</b></span></div>
-          <div class="chave"><i>5</i><span>O trecho vai na <b>observação</b></span></div>
-          <div class="chave"><i>6</i><span><b>Até 3 fotos</b>, carimbadas</span></div>
+          <div class="chave"><i>1</i><span>Frente</span></div>
+          <div class="chave"><i>2</i><span>Pacote — já traz a rua</span></div>
+          <div class="chave"><i>3</i><span>Quantidade <b>com vírgula</b> · mostra o saldo</span></div>
+          <div class="chave"><i>4</i><span>Equipe</span></div>
+          <div class="chave"><i>5</i><span>Observação — o trecho</span></div>
+          <div class="chave"><i>6</i><span>Até 3 fotos, carimbadas</span></div>
         </div>
       </div>
     </article>
@@ -401,24 +390,111 @@ details[open] summary{border-bottom:1px solid var(--border)}
         </div>
         <div class="chaves">
           <div class="chave"><i>★</i><span><b>Buscar chuva registrada</b> preenche o clima</span></div>
-          <div class="chave"><i>↓</i><span>Depois: efetivo, equipamentos e <b>paralisações com motivo</b></span></div>
+          <div class="chave"><i>↓</i><span>Depois: efetivo, equipamentos, paralisações</span></div>
         </div>
       </div>
     </article>
 
     <div class="nota ok"><b>Sem sinal, lance igual.</b>Sobe sozinho depois. Não lance duas vezes.</div>
+  </div>
+</section>
 
-    <details>
-      <summary>Também no seu celular</summary>
-      <div class="dentro">
-        <div class="qa"><b>Equipamentos</b><span>Hora de máquina, paradas e assinatura do operador.</span></div>
-        <div class="qa"><b>Notas Fiscais</b><span>Fotografe a nota. Não digite.</span></div>
-        <div class="qa"><b>Projetos</b><span>As pranchas abrem dentro do app, com zoom.</span></div>
-      </div>
-      <figure class="tela" style="box-shadow:none;border:0;border-radius:0">
-        <img src="docs/manual/m-projetos.png" alt="Prancha de pavimentação aberta dentro do aplicativo" loading="lazy">
-      </figure>
-    </details>
+<!-- ══════════════════════════════════ TELAS DO CELULAR -->
+<section class="bloco">
+  <div class="env" style="display:flex;flex-direction:column;gap:14px">
+    <div>
+      <span class="olho">No celular</span>
+      <h2>As telas do canteiro.</h2>
+    </div>
+    <p class="arraste">arraste para o lado →</p>
+    <div class="carrossel">
+      <figure class="cel">
+        <img src="docs/manual/c-lancar.png" alt="Tela Lançar Serviço no celular" loading="lazy">
+        <b>Lançar Serviço</b><span>o que a equipe executou</span></figure>
+      <figure class="cel">
+        <img src="docs/manual/c-rdo.png" alt="Tela RDO Diário no celular" loading="lazy">
+        <b>RDO Diário</b><span>efetivo, clima e paradas</span></figure>
+      <figure class="cel">
+        <img src="docs/manual/c-equipamentos.png" alt="Tela Equipamentos no celular" loading="lazy">
+        <b>Equipamentos</b><span>hora de máquina e assinatura</span></figure>
+      <figure class="cel">
+        <img src="docs/manual/c-notas.png" alt="Tela Notas Fiscais no celular" loading="lazy">
+        <b>Notas Fiscais</b><span>fotografe a nota</span></figure>
+      <figure class="cel">
+        <img src="docs/manual/c-projetos.png" alt="Prancha aberta dentro do app, no celular" loading="lazy">
+        <b>Projetos</b><span>a prancha, com zoom</span></figure>
+      <figure class="cel">
+        <img src="docs/manual/c-historico.png" alt="Tela Histórico no celular" loading="lazy">
+        <b>Histórico</b><span>o que já foi lançado</span></figure>
+      <figure class="cel">
+        <img src="docs/manual/c-painel.png" alt="Painel Executivo no celular" loading="lazy">
+        <b>Painel</b><span>como vai a obra</span></figure>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════════════════ TELAS DO ESCRITÓRIO -->
+<section class="bloco" id="escritorio">
+  <div class="env" style="display:flex;flex-direction:column;gap:18px">
+    <div>
+      <span class="olho">No computador</span>
+      <h2>As telas do escritório.</h2>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Painel Executivo</b><span>como vai a obra, hoje</span></div>
+      <figure class="tela"><img src="docs/manual/t-painel.png" alt="Painel Executivo" loading="lazy"></figure>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Avanço Físico</b><span>pacote a pacote</span></div>
+      <figure class="tela"><img src="docs/manual/t-avanco.png" alt="Avanço Físico por pacote" loading="lazy"></figure>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Apoio à Medição</b><span>consumo por item do orçamento · CSV</span></div>
+      <figure class="tela"><img src="docs/manual/t-medicao.png" alt="Prévia de medição por item contratual" loading="lazy"></figure>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Cronograma</b><span>quando cada saldo precisa começar</span></div>
+      <figure class="tela"><img src="docs/manual/t-cronograma.png" alt="Cronograma com planejamento reverso" loading="lazy"></figure>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Dias Improdutivos</b><span>chuva medida × clima apontado</span></div>
+      <figure class="tela"><img src="docs/manual/t-improdutivos.png" alt="Dias Improdutivos" loading="lazy"></figure>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Histórico</b><span>tudo o que foi lançado · CSV e RDO em PDF</span></div>
+      <figure class="tela"><img src="docs/manual/t-historico.png" alt="Histórico de serviços lançados" loading="lazy"></figure>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Teórico × Real</b><span>coeficiente × saída do almoxarifado</span></div>
+      <figure class="tela"><img src="docs/manual/t-teoricoreal.png" alt="Teórico × Real" loading="lazy"></figure>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Equipamentos</b><span>frota e hora de máquina</span></div>
+      <figure class="tela"><img src="docs/manual/t-equipamentos.png" alt="Equipamentos" loading="lazy"></figure>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Notas Fiscais</b><span>notas · estoque · preços</span></div>
+      <figure class="tela"><img src="docs/manual/t-notas.png" alt="Notas Fiscais" loading="lazy"></figure>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Projetos</b><span>a prancha dentro do sistema</span></div>
+      <figure class="tela"><img src="docs/manual/t-projetos.png" alt="Projetos com a prancha desenhada" loading="lazy"></figure>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="rot"><b>Usuários</b><span>quem entra e com qual acesso</span></div>
+      <figure class="tela"><img src="docs/manual/t-usuarios.png" alt="Usuários e perfis de acesso" loading="lazy"></figure>
+    </div>
   </div>
 </section>
 
@@ -443,118 +519,34 @@ details[open] summary{border-bottom:1px solid var(--border)}
         <div class="qa"><b>Pacote errado</b><span>Histórico → editar.</span></div>
         <div class="qa"><b>Lancei duas vezes</b><span>Histórico → apagar a duplicata.</span></div>
         <div class="qa"><b>Enviei e não apareceu</b><span>Está na fila offline. Não reenvie.</span></div>
-        <div class="qa"><b>Sessão expirada</b><span>Saia e entre de novo; o rascunho volta.</span></div>
+        <div class="qa"><b>Sessão expirada</b><span>Saia e entre; o rascunho volta.</span></div>
         <div class="qa"><b>Número diferente do painel</b><span>Puxe ATUALIZAR no menu.</span></div>
-        <div class="qa"><b>Esqueci de lançar ontem</b><span>Lance hoje com a data de ontem.</span></div>
+        <div class="qa"><b>Esqueci ontem</b><span>Lance hoje com a data de ontem.</span></div>
       </div>
     </details>
-  </div>
-</section>
-
-<!-- ══════════════════════════════════ ESCRITÓRIO -->
-<section class="bloco" id="escritorio">
-  <div class="env" style="display:flex;flex-direction:column;gap:14px">
-    <div><span class="olho">Administrativo</span><h2>O que olhar, e quando.</h2></div>
-
-    <figure class="tela">
-      <img src="docs/manual/p-central.png" alt="Cartão Central de Campo mostrando o que já foi registrado hoje" loading="lazy">
-      <figcaption><b>Central de Campo<span class="selo-ex">exemplo</span></b>Quem ainda não lançou hoje.</figcaption>
-    </figure>
-
-    <figure class="tela">
-      <img src="docs/manual/p-hero.png" alt="Avanço ponderado, ritmo e projeção de término no Painel Executivo" loading="lazy">
-      <figcaption><b>Painel Executivo<span class="selo-ex">exemplo</span></b>Avanço, ritmo e data provável de término.</figcaption>
-    </figure>
-
-    <div class="linhas">
-      <div class="linha"><b>Toda manhã</b><span>Central de Campo: ontem fechou?</span></div>
-      <div class="linha"><b>Toda sexta</b><span>Histórico: confira a semana e exporte o CSV.</span></div>
-      <div class="linha"><b>Todo dia 25</b><span>Apoio à Medição: gere a prévia.</span></div>
-      <div class="linha"><b>Choveu</b><span>Dias Improdutivos: confira a causa.</span></div>
-    </div>
 
     <details>
-      <summary>Histórico e Notas Fiscais</summary>
+      <summary>Primeiro acesso</summary>
       <div class="dentro">
-        <div class="qa"><b>Histórico</b><span>Filtro por mês, frente e apontador; CSV e o PDF do RDO oficial.</span></div>
-        <figure class="tela" style="box-shadow:none;border:0;border-radius:0">
-          <img src="docs/manual/historico.png" alt="Tela Histórico com a lista de serviços lançados" loading="lazy"></figure>
-        <div class="qa"><b>Notas · Estoque · Preços</b><span>Entrada por foto da nota, saldo por lote e preço por material.</span></div>
-        <figure class="tela" style="box-shadow:none;border:0;border-radius:0">
-          <img src="docs/manual/notas-fiscais.png" alt="Tela de Notas Fiscais" loading="lazy"></figure>
+        <div class="qa"><b>1.</b><span class="mono">leoribeiromac-cmyk.github.io/teotonio-vilela/</span></div>
+        <div class="qa"><b>2. Instale na tela inicial</b><span>Chrome: ⋮ → Instalar aplicativo. iPhone:
+          Compartilhar → Adicionar à Tela de Início. Aí abre sem sinal.</span></div>
+        <div class="qa"><b>3. Escolha a obra</b><span>no alto do menu: Ruas de Terra 4.</span></div>
+        <div class="qa"><b>4. Entre</b><span>com o seu usuário, no rodapé do menu.</span></div>
       </div>
     </details>
   </div>
 </section>
 
-<!-- ══════════════════════════════════ ENGENHARIA -->
-<section class="bloco" id="engenharia">
-  <div class="env" style="display:flex;flex-direction:column;gap:14px">
-    <div><span class="olho">Engenharia</span><h2>Da quantidade ao item medido.</h2></div>
-
-    <figure class="tela">
-      <img src="docs/manual/apoio-medicao.png" alt="Prévia de medição por item contratual" loading="lazy">
-      <figcaption><b>Apoio à Medição<span class="selo-ex">exemplo</span></b>
-        Uma linha por item do orçamento. Exporte o CSV e bata com a Planilha Geral.</figcaption>
-    </figure>
-
-    <div class="linhas">
-      <div class="linha"><b>Fechar o mês</b><span>Congela o que foi apresentado.</span><span class="quem">eng. e admin</span></div>
-      <div class="linha"><b>Saldo de contrato</b><span>Avisa o item que passou do contratado.</span></div>
-      <div class="linha"><b>Teórico × Real</b><span>Coeficiente contra saída do almoxarifado.</span></div>
-      <div class="linha"><b>Cronograma</b><span>Quando cada pacote precisa começar.</span></div>
-      <div class="linha"><b>APRESENTAR</b><span>A obra em tela cheia, para a reunião.</span></div>
-    </div>
-
-    <details>
-      <summary>Dias Improdutivos · quem apaga o quê</summary>
-      <div class="dentro">
-        <div class="qa"><b>Dias Improdutivos</b><span>Chuva medida × clima apontado × serviço do dia. É a base do pleito de prazo.</span></div>
-        <figure class="tela" style="box-shadow:none;border:0;border-radius:0">
-          <img src="docs/manual/dias-improdutivos.png" alt="Tela Dias Improdutivos" loading="lazy"></figure>
-        <div class="qa"><b>Apagar</b><span>O administrador, ou quem lançou. A regra vale no servidor e a
-          tentativa recusada fica na Auditoria.</span></div>
-        <div class="qa"><b>Corrigir de terceiro</b><span>Só engenharia e administrador.</span></div>
-      </div>
-    </details>
-  </div>
-</section>
-
-<!-- ══════════════════════════════════ IMPLANTAÇÃO -->
+<!-- ══════════════════════════════════ ANTES DO DIA 1 -->
 <section class="bloco" id="implantacao">
   <div class="env" style="display:flex;flex-direction:column;gap:14px">
-    <div><span class="olho">Antes do dia 1</span><h2>Falta ligar quatro coisas.</h2></div>
+    <div><span class="olho">Antes do dia 1</span><h2>Falta ligar três coisas.</h2></div>
     <div class="linhas">
       <div class="check"><span class="cx"></span><div><b>Usuários e perfis</b><span>sem isso ninguém lança</span></div></div>
       <div class="check"><span class="cx"></span><div><b>Matriz de coeficientes</b><span>vazia, a medição abre sem linha</span></div></div>
       <div class="check"><span class="cx"></span><div><b>Produtividade</b><span>sem ela o cronograma não calcula</span></div></div>
-      <div class="check"><span class="cx"></span><div><b>Prancha de terraplenagem</b><span>falta a CT-AP-103</span></div></div>
     </div>
-
-    <details>
-      <summary>As quatro primeiras semanas</summary>
-      <div class="dentro">
-        <div class="qa"><b>Semana 0</b><span>Resolver as quatro pendências e instalar nos celulares.</span></div>
-        <div class="qa"><b>Semana 1</b><span>30 min de treino. A engenharia confere tudo no fim do dia e corrige junto com quem lançou.</span></div>
-        <div class="qa"><b>Semana 2</b><span>Meta pública: todo dia útil com serviço e RDO.</span></div>
-        <div class="qa"><b>Semanas 3 e 4</b><span>Conferir a prévia item a item contra a planilha à mão. Depois, fechar o mês.</span></div>
-        <div class="qa"><b>Deu certo quando</b><span>a medição sai da prévia do sistema e a conferência só confirma.</span></div>
-      </div>
-    </details>
-
-    <details>
-      <summary>Dúvidas</summary>
-      <div class="dentro">
-        <div class="qa"><b>Preciso de internet?</b><span>Não para lançar.</span></div>
-        <div class="qa"><b>Gasta muito dado?</b><span>Pouco. As fotos são reduzidas antes de subir.</span></div>
-        <div class="qa"><b>Funciona em iPhone?</b><span>Sim, pelo Safari.</span></div>
-        <div class="qa"><b>Posso lançar por outro?</b><span>Pode, mas com o seu login.</span></div>
-        <div class="qa"><b>Perdi o celular</b><span>O enviado está na base. Peça troca de senha.</span></div>
-        <div class="qa"><b>Quem vê as fotos?</b><span>Só quem está logado.</span></div>
-        <div class="qa"><b>Acaba o RDO em papel?</b><span>Ele sai em PDF, para imprimir e assinar.</span></div>
-        <div class="qa"><b>E a Teotônio?</b><span>Mesmo sistema. O seletor Obra troca.</span></div>
-      </div>
-    </details>
   </div>
 </section>
 
@@ -563,10 +555,9 @@ details[open] summary{border-bottom:1px solid var(--border)}
   <div class="env" style="display:flex;flex-direction:column;gap:14px">
     <div><span class="olho">Cartão de bolso</span><h2>Imprima e cole no barracão.</h2></div>
     <div class="bolso">
-      <h3 style="margin-bottom:12px">Ruas de Terra 4 — a rotina do apontador</h3>
+      <h3 style="margin-bottom:12px">Ruas de Terra 4 — rotina do apontador</h3>
       <ol>
         <li>Frente → Pacote → Quantidade <b>com vírgula</b> → Equipe → Foto.</li>
-        <li><b>Pule</b> Sentido e Estaca. O trecho vai na Observação.</li>
         <li>“Acima do saldo”? <b>Pare e confira.</b></li>
         <li><b>RDO Diário</b> 1× por turno, com paralisação e motivo.</li>
         <li><b>Equipamentos:</b> horas, paradas e assinatura.</li>
