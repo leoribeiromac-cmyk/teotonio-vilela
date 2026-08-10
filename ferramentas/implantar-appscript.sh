@@ -73,14 +73,18 @@ MARCA='NOME_ABA_DIARIO'
 grep -q "$MARCA" Code.gs || erro "A marca '$MARCA' não está mais no Code.gs local.
    Ela é o que confirma a identidade do projeto remoto. Atualize a marca aqui e
    no .github/workflows/implantar-appscript.yml para algo que exista no arquivo."
-if [ -e "$TMP/Code.gs" ] || [ -e "$TMP/Code.js" ]; then
-  grep -qs "$MARCA" "$TMP/Code.gs" "$TMP/Code.js" || erro "O scriptId aponta para OUTRO projeto.
-   O Code.gs que está no Apps Script não contém '$MARCA' — não é o backend deste
+# Varre TODOS os arquivos baixados, não um nome fixo: no projeto real o arquivo
+# se chama `Código.gs`, com acento. Procurar por `Code.gs` fazia esta guarda se
+# declarar "projeto novo" e passar sem conferir nada.
+ARQUIVOS=$(ls "$TMP"/*.gs "$TMP"/*.js 2>/dev/null || true)
+if [ -n "$ARQUIVOS" ]; then
+  grep -qs "$MARCA" $ARQUIVOS || erro "O scriptId aponta para OUTRO projeto.
+   Nenhum arquivo do projeto remoto contém '$MARCA' — não é o backend deste
    repositório. Publicar apagaria esse outro projeto. Confira o scriptId no
    .clasp.json: tem de ser o do projeto cujo /exec o index.html chama."
   feito "É o backend certo."
 else
-  feito "Projeto remoto sem Code.gs — tratando como projeto novo."
+  feito "Projeto remoto sem arquivo de script — tratando como projeto novo."
 fi
 
 passo "Conferindo a sintaxe do Code.gs…"

@@ -141,13 +141,33 @@ console.log('\nÉ ESTE PROJETO MESMO?');
   const testa = dir => {
     try {
       execFileSync('bash', ['-c',
-        `if [ -e ${dir}/Code.gs ] || [ -e ${dir}/Code.js ]; then ` +
-        `grep -qs '${MARCA}' ${dir}/Code.gs ${dir}/Code.js || exit 1; fi`]);
+        `arquivos=$(ls ${dir}/*.gs ${dir}/*.js 2>/dev/null || true); ` +
+        `if [ -n "$arquivos" ]; then grep -qs '${MARCA}' $arquivos || exit 1; fi`]);
       return 'passa';
     } catch (e) { return 'bloqueia'; }
   };
   ok('o backend certo passa', testa(certo) === 'passa');
   ok('o projeto de Equipamentos é BLOQUEADO', testa(errado) === 'bloqueia');
+
+  /* O arquivo do projeto real chama-se `Código.gs`, com acento. Uma guarda que
+     procurasse o nome literal `Code.gs` não acharia nada e se declararia
+     "projeto novo" — passando sem conferir, justamente no caso que ela existe
+     para pegar. Por isso ela varre TODOS os arquivos de script. */
+  const acentuado = path.join(tmp, 'acentuado');
+  fs.mkdirSync(acentuado);
+  fs.writeFileSync(path.join(acentuado, 'Código.gs'), 'var ' + MARCA + " = 'RDO_Diario';");
+  ok('arquivo remoto com acento no nome ainda é conferido', testa(acentuado) === 'passa');
+
+  const acentuadoErrado = path.join(tmp, 'acentuado-errado');
+  fs.mkdirSync(acentuadoErrado);
+  fs.writeFileSync(path.join(acentuadoErrado, 'Código.gs'), '// Motor do app de Equipamentos');
+  ok('e com acento E conteúdo errado continua bloqueado',
+     testa(acentuadoErrado) === 'bloqueia');
+
+  // Projeto sem script nenhum é projeto novo — esse passa de propósito.
+  const vazio = path.join(tmp, 'vazio');
+  fs.mkdirSync(vazio);
+  ok('projeto sem nenhum arquivo de script passa (é projeto novo)', testa(vazio) === 'passa');
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

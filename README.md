@@ -157,6 +157,17 @@ Dá para automatizar. São **dois caminhos** — escolha um.
    chutado reconfigura o backend em produção.
    > Se o `clasp pull` trouxer algum `.gs` que não está no repositório, comite
    > também — senão a implantação apagaria esse arquivo.
+
+   > ⚠ **Os nomes dos arquivos têm de bater.** No projeto da Teotônio o arquivo
+   > principal chama-se **`Código.gs`**, com acento, enquanto o repositório
+   > guarda **`Code.gs`**. Para o `clasp` são dois arquivos diferentes: o push
+   > criaria um `Code` novo e **apagaria** o `Código`.
+   >
+   > A conferência bloqueia isso antes de acontecer, mas a implantação só passa
+   > a funcionar quando os nomes coincidirem. O caminho mais simples é
+   > **renomear no editor do Apps Script**: painel da esquerda → ⋮ ao lado de
+   > `Código` → *Renomear* → `Code`. Renomear arquivo não mexe em função
+   > nenhuma, e a versão já implantada continua no ar até a próxima publicação.
 7. Descubra o **id da implantação**: `clasp deployments`. Copie o id daquela
    que é o app da web (a que corresponde à URL `/exec` que o app usa).
 
