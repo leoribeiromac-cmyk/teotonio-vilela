@@ -133,8 +133,20 @@ console.log('\nA VERSÃO DO CLASP ESTÁ PRESA');
 {
   // A 3.x mudou o lugar do arquivo de credencial e a sintaxe dos comandos:
   // "instalar a última" quebraria a implantação num dia qualquer, sozinho.
-  ok('o fluxo instala uma versão exata', /@google\/clasp@\d+\.\d+\.\d+/.test(fluxo),
-     (fluxo.match(/@google\/clasp@[^\s]*/) || [''])[0]);
+  const noFluxo = (fluxo.match(/@google\/clasp@(\d+\.\d+\.\d+)/) || [])[1];
+  ok('o fluxo instala uma versão exata', !!noFluxo, noFluxo);
+
+  /* E o README tem de mandar instalar A MESMA. Quem faz o login segue o
+     README; quem implanta é o fluxo. Se as duas divergirem, a credencial é
+     gerada por uma versão e lida por outra — e isso não aparece no login,
+     só na primeira implantação de verdade. */
+  const readme = ler('README.md');
+  const noReadme = [...readme.matchAll(/@google\/clasp@(\d+\.\d+\.\d+)/g)].map(m => m[1]);
+  ok('o README manda instalar a mesma versão do fluxo',
+     noReadme.length > 0 && noReadme.every(v => v === noFluxo),
+     'fluxo=' + noFluxo + ' README=' + JSON.stringify(noReadme));
+  ok('e avisa para conferir com clasp --version',
+     /clasp --version/.test(readme));
 }
 
 console.log(falhas === 0 ? '\nTudo certo.\n' : `\n${falhas} FALHA(S)\n`);

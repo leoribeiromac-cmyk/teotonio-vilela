@@ -88,9 +88,38 @@ Dá para automatizar. São **dois caminhos** — escolha um.
 ### Antes dos dois: a preparação (1×)
 
 1. Instale o `clasp`: `npm install -g @google/clasp@2.4.2`
+
+   Confira com `clasp --version` que veio **2.4.2 mesmo**. A versão importa:
+   a 3.x mudou o lugar e o formato do arquivo de credencial, e o fluxo do
+   GitHub instala a 2.4.2. Credencial gerada por uma versão e lida por outra
+   é falha na primeira implantação de verdade. (Ambiente que já traz o `clasp`
+   pré-instalado — o Cloud Shell, por exemplo — pode ter outra versão: se o
+   `npm install` não sobrescrever, use `npx @google/clasp@2.4.2 login`.)
 2. Ligue a API: acesse **https://script.google.com/home/usersettings** e ative
    *API Google Apps Script*.
 3. Entre na conta: `clasp login`
+
+   > **Se o `clasp` estiver numa máquina remota** (Google Cloud Shell, um
+   > servidor por SSH), o login falha com `ERR_CONNECTION_REFUSED`: o Google
+   > devolve a autorização para `http://localhost:PORTA`, e esse "localhost" é
+   > a máquina remota, não a sua. O `--no-localhost` **não resolve mais** — o
+   > Google desativou esse fluxo em 2023.
+   >
+   > O contorno é entregar o código por dentro. Com o `clasp login` **rodando
+   > e esperando**, autorize no navegador, copie a URL inteira da página de
+   > erro e, numa segunda aba do terminal, rode:
+   >
+   > ```bash
+   > curl "http://127.0.0.1:PORTA/?iss=...COLE-A-URL-INTEIRA..."
+   > ```
+   >
+   > A **porta é sorteada a cada login** — leia a que aparece no
+   > `redirect_uri` do link, não presuma um número. As aspas são obrigatórias:
+   > sem elas o terminal corta a URL no primeiro `&`.
+   >
+   > O texto de sucesso muda conforme a versão (`Authorization successful.` na
+   > 2.x, `You are logged in as ...` em versões mais novas). Para conferir:
+   > `clasp login --status` na 2.x, `clasp show-authorized-user` na 3.x.
 4. Descubra o **id do projeto**: no editor do Apps Script, ⚙ **Configurações do
    projeto → IDs → ID do script**.
 5. Na raiz do repositório, crie o `.clasp.json` (ele é ignorado pelo git):
