@@ -563,6 +563,37 @@ pelo fatiador. `arquivo` é sempre o PDF, que alimenta os botões Abrir e Baixar
 Todos os perfis enxergam a tela — inclusive Campo, que é quem mais precisa saber
 o que construir.
 
+## Estaqueamento: o eixo é da obra
+
+Onde o serviço foi executado é dito por **estaca**, e a estaca pertence a um
+**eixo** da obra — não à avenida da Teotônio. Na Teotônio o eixo é o sentido
+da pista (Centro→Bairro E99–E141, Bairro→Centro E201–E244); nas Ruas de Terra
+é a **rua**, cada uma estaqueada a partir do zero (Agrimensor Sugaya E0–E12,
+Astrogildo Pereira E0–E18, conforme as memórias de cálculo do projeto).
+
+A obra declara os eixos no cadastro (`dados/<obra>.js`):
+
+```js
+eixoRotulo: 'Rua',                 // como o campo se chama na tela de lançamento
+eixos: [
+  { id: 'AGR', label: 'Agrimensor Sugaya',  ini: 0, fim: 12 },
+  { id: 'AST', label: 'Astrogildo Pereira', ini: 0, fim: 18 },
+]
+```
+
+O `id` é o que fica **gravado** no lançamento, entre parênteses —
+`Local_Estaca` = `"E4 a E7 (AGR)"`. Trocar um id depois cega o histórico já
+lançado; é para durar o contrato inteiro.
+
+Quem não declara `eixos` continua funcionando: a Teotônio cai nos seus
+`estacasCB`/`estacasBC`, e a obra vinda do "Gestor" no mapa `estacas`
+(rua → nº de estacas). Obra **sem** estaqueamento nenhum não pergunta estaca
+no lançamento, e as telas de mapa e de avenida 3D não aparecem para ela.
+
+Quando o pacote sabe em que rua está (coluna `Rua` do cadastro, que é o caso
+das Ruas de Terra), o eixo do lançamento **vem do pacote** e não é perguntado —
+não há como registrar a produção de uma rua no estaqueamento da outra.
+
 ## Fila offline
 
 Lançamento feito sem sinal espera no aparelho e sobe sozinho quando a conexão

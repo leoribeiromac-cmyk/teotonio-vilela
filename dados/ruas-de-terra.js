@@ -34,6 +34,19 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     "Agrimensor Sugaya": 12,
     "Astrogildo Pereira": 18
   },
+  /* Eixos estaqueados da obra. Aqui a estaca é da RUA, não do sentido de
+     uma avenida: cada rua tem o seu estaqueamento próprio, começando na
+     estaca 0. As faixas são as das memórias de cálculo do projeto —
+     Agrimensor "Estaca 0+00 a 12+00" (240,00 m) e Astrogildo
+     "Estaca 0,00 a 18+00" (360,00 m), 20 m por estaca.
+
+     `id` é o que fica GRAVADO no lançamento, entre parênteses
+     ("E4 a E7 (AGR)"). Trocar um id depois cega o histórico já lançado. */
+  "eixoRotulo": "Rua",
+  "eixos": [
+    { "id": "AGR", "label": "Agrimensor Sugaya",  "ini": 0, "fim": 12, "extensaoM": 240 },
+    { "id": "AST", "label": "Astrogildo Pereira", "ini": 0, "fim": 18, "extensaoM": 360 }
+  ],
   "frentes": [
     {
       "id": 1,
