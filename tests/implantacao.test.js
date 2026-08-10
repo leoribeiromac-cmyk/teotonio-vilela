@@ -24,19 +24,36 @@ const claspignore = ler('.claspignore');
 
 console.log('\nA MESMA URL DE SEMPRE');
 {
-  // Toda chamada de `clasp deploy`, nos dois arquivos, tem de trazer -i.
+  /* O fonte do clasp (core/project.js) diz, na própria implementação:
+       "If no deploymentId is provided, create a new deployment."
+     Ou seja: `clasp deploy` sem id NÃO falha — ele cria uma implantação nova,
+     com URL /exec nova, e devolve sucesso. O app continua falando com a
+     antiga, e ninguém percebe até a obra reclamar.
+
+     `clasp redeploy <id>` não tem esse buraco: o id é argumento obrigatório,
+     então a ausência dele PARA o comando. Entre um comando que falha e um que
+     publica no lugar errado dizendo que deu certo, o que falha é o seguro. */
   const chamadas = [];
   [['fluxo', fluxo], ['script', script]].forEach(([onde, txt]) => {
     txt.split('\n').forEach((linha, i) => {
       // Só linha de comando: comentário que fala de deploy não conta.
       const semComentario = linha.replace(/^\s*#.*/, '');
-      if (/\bclasp\s+deploy\b/.test(semComentario)) chamadas.push({ onde, n: i + 1, linha: semComentario.trim() });
+      if (/\bclasp\s+(deploy|redeploy|create-deployment|update-deployment)\b/.test(semComentario)) {
+        chamadas.push({ onde, n: i + 1, linha: semComentario.trim() });
+      }
     });
   });
-  ok('achou as chamadas de clasp deploy', chamadas.length === 2, JSON.stringify(chamadas.map(c => c.onde)));
-  const semId = chamadas.filter(c => !/\s-i\s/.test(c.linha));
-  ok('toda implantação reusa o id existente (-i)', semId.length === 0,
-     JSON.stringify(semId.map(c => c.onde + ':' + c.n + ' ' + c.linha)));
+  ok('achou as chamadas de implantação', chamadas.length === 2, JSON.stringify(chamadas.map(c => c.onde)));
+
+  const inseguras = chamadas.filter(c =>
+    // `redeploy <id>` é seguro por construção; `deploy` só com -i explícito.
+    !/\bclasp\s+(redeploy|update-deployment)\s+"?\$/.test(c.linha) && !/\s-i\s/.test(c.linha));
+  ok('nenhuma implantação pode criar uma URL nova', inseguras.length === 0,
+     JSON.stringify(inseguras.map(c => c.onde + ':' + c.n + ' ' + c.linha)));
+
+  const bareDeploy = chamadas.filter(c => /\bclasp\s+(deploy|create-deployment)\b/.test(c.linha));
+  ok('e ninguém usa o `deploy` cru (o que cria implantação nova)',
+     bareDeploy.length === 0, JSON.stringify(bareDeploy.map(c => c.onde + ':' + c.linha)));
 }
 
 console.log('\nNÃO PUBLICAR SEM SABER PARA ONDE');

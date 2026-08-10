@@ -27,7 +27,7 @@ for arg in "$@"; do
   esac
 done
 
-command -v clasp >/dev/null 2>&1 || erro "clasp não instalado. Rode: npm install -g @google/clasp@2.4.2"
+command -v clasp >/dev/null 2>&1 || erro "clasp não instalado. Rode: npm install -g @google/clasp@3.3.0"
 [ -f "$HOME/.clasprc.json" ] || erro "Você ainda não entrou na conta Google. Rode: clasp login"
 [ -f .clasp.json ] || erro "Falta o .clasp.json (o id do projeto). Ver o README: \"Implantar o backend sozinho\"."
 [ -f appsscript.json ] || erro "Falta o appsscript.json. Rode 'clasp pull' uma vez e comite o arquivo — ele guarda fuso, escopos e a configuração do app da web."
@@ -83,5 +83,8 @@ clasp push -f
 feito "Código no projeto."
 
 passo "Publicando a versão (mesma URL de sempre)…"
-clasp deploy -i "$ID_IMPL" -d "$DESCRICAO"
+# `redeploy` e não `deploy`: no redeploy o id é argumento obrigatório, então
+# sem ele o comando PARA. O `deploy` sem id cria uma implantação nova, com URL
+# /exec nova, e devolve sucesso.
+clasp redeploy "$ID_IMPL" -d "$DESCRICAO"
 feito "No ar: $DESCRICAO"

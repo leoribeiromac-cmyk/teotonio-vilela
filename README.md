@@ -87,14 +87,16 @@ Dá para automatizar. São **dois caminhos** — escolha um.
 
 ### Antes dos dois: a preparação (1×)
 
-1. Instale o `clasp`: `npm install -g @google/clasp@2.4.2`
+1. Instale o `clasp`: `npm install -g @google/clasp@3.3.0`
 
-   Confira com `clasp --version` que veio **2.4.2 mesmo**. A versão importa:
-   a 3.x mudou o lugar e o formato do arquivo de credencial, e o fluxo do
-   GitHub instala a 2.4.2. Credencial gerada por uma versão e lida por outra
-   é falha na primeira implantação de verdade. (Ambiente que já traz o `clasp`
-   pré-instalado — o Cloud Shell, por exemplo — pode ter outra versão: se o
-   `npm install` não sobrescrever, use `npx @google/clasp@2.4.2 login`.)
+   Confira com `clasp --version` que veio **3.3.0 mesmo**. A versão importa: o
+   formato do `~/.clasprc.json` mudou entre a 2.x (chaves `token` +
+   `oauth2ClientSettings`) e a 3.x (chave `tokens`). Credencial gerada por uma
+   versão e lida por outra **não falha no login** — falha na primeira
+   implantação de verdade, que é o pior momento para descobrir. O fluxo do
+   GitHub instala a 3.3.0; se a sua for outra, gere a credencial de novo com
+   `npx @google/clasp@3.3.0 login`. (O Cloud Shell já traz o `clasp`
+   pré-instalado, e o `npm install -g` pode não sobrescrever.)
 2. Ligue a API: acesse **https://script.google.com/home/usersettings** e ative
    *API Google Apps Script*.
 3. Entre na conta: `clasp login`
@@ -119,7 +121,11 @@ Dá para automatizar. São **dois caminhos** — escolha um.
    >
    > O texto de sucesso muda conforme a versão (`Authorization successful.` na
    > 2.x, `You are logged in as ...` em versões mais novas). Para conferir:
-   > `clasp login --status` na 2.x, `clasp show-authorized-user` na 3.x.
+   > `clasp show-authorized-user` na 3.x (`clasp login --status` é da 2.x e não
+   > existe mais).
+   >
+   > A 3.x aceita `clasp login --redirect-port 8888`, que fixa a porta em vez
+   > de sortear uma — deixa o `curl` acima previsível.
 4. Descubra o **id do projeto**: no editor do Apps Script, ⚙ **Configurações do
    projeto → IDs → ID do script**.
 5. Na raiz do repositório, crie o `.clasp.json` (ele é ignorado pelo git):
@@ -139,8 +145,15 @@ Dá para automatizar. São **dois caminhos** — escolha um.
    que é o app da web (a que corresponde à URL `/exec` que o app usa).
 
 > ⚠ **O id da implantação é o detalhe que mais importa.** `clasp deploy` sem
-> ele **não dá erro**: cria uma implantação nova, com uma URL `/exec` nova, e
-> devolve sucesso. O app continua falando com a URL antiga. Por isso os dois
+> ele **não dá erro** — está escrito no próprio fonte do clasp
+> (`core/project.js`): *"If no deploymentId is provided, create a new
+> deployment."* Ele cria uma implantação nova, com uma URL `/exec` nova, e
+> devolve sucesso. O app continua falando com a URL antiga.
+>
+> Por isso a automação usa `clasp redeploy <id>`, e não `clasp deploy -i`: no
+> `redeploy` o id é argumento **obrigatório**, então a falta dele para o
+> comando. Entre um comando que falha e um que publica no lugar errado
+> dizendo que deu certo, o que falha é o seguro. Por isso os dois
 > caminhos abaixo **param** se o id faltar, em vez de publicar no vazio.
 
 ### Caminho A — da sua máquina (a credencial não sai daqui)
