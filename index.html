@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=36"></script>
-<script src="dados/ruas-de-terra.js?v=36"></script>
+<script src="dados/ranario.js?v=37"></script>
+<script src="dados/ruas-de-terra.js?v=37"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=36"></script>
+<script src="dados/teotonio-muros.js?v=37"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=36"></script>
-<script src="js/nf/adaptador.js?v=36"></script>
-<script src="js/nf/notas.js?v=36"></script>
-<script src="js/equip/equipamentos.js?v=36"></script>
+<script src="js/ui/icones.js?v=37"></script>
+<script src="js/nf/adaptador.js?v=37"></script>
+<script src="js/nf/notas.js?v=37"></script>
+<script src="js/equip/equipamentos.js?v=37"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -13203,6 +13203,18 @@ function renderServicoRow(s, idx, frentes) {
                qual dos quatro trechos de muro é o que está na frente dele. */
             const obs = pacoteSelecionado ? String(getCSVField(pacoteSelecionado, 'Observação') || '').trim() : '';
             return obs ? `<div style="font-size:11px;margin-top:3px;color:var(--muted)">${escHtml(obs)}</div>` : '';
+          })()}
+          ${(() => {
+            /* A descrição do orçamento, inteira, embaixo do serviço escolhido.
+               O nome da lista é curto de propósito — "Tubo de concreto armado
+               Ø60 (PA-2)" cabe na tela do celular e diz o que é. Mas o que
+               está no contrato é "FORNECIMENTO E ASSENTAMENTO DE TUBOS DE
+               CONCRETO ARMADO, DIÂMETRO 60CM - TIPO PA-2", e é isso que a
+               fiscalização mede: fica aqui, uma linha abaixo, para quem
+               precisar conferir. */
+            const desc = pacoteSelecionado ? String(getCSVField(pacoteSelecionado, 'Descricao Orcamento') || '').trim() : '';
+            if (!desc) return '';
+            return `<div style="font-size:11px;margin-top:3px;color:var(--muted-2);line-height:1.35">${escHtml(desc)}</div>`;
           })()}
         </div>
         ${camposEstaca}

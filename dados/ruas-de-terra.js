@@ -214,7 +214,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 2,
-      "servico": "Regularização e compactação de ruas de terra (ie-5)",
+      "servico": "Regularização e compactação (IE-5)",
       "descricaoOrig": "REGULARIZAÇÃO E COMPACTAÇÃO DE RUAS DE TERRA (IE-5)",
       "un": "M2",
       "qtdPrev": 1700.65
@@ -230,7 +230,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 2,
-      "servico": "Fornecimento e assentamento de guias tipo pmsp 100",
+      "servico": "Guia PMSP 100",
       "descricaoOrig": "INC.27 - FORNECIMENTO E ASSENTAMENTO DE GUIAS TIPO PMSP 100, INCLUSIVE ENCOSTAMENTO DE TERRA - FCK=25,0MPA",
       "un": "M",
       "qtdPrev": 512.0
@@ -238,7 +238,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 2,
-      "servico": "Base de concreto fck=15,00mpa para guias, sarjetas ou sarjetões",
+      "servico": "Base de concreto p/ guia (fck 15)",
       "descricaoOrig": "INC.27 - BASE DE CONCRETO FCK=15,00MPA PARA GUIAS, SARJETAS OU SARJETÕES",
       "un": "M3",
       "qtdPrev": 43.52,
@@ -248,7 +248,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 2,
-      "servico": "Construção de sarjeta ou sarjetão de concreto - fck= 20,0mpa",
+      "servico": "Sarjeta ou sarjetão (fck 20)",
       "descricaoOrig": "INC.27 - CONSTRUÇÃO DE SARJETA OU SARJETÃO DE CONCRETO - FCK= 20,0MPA",
       "un": "M3",
       "qtdPrev": 34.56,
@@ -278,7 +278,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 2,
-      "servico": "Reforço do sub-leito/sub-base de solo melhorado com agregado recicl…",
+      "servico": "Reforço de subleito — solo melhorado",
       "descricaoOrig": "REFORÇO DO SUB-LEITO/SUB-BASE DE SOLO MELHORADO COM AGREGADO RECICLADO 10% EM VOLUME, COM FORNECIMENTO DE AGREGADO",
       "un": "M3",
       "qtdPrev": 340.13,
@@ -288,7 +288,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 2,
-      "servico": "Imprimação betuminosa ligante",
+      "servico": "Imprimação ligante",
       "descricaoOrig": "INA.01 - IMPRIMAÇÃO BETUMINOSA LIGANTE",
       "un": "M2",
       "qtdPrev": 3401.3
@@ -296,7 +296,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 2,
-      "servico": "Imprimação betuminosa impermeabilizante",
+      "servico": "Imprimação impermeabilizante",
       "descricaoOrig": "IMPRIMAÇÃO BETUMINOSA IMPERMEABILIZANTE",
       "un": "M2",
       "qtdPrev": 1700.65
@@ -304,7 +304,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 2,
-      "servico": "Revestimento de pré-misturado à quente (sem transporte)",
+      "servico": "Pré-misturado a quente (PMQ)",
       "descricaoOrig": "INA.01 - REVESTIMENTO DE PRÉ-MISTURADO À QUENTE (SEM TRANSPORTE)",
       "un": "M3",
       "qtdPrev": 170.065,
@@ -314,7 +314,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 3,
-      "servico": "Passeio de concreto armado, fck=25mpa",
+      "servico": "Passeio de concreto (fck 25)",
       "descricaoOrig": "NC.27 - PASSEIO DE CONCRETO ARMADO, FCK=25MPA, INCLUINDO PREPARO DA CAIXA E LASTRO DE BRITA",
       "un": "M3",
       "qtdPrev": 48.229,
@@ -348,7 +348,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 7,
-      "servico": "Fornecimento e assentamento de tubos de concreto simples - diâmetro…",
+      "servico": "Tubo de concreto simples Ø50",
       "descricaoOrig": "FORNECIMENTO E ASSENTAMENTO DE TUBOS DE CONCRETO SIMPLES - DIÂMETRO 50CM",
       "un": "M",
       "qtdPrev": 85.0
@@ -356,7 +356,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 7,
-      "servico": "Fornecimento e assentamento de tubos de concreto armado, diâmetro 6…",
+      "servico": "Tubo de concreto armado Ø60 (PA-2)",
       "descricaoOrig": "FORNECIMENTO E ASSENTAMENTO DE TUBOS DE CONCRETO ARMADO, DIÂMETRO 60CM - TIPO PA-2",
       "un": "M",
       "qtdPrev": 222.0
@@ -364,7 +364,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 7,
-      "servico": "Escavação mecânica para fundações e valas com profundidade menor ou…",
+      "servico": "Escavação de vala (até 4,0 m)",
       "descricaoOrig": "ESCAVAÇÃO MECÂNICA PARA FUNDAÇÕES E VALAS COM PROFUNDIDADE MENOR OU IGUAL À 4,0M",
       "un": "M3",
       "qtdPrev": 1649.9
@@ -372,7 +372,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 7,
-      "servico": "Reenchimento de vala com compactação, sem fornecimento de terra",
+      "servico": "Reenchimento de vala compactado",
       "descricaoOrig": "REENCHIMENTO DE VALA COM COMPACTAÇÃO, SEM FORNECIMENTO DE TERRA",
       "un": "M3",
       "qtdPrev": 1072.694
@@ -389,7 +389,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 7,
-      "servico": "Escoramento descontínuo de madeira para canalização de tubos",
+      "servico": "Escoramento de vala (madeira)",
       "descricaoOrig": "ESCORAMENTO DESCONTÍNUO DE MADEIRA PARA CANALIZAÇÃO DE TUBOS",
       "un": "M2",
       "qtdPrev": 861.62
@@ -397,7 +397,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 7,
-      "servico": "Poço de visita tipo 1 - 1,40 x 1,40 x 1,40m",
+      "servico": "Poço de visita tipo 1",
       "descricaoOrig": "POÇO DE VISITA TIPO 1 - 1,40 X 1,40 X 1,40M",
       "un": "UN",
       "qtdPrev": 8.0
@@ -405,7 +405,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 7,
-      "servico": "Instalação de tampão para galeria de águas pluviais - articulado, e…",
+      "servico": "Instalação de tampão articulado",
       "descricaoOrig": "INC.27 - INSTALAÇÃO DE TAMPÃO PARA GALERIA DE ÁGUAS PLUVIAIS - ARTICULADO, EXCETO FORNECIMENTO DE TAMPÃO",
       "un": "UN",
       "qtdPrev": 8.0
@@ -413,7 +413,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Agrimensor Sugaya",
       "capId": 7,
-      "servico": "Chaminé de poço de visita com alvenaria de um tijolo comum",
+      "servico": "Chaminé de poço de visita",
       "descricaoOrig": "CHAMINÉ DE POÇO DE VISITA COM ALVENARIA DE UM TIJOLO COMUM",
       "un": "M",
       "qtdPrev": 16.0
@@ -445,7 +445,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 2,
-      "servico": "Regularização e compactação de ruas de terra (ie-5)",
+      "servico": "Regularização e compactação (IE-5)",
       "descricaoOrig": "REGULARIZAÇÃO E COMPACTAÇÃO DE RUAS DE TERRA (IE-5)",
       "un": "M2",
       "qtdPrev": 2984.4
@@ -461,7 +461,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 2,
-      "servico": "Fornecimento e assentamento de guias tipo pmsp 100",
+      "servico": "Guia PMSP 100",
       "descricaoOrig": "INC.27 - FORNECIMENTO E ASSENTAMENTO DE GUIAS TIPO PMSP 100, INCLUSIVE ENCOSTAMENTO DE TERRA - FCK=25,0MPA",
       "un": "M",
       "qtdPrev": 720.0
@@ -469,7 +469,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 2,
-      "servico": "Base de concreto fck=15,00mpa para guias, sarjetas ou sarjetões",
+      "servico": "Base de concreto p/ guia (fck 15)",
       "descricaoOrig": "INC.27 - BASE DE CONCRETO FCK=15,00MPA PARA GUIAS, SARJETAS OU SARJETÕES",
       "un": "M3",
       "qtdPrev": 62.531,
@@ -479,7 +479,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 2,
-      "servico": "Construção de sarjeta ou sarjetão de concreto - fck= 20,0mpa",
+      "servico": "Sarjeta ou sarjetão (fck 20)",
       "descricaoOrig": "INC.27 - CONSTRUÇÃO DE SARJETA OU SARJETÃO DE CONCRETO - FCK= 20,0MPA",
       "un": "M3",
       "qtdPrev": 51.262,
@@ -509,7 +509,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 2,
-      "servico": "Reforço do sub-leito/sub-base de solo melhorado com agregado recicl…",
+      "servico": "Reforço de subleito — solo melhorado",
       "descricaoOrig": "REFORÇO DO SUB-LEITO/SUB-BASE DE SOLO MELHORADO COM AGREGADO RECICLADO 10% EM VOLUME, COM FORNECIMENTO DE AGREGADO",
       "un": "M3",
       "qtdPrev": 596.88,
@@ -519,7 +519,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 2,
-      "servico": "Imprimação betuminosa ligante",
+      "servico": "Imprimação ligante",
       "descricaoOrig": "INA.01 - IMPRIMAÇÃO BETUMINOSA LIGANTE",
       "un": "M2",
       "qtdPrev": 5968.8
@@ -527,7 +527,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 2,
-      "servico": "Imprimação betuminosa impermeabilizante",
+      "servico": "Imprimação impermeabilizante",
       "descricaoOrig": "IMPRIMAÇÃO BETUMINOSA IMPERMEABILIZANTE",
       "un": "M2",
       "qtdPrev": 2984.4
@@ -535,7 +535,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 2,
-      "servico": "Revestimento de pré-misturado à quente (sem transporte)",
+      "servico": "Pré-misturado a quente (PMQ)",
       "descricaoOrig": "INA.01 - REVESTIMENTO DE PRÉ-MISTURADO À QUENTE (SEM TRANSPORTE)",
       "un": "M3",
       "qtdPrev": 298.44,
@@ -545,7 +545,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 3,
-      "servico": "Passeio de concreto armado, fck=25mpa",
+      "servico": "Passeio de concreto (fck 25)",
       "descricaoOrig": "NC.27 - PASSEIO DE CONCRETO ARMADO, FCK=25MPA, INCLUINDO PREPARO DA CAIXA E LASTRO DE BRITA",
       "un": "M3",
       "qtdPrev": 69.026,
@@ -588,7 +588,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 7,
-      "servico": "Instalação de tampão para galeria de águas pluviais - articulado, e…",
+      "servico": "Instalação de tampão articulado",
       "descricaoOrig": "INC.27 - INSTALAÇÃO DE TAMPÃO PARA GALERIA DE ÁGUAS PLUVIAIS - ARTICULADO, EXCETO FORNECIMENTO DE TAMPÃO",
       "un": "UN",
       "qtdPrev": 9.0
@@ -596,7 +596,7 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
     {
       "rua": "Astrogildo Pereira",
       "capId": 7,
-      "servico": "Chaminé de poço de visita com alvenaria de um tijolo comum",
+      "servico": "Chaminé de poço de visita",
       "descricaoOrig": "CHAMINÉ DE POÇO DE VISITA COM ALVENARIA DE UM TIJOLO COMUM",
       "un": "M",
       "qtdPrev": 18.0
