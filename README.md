@@ -563,6 +563,76 @@ pelo fatiador. `arquivo` é sempre o PDF, que alimenta os botões Abrir e Baixar
 Todos os perfis enxergam a tela — inclusive Campo, que é quem mais precisa saber
 o que construir.
 
+## Estaqueamento: o eixo é da obra
+
+Onde o serviço foi executado é dito por **estaca**, e a estaca pertence a um
+**eixo** da obra — não à avenida da Teotônio. Na Teotônio o eixo é o sentido
+da pista (Centro→Bairro E99–E141, Bairro→Centro E201–E244); nas Ruas de Terra
+é a **rua**, cada uma estaqueada a partir do zero (Agrimensor Sugaya E0–E12,
+Astrogildo Pereira E0–E18, conforme as memórias de cálculo do projeto).
+
+A obra declara os eixos no cadastro (`dados/<obra>.js`):
+
+```js
+eixoRotulo: 'Rua',                 // como o campo se chama na tela de lançamento
+eixos: [
+  { id: 'AGR', label: 'Agrimensor Sugaya',  ini: 0, fim: 12 },
+  { id: 'AST', label: 'Astrogildo Pereira', ini: 0, fim: 18 },
+]
+```
+
+O `id` é o que fica **gravado** no lançamento, entre parênteses —
+`Local_Estaca` = `"E4 a E7 (AGR)"`. Trocar um id depois cega o histórico já
+lançado; é para durar o contrato inteiro.
+
+Quem não declara `eixos` continua funcionando: a Teotônio cai nos seus
+`estacasCB`/`estacasBC`, e a obra vinda do "Gestor" no mapa `estacas`
+(rua → nº de estacas). Obra **sem** estaqueamento nenhum não pergunta estaca
+no lançamento, e as telas de mapa e de avenida 3D não aparecem para ela.
+
+**Trecho é trecho, não duas pontas.** `E0 a E4` conta como cinco estacas —
+o trecho foi executado inteiro, e a quantidade é dividida entre elas. Sem
+isso, E1, E2 e E3 apareciam apagadas no mapa como se nada tivesse sido feito
+ali. Estacas soltas continuam soltas: `E10, E12` são duas, não três — o que
+manda é o separador (`a`, `até`, `-`).
+
+### Lado da via
+
+`lados: true` no cadastro põe no lançamento o campo **Lado da via** (LD / LE /
+LD/LE, o vocabulário das memórias de cálculo), obrigatório onde aparece, e o
+lado fica no fim do campo gravado: `"E4 a E7 (AGR) LD"`. Meia pista é meio
+serviço — sem o lado, "guia da E4 à E7" tanto pode ser 60 m como 120 m, e a
+conferência da medição não separa o que já foi medido do que falta no outro
+lado. A obra pode declarar a própria lista em vez de `true`. Sem a chave, o
+campo não existe — é o caso da Teotônio, cujo formulário segue o de sempre.
+
+Quando o pacote sabe em que rua está (coluna `Rua` do cadastro, que é o caso
+das Ruas de Terra), o eixo do lançamento **vem do pacote** e não é perguntado —
+não há como registrar a produção de uma rua no estaqueamento da outra.
+
+### Croqui: onde fica a estaca
+
+O mapa em grade responde *quanto* foi feito na estaca 7. Quem lê o painel sem
+ter estado no canteiro precisa antes saber *onde fica* a estaca 7 — e isso é a
+**Planta de estaqueamento**, no topo do Avanço Físico: a planta do executivo
+com uma bolha em cada estaca, cinza sem lançamento e laranja (mais escura,
+mais RDOs) com produção. Clicar numa bolha lista o que foi lançado ali.
+
+As posições **não são estimadas**: são as coordenadas dos rótulos de estaca que
+o projetista escreveu no desenho, lidas do PDF vetorial por
+`ferramentas/croqui-estacas.py`. O script recorta a planta, gera o `.webp` em
+`projetos/<obra>/` e imprime o bloco `croquis` para colar no cadastro:
+
+```bash
+python ferramentas/croqui-estacas.py           # gera imagem + coordenadas
+python ferramentas/croqui-estacas.py --check   # só confere a sequência
+```
+
+Ele **recusa** gerar se faltar o rótulo de alguma estaca da faixa — croqui com
+estaca faltando é pior que croqui nenhum. A folha usada como base precisa ser
+uma planta com os rótulos em texto: na Astrogildo a de pavimentação virou curva
+no PDF, e a base é a de terraplenagem, que desenha a mesma via.
+
 ## Fila offline
 
 Lançamento feito sem sinal espera no aparelho e sobe sozinho quando a conexão
@@ -673,6 +743,7 @@ agregando por código, como sempre foi.
 | `manifest.json` / `sw.js` / `icon-*.png` / `favicon.svg` | PWA — a marca é a avenida em perspectiva |
 | `pacotes.csv` | Snapshot de referência da aba Pacotes |
 | `dados/teotonio-muros.js` | Pacotes e coeficientes dos muros de contenção, enquanto a planilha não os tem (ver acima) |
+| `ferramentas/croqui-estacas.py` | Gera o croqui de estaqueamento (planta + posição de cada estaca) a partir da prancha em PDF |
 | `docs/muros-planilha.csv` | As mesmas linhas prontas para colar nas abas `Pacotes` e `Coeficientes` |
 | `js/ui/icones.js` | Conjunto de ícones do app — traço único na grade de 24, cor herdada do tema. Cobre navegação, ações e frentes de serviço (`icFrente()` escolhe pelo nome da frente) |
 | `vendor/` | Bibliotecas servidas pelo próprio site (ver abaixo) |

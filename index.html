@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=34"></script>
-<script src="dados/ruas-de-terra.js?v=34"></script>
+<script src="dados/ranario.js?v=35"></script>
+<script src="dados/ruas-de-terra.js?v=35"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=34"></script>
+<script src="dados/teotonio-muros.js?v=35"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=34"></script>
-<script src="js/nf/adaptador.js?v=34"></script>
-<script src="js/nf/notas.js?v=34"></script>
-<script src="js/equip/equipamentos.js?v=34"></script>
+<script src="js/ui/icones.js?v=35"></script>
+<script src="js/nf/adaptador.js?v=35"></script>
+<script src="js/nf/notas.js?v=35"></script>
+<script src="js/equip/equipamentos.js?v=35"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -905,6 +905,39 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;
   text-align:center;padding:2px 0;
   writing-mode:vertical-rl;transform:rotate(180deg);
+}
+
+/* ===== CROQUI DE ESTAQUEAMENTO =====
+   A planta da rua com uma bolha em cada estaca. O fundo é branco fixo, e
+   não var(--surface): é um desenho de projeto, com as cores da legenda
+   (vermelho o pavimento, amarelo o passeio) — no tema escuro, um fundo
+   escuro embaixo dele deixaria a planta ilegível. */
+.croqui{
+  position:relative;background:#fff;border:1px solid var(--border);
+  border-radius:var(--r);overflow:hidden;line-height:0;
+}
+.croqui img{width:100%;height:auto;display:block}
+.croqui-pt{
+  position:absolute;transform:translate(-50%,-50%);
+  width:22px;height:22px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;
+  line-height:1;cursor:pointer;border:1.5px solid #fff;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);
+  transition:transform calc(.15s * var(--anim-speed));
+}
+.croqui-pt:hover{transform:translate(-50%,-50%) scale(1.25);z-index:3}
+.croqui-pt.on{outline:2.5px solid var(--acc);outline-offset:2px;z-index:4}
+.croqui-legenda{
+  display:flex;gap:16px;flex-wrap:wrap;align-items:center;
+  font-size:11px;color:var(--muted);margin-top:8px;
+}
+.croqui-legenda i{
+  width:11px;height:11px;border-radius:50%;display:inline-block;
+  margin-right:5px;vertical-align:-1px;border:1px solid #fff;
+}
+@media(max-width:700px){
+  .croqui-pt{width:18px;height:18px;font-size:8px}
 }
 
 /* ===================== FORM ===================== */
@@ -2504,6 +2537,86 @@ function lsObra(base) {
   return id === 'teotonio' ? base : base + ':' + id;
 }
 
+/* ------------------------------------------------------------------
+   EIXOS ESTAQUEADOS
+   ------------------------------------------------------------------
+   Toda obra linear é localizada sobre um ou mais EIXOS estaqueados. Na
+   Teotônio o eixo é o SENTIDO da avenida (Centro→Bairro E99–E141,
+   Bairro→Centro E201–E244). Nas Ruas de Terra é a RUA: cada uma tem o
+   seu estaqueamento próprio, e as duas começam na estaca 0 — E5 da
+   Agrimensor não é a E5 da Astrogildo.
+
+   É por isso que as telas falam de "eixo" e não de "sentido": o campo
+   é o mesmo, o que muda é o nome que a obra dá a ele (`eixoRotulo`).
+
+   A obra pode declarar `eixos` no cadastro; quem não declara cai nos
+   sentidos da avenida, e depois no mapa `estacas` (rua → nº de estacas)
+   que é o formato do "Gestor — Controle de Obras". Obra sem nada disso
+   fica com lista vazia, e toda tela de estaca simplesmente não aparece.
+   ------------------------------------------------------------------ */
+function eixosDaObra(o) {
+  const limpa = (e) => ({
+    id: String(e.id).toUpperCase(), label: e.label || String(e.id),
+    ini: Math.trunc(Number(e.ini) || 0), fim: Math.trunc(Number(e.fim) || 0)
+  });
+
+  if (Array.isArray(o.eixos) && o.eixos.length) {
+    return o.eixos.filter(e => e && e.id).map(limpa).filter(e => e.fim >= e.ini);
+  }
+
+  const out = [];
+  if (o.estacasCB && o.estacasCB.fim >= o.estacasCB.ini) {
+    out.push(limpa({ id: 'CB', label: o.estacasCB.label || 'Centro→Bairro',
+                     ini: o.estacasCB.ini, fim: o.estacasCB.fim }));
+  }
+  if (o.estacasBC && o.estacasBC.fim >= o.estacasBC.ini) {
+    out.push(limpa({ id: 'BC', label: o.estacasBC.label || 'Bairro→Centro',
+                     ini: o.estacasBC.ini, fim: o.estacasBC.fim }));
+  }
+  if (out.length) return out;
+
+  // Formato do app irmão: { 'Rua Tal': 12 } = estacas 0 a 12 daquela rua.
+  // O id sai das 3 primeiras letras do nome; se duas ruas colidirem, entra
+  // um número, porque id repetido misturaria o histórico das duas.
+  const usados = new Set();
+  Object.keys(o.estacas || {}).forEach(rua => {
+    let base = rua.replace(/[^A-Za-zÀ-ÿ]/g, '').slice(0, 3).toUpperCase() || 'EIX';
+    let id = base, n = 2;
+    while (usados.has(id)) id = base + (n++);
+    usados.add(id);
+    out.push(limpa({ id: id, label: rua, ini: 0, fim: o.estacas[rua] }));
+  });
+  return out;
+}
+
+/* ------------------------------------------------------------------
+   LADO DA VIA
+   ------------------------------------------------------------------
+   Meia pista é meio serviço. Sem dizer o lado, "guia da E4 à E7" pode
+   ser 60 m ou 120 m, e a conferência da medição não tem como separar o
+   que já foi medido do que ainda falta no outro lado. LD/LE é o
+   vocabulário do próprio projeto — as memórias de cálculo cotam assim.
+
+   `lados: true` no cadastro liga o campo com os três valores usuais; a
+   obra pode declarar a própria lista. Obra que não declara nada não
+   ganha o campo — é o caso da Teotônio, cujos apontadores estão com o
+   formulário de sempre.
+   ------------------------------------------------------------------ */
+const LADOS_PADRAO = [
+  { id: 'LD',    label: 'Lado direito' },
+  { id: 'LE',    label: 'Lado esquerdo' },
+  { id: 'LD/LE', label: 'Ambos os lados' },
+];
+
+function ladosDaObra(o) {
+  if (o.lados === true) return LADOS_PADRAO.slice();
+  if (Array.isArray(o.lados)) {
+    return o.lados.filter(l => l && l.id)
+      .map(l => ({ id: String(l.id).toUpperCase(), label: l.label || String(l.id) }));
+  }
+  return [];
+}
+
 function montarConfig(id) {
   const o = OBRAS_CFG[id] || OBRAS_CFG.teotonio;
   return Object.assign({}, o, {
@@ -2520,6 +2633,11 @@ function montarConfig(id) {
     // Executivo inteiro ao abrir qualquer outra obra.
     estacasCB: o.estacasCB || { ini: 0, fim: -1, label: '' },
     estacasBC: o.estacasBC || { ini: 0, fim: -1, label: '' },
+    // Os eixos estaqueados desta obra (ver eixosDaObra). Na Teotônio saem
+    // dos dois sentidos acima; nas Ruas de Terra, das duas ruas.
+    eixos: eixosDaObra(o),
+    eixoRotulo: o.eixoRotulo || (o.estacasCB ? 'Sentido da via' : 'Trecho'),
+    lados: ladosDaObra(o),
     refreshMs: APP.refreshMs,
     ls: Object.assign({
       rdoDraft:   lsObra('teotonio_rdo_draft_v1'),
@@ -3374,23 +3492,141 @@ function toast(msg, type = 'info', durationMs = 3500) {
   return t;
 }
 
-/* A obra trabalha com estacas numeradas por sentido? Só a Teotônio, por
-   enquanto. As telas que desenham a avenida e o mapa de estacas perguntam
-   isso antes de renderizar — numa obra sem estacas elas não fazem sentido
-   e sairiam vazias. */
+/* A obra é estaqueada? As telas que desenham a via e o mapa de estacas
+   perguntam isso antes de renderizar — numa obra sem estaqueamento elas
+   não fazem sentido e sairiam vazias. */
 function temEstacas() {
   return listarEstacas().length > 0;
 }
 
+function eixosDaObraAtiva() {
+  return (CONFIG && CONFIG.eixos) || [];
+}
+
+function eixoPorId(id) {
+  const alvo = String(id || '').toUpperCase();
+  return eixosDaObraAtiva().find(e => e.id === alvo) || null;
+}
+
+/* O eixo que o formulário assume quando não há nada escolhido: o primeiro
+   da obra. 'CB' é o padrão histórico da Teotônio e continua valendo para
+   ela, porque é o primeiro eixo dela. */
+function eixoPadrao() {
+  const e = eixosDaObraAtiva()[0];
+  return e ? e.id : 'CB';
+}
+
+/* Duas ruas estaqueadas do zero têm ambas uma estaca 5. Quando as faixas
+   se sobrepõem, a chave interna leva o eixo junto — senão a produção de
+   uma rua entraria no mapa da outra. Na Teotônio, cujas faixas são
+   disjuntas (E99–E141 e E201–E244), a chave segue sendo só "E120". */
+let _eixosColidemCache = null;
+function eixosColidem() {
+  const es = eixosDaObraAtiva();
+  if (_eixosColidemCache && _eixosColidemCache.ref === es) return _eixosColidemCache.valor;
+  let valor = false;
+  for (let i = 0; i < es.length && !valor; i++) {
+    for (let j = i + 1; j < es.length && !valor; j++) {
+      if (es[i].ini <= es[j].fim && es[j].ini <= es[i].fim) valor = true;
+    }
+  }
+  _eixosColidemCache = { ref: es, valor };
+  return valor;
+}
+
+function chaveEstaca(num, eixoId) {
+  return eixosColidem() ? 'E' + num + '@' + String(eixoId || '').toUpperCase() : 'E' + num;
+}
+
 function listarEstacas() {
   const out = [];
-  for (let i = CONFIG.estacasCB.ini; i <= CONFIG.estacasCB.fim; i++) {
-    out.push({ id: 'E' + i, num: i, sentido: 'CB' });
-  }
-  for (let i = CONFIG.estacasBC.ini; i <= CONFIG.estacasBC.fim; i++) {
-    out.push({ id: 'E' + i, num: i, sentido: 'BC' });
-  }
+  eixosDaObraAtiva().forEach(x => {
+    for (let i = x.ini; i <= x.fim; i++) {
+      out.push({ id: chaveEstaca(i, x.id), rot: 'E' + i, num: i, eixo: x.id,
+                 // `sentido` continua aqui pelo nome antigo do campo, que é
+                 // o que o resto do app aprendeu a ler.
+                 sentido: x.id });
+    }
+  });
   return out;
+}
+
+/* ------------------------------------------------------------------
+   LEITURA DO CAMPO `Local_Estaca`
+   ------------------------------------------------------------------
+   Um único lugar para interpretar o que está gravado no lançamento —
+   "E99 a E141 (CB)", "E4 a E7 (AGR)", "E120", "E106+10". Antes essa
+   regex estava copiada em quatro telas, e cada cópia tratava um caso.
+
+   Regras que vêm do campo e não podem mudar:
+   • o deslocamento "+10" sai ANTES dos números, senão "E106+10" vira
+     uma estaca fantasma E10;
+   • o eixo é o que está entre parênteses. Lançamento antigo da Teotônio
+     que não tem sufixo é resolvido pela faixa em que o número cai;
+   • estaca fora de qualquer faixa da obra é descartada, como sempre foi;
+   • "E0 a E4" é um TRECHO, e o trecho foi executado inteiro: devolve as
+     cinco estacas, não só as duas pontas. Enquanto só as pontas contavam,
+     o mapa mostrava E1, E2 e E3 apagadas como se nada tivesse sido feito
+     ali — numa rua de 12 estacas, o mapa mentia desde o primeiro dia.
+   ------------------------------------------------------------------ */
+
+/* Um trecho: dois números com "a", "até" ou traço no meio. O separador é
+   exigido justamente para não transformar "E10, E12" (duas estacas soltas,
+   que é o que o apontador quis dizer) numa faixa de três. */
+const RE_TRECHO = /E?\s?(\d{1,3})\s*(?:A|ATÉ|ATE|-|–|—)\s*E?\s?(\d{1,3})/g;
+const RE_ESTACA = /E\s?\d{1,3}|\b\d{2,3}\b/g;
+// Guarda contra dado sujo: "E1 a 999" não vira 999 células no mapa.
+const MAX_TRECHO = 200;
+
+function lerLocalEstaca(txt) {
+  const bruto = String(txt || '').toUpperCase();
+  const mEixo = bruto.match(/\(\s*([A-Z0-9]{2,6})\s*\)/);
+  const eixoDito = mEixo && eixoPorId(mEixo[1]) ? mEixo[1] : '';
+
+  const semSufixo = bruto.replace(/\([^)]*\)/g, '').replace(/\+\s*\d+/g, '');
+
+  // Primeiro os trechos, que saem do texto assim que são expandidos; o que
+  // sobra são estacas citadas soltas. "E4" é o formato de hoje; o número
+  // solto de 2–3 dígitos é lançamento velho da Teotônio, e continua sendo
+  // lido como sempre foi ("E1 120" devolve as duas, não só a primeira).
+  const numeros = [];
+  let sobra = semSufixo, m;
+  RE_TRECHO.lastIndex = 0;
+  while ((m = RE_TRECHO.exec(semSufixo)) !== null) {
+    const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+    const ini = Math.min(a, b), fim = Math.max(a, b);
+    if (fim - ini <= MAX_TRECHO) {
+      for (let i = ini; i <= fim; i++) numeros.push(i);
+    } else {
+      numeros.push(a, b);
+    }
+    sobra = sobra.replace(m[0], ' ');
+  }
+  (sobra.match(RE_ESTACA) || []).forEach(t => numeros.push(parseInt(String(t).replace(/[^\d]/g, ''), 10)));
+  if (!numeros.length) return [];
+
+  const out = [];
+  const vistas = {};
+  numeros.forEach(n => {
+    if (!isFinite(n)) return;
+    const eixo = eixoDito || (eixosDaObraAtiva().find(e => n >= e.ini && n <= e.fim) || {}).id;
+    if (!eixo) return;                       // fora das faixas do contrato
+    const e = eixoPorId(eixo);
+    if (!e || n < e.ini || n > e.fim) return;
+    const id = chaveEstaca(n, e.id);
+    if (vistas[id]) return;        // a mesma estaca citada duas vezes é uma só
+    vistas[id] = true;
+    out.push({ num: n, eixo: e.id, id: id, rot: 'E' + n });
+  });
+  out.sort((a, b) => a.num - b.num);
+  return out;
+}
+
+/* De que lado da via o serviço foi executado, quando o lançamento diz.
+   Vem depois do eixo, no fim do campo: "E4 a E7 (AGR) LD". */
+function lerLadoDaVia(txt) {
+  const m = String(txt || '').toUpperCase().match(/\)\s*(LD\/LE|LE\/LD|LD|LE)\b/);
+  return m ? m[1].replace('LE/LD', 'LD/LE') : '';
 }
 
 // ====================================================================
@@ -5242,14 +5478,11 @@ function calcularAvancoPorPacote(rdos = STATE.rdoavanco, pacotes = STATE.pacotes
     const d = parseISODate(getCSVField(r, 'Data'));
     if (d && (!m[pid].ultimaData || d > m[pid].ultimaData)) m[pid].ultimaData = d;
     
-    // Remove deslocamentos "+10" ANTES de extrair números — sem isso, a
-    // notação de campo "E106+10" gerava uma estaca fantasma "E10".
-    const est = String(getCSVField(r, 'Local_Estaca') || '').toUpperCase().replace(/\+\s*\d+/g, '').match(/E?\d{2,3}/g);
-    if (est) {
+    const est = lerLocalEstaca(getCSVField(r, 'Local_Estaca'));
+    if (est.length) {
       const qPorEstaca = q / est.length;
       est.forEach(e => {
-        const ek = e.replace(/^E/, 'E') === 'E' ? 'E' + e.replace(/^E/, '').padStart(3, '0') : (e.startsWith('E') ? e : 'E' + e);
-        m[pid].porEstaca[ek] = (m[pid].porEstaca[ek] || 0) + qPorEstaca;
+        m[pid].porEstaca[e.id] = (m[pid].porEstaca[e.id] || 0) + qPorEstaca;
       });
     }
   });
@@ -7860,69 +8093,81 @@ function calcAvancoPorEstaca(rdosAtivos, pacotesAtivos) {
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
     if (!validPids.has(pid)) return;
     const q = num(getCSVField(r, 'Quantidade'));
-    // Remove deslocamentos "+10" ANTES de extrair números — sem isso, a
-    // notação de campo "E106+10" gerava uma estaca fantasma "E10".
-    const est = String(getCSVField(r, 'Local_Estaca') || '').toUpperCase().replace(/\+\s*\d+/g, '').match(/E?\d{2,3}/g);
-    if (!est) return;
-    est.forEach(estStr => {
-      const ek = estStr.startsWith('E') ? estStr : 'E' + estStr;
-      if (!estacas[ek]) return;
-      estacas[ek].lancamentos++;
-      estacas[ek].qtd += q / est.length;
-      estacas[ek].pacotes.add(pid);
+    const est = lerLocalEstaca(getCSVField(r, 'Local_Estaca'));
+    if (!est.length) return;
+    est.forEach(e => {
+      if (!estacas[e.id]) return;
+      estacas[e.id].lancamentos++;
+      estacas[e.id].qtd += q / est.length;
+      estacas[e.id].pacotes.add(pid);
     });
   });
   return estacas;
 }
 
 function renderAvenida3D(rdosAtivos, pacotesAtivos) {
-  // desenho da avenida em perspectiva: só existe para obra com estacas por
-  // sentido. Nas demais, o bloco simplesmente não entra na página.
+  // desenho da via em perspectiva: só existe para obra estaqueada. Nas
+  // demais, o bloco simplesmente não entra na página.
   if (!temEstacas()) return '';
   const av = calcAvancoPorEstaca(rdosAtivos, pacotesAtivos);
   const todasEst = Object.values(av);
-  const cb = todasEst.filter(e => e.sentido === 'CB').sort((a,b) => a.num - b.num);
-  const bc = todasEst.filter(e => e.sentido === 'BC').sort((a,b) => a.num - b.num);
   const maxLanc = Math.max(1, ...todasEst.map(e => e.lancamentos));
   const ativas = todasEst.filter(e => e.lancamentos > 0).length;
   const total = todasEst.length;
   const inativas = total - ativas;
   const topEstaca = [...todasEst].sort((a,b) => b.lancamentos - a.lancamentos)[0];
-  function bar(e, sentido, i, totalN) {
+
+  function bar(e, pista, i, totalN) {
     const ratio = e.lancamentos / maxLanc;
     const height = e.lancamentos === 0 ? 6 : Math.max(8, 8 + ratio * 75);
     const left   = (i / Math.max(1, totalN - 1)) * 96 + 2;
     const dim    = e.lancamentos === 0 ? 'dim' : '';
-    const delay  = 500 + Math.floor(i * 15) + (sentido === 'bc' ? 80 : 0);
-    const title  = `${e.id} · ${e.lancamentos} RDO${e.lancamentos!==1?'s':''} · ${e.pacotes.size} pacote${e.pacotes.size!==1?'s':''}`;
-    return `<div class="bar3d ${sentido} ${dim}" style="left:${left.toFixed(2)}%;height:${height}px;animation-delay:${delay}ms" title="${title}"></div>`;
+    const delay  = 500 + Math.floor(i * 15) + (pista === 'bc' ? 80 : 0);
+    const title  = `${e.rot} · ${e.lancamentos} RDO${e.lancamentos!==1?'s':''} · ${e.pacotes.size} pacote${e.pacotes.size!==1?'s':''}`;
+    return `<div class="bar3d ${pista} ${dim}" style="left:${left.toFixed(2)}%;height:${height}px;animation-delay:${delay}ms" title="${title}"></div>`;
   }
-  const cbBars = cb.map((e, i) => bar(e, 'cb', i, cb.length)).join('');
-  const bcBars = bc.map((e, i) => bar(e, 'bc', i, bc.length)).join('');
+
+  /* A cena tem duas pistas — é o desenho da avenida de pista dupla. Cada
+     cena recebe até DOIS eixos: na Teotônio são os dois sentidos, nas Ruas
+     de Terra são duas ruas, uma em cada pista. Obra com mais eixos ganha
+     outra cena embaixo, de dois em dois; com um eixo só, a pista de baixo
+     fica vazia e o rótulo dela não é desenhado. */
+  const eixos = eixosDaObraAtiva();
+  const cenas = [];
+  for (let k = 0; k < eixos.length; k += 2) {
+    const par = eixos.slice(k, k + 2);
+    const lados = par.map((x, li) => {
+      const pista = li === 0 ? 'cb' : 'bc';
+      const lista = todasEst.filter(e => e.eixo === x.id).sort((a, b) => a.num - b.num);
+      return { x, pista, barras: lista.map((e, i) => bar(e, pista, i, lista.length)).join('') };
+    });
+    const rot = (l) => `<div class="scene-lane-label ${l.pista}">${l.pista === 'cb' ? '↑ ' : ''}<span class="acc">${escHtml(l.x.label)}</span> · E${l.x.ini}–E${l.x.fim}${l.pista === 'bc' ? ' ↓' : ''}</div>`;
+    cenas.push(`
+        <div class="scene-3d"${k ? ' style="margin-top:14px"' : ''}>
+          ${lados.map(rot).join('')}
+          <div class="scene-3d-stage">
+            <div class="road-3d">${lados.map(l => l.barras).join('')}</div>
+          </div>
+          <div class="scene-legend">
+            <span class="scene-legend-item"><span class="scene-legend-swatch"></span>altura = nº de RDOs</span>
+            <span class="scene-legend-item"><span class="scene-legend-swatch dim"></span>sem atividade</span>
+          </div>
+        </div>`);
+  }
+
   return `
     <div class="card stagger-item avenue-card" style="animation-delay:.20s">
       <div class="card-header">
         <div>
           <div class="card-title-lg">Trecho da obra · atividade por estaca</div>
-          <div class="card-title-sub">Av. Senador Teotônio Vilela · ${total} estacas · <strong style="color:var(--acc)">${ativas}</strong> com lançamentos${topEstaca && topEstaca.lancamentos > 0 ? ' · pico em <strong style="color:var(--text)">'+topEstaca.id+'</strong> ('+topEstaca.lancamentos+' RDOs)' : ''}</div>
+          <div class="card-title-sub">${escHtml(OBRA.nome || '')} · ${total} estacas · <strong style="color:var(--acc)">${ativas}</strong> com lançamentos${topEstaca && topEstaca.lancamentos > 0 ? ' · pico em <strong style="color:var(--text)">'+escHtml(topEstaca.rot)+'</strong> ('+topEstaca.lancamentos+' RDOs)' : ''}</div>
         </div>
         <div class="avenue-header-stats">
           <div class="avenue-meta-stat"><div class="avenue-meta-num">${ativas}</div><div class="avenue-meta-lbl">ativas</div></div>
           <div class="avenue-meta-stat"><div class="avenue-meta-num" style="color:var(--muted-2)">${inativas}</div><div class="avenue-meta-lbl">sem RDO</div></div>
         </div>
       </div>
-      <div class="card-body">
-        <div class="scene-3d">
-          <div class="scene-lane-label cb">↑ <span class="acc">Centro → Bairro</span> · E${CONFIG.estacasCB.ini}–E${CONFIG.estacasCB.fim}</div>
-          <div class="scene-3d-stage">
-            <div class="road-3d">${cbBars}${bcBars}</div>
-          </div>
-          <div class="scene-lane-label bc"><span class="acc">Bairro → Centro</span> · E${CONFIG.estacasBC.ini}–E${CONFIG.estacasBC.fim} ↓</div>
-          <div class="scene-legend">
-            <span class="scene-legend-item"><span class="scene-legend-swatch"></span>altura = nº de RDOs</span>
-            <span class="scene-legend-item"><span class="scene-legend-swatch dim"></span>sem atividade</span>
-          </div>
-        </div>
+      <div class="card-body">${cenas.join('')}
       </div>
     </div>
   `;
@@ -9143,20 +9388,14 @@ function corDaFrente(nome, alpha) {
   return 'oklch(' + l.toFixed(2) + ' 0.16 ' + hue + (alpha != null ? ' / ' + alpha : '') + ')';
 }
 
-/* Extrai as estacas de um lançamento. Mesma regra do resto do app: o
-   deslocamento "+10" sai antes, senão "E106+10" viraria a estaca E10. */
-function estacasDoLancamento(r) {
-  return String(getCSVField(r, 'Local_Estaca') || '')
-    .toUpperCase().replace(/\+\s*\d+/g, '').match(/E?\d{2,3}/g) || [];
-}
-
 /* Monta os pontos do gráfico: um por (lançamento × estaca citada).
-   Devolve separado por sentido, porque a avenida tem duas faixas de
-   numeração disjuntas (E099–E141 e E201–E244) e um eixo só deixaria um
-   vazio enorme no meio. */
+   Devolve separado POR EIXO — a avenida tem duas faixas de numeração
+   disjuntas (E099–E141 e E201–E244) e um gráfico só deixaria um vazio
+   enorme no meio; nas Ruas de Terra, duas ruas estaqueadas do zero
+   cairiam uma por cima da outra. */
 function dadosTempoCaminhamento() {
-  var faixa = { CB: CONFIG.estacasCB, BC: CONFIG.estacasBC };
-  var out = { CB: [], BC: [] };
+  var out = {};
+  eixosDaObraAtiva().forEach(function (x) { out[x.id] = []; });
 
   (STATE.rdoavanco || []).forEach(function (r) {
     var d = parseISODate(getCSVField(r, 'Data'));
@@ -9165,19 +9404,15 @@ function dadosTempoCaminhamento() {
     var pac = STATE.pacotes.find(function (p) { return getCSVField(p, 'ID') === pid; });
     var frente = (pac && getCSVField(pac, 'Frente')) || getCSVField(r, 'Frente') || 'Outros';
     var nomePac = (pac && getCSVField(pac, 'Pacote')) || pid || '—';
-    var ests = estacasDoLancamento(r);
+    var ests = lerLocalEstaca(getCSVField(r, 'Local_Estaca'));
     if (!ests.length) return;
     var q = num(getCSVField(r, 'Quantidade'));
     var qPorEstaca = q / ests.length;
 
     ests.forEach(function (e) {
-      var n = parseInt(String(e).replace(/^E/, ''), 10);
-      if (!isFinite(n)) return;
-      var sentido = (n >= faixa.CB.ini && n <= faixa.CB.fim) ? 'CB'
-                  : (n >= faixa.BC.ini && n <= faixa.BC.fim) ? 'BC' : null;
-      if (!sentido) return;   // estaca fora das faixas do contrato
-      out[sentido].push({
-        x: n, y: d.getTime(), q: qPorEstaca,
+      if (!out[e.eixo]) return;
+      out[e.eixo].push({
+        x: e.num, y: d.getTime(), q: qPorEstaca,
         frente: frente, pacote: nomePac,
         data: getCSVField(r, 'Data'),
         unidade: (pac && getCSVField(pac, 'Unidade Física')) || ''
@@ -9232,8 +9467,9 @@ function recarregarTempoCaminhamento() {
 
 function renderTempoCaminhamento() {
   var dados = dadosTempoCaminhamento();
-  var total = dados.CB.length + dados.BC.length;
-  var frentes = [].concat(dados.CB, dados.BC)
+  var todos = Object.keys(dados).reduce(function (a, k) { return a.concat(dados[k]); }, []);
+  var total = todos.length;
+  var frentes = todos
     .map(function (p) { return p.frente; })
     .filter(function (v, i, a) { return a.indexOf(v) === i; })
     .sort();
@@ -9259,8 +9495,9 @@ function renderTempoCaminhamento() {
           return '<button class="tc-chip ' + (TC.dias === o[0] ? 'on' : '') + '" onclick="tcSetDias(' + o[0] + ')">' + o[1] + '</button>';
         }).join('') +
       '</div>' +
-      blocoTC('CB', 'Sentido Centro→Bairro · E' + CONFIG.estacasCB.ini + '–E' + CONFIG.estacasCB.fim) +
-      blocoTC('BC', 'Sentido Bairro→Centro · E' + CONFIG.estacasBC.ini + '–E' + CONFIG.estacasBC.fim) +
+      eixosDaObraAtiva().map(function (x) {
+        return blocoTC(x.id, x.label + ' · E' + x.ini + '–E' + x.fim);
+      }).join('') +
       '<div class="tc-legenda">' + ic('info') +
         '<span>Cada bolha é um lançamento na estaca — quanto maior, maior a quantidade. ' +
         'A linha cheia é a frente de trabalho dia a dia: <b>quanto mais deitada, mais rápido a frente anda</b>. ' +
@@ -9268,12 +9505,12 @@ function renderTempoCaminhamento() {
   }
 
   function blocoTC(sent, label) {
-    if (!dados[sent].length) return '';                 // sentido sem lançamento nenhum
+    if (!dados[sent] || !dados[sent].length) return '';   // eixo sem lançamento nenhum
     var visiveis = filtrarTC(dados[sent]);
     var miolo = visiveis.length
       ? '<div class="tc-canvas-wrap"><canvas id="tc' + sent + '"></canvas></div>'
       : '<div class="tc-nada">' + ic('filtro') +
-        '<span>Nada neste sentido com o filtro atual' +
+        '<span>Nada neste trecho com o filtro atual' +
         (TC.frente ? ' — <b>' + escHtml(TC.frente) + '</b> não trabalhou neste trecho no período' : '') +
         '.</span></div>';
     return '<div class="tc-bloco">' +
@@ -9284,7 +9521,7 @@ function renderTempoCaminhamento() {
   return '<div class="card stagger-item" id="tcBloco" style="animation-delay:.05s">' +
     '<div class="card-header"><div>' +
       '<div class="card-title">' + ic('cronograma') + ' Tempo × Estaca</div>' +
-      '<div class="card-title-sub">Onde cada frente esteve, dia a dia, ao longo da avenida</div>' +
+      '<div class="card-title-sub">Onde cada frente esteve, dia a dia, ao longo do trecho</div>' +
     '</div></div>' +
     '<div class="card-body">' + corpo + '</div>' +
   '</div>';
@@ -9298,12 +9535,12 @@ async function montarTempoCaminhamento() {
   if (STATE.currentPage !== telaAntes) return;
   var dados = dadosTempoCaminhamento();
 
-  ['CB', 'BC'].forEach(function (sent) {
+  eixosDaObraAtiva().map(function (x) { return x.id; }).forEach(function (sent) {
     var el = document.getElementById('tc' + sent);
     if (window['tcChart' + sent]) { window['tcChart' + sent].destroy(); window['tcChart' + sent] = null; }
     if (!el) return;                       // filtro esvaziou: o render pôs o aviso no lugar do canvas
 
-    var pts = filtrarTC(dados[sent]);
+    var pts = filtrarTC(dados[sent] || []);
     if (!pts.length) return;
 
     var maxQ = Math.max.apply(null, pts.map(function (p) { return p.q; })) || 1;
@@ -9355,7 +9592,7 @@ async function montarTempoCaminhamento() {
       }
     };
 
-    var faixa = sent === 'CB' ? CONFIG.estacasCB : CONFIG.estacasBC;
+    var faixa = eixoPorId(sent) || { ini: 0, fim: 0 };
     var eixo = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#7a7570';
     var grade = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#e4e0d8';
 
@@ -9433,6 +9670,8 @@ function renderAvancoFisico() {
   });
   
   return `
+    ${renderCroquiEstacas()}
+
     <div class="card stagger-item">
       <div class="card-header">
         <div>
@@ -9493,16 +9732,143 @@ function renderAvancoFisico() {
   `;
 }
 
+/* ------------------------------------------------------------------
+   CROQUI DE ESTAQUEAMENTO
+   ------------------------------------------------------------------
+   O mapa em grade responde "quanto foi feito na estaca 7". Este responde
+   "onde fica a estaca 7" — que é a pergunta de quem lê o painel sem ter
+   estado no canteiro. O fundo é a própria planta do executivo, e cada
+   bolha está na coordenada que o projetista escreveu no desenho (ver
+   `ferramentas/croqui-estacas.py`); nada aqui é posição estimada.
+
+   Obra sem `croquis` no cadastro simplesmente não mostra o bloco.
+   ------------------------------------------------------------------ */
+const CROQUI = { sel: null };   // { eixo, num } da estaca aberta
+
+window.croquiSelecionar = function (eixo, num) {
+  const igual = CROQUI.sel && CROQUI.sel.eixo === eixo && CROQUI.sel.num === num;
+  CROQUI.sel = igual ? null : { eixo: eixo, num: num };   // clicar de novo fecha
+  const box = document.getElementById('croquiBloco');
+  if (box) box.outerHTML = renderCroquiEstacas();
+};
+
+/* Os lançamentos que citam esta estaca, do mais recente para trás. */
+function lancamentosNaEstaca(eixo, num) {
+  return (STATE.rdoavanco || []).filter(r => {
+    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    if (!pid || pid === 'OUTRO') return false;
+    return lerLocalEstaca(getCSVField(r, 'Local_Estaca'))
+      .some(e => e.eixo === eixo && e.num === num);
+  }).sort((a, b) => String(getCSVField(b, 'Data')).localeCompare(String(getCSVField(a, 'Data'))));
+}
+
+function renderCroquiEstacas() {
+  const croquis = (OBRA.croquis || []).filter(c => eixoPorId(c.eixo));
+  if (!croquis.length) return '';
+
+  const est = calcAvancoPorEstaca(STATE.rdoavanco || [], STATE.pacotes || []);
+  const maxLanc = Math.max(1, ...Object.values(est).map(e => e.lancamentos));
+
+  const bolha = (c, e) => {
+    const dado = est[chaveEstaca(e.n, c.eixo)];
+    const lanc = dado ? dado.lancamentos : 0;
+    const pacs = dado ? dado.pacotes.size : 0;
+    // Cinza = ninguém lançou nada ali ainda. Com produção, a cor escurece
+    // com o número de RDOs — é a mesma escala do mapa em grade.
+    const cor = lanc === 0
+      ? 'background:oklch(0.72 0 0 / .55);color:#fff'
+      : `background:oklch(${(0.86 - Math.min(lanc / maxLanc, 1) * 0.36).toFixed(2)} 0.17 38);color:#fff`;
+    const sel = CROQUI.sel && CROQUI.sel.eixo === c.eixo && CROQUI.sel.num === e.n ? ' on' : '';
+    const t = lanc === 0
+      ? `E${e.n} · sem lançamento`
+      : `E${e.n} · ${lanc} RDO${lanc !== 1 ? 's' : ''} · ${pacs} pacote${pacs !== 1 ? 's' : ''}`;
+    return `<div class="croqui-pt${sel}" style="left:${(e.x * 100).toFixed(2)}%;top:${(e.y * 100).toFixed(2)}%;${cor}"
+                 title="${escHtml(t)}" onclick="croquiSelecionar('${escHtml(c.eixo)}', ${e.n})">${e.n}</div>`;
+  };
+
+  const detalhe = () => {
+    if (!CROQUI.sel) return '';
+    const eixo = eixoPorId(CROQUI.sel.eixo);
+    const linhas = lancamentosNaEstaca(CROQUI.sel.eixo, CROQUI.sel.num);
+    const titulo = `Estaca E${CROQUI.sel.num} · ${escHtml(eixo ? eixo.label : CROQUI.sel.eixo)}`;
+    if (!linhas.length) {
+      return `<div style="margin-top:12px;padding:12px 14px;background:var(--bg);border-radius:var(--r);font-size:13px;color:var(--muted)">
+        <strong style="color:var(--text)">${titulo}</strong> — nenhum serviço lançado nesta estaca ainda.</div>`;
+    }
+    return `<div style="margin-top:12px;padding:12px 14px;background:var(--bg);border-radius:var(--r)">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">${titulo} — ${linhas.length} lançamento${linhas.length > 1 ? 's' : ''}</div>
+      ${linhas.slice(0, 12).map(r => {
+        const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+        const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid);
+        const un = p ? (getCSVField(p, 'Unidade Física') || '') : '';
+        const lado = lerLadoDaVia(getCSVField(r, 'Local_Estaca'));
+        return `<div style="display:flex;gap:10px;font-size:12px;padding:3px 0;border-top:1px solid var(--border)">
+          <span class="t-mono" style="color:var(--muted);white-space:nowrap">${escHtml(fmtData(getCSVField(r, 'Data')))}</span>
+          <span style="flex:1">${escHtml(p ? getCSVField(p, 'Pacote') : (getCSVField(r, 'Pacote_Nome') || pid))}${lado ? ` <span class="t-mono" style="color:var(--muted)">· ${escHtml(lado)}</span>` : ''}</span>
+          <span class="t-mono" style="white-space:nowrap">${fmtNum(num(getCSVField(r, 'Quantidade')), 2)} ${escHtml(un)}</span>
+        </div>`;
+      }).join('')}
+      ${linhas.length > 12 ? `<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ${linhas.length - 12} mais — veja no Histórico</div>` : ''}
+    </div>`;
+  };
+
+  return `
+    <div class="card stagger-item" id="croquiBloco">
+      <div class="card-header">
+        <div>
+          <div class="card-title">${ic('mapa')} Planta de estaqueamento</div>
+          <div class="card-title-sub">Onde fica cada estaca, na planta do projeto · clique numa estaca para ver o que foi lançado nela</div>
+        </div>
+      </div>
+      <div class="card-body">
+        ${croquis.map(c => {
+          const eixo = eixoPorId(c.eixo);
+          return `
+        <div style="margin-bottom:16px">
+          <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">
+            ${escHtml(eixo.label)} · E${eixo.ini}–E${eixo.fim}
+            <span style="text-transform:none;font-weight:400"> — prancha ${escHtml(c.prancha || '')}${c.disciplina ? ' (' + escHtml(c.disciplina) + ')' : ''}</span>
+          </div>
+          <!-- O aspect-ratio fica no CONTÊINER, não só na imagem: se a planta
+               não carregar (primeira abertura sem sinal, antes do cache do
+               service worker), a caixa guarda a forma e as estacas continuam
+               no lugar certo, cada uma na sua fração. -->
+          <div class="croqui" style="aspect-ratio:${c.largura} / ${c.altura}">
+            <img src="${escHtml(c.arquivo)}" width="${c.largura}" height="${c.altura}"
+                 alt="Planta da ${escHtml(eixo.label)} com o estaqueamento">
+            ${(c.estacas || []).map(e => bolha(c, e)).join('')}
+          </div>
+        </div>`;
+        }).join('')}
+        <div class="croqui-legenda">
+          <span><i style="background:oklch(0.72 0 0 / .55)"></i>sem lançamento</span>
+          <span><i style="background:oklch(0.78 0.17 38)"></i>com produção</span>
+          <span><i style="background:oklch(0.50 0.17 38)"></i>mais RDOs</span>
+        </div>
+        ${detalhe()}
+      </div>
+    </div>
+  `;
+}
+
 function renderHeatmap(av) {
   const estacas = listarEstacas();
   if (!estacas.length) {
     return `<div class="empty"><div class="empty-icon">${ic('mapa')}</div>
       <div class="empty-title">Mapa de estacas não se aplica a esta obra</div>
-      <div class="empty-sub">O mapa é montado sobre a numeração de estacas por sentido,
-        que hoje só a Av. Teotônio Vilela tem cadastrada.</div></div>`;
+      <div class="empty-sub">O mapa é montado sobre o estaqueamento declarado no
+        cadastro da obra (<code>eixos</code>), que esta ainda não tem.</div></div>`;
   }
-  const pacotesAtivos = Object.values(av).filter(a => a.pacote && getCSVField(a.pacote, 'Status') !== 'Histórico')
-    .filter(a => a.qtdExecutada > 0 || true).slice(0, 15); 
+  /* As linhas do mapa são os pacotes QUE TÊM produção lançada com estaca,
+     os de maior produção primeiro. Antes entravam os 15 primeiros pacotes
+     do cadastro, tivessem eles produção ou não — numa obra de 56 pacotes
+     isso enchia o mapa de linhas vazias e escondia justamente as que
+     tinham o que mostrar. */
+  const pacotesAtivos = Object.values(av)
+    .filter(a => a.pacote && getCSVField(a.pacote, 'Status') !== 'Histórico')
+    .filter(a => Object.keys(a.porEstaca || {}).length > 0)
+    .sort((a, b) => b.qtdExecutada - a.qtdExecutada)
+    .slice(0, 15);
   
   if (pacotesAtivos.length === 0) {
     return `<div class="empty"><div class="empty-icon">${ic('mapa')}</div><div class="empty-title">Mapa vazio</div><div class="empty-sub">Lance RDOs com estaca preenchida pra ver o mapa se construir</div></div>`;
@@ -9513,19 +9879,21 @@ function renderHeatmap(av) {
     maxPorPac[getCSVField(a.pacote, 'ID')] = Math.max(0, ...Object.values(a.porEstaca));
   });
   
-  const cb = estacas.filter(e => e.sentido === 'CB');
-  const bc = estacas.filter(e => e.sentido === 'BC');
-  
   function blocoHeatmap(lista, label) {
     if (lista.length === 0) return '';
+    /* Só os pacotes que trabalharam NESTE eixo. Sem isso, o bloco da
+       Astrogildo trazia as linhas dos serviços da Agrimensor, todas
+       vazias — e o mesmo valia para os dois sentidos da avenida. */
+    const doEixo = pacotesAtivos.filter(a => lista.some(e => (a.porEstaca[e.id] || 0) > 0));
+    if (!doEixo.length) return '';
     const colTemplate = `200px repeat(${lista.length}, minmax(28px, 1fr))`;
     return `
       <div style="margin-bottom:18px">
         <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">${label}</div>
         <div class="heatmap" style="grid-template-columns:${colTemplate}">
           <div class="hm-row-label" style="visibility:hidden">.</div>
-          ${lista.map(e => `<div class="hm-col-label">${escHtml(e.id)}</div>`).join('')}
-          ${pacotesAtivos.map(a => {
+          ${lista.map(e => `<div class="hm-col-label">${escHtml(e.rot)}</div>`).join('')}
+          ${doEixo.map(a => {
             const max = maxPorPac[getCSVField(a.pacote, 'ID')] || 1;
             return `
               <div class="hm-row-label">${escHtml(getCSVField(a.pacote, 'Pacote'))}</div>
@@ -9536,7 +9904,7 @@ function renderHeatmap(av) {
                   `background:oklch(${0.95 - intensity * 0.45} 0.18 38)` :
                   `background:var(--bg)`;
                 const color = intensity > 0.5 ? '#fff' : 'var(--muted)';
-                const title = `${e.id} · ${escHtml(getCSVField(a.pacote, 'Pacote'))}: ${fmtNum(v, 1)} ${escHtml(getCSVField(a.pacote, 'Unidade Física')||'')}`;
+                const title = `${e.rot} · ${escHtml(getCSVField(a.pacote, 'Pacote'))}: ${fmtNum(v, 1)} ${escHtml(getCSVField(a.pacote, 'Unidade Física')||'')}`;
                 return `<div class="hm-cell" style="${bg};color:${color}" title="${title}">${v > 0 ? fmtNum(v, 0) : ''}</div>`;
               }).join('')}
             `;
@@ -9546,10 +9914,13 @@ function renderHeatmap(av) {
     `;
   }
   
+  // Um bloco por eixo: os dois sentidos da avenida, ou uma faixa por rua.
   return `
     <div class="heatmap-wrap">
-      ${blocoHeatmap(cb, `Sentido Centro→Bairro · E${CONFIG.estacasCB.ini}–E${CONFIG.estacasCB.fim}`)}
-      ${blocoHeatmap(bc, `Sentido Bairro→Centro · E${CONFIG.estacasBC.ini}–E${CONFIG.estacasBC.fim}`)}
+      ${eixosDaObraAtiva().map(x => blocoHeatmap(
+          estacas.filter(e => e.eixo === x.id),
+          `${escHtml(x.label)} · E${x.ini}–E${x.fim}`
+        )).join('')}
     </div>
   `;
 }
@@ -11017,8 +11388,9 @@ function renderHistoricoServicos() {
       const apontador  = getCSVField(r, 'Apontador') || '';
       const obs        = getCSVField(r, 'Observacao') || '';
 
-      // Parse "E99 a E141 (CB)" or "E99 (CB)" back to components
-      let estIni = '', estFim = '', sentido = 'CB';
+      // Desmonta "E99 a E141 (CB)" / "E4 a E7 (AGR) LD" de volta em campos
+      let estIni = '', estFim = '', sentido = eixoPadrao();
+      const lado = lerLadoDaVia(localEstaca);
       const m1 = localEstaca.match(/^(E\d+)\s+a\s+(E\d+)\s+\((\w+)\)/);
       const m2 = localEstaca.match(/^(E\d+)\s+\((\w+)\)/);
       if (m1) { estIni = m1[1]; estFim = m1[2]; sentido = m1[3]; }
@@ -11085,20 +11457,27 @@ function renderHistoricoServicos() {
                   <input type="text" inputmode="decimal" data-numeric id="hedit-qtd-${idx}" value="${esc(qtd)}" autocomplete="off" style="width:90px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
                 </div>
                 <div>
-                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Sentido</div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">${esc(CONFIG.eixoRotulo)}</div>
                   <select id="hedit-sentido-${idx}" style="padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
-                    <option${sentido==='CB'?' selected':''}>CB</option>
-                    <option${sentido==='BC'?' selected':''}>BC</option>
+                    ${eixosDaObraAtiva().map(x => `<option value="${esc(x.id)}"${sentido===x.id?' selected':''}>${esc(x.label)}</option>`).join('')}
                   </select>
                 </div>
                 <div>
                   <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Est. Ini</div>
-                  <input type="text" id="hedit-estini-${idx}" value="${esc(estIni)}" placeholder="E99" style="width:68px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                  <input type="text" id="hedit-estini-${idx}" value="${esc(estIni)}" placeholder="E${(eixoPorId(sentido)||{ini:''}).ini}" style="width:68px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
                 </div>
                 <div>
                   <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Est. Fim</div>
-                  <input type="text" id="hedit-estfim-${idx}" value="${esc(estFim)}" placeholder="E141" style="width:68px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                  <input type="text" id="hedit-estfim-${idx}" value="${esc(estFim)}" placeholder="E${(eixoPorId(sentido)||{fim:''}).fim}" style="width:68px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
                 </div>
+                ${(CONFIG.lados || []).length ? `
+                <div>
+                  <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Lado</div>
+                  <select id="hedit-lado-${idx}" style="padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
+                    <option value="">—</option>
+                    ${CONFIG.lados.map(l => `<option value="${esc(l.id)}"${lado===l.id?' selected':''}>${esc(l.id)}</option>`).join('')}
+                  </select>
+                </div>` : ''}
                 <div>
                   <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:3px">Equipe</div>
                   <input type="text" id="hedit-equipe-${idx}" value="${esc(equipe)}" style="width:110px;padding:4px 7px;font-size:12px;border:1px solid var(--border);border-radius:4px">
@@ -11304,9 +11683,10 @@ window.histSalvarEdicao = async function(idx) {
   // numCampo() e não parseFloat(): "22,26" no parseFloat vira 22 (ele para na
   // vírgula), e a correção do serviço saía menor do que o apontador digitou.
   const qtd       = qtdTexto === '' ? NaN : numCampo(qtdTexto);
-  const sentido   = document.getElementById(`hedit-sentido-${idx}`)?.value || 'CB';
+  const sentido   = document.getElementById(`hedit-sentido-${idx}`)?.value || eixoPadrao();
   const estIni    = (document.getElementById(`hedit-estini-${idx}`)?.value || '').trim();
   const estFim    = (document.getElementById(`hedit-estfim-${idx}`)?.value || '').trim();
+  const lado      = (document.getElementById(`hedit-lado-${idx}`)?.value || '').trim();
   const equipe    = (document.getElementById(`hedit-equipe-${idx}`)?.value || '').trim();
   const apontador = (document.getElementById(`hedit-apontador-${idx}`)?.value || '').trim();
   const obs       = (document.getElementById(`hedit-obs-${idx}`)?.value || '').trim();
@@ -11316,6 +11696,7 @@ window.histSalvarEdicao = async function(idx) {
   let localEstaca = '';
   if (estIni && estFim) localEstaca = `${estIni} a ${estFim} (${sentido})`;
   else if (estIni) localEstaca = `${estIni} (${sentido})`;
+  if (localEstaca && lado) localEstaca += ' ' + lado;
 
   const p = STATE.pacotes.find(pp => String(getCSVField(pp, 'ID')) === String(pacoteId));
   const pacoteNome = p ? getCSVField(p, 'Pacote') : getCSVField(r, 'Pacote_Nome');
@@ -12448,7 +12829,7 @@ function defaultDraft() {
     apontador,
     observacaoGeral: '',
     servicos: [
-      { frente: '', pacoteId: '', sentido: 'CB', estacaIni: '', estacaFim: '', quantidade: '', equipe: '', observacao: '' }
+      { frente: '', pacoteId: '', sentido: eixoPadrao(), estacaIni: '', estacaFim: '', lado: '', quantidade: '', equipe: '', observacao: '' }
     ],
     outrosServicos: []
   };
@@ -12457,11 +12838,7 @@ function defaultDraft() {
 function renderRDO() {
   if (!STATE.draft) STATE.draft = loadDraft() || defaultDraft();
   const d = STATE.draft;
-  
-  const estacasCB = []; for (let i = CONFIG.estacasCB.ini; i <= CONFIG.estacasCB.fim; i++) estacasCB.push('E' + i);
-  const estacasBC = []; for (let i = CONFIG.estacasBC.ini; i <= CONFIG.estacasBC.fim; i++) estacasBC.push('E' + i);
-  const estacasUsar = d.sentido === 'CB' ? estacasCB : estacasBC;
-  
+
   const frentes = [...new Set(STATE.pacotes
     .filter(p => getCSVField(p, 'Status') !== 'Histórico' && getCSVField(p, 'Frente'))
     .map(p => getCSVField(p, 'Frente')))].sort();
@@ -12600,18 +12977,87 @@ function etapaAnteriorDe(pid) {
   return STATE.pacotes.some(p => getCSVField(p, 'ID') === anterior) ? anterior : null;
 }
 
+/* O pacote já sabe em que rua está — "Base de brita — Astrogildo Pereira"
+   nasce da coluna Rua do cadastro. Quando sabe, o eixo do lançamento vem
+   dele: o apontador não diz duas vezes onde está, e não há como registrar
+   a produção de uma rua no estaqueamento da outra. */
+function eixoDoPacote(pac) {
+  if (!pac) return '';
+  const rua = String(getCSVField(pac, 'Rua') || '').trim().toLowerCase();
+  if (!rua) return '';
+  const e = eixosDaObraAtiva().find(x => String(x.label).trim().toLowerCase() === rua);
+  return e ? e.id : '';
+}
+
+/* Em que eixo este serviço do rascunho está. Uma fonte só, usada pelo
+   formulário, pela validação e pela hora de gravar — se cada um decidisse
+   por conta, a tela mostraria uma rua e o lançamento sairia com outra. */
+function eixoDoServico(s) {
+  const pac = STATE.pacotes.find(p => getCSVField(p, 'ID') === s.pacoteId);
+  const auto = eixoDoPacote(pac);
+  if (auto) return auto;
+  return eixoPorId(s.sentido) ? String(s.sentido).toUpperCase() : eixoPadrao();
+}
+
 function renderServicoRow(s, idx, frentes) {
-  const pacotesDaFrente = s.frente ? 
+  const pacotesDaFrente = s.frente ?
     STATE.pacotes.filter(p => getCSVField(p, 'Frente') === s.frente && getCSVField(p, 'Status') !== 'Histórico') :
     [];
   const pacoteSelecionado = STATE.pacotes.find(p => getCSVField(p, 'ID') === s.pacoteId);
   const unidade = pacoteSelecionado ? (getCSVField(pacoteSelecionado, 'Unidade Física') || '') : '';
-  
-  const sentido = s.sentido || 'CB';
-  const estacasCB = []; for (let i = CONFIG.estacasCB.ini; i <= CONFIG.estacasCB.fim; i++) estacasCB.push('E' + i);
-  const estacasBC = []; for (let i = CONFIG.estacasBC.ini; i <= CONFIG.estacasBC.fim; i++) estacasBC.push('E' + i);
-  const estacasUsar = sentido === 'CB' ? estacasCB : estacasBC;
-  
+
+  const eixos = eixosDaObraAtiva();
+  const eixoAuto = eixoDoPacote(pacoteSelecionado);
+  const sentido = eixoDoServico(s);
+  const faixa = eixoPorId(sentido);
+  const estacasUsar = [];
+  if (faixa) for (let i = faixa.ini; i <= faixa.fim; i++) estacasUsar.push('E' + i);
+
+  /* Obra sem estaqueamento declarado não pergunta estaca nenhuma — o
+     campo ficaria com uma lista vazia e a validação exigiria preencher
+     o impossível. */
+  const campoEixo = !eixos.length ? '' : (eixoAuto ? `
+        <div class="field">
+          <label>${escHtml(CONFIG.eixoRotulo)}</label>
+          <div style="padding:9px 11px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);font-size:13px">${escHtml(faixa ? faixa.label : eixoAuto)}</div>
+          <div style="font-size:11px;margin-top:3px;color:var(--muted)">definido pelo serviço escolhido</div>
+        </div>` : `
+        <div class="field">
+          <label>${escHtml(CONFIG.eixoRotulo)}</label>
+          <select data-svc="${idx}" data-field="sentido">
+            ${eixos.map(x => `<option value="${escHtml(x.id)}" ${sentido===x.id?'selected':''}>${escHtml(x.label)} (E${x.ini}–E${x.fim})</option>`).join('')}
+          </select>
+        </div>`);
+
+  const camposEstaca = !eixos.length ? '' : `
+        <div class="field">
+          <label>Estaca início</label>
+          <select data-svc="${idx}" data-field="estacaIni">
+            <option value="">— início —</option>
+            ${estacasUsar.map(e => `<option ${s.estacaIni===e?'selected':''}>${e}</option>`).join('')}
+          </select>
+        </div>
+        <div class="field">
+          <label>Estaca fim</label>
+          <select data-svc="${idx}" data-field="estacaFim">
+            <option value="">— fim —</option>
+            ${estacasUsar.map(e => `<option ${s.estacaFim===e?'selected':''}>${e}</option>`).join('')}
+          </select>
+        </div>`;
+
+  /* Meia pista é meio serviço: a guia da E4 à E7 pode ser 60 m ou 120 m
+     conforme o lado, e sem isso a medição não separa o que já foi medido
+     do que falta no outro lado. Só aparece na obra que declarou `lados`. */
+  const lados = (CONFIG.lados || []);
+  const campoLado = !lados.length ? '' : `
+        <div class="field">
+          <label>Lado da via</label>
+          <select data-svc="${idx}" data-field="lado">
+            <option value="">— escolher —</option>
+            ${lados.map(l => `<option value="${escHtml(l.id)}" ${s.lado===l.id?'selected':''}>${escHtml(l.label)} (${escHtml(l.id)})</option>`).join('')}
+          </select>
+        </div>`;
+
   return `
     <div class="servico-row" data-idx="${idx}">
       <span class="row-num">SERVIÇO ${idx + 1}</span>
@@ -12640,27 +13086,9 @@ function renderServicoRow(s, idx, frentes) {
             return obs ? `<div style="font-size:11px;margin-top:3px;color:var(--muted)">${escHtml(obs)}</div>` : '';
           })()}
         </div>
-        <div class="field">
-          <label>Sentido da via</label>
-          <select data-svc="${idx}" data-field="sentido">
-            <option value="CB" ${sentido==='CB'?'selected':''}>Centro→Bairro (E${CONFIG.estacasCB.ini}–E${CONFIG.estacasCB.fim})</option>
-            <option value="BC" ${sentido==='BC'?'selected':''}>Bairro→Centro (E${CONFIG.estacasBC.ini}–E${CONFIG.estacasBC.fim})</option>
-          </select>
-        </div>
-        <div class="field">
-          <label>Estaca início</label>
-          <select data-svc="${idx}" data-field="estacaIni">
-            <option value="">— início —</option>
-            ${estacasUsar.map(e => `<option ${s.estacaIni===e?'selected':''}>${e}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field">
-          <label>Estaca fim</label>
-          <select data-svc="${idx}" data-field="estacaFim">
-            <option value="">— fim —</option>
-            ${estacasUsar.map(e => `<option ${s.estacaFim===e?'selected':''}>${e}</option>`).join('')}
-          </select>
-        </div>
+        ${campoEixo}
+        ${camposEstaca}
+        ${campoLado}
         <div class="field">
           <label>Quantidade ${unidade ? `(${unidade})` : ''}</label>
           <!-- type=text + inputmode=decimal, e NÃO type=number: com type=number
@@ -12776,6 +13204,19 @@ function svcInputHandler(ev) {
     rerenderServicoRow(idx);
   }
   if (field === 'pacoteId') {
+    /* Trocar de pacote pode trocar o eixo junto (o pacote traz a rua). A
+       estaca escolhida era da rua anterior e pode nem existir na nova —
+       melhor pedir de novo do que gravar E15 numa rua que vai só até a
+       E12. */
+    const svc = STATE.draft.servicos[idx];
+    const faixa = eixoPorId(eixoDoServico(svc));
+    const fora = (v) => {
+      if (!v) return false;
+      const n = parseInt(String(v).replace(/^E/i, ''), 10);
+      return !faixa || !isFinite(n) || n < faixa.ini || n > faixa.fim;
+    };
+    if (fora(svc.estacaIni)) svc.estacaIni = '';
+    if (fora(svc.estacaFim)) svc.estacaFim = '';
     rerenderServicoRow(idx);
   }
   if (field === 'sentido') {
@@ -12809,8 +13250,11 @@ function adicionarServico() {
   const ultimo = STATE.draft.servicos[STATE.draft.servicos.length - 1];
   STATE.draft.servicos.push({
     frente: '', pacoteId: '',
-    sentido: ultimo ? ultimo.sentido : 'CB',
+    sentido: (ultimo && ultimo.sentido) ? ultimo.sentido : eixoPadrao(),
     estacaIni: '', estacaFim: '',
+    // o lado costuma ser o mesmo da linha anterior: a equipe está naquele
+    // lado da rua o dia inteiro
+    lado: (ultimo && ultimo.lado) ? ultimo.lado : '',
     quantidade: '', equipe: '', observacao: ''
   });
   saveDraft(STATE.draft);
@@ -12844,15 +13288,15 @@ window.copiarServicosDeOntem = function() {
   STATE.draft.servicos = doDia.map(r => {
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
     const pac = STATE.pacotes.find(p => getCSVField(p, 'ID') === pid);
-    const loc = String(getCSVField(r, 'Local_Estaca') || '');
-    const mSent = loc.match(/\((CB|BC)\)/i);
-    const mEst = loc.toUpperCase().replace(/\+\s*\d+/g, '').match(/E\d{2,3}/g) || [];
+    const loc = getCSVField(r, 'Local_Estaca');
+    const est = lerLocalEstaca(loc);
     return {
       frente: pac ? getCSVField(pac, 'Frente') : '',
       pacoteId: pid,
-      sentido: mSent ? mSent[1].toUpperCase() : 'CB',
-      estacaIni: mEst[0] || '',
-      estacaFim: mEst[1] || mEst[0] || '',
+      sentido: est.length ? est[0].eixo : eixoPadrao(),
+      estacaIni: est.length ? est[0].rot : '',
+      estacaFim: est.length ? est[est.length - 1].rot : '',
+      lado: lerLadoDaVia(loc),
       quantidade: '',
       equipe: getCSVField(r, 'Equipe') || getCSVField(r, 'Subcontratado') || '',
       observacao: ''
@@ -12919,12 +13363,22 @@ function validarRDO(d) {
     erros.push('Adicione pelo menos 1 serviço com pacote e quantidade > 0, ou 1 outro serviço descrito');
     return erros;
   }
-  for (let i = 0; i < d.servicos.length; i++) {
-    const s = d.servicos[i];
-    if (s.pacoteId && numCampo(s.quantidade) > 0) {
-      if (!s.estacaIni || !s.estacaFim) {
-        erros.push(`Serviço ${i+1}: estaca início e fim obrigatórias`);
-        break;
+  // Estaca só é obrigatória onde existe estaqueamento: obra sem eixos
+  // cadastrados não mostra o campo, e exigi-lo travaria o lançamento.
+  if (temEstacas()) {
+    for (let i = 0; i < d.servicos.length; i++) {
+      const s = d.servicos[i];
+      if (s.pacoteId && numCampo(s.quantidade) > 0) {
+        if (!s.estacaIni || !s.estacaFim) {
+          erros.push(`Serviço ${i+1}: estaca início e fim obrigatórias`);
+          break;
+        }
+        // Onde o lado é perguntado, ele é obrigatório: em branco, a
+        // quantidade fica sem metade da informação que a define.
+        if ((CONFIG.lados || []).length && !s.lado) {
+          erros.push(`Serviço ${i+1}: informe o lado da via`);
+          break;
+        }
       }
     }
   }
@@ -12943,9 +13397,10 @@ function destacarCamposRDO(d) {
   if (!d.apontador || !d.apontador.trim()) marcar('[data-draft="apontador"]');
   for (let i = 0; i < d.servicos.length; i++) {
     const s = d.servicos[i];
-    if (s.pacoteId && numCampo(s.quantidade) > 0 && (!s.estacaIni || !s.estacaFim)) {
+    if (temEstacas() && s.pacoteId && numCampo(s.quantidade) > 0) {
       if (!s.estacaIni) marcar(`[data-svc="${i}"][data-field="estacaIni"]`);
       if (!s.estacaFim) marcar(`[data-svc="${i}"][data-field="estacaFim"]`);
+      if ((CONFIG.lados || []).length && !s.lado) marcar(`[data-svc="${i}"][data-field="lado"]`);
     }
   }
   if (primeiro) primeiro.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -12982,9 +13437,14 @@ async function salvarRDO() {
     .map(s => {
       const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === s.pacoteId);
       const obsCompleta = [d.observacaoGeral, s.observacao].filter(x => x && x.trim()).join(' · ');
+      // O eixo vai gravado entre parênteses: é ele que diz de qual rua (ou
+      // de qual sentido da avenida) é a estaca lida depois. O lado da via,
+      // quando a obra o pede, vem logo em seguida: "E4 a E7 (AGR) LD".
+      const eixoSvc = eixoDoServico(s);
       let localEstaca = '';
-      if (s.estacaIni && s.estacaFim) localEstaca = `${s.estacaIni} a ${s.estacaFim} (${s.sentido||'CB'})`;
-      else if (s.estacaIni) localEstaca = `${s.estacaIni} (${s.sentido||'CB'})`;
+      if (s.estacaIni && s.estacaFim) localEstaca = `${s.estacaIni} a ${s.estacaFim} (${eixoSvc})`;
+      else if (s.estacaIni) localEstaca = `${s.estacaIni} (${eixoSvc})`;
+      if (localEstaca && s.lado) localEstaca += ' ' + s.lado;
       // O id sai daqui, não do servidor: é ele que amarra a foto ao serviço
       // (a foto sobe depois que a linha já foi gravada). Mesmo formato que o
       // backend geraria, para não quebrar as limpezas por prefixo de data.
