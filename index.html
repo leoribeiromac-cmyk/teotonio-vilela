@@ -72,22 +72,42 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=38"></script>
-<script src="dados/ruas-de-terra.js?v=38"></script>
+<script src="dados/ranario.js?v=39"></script>
+<script src="dados/ruas-de-terra.js?v=39"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=38"></script>
+<script src="dados/teotonio-muros.js?v=39"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=38"></script>
-<script src="js/nf/adaptador.js?v=38"></script>
-<script src="js/nf/notas.js?v=38"></script>
-<script src="js/equip/equipamentos.js?v=38"></script>
+<script src="js/ui/icones.js?v=39"></script>
+<script src="js/nf/adaptador.js?v=39"></script>
+<script src="js/nf/notas.js?v=39"></script>
+<script src="js/equip/equipamentos.js?v=39"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
+  /* ----------------------------------------------------------------
+     ÁREA SEGURA (notch / barra de status / barra de gestos)
+     ----------------------------------------------------------------
+     Instalado na tela de início do iPhone, o app abre em tela cheia:
+     `viewport-fit=cover` + `apple-mobile-web-app-status-bar-style`
+     translúcido fazem o conteúdo passar POR BAIXO da barra de status.
+     Sem reservar esse espaço, a barra do topo — onde mora o botão
+     ENTRAR — fica escondida atrás do relógio e da bateria, e o toque
+     nem chega na página: o iOS entende como toque na barra de status
+     e só rola a tela para o começo. Era isso que impedia o login.
+
+     Os tokens existem para que a reserva seja TESTÁVEL: o env() não
+     tem como ser simulado no navegador de teste, mas `--sat` sim
+     (ver tests/area-segura.ui.test.js).
+     ---------------------------------------------------------------- */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+
   /* Tema Canteiro - paleta terra/terracota */
   --bg:#f5f3ef;
   --bg-2:#eeebe5;
@@ -208,7 +228,8 @@
     display: flex; position: fixed; bottom: 0; left: 0; right: 0;
     background: var(--sidebar-bg); border-top: 1px solid var(--sidebar-border);
     z-index: 999; justify-content: space-around; align-items: stretch;
-    padding-bottom: env(safe-area-inset-bottom, 0px);
+    padding-bottom: var(--sab);
+    padding-left: var(--sal); padding-right: var(--sar);
     box-shadow: 0 -4px 18px rgba(0,0,0,.22);
   }
   .bottom-nav-item {
@@ -226,7 +247,7 @@
   .bottom-nav-item .nav-icon { display: flex; font-size: 21px; line-height: 1 }
   .bottom-nav-item:active { background: rgba(127,127,127,.14) }
   /* a barra não pode tapar o fim da página */
-  .page { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important }
+  .page { padding-bottom: calc(84px + var(--sab)) !important }
 }
 
 /* ============================================================
@@ -437,6 +458,12 @@ html,body{
 }
 .mono{font-family:'JetBrains Mono',monospace}
 
+/* ver o comentário da faixa no <body> */
+.faixa-status{
+  position:fixed;top:0;left:0;right:0;height:var(--sat);
+  background:var(--sidebar-bg);z-index:1200;pointer-events:none;
+}
+
 /* ------------------------------------------------------------------
    ÍCONES (js/ui/icones.js). Um conjunto só, traço de 1.7 na grade de
    24, cor herdada do texto — some o emoji de cada aparelho e entra o
@@ -613,6 +640,8 @@ html,body{
 .proj-visor.cheia{
   position:fixed;inset:0;z-index:1150;margin:0;border-radius:0;
   display:flex;flex-direction:column;max-height:none;
+  /* o cabeçalho do visor traz o botão de sair da tela cheia */
+  padding-top:var(--sat);padding-bottom:var(--sab);
 }
 .proj-visor.cheia .proj-mapa{flex:1;height:auto;border-radius:0}
 .proj-visor.cheia .proj-dica{display:none}
@@ -749,8 +778,13 @@ body.proj-cheia-ativa{overflow:hidden}
 /* ===================== MAIN ===================== */
 .main{flex:1;overflow-y:auto;min-width:0;display:flex;flex-direction:column;background:var(--bg)}
 
+/* A altura SOMA a área segura em vez de descontá-la (box-sizing é
+   border-box): a barra continua com 60px de conteúdo clicável e o que
+   cresce é a faixa pintada atrás do relógio do iPhone. */
 .topbar{
-  padding:0 28px;height:60px;background:var(--surface);
+  padding:var(--sat) calc(28px + var(--sar)) 0 calc(28px + var(--sal));
+  height:calc(60px + var(--sat));
+  background:var(--surface);
   border-bottom:1px solid var(--border);
   display:flex;align-items:center;justify-content:space-between;
   flex-shrink:0;gap:14px;position:sticky;top:0;z-index:5;
@@ -992,7 +1026,8 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .btn-add-servico:hover{border-color:var(--pri);color:var(--pri);background:var(--pri-l)}
 
 /* ===================== TOAST ===================== */
-.toast-wrap{position:fixed;top:20px;right:20px;z-index:1000;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+.toast-wrap{position:fixed;top:calc(20px + var(--sat));right:calc(20px + var(--sar));z-index:1000;
+  display:flex;flex-direction:column;gap:8px;pointer-events:none}
 .toast{
   background:var(--surface);border:1px solid var(--border);
   padding:12px 18px;border-radius:var(--r);box-shadow:var(--sh-lg);
@@ -1030,7 +1065,7 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
    tela: é recado, não interrupção — dá para ignorar e seguir lançando. */
 #swUpdateBanner{
   position:fixed;right:16px;left:auto;z-index:1200;
-  bottom:calc(78px + env(safe-area-inset-bottom,0px));
+  bottom:calc(78px + var(--sab));
   display:flex;align-items:center;gap:10px;
   background:var(--acc);color:#fff;padding:11px 12px 11px 16px;
   border-radius:12px;box-shadow:0 8px 26px rgba(0,0,0,.3);
@@ -1064,7 +1099,8 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   background:radial-gradient(120% 90% at 15% 0%, #2a231c 0%, #1a1612 55%, #100d0a 100%);
   color:#f5efe6;
 }
-#apres .ap-top{display:flex;align-items:center;gap:12px;padding:18px 28px;flex-shrink:0}
+#apres .ap-top{display:flex;align-items:center;gap:12px;flex-shrink:0;
+  padding:calc(18px + var(--sat)) calc(28px + var(--sar)) 18px calc(28px + var(--sal))}
 #apres .ap-top-marca{
   width:38px;height:38px;border-radius:10px;background:var(--acc);color:#fff;
   display:flex;align-items:center;justify-content:center;flex-shrink:0;
@@ -1164,7 +1200,7 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   letter-spacing:.22em;text-transform:uppercase;color:rgba(245,239,230,.45)}
 
 #apres .ap-ctrl{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;
-  padding:14px 20px calc(16px + env(safe-area-inset-bottom,0px));flex-shrink:0}
+  padding:14px 20px calc(16px + var(--sab));flex-shrink:0}
 #apres .ap-ctrl button{
   display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:8px 16px;
   border-radius:9px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);
@@ -1173,7 +1209,7 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 #apres .ap-ctrl button:hover{background:rgba(255,255,255,.13)}
 #apres .ap-ctrl button .ic{width:16px;height:16px;vertical-align:0}
 @media (max-width:640px){
-  #apres .ap-top{padding:12px 16px}
+  #apres .ap-top{padding:calc(12px + var(--sat)) calc(16px + var(--sar)) 12px calc(16px + var(--sal))}
   #apres .ap-prog{max-width:100%;order:3;width:100%;justify-content:flex-start;margin-left:0}
   #apres .ap-tab{font-size:13px}
   #apres .ap-tab td,#apres .ap-tab th{padding-left:6px;padding-right:6px}
@@ -1301,12 +1337,16 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   /* A gaveta abre POR CIMA da barra inferior (z-index 999): sem isso a
      barra tapava o rodapé do menu — justo onde ficam entrar/sair e a
      escolha de tema. */
+  /* A gaveta cobre a tela inteira, inclusive a faixa da barra de status:
+     sem o padding, o nome da obra e o primeiro item do menu nascem
+     debaixo do relógio do iPhone. */
   .sidebar{
     position:fixed;left:0;top:0;height:100%;z-index:1001;
+    padding-top:var(--sat);padding-left:var(--sal);
     transform:translateX(-100%);box-shadow:var(--sh-lg);
   }
   .sidebar.open{transform:translateX(0)}
-  .sidebar .sync-block{padding-bottom:calc(16px + env(safe-area-inset-bottom, 0px))}
+  .sidebar .sync-block{padding-bottom:calc(16px + var(--sab))}
   .sidebar-overlay{
     display:block;position:fixed;inset:0;
     background:rgba(0,0,0,.4);z-index:1000;
@@ -1314,7 +1354,7 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   }
   .sidebar-overlay.open{opacity:1;pointer-events:auto}
   .page{padding:14px}
-  .topbar{padding:12px 16px}
+  .topbar{padding:var(--sat) calc(16px + var(--sar)) 0 calc(16px + var(--sal))}
   .topbar-title{font-size:15px}
   .card-body{padding:14px 16px}
   .kpi-card{padding:14px}
@@ -1915,7 +1955,11 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 
 /* ===== Topbar mobile ===== */
 @media (max-width: 768px) {
-  .topbar { height: 56px; padding: 0 12px; gap: 8px; }
+  .topbar {
+    height: calc(56px + var(--sat));
+    padding: var(--sat) calc(12px + var(--sar)) 0 calc(12px + var(--sal));
+    gap: 8px;
+  }
   .topbar-title { font-size: 14px; line-height: 1.15; }
   .topbar-sub { font-size: 11px; }
   .topbar > div:last-child { gap: 4px; }
@@ -2191,7 +2235,8 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
    modal e comia o pé de Cadastros e do Painel. Abaixo do toast (1100) e das
    confirmações do app (9999), que precisam aparecer sobre ele. */
 .eq-modal{position:fixed;inset:0;z-index:1050;display:flex;align-items:flex-start;justify-content:center;
-  background:rgba(0,0,0,.45);padding:16px;overflow-y:auto}
+  background:rgba(0,0,0,.45);overflow-y:auto;
+  padding:calc(16px + var(--sat)) calc(16px + var(--sar)) calc(16px + var(--sab)) calc(16px + var(--sal))}
 .eq-modal-caixa{background:var(--surface);border-radius:var(--r-lg);width:100%;margin:auto;
   box-shadow:var(--sh-lg);max-height:92vh;display:flex;flex-direction:column}
 .eq-modal-topo{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;
@@ -2245,7 +2290,7 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 
   /* 58 px é a barra de navegação de baixo: a faixa do botão encosta nela,
      senão sobra uma fresta com meia linha do formulário passando por trás. */
-  .eq-enviar{position:sticky;bottom:calc(58px + env(safe-area-inset-bottom,0px));
+  .eq-enviar{position:sticky;bottom:calc(58px + var(--sab));
     z-index:4;padding:12px 0 0;margin-top:10px;background:var(--surface)}
   .eq-enviar .btn{margin-bottom:10px}
   /* e sem isto o campo que passa por trás do botão sai cortado ao meio */
@@ -2262,7 +2307,7 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   /* o `margin:auto` da versão de mesa centraliza a caixa e a deixa do
      tamanho do conteúdo; no celular ela toma a tela toda */
   .eq-modal-caixa{max-width:none!important;max-height:100%;height:100%;border-radius:0;margin:0}
-  .eq-modal-corpo{padding-bottom:calc(24px + env(safe-area-inset-bottom,0px))}
+  .eq-modal-corpo{padding-bottom:calc(24px + var(--sab))}
   .eq-modal-rodape .btn{flex:1;justify-content:center}
   .eq-lista{max-height:none}
   .eq-med-linha{grid-template-columns:1fr}
@@ -2325,6 +2370,12 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 </style>
 </head>
 <body>
+<!-- Faixa pintada atrás da barra de status do iPhone. Em tela cheia o iOS
+     desenha relógio e bateria em BRANCO, e no tema claro isso sumia sobre a
+     barra branca do topo. A faixa é escura como a gaveta, então o relógio se
+     lê nos dois temas. Fora do iPhone ela tem altura zero e não existe na
+     prática; pointer-events:none garante que nunca rouba um toque. -->
+<div class="faixa-status" aria-hidden="true"></div>
 <div id="root"></div>
 <div class="toast-wrap" id="toastWrap"></div>
 
@@ -3646,7 +3697,7 @@ window.abrirConfigIA = function() {
   const atual = (localStorage.getItem(GEMINI_KEY_LS) || '').trim();
   const modal = document.createElement('div');
   modal.id = 'modalConfigIA';
-  modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,12,8,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(15,12,8,.55);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);padding:calc(20px + var(--sat)) calc(20px + var(--sar)) calc(20px + var(--sab)) calc(20px + var(--sal));';
   modal.innerHTML = `
     <div style="background:var(--surface);border-radius:var(--r-lg);max-width:480px;width:100%;padding:28px 28px 22px;box-shadow:var(--sh-lg);">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
@@ -7271,7 +7322,8 @@ window.ampliarFoto = async function(fileId, legenda) {
   const previa = await fotoLer('mini:' + fileId);
   const janela = document.createElement('div');
   janela.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:2000;display:flex;' +
-    'flex-direction:column;align-items:center;justify-content:center;padding:20px;cursor:zoom-out';
+    'flex-direction:column;align-items:center;justify-content:center;cursor:zoom-out;' +
+    'padding:calc(20px + var(--sat)) calc(20px + var(--sar)) calc(20px + var(--sab)) calc(20px + var(--sal))';
   janela.onclick = () => janela.remove();
   janela.innerHTML = `<img id="fotoAmp" src="${previa || ''}" alt="${escHtml(legenda || '')}"
       style="max-width:100%;max-height:82vh;border-radius:8px;${previa ? '' : 'display:none'}">
@@ -12003,7 +12055,7 @@ function abrirModalRDO(innerHtml) {
   fecharModalRDO();
   const m = document.createElement('div');
   m.id = 'modalRDO';
-  m.style.cssText = 'position:fixed;inset:0;background:rgba(15,12,8,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px);';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(15,12,8,.55);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);padding:calc(20px + var(--sat)) calc(20px + var(--sar)) calc(20px + var(--sab)) calc(20px + var(--sal));';
   m.innerHTML = `<div style="background:var(--surface);border-radius:var(--r-lg);max-width:900px;width:100%;max-height:90vh;overflow:auto;padding:24px;box-shadow:var(--sh-lg)">${innerHtml}</div>`;
   document.body.appendChild(m);
   m.addEventListener('click', e => { if (e.target === m) fecharModalRDO(); });
