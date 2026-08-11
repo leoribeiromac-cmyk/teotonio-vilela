@@ -1268,42 +1268,63 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   min-height:160px;
 }
 
-/* ===================== TEMPO × ESTACA ===================== */
-.tc-filtros{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:16px}
-.tc-flabel{font-size:9px;font-weight:800;letter-spacing:.12em;color:var(--muted);text-transform:uppercase}
-.tc-chip{
-  display:inline-flex;align-items:center;gap:6px;
-  padding:4px 10px;border-radius:20px;cursor:pointer;
-  border:1px solid var(--border);background:var(--surface);
-  color:var(--muted);font-family:inherit;font-size:11px;font-weight:600;
-  transition:all .15s;
-}
-.tc-chip i{width:8px;height:8px;border-radius:50%;background:var(--tc-cor,var(--muted-2));flex-shrink:0}
-.tc-chip:hover{border-color:var(--border-strong);color:var(--text)}
-.tc-chip.on{background:var(--text);border-color:var(--text);color:var(--surface)}
-.tc-bloco{margin-bottom:20px}
-.tc-titulo{
+/* ===================== PLANTA DE AVANÇO =====================
+   A via desenhada em proporção real (1 célula = 1 estaca = 20 m),
+   que vai se pintando conforme os apontamentos chegam. */
+.pv-eixo{margin-bottom:24px}
+.pv-titulo{
   font-size:11px;font-weight:600;color:var(--muted);
   text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;
 }
-/* altura fixa: o gráfico é lido pela INCLINAÇÃO das linhas, e altura
-   elástica mudaria a inclinação sem a produtividade ter mudado */
-.tc-canvas-wrap{position:relative;height:340px;width:100%}
-@media(max-width:768px){ .tc-canvas-wrap{height:260px} }
-.tc-legenda{
+.pv-titulo .pv-metros{text-transform:none;font-weight:400}
+.pv-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.pv-grade{display:grid;grid-template-columns:132px 1fr;gap:5px 10px;align-items:center;min-width:520px}
+.pv-rotulo{
+  font-size:10.5px;font-weight:600;color:var(--text);
+  display:flex;align-items:center;gap:6px;justify-content:flex-end;
+  text-align:right;white-space:nowrap;overflow:hidden;
+}
+.pv-rotulo .ic{width:13px;height:13px;flex-shrink:0;color:var(--muted)}
+.pv-rotulo.via{color:var(--muted);font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.pv-rotulo small{font-weight:400;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:9px}
+/* a largura da faixa é proporcional ao comprimento do eixo — dois trechos
+   de tamanhos diferentes ficam na MESMA escala, lado a lado */
+.pv-fx{display:grid;border-radius:6px;overflow:hidden;position:relative}
+.pv-fx.via{height:30px;border-radius:7px;box-shadow:inset 0 0 0 1px var(--border)}
+.pv-fx.frente{height:18px;box-shadow:inset 0 0 0 1px var(--border)}
+.pv-cel{position:relative;cursor:pointer;background:var(--bg)}
+.pv-cel:hover{filter:brightness(.92);z-index:2}
+.pv-cel.rec::after{
+  content:'';position:absolute;inset:2px;border-radius:3px;
+  border:1.5px solid var(--acc);pointer-events:none;
+}
+.pv-cel.on{outline:2px solid var(--acc);outline-offset:-2px;z-index:3}
+/* o eixo tracejado da pista, por cima das células pintadas */
+.pv-eixo-via{
+  position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;
+  background:repeating-linear-gradient(90deg,rgba(255,255,255,.75) 0 9px,transparent 9px 20px);
+  pointer-events:none;
+}
+.pv-regua{height:15px;position:relative}
+.pv-regua .pv-cel{cursor:default;background:transparent;border-left:1px solid var(--border)}
+.pv-regua .pv-cel.q{border-left-color:var(--border-strong)}
+.pv-regua i{
+  position:absolute;top:2px;left:1px;font-style:normal;
+  font-family:'JetBrains Mono',monospace;font-size:8px;color:var(--muted);
+  white-space:nowrap;line-height:1;
+}
+.pv-legenda{
   display:flex;align-items:flex-start;gap:8px;
   padding:10px 12px;border-radius:var(--r-sm);
   background:var(--bg-2);border:1px solid var(--border);
   font-size:11.5px;line-height:1.55;color:var(--muted);
 }
-.tc-legenda .ic{width:15px;height:15px;vertical-align:0;margin-top:1px;flex-shrink:0}
-.tc-nada{
-  display:flex;align-items:center;justify-content:center;gap:9px;
-  height:120px;border-radius:var(--r-sm);
-  border:1px dashed var(--border-strong);background:var(--bg-2);
-  font-size:12px;color:var(--muted);text-align:center;padding:0 18px;
+.pv-legenda .ic{width:15px;height:15px;vertical-align:0;margin-top:1px;flex-shrink:0}
+@media(max-width:768px){
+  .pv-grade{grid-template-columns:96px 1fr}
+  .pv-rotulo{font-size:9.5px}
+  .pv-rotulo small{display:none}
 }
-.tc-nada .ic{width:16px;height:16px;vertical-align:0;flex-shrink:0}
 
 /* ===================== EMPTY / LOADING ===================== */
 .empty{padding:60px 20px;text-align:center;color:var(--muted)}
@@ -9097,8 +9118,8 @@ function _exportarRelatorioExecutivoPDF() {
 
 async function montarGraficos() {
   // Ponto único de montagem de gráfico: todo mundo que troca de tela ou de
-  // tema já chama daqui, então o Tempo × Estaca entra junto sem hook novo.
-  if (STATE.currentPage === 'avancofisico') { montarTempoCaminhamento(); return; }
+  // tema já chama daqui. (O Avanço Físico não entra mais: a Planta de
+  // avanço é HTML puro, desenhada no próprio render, sem Chart.js.)
   if (STATE.currentPage !== 'executivo') return;
   if (!STATE.dashData) return;
 
@@ -9394,20 +9415,25 @@ async function montarGraficos() {
 }
 
 // ====================================================================
-// TEMPO-CAMINHAMENTO (time-location / time-chainage)
+// PLANTA DE AVANÇO (a via em proporção real, se preenchendo)
 // --------------------------------------------------------------------
-// O formato de planejamento de obra LINEAR — rodovia, ferrovia, duto,
-// avenida. Um eixo é a posição na via (estaca), o outro é o tempo. Cada
-// frente vira uma diagonal descendo pela avenida, e a INCLINAÇÃO da
-// diagonal é a produtividade: linha deitada = frente andando rápido,
-// linha em pé = frente parada no mesmo trecho.
+// Substitui o gráfico de dispersão Tempo × Estaca, que virava um
+// emaranhado de linhas cruzadas assim que a obra acumulava meses de
+// apontamento. Aqui o desenho é o da própria via: cada eixo é uma
+// faixa na escala real do estaqueamento (1 célula = 1 estaca = 20 m,
+// e dois eixos de comprimentos diferentes ficam proporcionais entre
+// si). A pista escurece onde mais se trabalhou, e embaixo dela cada
+// frente tem a sua faixa, que vai se pintando estaca a estaca conforme
+// os RDOs chegam — o projeto "se constrói" na tela.
 //
-// O que ele mostra e o Gantt não mostra: duas frentes que vão se
-// encontrar na MESMA estaca na MESMA semana. No Gantt são duas barras
-// paralelas que parecem conviver bem; aqui as diagonais se cruzam, e o
-// cruzamento é o conflito.
+// A intensidade é o NÚMERO DE LANÇAMENTOS, não a quantidade: dentro de
+// uma frente convivem pacotes de ML, m² e m³, e somar quantidades de
+// unidades diferentes inventaria um número sem significado. É a mesma
+// régua do croqui de estaqueamento e do desenho da avenida do painel.
 //
-// Os dados já existiam: cada linha de RDO_Avanco tem data e estaca.
+// O recorte de tempo que o gráfico antigo dava virou o contorno de
+// "trabalhada há pouco": a estaca com RDO nos últimos 14 dias ganha um
+// anel — é onde as frentes estão AGORA.
 // ====================================================================
 
 /* Cor estável por frente, sem ninguém cadastrar paleta.
@@ -9444,272 +9470,188 @@ function corDaFrente(nome, alpha) {
   return 'oklch(' + l.toFixed(2) + ' 0.16 ' + hue + (alpha != null ? ' / ' + alpha : '') + ')';
 }
 
-/* Monta os pontos do gráfico: um por (lançamento × estaca citada).
-   Devolve separado POR EIXO — a avenida tem duas faixas de numeração
-   disjuntas (E099–E141 e E201–E244) e um gráfico só deixaria um vazio
-   enorme no meio; nas Ruas de Terra, duas ruas estaqueadas do zero
-   cairiam uma por cima da outra. */
-function dadosTempoCaminhamento() {
+/* Metros entre estacas consecutivas. 20 m é o passo padrão do
+   estaqueamento de projeto viário; obra com passo diferente declara
+   `metrosPorEstaca` no cadastro. */
+function pvMetrosPorEstaca() {
+  return (CONFIG && CONFIG.metrosPorEstaca) || 20;
+}
+
+/* Estado da tela: a estaca aberta no painel de detalhe. */
+const PV = { sel: null };
+
+window.pvSelecionar = function (eixo, num) {
+  var igual = PV.sel && PV.sel.eixo === eixo && PV.sel.num === num;
+  PV.sel = igual ? null : { eixo: eixo, num: num };   // clicar de novo fecha
+  var box = document.getElementById('pvBloco');
+  if (box) box.outerHTML = renderPlantaAvanco();
+};
+
+/* Agrega os lançamentos por eixo → frente → estaca. Cada célula guarda
+   quantos RDOs citaram a estaca, quantos pacotes distintos e a data mais
+   recente — é tudo o que o desenho precisa. */
+function dadosPlantaAvanco() {
   var out = {};
-  eixosDaObraAtiva().forEach(function (x) { out[x.id] = []; });
+  eixosDaObraAtiva().forEach(function (x) {
+    out[x.id] = { frentes: {}, via: {}, maxVia: 0 };
+  });
 
   (STATE.rdoavanco || []).forEach(function (r) {
-    var d = parseISODate(getCSVField(r, 'Data'));
-    if (!d) return;
-    var pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
-    var pac = STATE.pacotes.find(function (p) { return getCSVField(p, 'ID') === pid; });
-    var frente = (pac && getCSVField(pac, 'Frente')) || getCSVField(r, 'Frente') || 'Outros';
-    var nomePac = (pac && getCSVField(pac, 'Pacote')) || pid || '—';
     var ests = lerLocalEstaca(getCSVField(r, 'Local_Estaca'));
     if (!ests.length) return;
-    var q = num(getCSVField(r, 'Quantidade'));
-    var qPorEstaca = q / ests.length;
+    var pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    var pac = (STATE.pacotes || []).find(function (p) { return getCSVField(p, 'ID') === pid; });
+    var frente = (pac && getCSVField(pac, 'Frente')) || getCSVField(r, 'Frente') || 'Outros';
+    var dTxt = getCSVField(r, 'Data');
+    var d = parseISODate(dTxt);
 
     ests.forEach(function (e) {
-      if (!out[e.eixo]) return;
-      out[e.eixo].push({
-        x: e.num, y: d.getTime(), q: qPorEstaca,
-        frente: frente, pacote: nomePac,
-        data: getCSVField(r, 'Data'),
-        unidade: (pac && getCSVField(pac, 'Unidade Física')) || ''
-      });
+      var ex = out[e.eixo];
+      if (!ex) return;
+      var fr = ex.frentes[frente] || (ex.frentes[frente] = { max: 0, estacas: {} });
+      var cel = fr.estacas[e.num] || (fr.estacas[e.num] = { rdos: 0, pacotes: {}, ultima: null, ultimaTxt: '' });
+      cel.rdos++;
+      if (pid) cel.pacotes[pid] = 1;
+      if (d && (!cel.ultima || d > cel.ultima)) { cel.ultima = d; cel.ultimaTxt = dTxt; }
+      if (cel.rdos > fr.max) fr.max = cel.rdos;
+      ex.via[e.num] = (ex.via[e.num] || 0) + 1;
+      if (ex.via[e.num] > ex.maxVia) ex.maxVia = ex.via[e.num];
     });
   });
   return out;
 }
 
-/* A "linha de frente": por dia, a estaca MEDIANA em que a frente
-   trabalhou. A mediana e não a média porque um lançamento perdido a 30
-   estacas de distância torceria a média e inventaria um avanço que não
-   houve. */
-function linhaDeFrente(pontos) {
-  var porDia = {};
-  pontos.forEach(function (p) {
-    (porDia[p.y] = porDia[p.y] || []).push(p.x);
-  });
-  return Object.keys(porDia).map(Number).sort(function (a, b) { return a - b; })
-    .map(function (t) {
-      var xs = porDia[t].sort(function (a, b) { return a - b; });
-      var m = Math.floor(xs.length / 2);
-      var med = xs.length % 2 ? xs[m] : (xs[m - 1] + xs[m]) / 2;
-      return { x: med, y: t };
-    });
-}
+function renderPlantaAvanco() {
+  if (!temEstacas()) return '';
+  var dados = dadosPlantaAvanco();
+  var eixos = eixosDaObraAtiva();
+  var passo = pvMetrosPorEstaca();
+  var recorte = Date.now() - 14 * 86400000;   // anel de "trabalhada há pouco"
+  var maxCasas = Math.max.apply(null, eixos.map(function (x) { return x.fim - x.ini + 1; }).concat([1]));
+  var temDado = eixos.some(function (x) { return Object.keys(dados[x.id].frentes).length > 0; });
 
-/* Estado da tela: qual frente está isolada e quantos dias para trás. */
-const TC = { frente: '', dias: 90 };
+  function blocoEixo(x) {
+    var ex = dados[x.id];
+    var n = x.fim - x.ini + 1;
+    var larg = (n / maxCasas * 100).toFixed(2) + '%';
+    var colunas = 'grid-template-columns:repeat(' + n + ',1fr)';
+    var frentes = Object.keys(ex.frentes).sort();
+    var tocadas = Object.keys(ex.via).length;
 
-/* O filtro mora aqui e é usado pelo render E pela montagem do gráfico —
-   as duas precisam concordar sobre o que sobrou, senão o render desenha
-   um canvas que a montagem descobre estar vazio e o bloco fica em branco
-   sem explicar nada. Acontece de verdade: uma frente que já passou da
-   última estaca do sentido some daquele gráfico nos últimos 30 dias. */
-function filtrarTC(pts) {
-  var corte = TC.dias ? Date.now() - TC.dias * 86400000 : 0;
-  return pts.filter(function (p) {
-    return (!corte || p.y >= corte) && (!TC.frente || p.frente === TC.frente);
-  });
-}
+    var celulasVia = '';
+    for (var i = x.ini; i <= x.fim; i++) {
+      var v = ex.via[i] || 0;
+      // mesma rampa do mapa em grade: mais RDOs = mais escuro
+      var cor = v > 0
+        ? 'background:oklch(' + (0.92 - Math.min(v / (ex.maxVia || 1), 1) * 0.42).toFixed(2) + ' 0.17 38)'
+        : '';
+      var sel = PV.sel && PV.sel.eixo === x.id && PV.sel.num === i ? ' on' : '';
+      celulasVia += '<div class="pv-cel' + sel + '" style="' + cor + '" ' +
+        'title="E' + i + ' · ' + (v ? v + ' lançamento' + (v !== 1 ? 's' : '') + ' no total' : 'sem lançamento') + '" ' +
+        'onclick="pvSelecionar(\'' + x.id + '\',' + i + ')"></div>';
+    }
 
-window.tcSetFrente = function (f) { TC.frente = f; recarregarTempoCaminhamento(); };
-window.tcSetDias = function (d) { TC.dias = parseInt(d, 10) || 0; recarregarTempoCaminhamento(); };
+    var regua = '';
+    for (var k = x.ini; k <= x.fim; k++) {
+      var cheia = k % 5 === 0;
+      regua += '<div class="pv-cel' + (cheia ? ' q' : '') + '">' + (cheia ? '<i>E' + k + '</i>' : '') + '</div>';
+    }
 
-function recarregarTempoCaminhamento() {
-  var box = document.getElementById('tcBloco');
-  if (!box) return;
-  box.outerHTML = renderTempoCaminhamento();
-  setTimeout(montarTempoCaminhamento, 30);
-}
+    var linhas = frentes.map(function (f) {
+      var fr = ex.frentes[f];
+      var cels = '';
+      for (var i2 = x.ini; i2 <= x.fim; i2++) {
+        var cel = fr.estacas[i2];
+        var estilo = '', cls = 'pv-cel', t = 'E' + i2 + ' · ' + f + ' · sem lançamento';
+        if (cel) {
+          // raiz quadrada para o lançamento único não ficar invisível ao
+          // lado da estaca com vinte
+          var alfa = 0.3 + 0.7 * Math.sqrt(Math.min(cel.rdos / (fr.max || 1), 1));
+          estilo = 'background:' + corDaFrente(f, alfa.toFixed(2));
+          if (cel.ultima && cel.ultima.getTime() >= recorte) cls += ' rec';
+          var np = Object.keys(cel.pacotes).length;
+          t = 'E' + i2 + ' · ' + f + ' · ' + cel.rdos + ' RDO' + (cel.rdos !== 1 ? 's' : '') +
+              (np ? ' · ' + np + ' pacote' + (np !== 1 ? 's' : '') : '') +
+              (cel.ultimaTxt ? ' · último em ' + fmtData(cel.ultimaTxt) : '');
+        }
+        if (PV.sel && PV.sel.eixo === x.id && PV.sel.num === i2) cls += ' on';
+        cels += '<div class="' + cls + '" style="' + estilo + '" title="' + escHtml(t) + '" ' +
+          'onclick="pvSelecionar(\'' + x.id + '\',' + i2 + ')"></div>';
+      }
+      var nEst = Object.keys(fr.estacas).length;
+      return '<div class="pv-rotulo" title="' + escHtml(f) + '">' + ic(icFrente(f), 13) +
+               '<span>' + escHtml(f) + '</span><small>' + nEst + ' est.</small></div>' +
+             '<div class="pv-fx frente" style="width:' + larg + ';' + colunas + '">' + cels + '</div>';
+    }).join('');
 
-function renderTempoCaminhamento() {
-  var dados = dadosTempoCaminhamento();
-  var todos = Object.keys(dados).reduce(function (a, k) { return a.concat(dados[k]); }, []);
-  var total = todos.length;
-  var frentes = todos
-    .map(function (p) { return p.frente; })
-    .filter(function (v, i, a) { return a.indexOf(v) === i; })
-    .sort();
-
-  var corpo;
-  if (!total) {
-    corpo = '<div class="empty"><div class="empty-icon">' + ic('cronograma') + '</div>' +
-      '<div class="empty-title">Sem estaca para posicionar</div>' +
-      '<div class="empty-sub">O gráfico se desenha a partir da estaca preenchida em cada lançamento. ' +
-      'Lance serviços com o campo de estaca para ver as frentes andarem pela avenida.</div></div>';
-  } else {
-    corpo =
-      '<div class="tc-filtros">' +
-        '<span class="tc-flabel">FRENTE</span>' +
-        '<button class="tc-chip ' + (TC.frente ? '' : 'on') + '" onclick="tcSetFrente(\'\')">Todas</button>' +
-        frentes.map(function (f) {
-          return '<button class="tc-chip ' + (TC.frente === f ? 'on' : '') + '" ' +
-            'style="--tc-cor:' + corDaFrente(f) + '" onclick="tcSetFrente(' + JSON.stringify(f).replace(/"/g, '&quot;') + ')">' +
-            '<i></i>' + escHtml(f) + '</button>';
-        }).join('') +
-        '<span class="tc-flabel" style="margin-left:auto">PERÍODO</span>' +
-        [[30, '30 d'], [90, '90 d'], [180, '180 d'], [0, 'Tudo']].map(function (o) {
-          return '<button class="tc-chip ' + (TC.dias === o[0] ? 'on' : '') + '" onclick="tcSetDias(' + o[0] + ')">' + o[1] + '</button>';
-        }).join('') +
-      '</div>' +
-      eixosDaObraAtiva().map(function (x) {
-        return blocoTC(x.id, x.label + ' · E' + x.ini + '–E' + x.fim);
-      }).join('') +
-      '<div class="tc-legenda">' + ic('info') +
-        '<span>Cada bolha é um lançamento na estaca — quanto maior, maior a quantidade. ' +
-        'A linha cheia é a frente de trabalho dia a dia: <b>quanto mais deitada, mais rápido a frente anda</b>. ' +
-        'Duas linhas que se cruzam são duas frentes no mesmo trecho na mesma data.</span></div>';
-  }
-
-  function blocoTC(sent, label) {
-    if (!dados[sent] || !dados[sent].length) return '';   // eixo sem lançamento nenhum
-    var visiveis = filtrarTC(dados[sent]);
-    var miolo = visiveis.length
-      ? '<div class="tc-canvas-wrap"><canvas id="tc' + sent + '"></canvas></div>'
-      : '<div class="tc-nada">' + ic('filtro') +
-        '<span>Nada neste trecho com o filtro atual' +
-        (TC.frente ? ' — <b>' + escHtml(TC.frente) + '</b> não trabalhou neste trecho no período' : '') +
-        '.</span></div>';
-    return '<div class="tc-bloco">' +
-      '<div class="tc-titulo">' + label + '</div>' + miolo +
+    return '<div class="pv-eixo">' +
+      '<div class="pv-titulo">' + escHtml(x.label) + ' · E' + x.ini + '–E' + x.fim +
+        '<span class="pv-metros"> — ' + fmtNum((n - 1) * passo, 0) + ' m · ' +
+        tocadas + ' de ' + n + ' estacas com produção</span></div>' +
+      '<div class="pv-scroll"><div class="pv-grade">' +
+        '<div class="pv-rotulo via">Via</div>' +
+        '<div class="pv-fx via" style="width:' + larg + ';' + colunas + '">' + celulasVia +
+          '<div class="pv-eixo-via"></div></div>' +
+        '<div></div>' +
+        '<div class="pv-regua" style="width:' + larg + ';display:grid;' + colunas + '">' + regua + '</div>' +
+        linhas +
+      '</div></div>' +
     '</div>';
   }
 
-  return '<div class="card stagger-item" id="tcBloco" style="animation-delay:.05s">' +
+  /* Os lançamentos da estaca clicada — o mesmo detalhe do croqui de
+     estaqueamento, para a leitura não mudar de uma tela para a outra. */
+  function detalhe() {
+    if (!PV.sel) return '';
+    var eixo = eixoPorId(PV.sel.eixo);
+    var linhas = lancamentosNaEstaca(PV.sel.eixo, PV.sel.num);
+    var titulo = 'Estaca E' + PV.sel.num + ' · ' + escHtml(eixo ? eixo.label : PV.sel.eixo);
+    if (!linhas.length) {
+      return '<div style="margin-top:12px;padding:12px 14px;background:var(--bg);border-radius:var(--r);font-size:13px;color:var(--muted)">' +
+        '<strong style="color:var(--text)">' + titulo + '</strong> — nenhum serviço lançado nesta estaca ainda.</div>';
+    }
+    return '<div style="margin-top:12px;padding:12px 14px;background:var(--bg);border-radius:var(--r)">' +
+      '<div style="font-size:13px;font-weight:600;margin-bottom:8px">' + titulo + ' — ' + linhas.length + ' lançamento' + (linhas.length > 1 ? 's' : '') + '</div>' +
+      linhas.slice(0, 12).map(function (r) {
+        var pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+        var p = STATE.pacotes.find(function (pp) { return getCSVField(pp, 'ID') === pid; });
+        var un = p ? (getCSVField(p, 'Unidade Física') || '') : '';
+        var lado = lerLadoDaVia(getCSVField(r, 'Local_Estaca'));
+        return '<div style="display:flex;gap:10px;font-size:12px;padding:3px 0;border-top:1px solid var(--border)">' +
+          '<span class="t-mono" style="color:var(--muted);white-space:nowrap">' + escHtml(fmtData(getCSVField(r, 'Data'))) + '</span>' +
+          '<span style="flex:1">' + escHtml(p ? getCSVField(p, 'Pacote') : (getCSVField(r, 'Pacote_Nome') || pid)) +
+            (lado ? ' <span class="t-mono" style="color:var(--muted)">· ' + escHtml(lado) + '</span>' : '') + '</span>' +
+          '<span class="t-mono" style="white-space:nowrap">' + fmtNum(num(getCSVField(r, 'Quantidade')), 2) + ' ' + escHtml(un) + '</span>' +
+        '</div>';
+      }).join('') +
+      (linhas.length > 12 ? '<div style="font-size:11px;color:var(--muted);margin-top:6px">+ ' + (linhas.length - 12) + ' mais — veja no Histórico</div>' : '') +
+    '</div>';
+  }
+
+  var corpo;
+  if (!temDado) {
+    corpo = '<div class="empty"><div class="empty-icon">' + ic('mapa') + '</div>' +
+      '<div class="empty-title">O desenho ainda está em branco</div>' +
+      '<div class="empty-sub">A planta se pinta a partir da estaca preenchida em cada lançamento. ' +
+      'Lance serviços com o campo de estaca para ver a via se construir aqui.</div></div>';
+  } else {
+    corpo = eixos.map(blocoEixo).join('') +
+      '<div class="pv-legenda">' + ic('info') +
+        '<span>O desenho está na escala do projeto: 1 célula = 1 estaca = ' + passo + ' m, ' +
+        'e os trechos são proporcionais entre si. A faixa <b>Via</b> escurece onde mais se trabalhou; ' +
+        'abaixo dela, cada frente vai pintando a sua à medida que os apontamentos chegam. ' +
+        'O contorno marca estaca com RDO nos últimos 14 dias — <b>é onde as frentes estão agora</b>. ' +
+        'Toque numa estaca para ver os lançamentos dela.</span></div>' +
+      detalhe();
+  }
+
+  return '<div class="card stagger-item" id="pvBloco" style="animation-delay:.05s">' +
     '<div class="card-header"><div>' +
-      '<div class="card-title">' + ic('cronograma') + ' Tempo × Estaca</div>' +
-      '<div class="card-title-sub">Onde cada frente esteve, dia a dia, ao longo do trecho</div>' +
+      '<div class="card-title">' + ic('mapa') + ' Planta de avanço</div>' +
+      '<div class="card-title-sub">A via em proporção real, se preenchendo a cada apontamento</div>' +
     '</div></div>' +
     '<div class="card-body">' + corpo + '</div>' +
   '</div>';
-}
-
-/* Instancia os dois gráficos. Separado do render porque o canvas só
-   existe depois que o HTML entrou na página. */
-async function montarTempoCaminhamento() {
-  var telaAntes = STATE.currentPage;
-  try { await usarLib('grafico'); } catch (e) { return; }   // sem gráfico, a tela segue viva
-  if (STATE.currentPage !== telaAntes) return;
-  var dados = dadosTempoCaminhamento();
-
-  eixosDaObraAtiva().map(function (x) { return x.id; }).forEach(function (sent) {
-    var el = document.getElementById('tc' + sent);
-    if (window['tcChart' + sent]) { window['tcChart' + sent].destroy(); window['tcChart' + sent] = null; }
-    if (!el) return;                       // filtro esvaziou: o render pôs o aviso no lugar do canvas
-
-    var pts = filtrarTC(dados[sent] || []);
-    if (!pts.length) return;
-
-    var maxQ = Math.max.apply(null, pts.map(function (p) { return p.q; })) || 1;
-    var frentes = pts.map(function (p) { return p.frente; })
-      .filter(function (v, i, a) { return a.indexOf(v) === i; }).sort();
-
-    // Só os lançamentos viram dataset. A "linha de frente" é ANOTAÇÃO, não
-    // dado: como dataset ela entrava no teste de acerto e roubava o tooltip
-    // — o dedo caía na linha e o app respondia "frente do dia" em vez de
-    // dizer qual pacote, qual estaca e quanto foi lançado.
-    var datasets = frentes.map(function (f) {
-      var cor = corDaFrente(f);
-      return {
-        label: f, frenteNome: f,
-        data: pts.filter(function (p) { return p.frente === f; }),
-        borderColor: cor, backgroundColor: corDaFrente(f, 0.45),
-        showLine: false,
-        pointRadius: function (c) {
-          var p = c.raw; return p ? 2.5 + Math.sqrt(p.q / maxQ) * 6.5 : 3;
-        },
-        pointHoverRadius: function (c) {
-          var p = c.raw; return p ? 4.5 + Math.sqrt(p.q / maxQ) * 6.5 : 5;
-        },
-        pointBorderWidth: 1.2
-      };
-    });
-
-    var linhaFrentePlugin = {
-      id: 'linhaFrente',
-      beforeDatasetsDraw: function (chart) {          // atrás das bolhas
-        var xs = chart.scales.x, ys = chart.scales.y, c = chart.ctx;
-        if (!xs || !ys) return;
-        chart.data.datasets.forEach(function (ds, i) {
-          if (chart.getDatasetMeta(i).hidden) return;
-          var linha = linhaDeFrente(ds.data);
-          if (linha.length < 2) return;
-          c.save();
-          c.strokeStyle = ds.borderColor;
-          c.lineWidth = 2;
-          c.lineJoin = 'round';
-          c.beginPath();
-          linha.forEach(function (p, k) {
-            var px = xs.getPixelForValue(p.x), py = ys.getPixelForValue(p.y);
-            if (k === 0) c.moveTo(px, py); else c.lineTo(px, py);
-          });
-          c.stroke();
-          c.restore();
-        });
-      }
-    };
-
-    var faixa = eixoPorId(sent) || { ini: 0, fim: 0 };
-    var eixo = getComputedStyle(document.documentElement).getPropertyValue('--muted').trim() || '#7a7570';
-    var grade = getComputedStyle(document.documentElement).getPropertyValue('--border').trim() || '#e4e0d8';
-
-    window['tcChart' + sent] = new Chart(el, {
-      type: 'scatter',
-      data: { datasets: datasets },
-      options: {
-        responsive: true, maintainAspectRatio: false,
-        // intersect:false porque no celular ninguém acerta uma bolha de 4px
-        // com o dedo — assim o toque pega o ponto mais próximo
-        interaction: { mode: 'nearest', intersect: false },
-        scales: {
-          x: {
-            type: 'linear', min: faixa.ini, max: faixa.fim,
-            title: { display: true, text: 'ESTACA', color: eixo,
-                     font: { size: 9, weight: '700' } },
-            ticks: { color: eixo, font: { size: 9, family: 'JetBrains Mono, monospace' },
-                     maxTicksLimit: 14, callback: function (v) { return 'E' + v; } },
-            grid: { color: grade }
-          },
-          y: {
-            type: 'linear', reverse: true,   // tempo desce: o mais antigo em cima
-            title: { display: true, text: 'DATA', color: eixo,
-                     font: { size: 9, weight: '700' } },
-            ticks: {
-              color: eixo, font: { size: 9, family: 'JetBrains Mono, monospace' },
-              maxTicksLimit: 9,
-              callback: function (v) {
-                var d = new Date(v);
-                return isNaN(d) ? '' : ('0' + d.getDate()).slice(-2) + '/' + ('0' + (d.getMonth() + 1)).slice(-2);
-              }
-            },
-            grid: { color: grade }
-          }
-        },
-        plugins: {
-          legend: {
-            labels: {
-              color: eixo, boxWidth: 9, boxHeight: 9, usePointStyle: true,
-              font: { size: 10 }
-            }
-          },
-          tooltip: {
-            callbacks: {
-              title: function (ctx) {
-                var p = ctx[0] && ctx[0].raw;
-                return p && p.data ? fmtData(p.data) : '';
-              },
-              label: function (ctx) {
-                var p = ctx.raw;
-                if (!p) return '';
-                return [p.frente + ' · ' + p.pacote,
-                        'E' + p.x + ' — ' + fmtNum(p.q, 1) + ' ' + (p.unidade || '')];
-              }
-            }
-          }
-        }
-      },
-      plugins: [linhaFrentePlugin]
-    });
-  });
 }
 
 // ====================================================================
@@ -9728,6 +9670,8 @@ function renderAvancoFisico() {
   return `
     ${renderCroquiEstacas()}
 
+    ${renderPlantaAvanco()}
+
     <div class="card stagger-item">
       <div class="card-header">
         <div>
@@ -9739,8 +9683,6 @@ function renderAvancoFisico() {
         ${renderHeatmap(av)}
       </div>
     </div>
-
-    ${renderTempoCaminhamento()}
 
     <div class="card stagger-item" style="animation-delay: .1s">
       <div class="card-header">
