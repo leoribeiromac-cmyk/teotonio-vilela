@@ -167,7 +167,7 @@ function rotear(e) {
       case 'nfConsultarChave':  resp = nfConsultarChave(p); break;
       case 'saidaSalvar':       resp = saidaSalvar(p); break;
       case 'saidaExcluir':      resp = saidaExcluir(p.obra, p.id, p.token); break;
-      case 'clima':           resp = climaDoDia(p.data); break;
+      case 'clima':           resp = climaDoDia(p.data, p.obra); break;
       case 'rdoFoto':         resp = rdoFoto(p); break;
       case 'obterFoto':       resp = obterFotoPrivada(p.fileId, p.mini); break;
       case 'usuariosListar':  resp = usuariosListar(p.token); break;
@@ -884,10 +884,30 @@ function gerarId(data, k) {
 // comercial no caminho (o tier gratuito do Open-Meteo, por exemplo, é
 // só para uso NÃO comercial — não serve para obra).
 //
+// A ESTAÇÃO É DE CADA OBRA, NÃO DO SISTEMA
+//
+// Até aqui existia UMA estação fixa (A701, Mirante de Santana) para tudo.
+// Só que as obras não ficam no mesmo lugar: a Teotônio está na zona sul
+// da capital, as Ruas de Terra em Itaquera e o Ranário em São Roque, a
+// mais de 50 km de Santana. Chuva de verão em São Paulo é convectiva e
+// localizada — chove 30 mm no Grajaú com Santana seco no mesmo dia. Um
+// pleito de prorrogação em São Roque sustentado por estação da capital
+// se defende mal.
+//
+// Como a estação é escolhida: NÃO por uma tabela de códigos escrita à
+// mão, que envelhece calada quando o INMET desativa uma estação. A obra
+// declara a COORDENADA dela (abaixo) e o resto sai do catálogo do
+// próprio INMET, buscado e guardado por 30 dias: a estação automática
+// operante mais próxima ganha. Se a mais próxima estiver muda naquele
+// dia — e estação de campo cai —, a busca desce para a seguinte, e a
+// resposta diz qual respondeu e a que distância da obra.
+//
 // Propriedades do script (opcionais):
-//   INMET_ESTACAO  código da estação automática (padrão A701, São Paulo
-//                  – Mirante de Santana). Troque pela estação mais perto
-//                  da obra: portal.inmet.gov.br/paginas/catalogoaut
+//   INMET_ESTACAO_<OBRA>  trava a estação de UMA obra (ex.:
+//                  INMET_ESTACAO_TEOTONIO = A771). Use quando conhecer
+//                  a região melhor que a distância em linha reta.
+//   INMET_ESTACAO  trava a estação de TODAS as obras (era o ajuste
+//                  antigo; continua valendo, agora como último recurso)
 //   CLIMA_URL      molde de URL de outro provedor, com {ini} {fim} {est}
 //
 // ATENÇÃO: a leitura dos campos do INMET segue a nomenclatura publicada
@@ -895,40 +915,183 @@ function gerarId(data, k) {
 // Se o provedor mudar os nomes, climaDoDia devolve ok:false com o
 // motivo, e o RDO continua sendo preenchido à mão — nunca trava.
 // ------------------------------------------------------------
-var INMET_ESTACAO_PADRAO = 'A701';
+var INMET_ESTACAO_PADRAO = 'A701';   // último recurso: catálogo fora do ar
 
-function climaDoDia(dataISO) {
+// Onde cada obra fica. É a ÚNICA coisa que precisa ser mantida à mão, e
+// dá para conferir num mapa. Rode conferirEstacoes() depois de mexer:
+// ela imprime a estação que cada coordenada resolve e a distância.
+var CLIMA_OBRAS = {
+  'teotonio':      { nome: 'Av. Sen. Teotônio Vilela — São Paulo/SP',   lat: -23.7205, lon: -46.7025 },
+  'ruas-de-terra': { nome: 'Itaquera — São Paulo/SP',                   lat: -23.5395, lon: -46.4585 },
+  'ranario':       { nome: 'Estrada do Ranário (SQE-479) — São Roque/SP', lat: -23.5290, lon: -47.1355 }
+};
+
+/* Distância em km entre dois pontos (haversine). Serve para ordenar
+   estações — nessa escala a curvatura já pesa, e o erro de tratar grau
+   de longitude como grau de latitude passaria de 8 %. */
+function distanciaKm_(lat1, lon1, lat2, lon2) {
+  var R = 6371, g = Math.PI / 180;
+  var dLat = (lat2 - lat1) * g, dLon = (lon2 - lon1) * g;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos(lat1 * g) * Math.cos(lat2 * g) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+
+// Quantas candidatas guardar por obra. Cinco cobre com folga o dia em
+// que a mais perto não publica, e mantém a propriedade pequena.
+var INMET_CANDIDATAS = 5;
+
+/* Baixa o catálogo de estações automáticas do INMET e devolve só as em
+   operação, com coordenada legível. Não guarda nada: é a lista inteira
+   do Brasil, grande demais tanto para o CacheService (6 h) quanto para
+   uma propriedade do script (9 KB por valor). Quem guarda é
+   estacoesDaObra_, e só as poucas que interessam a cada obra. */
+function catalogoEstacoes_() {
+  var bruto;
+  try {
+    var r = UrlFetchApp.fetch('https://apitempo.inmet.gov.br/estacoes/T',
+                              { muteHttpExceptions: true, followRedirects: true });
+    if (r.getResponseCode() !== 200) return [];
+    bruto = JSON.parse(r.getContentText() || '[]');
+  } catch (e) {
+    Logger.log('Catálogo do INMET indisponível: ' + e);
+    return [];
+  }
+  if (!bruto || !bruto.length) return [];
+
+  var lista = [];
+  for (var i = 0; i < bruto.length; i++) {
+    var e = bruto[i] || {};
+    var cod = String(e.CD_ESTACAO || '').trim();
+    var lat = parseFloat(e.VL_LATITUDE), lon = parseFloat(e.VL_LONGITUDE);
+    if (!cod || !isFinite(lat) || !isFinite(lon)) continue;
+    if (e.DT_FIM_OPERACAO) continue;                       // já desativada
+    // o nome do campo de UF variou entre versões da API — aceita os dois
+    var uf = String(e.SG_ESTADO || e.SG_STATE || '').trim().toUpperCase();
+    lista.push({ cod: cod, nome: String(e.DC_NOME || cod), uf: uf, lat: lat, lon: lon });
+  }
+  return lista;
+}
+
+/* As candidatas de TODAS as obras, calculadas de uma vez e guardadas por
+   30 dias — estação nova ou desativada é notícia de mês, não de hora.
+   De uma vez porque a ida ao catálogo é a parte cara: fazer a conta para
+   as três obras no mesmo download evita repeti-lo. */
+function recalcularEstacoes_() {
+  var cat = catalogoEstacoes_();
+  if (!cat.length) return null;
+
+  var props = PropertiesService.getScriptProperties();
+  var out = {};
+  Object.keys(CLIMA_OBRAS).forEach(function (id) {
+    var o = CLIMA_OBRAS[id];
+    var perto = cat.map(function (e) {
+      return { cod: e.cod, nome: e.nome,
+               km: +distanciaKm_(o.lat, o.lon, e.lat, e.lon).toFixed(1) };
+    }).sort(function (a, b) { return a.km - b.km; }).slice(0, INMET_CANDIDATAS);
+    out[id] = perto;
+    try { props.setProperty('INMET_PERTO_' + id, JSON.stringify(perto)); } catch (e) {}
+  });
+  try { props.setProperty('INMET_PERTO_EM', String(Date.now())); } catch (e) {}
+  return out;
+}
+
+/* As estações candidatas de uma obra, da mais perto para a mais longe.
+   Devolve no máximo `quantas` — a primeira é a preferida, as outras são
+   a rede de segurança para o dia em que ela não publicar. */
+function estacoesDaObra_(obraId, quantas) {
+  var id = String(obraId || OBRA_ID);
+  var props = PropertiesService.getScriptProperties();
+  var n = Math.max(1, quantas || 3);
+
+  // 1) trava manual: primeiro a da obra, depois a global (ajuste antigo)
+  var chaveObra = 'INMET_ESTACAO_' + id.toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  var travada = props.getProperty(chaveObra) || props.getProperty('INMET_ESTACAO');
+  if (travada) return [{ cod: String(travada).trim(), nome: '', km: null, travada: true }];
+
+  // 2) obra sem coordenada declarada: não há como escolher — não invento
+  if (!CLIMA_OBRAS[id]) {
+    return [{ cod: INMET_ESTACAO_PADRAO, nome: '', km: null, semCoordenada: true }];
+  }
+
+  // 3) a conta de 30 dias atrás, se ainda vale
+  var em = Number(props.getProperty('INMET_PERTO_EM') || 0);
+  if (em && (Date.now() - em) < 30 * 24 * 3600 * 1000) {
+    try {
+      var guardado = JSON.parse(props.getProperty('INMET_PERTO_' + id) || '[]');
+      if (guardado.length) return guardado.slice(0, n);
+    } catch (e) {}
+  }
+
+  // 4) refaz a conta contra o catálogo do INMET
+  var todas = recalcularEstacoes_();
+  if (todas && todas[id] && todas[id].length) return todas[id].slice(0, n);
+
+  // 5) catálogo fora do ar: a última escolha que deu certo ainda vale
+  var ultima = props.getProperty('INMET_ULTIMA_' + id);
+  return [{ cod: ultima || INMET_ESTACAO_PADRAO, nome: '', km: null, semCatalogo: true }];
+}
+
+function climaDoDia(dataISO, obraId) {
   var d = String(dataISO || '').slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return { ok: false, motivo: 'Data inválida' };
+  var id = normObra(obraId);
 
+  // A chave leva a OBRA: sem isso a primeira obra consultada no dia
+  // servia a chuva dela para todas as outras.
   var cache = CacheService.getScriptCache();
-  var chave = 'clima_' + d;
+  var chave = 'clima_' + id + '_' + d;
   var guardado = cache.get(chave);
   if (guardado) { try { return JSON.parse(guardado); } catch (e) {} }
 
-  var props = PropertiesService.getScriptProperties();
-  var est = props.getProperty('INMET_ESTACAO') || INMET_ESTACAO_PADRAO;
-  var molde = props.getProperty('CLIMA_URL') ||
+  var candidatas = estacoesDaObra_(id, 3);
+  var molde = PropertiesService.getScriptProperties().getProperty('CLIMA_URL') ||
               'https://apitempo.inmet.gov.br/estacao/{ini}/{fim}/{est}';
-  var url = molde.replace('{ini}', d).replace('{fim}', d).replace('{est}', est);
 
+  var motivos = [];
+  for (var i = 0; i < candidatas.length; i++) {
+    var tentativa = climaDaEstacao_(molde, d, candidatas[i]);
+    if (!tentativa.ok) { motivos.push(tentativa.motivo); continue; }
+
+    // deu certo: lembra a escolha para o dia em que o catálogo cair
+    try {
+      PropertiesService.getScriptProperties()
+        .setProperty('INMET_ULTIMA_' + id, candidatas[i].cod);
+    } catch (e) {}
+
+    // 6 h: dia passado não muda mais, e dia corrente ainda recebe horas novas
+    try { cache.put(chave, JSON.stringify(tentativa), 21600); } catch (e) {}
+    return tentativa;
+  }
+
+  return { ok: false, motivo: motivos[0] || 'Nenhuma estação respondeu.' };
+}
+
+/* Uma estação, um dia. Separado de climaDoDia porque a busca é repetida
+   até alguma responder — e porque assim dá para testar a conta da chuva
+   sem rede no caminho. */
+function climaDaEstacao_(molde, d, est) {
+  var url = molde.replace('{ini}', d).replace('{fim}', d).replace('{est}', est.cod);
   var linhas;
   try {
     var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
     if (r.getResponseCode() !== 200) {
-      return { ok: false, motivo: 'A estação respondeu ' + r.getResponseCode() + '.' };
+      return { ok: false, motivo: 'A estação ' + est.cod + ' respondeu ' + r.getResponseCode() + '.' };
     }
     linhas = JSON.parse(r.getContentText() || '[]');
   } catch (e) {
-    return { ok: false, motivo: 'Não foi possível falar com a estação: ' + e };
+    return { ok: false, motivo: 'Não foi possível falar com a estação ' + est.cod + ': ' + e };
   }
   if (!linhas || !linhas.length) {
-    return { ok: false, motivo: 'A estação ' + est + ' não tem registro para ' + d +
+    return { ok: false, motivo: 'A estação ' + est.cod + ' não tem registro para ' + d +
                                 ' (dado costuma sair com algumas horas de atraso).' };
   }
+  return somarChuva_(linhas, d, est);
+}
 
-  // Somatório de chuva por período do dia. A hora do INMET vem em UTC
-  // ("HH00"); São Paulo é UTC-3, então 09 UTC = 06 local.
+/* Somatório de chuva por período do dia. A hora do INMET vem em UTC
+   ("HH00"); São Paulo é UTC-3, então 09 UTC = 06 local. */
+function somarChuva_(linhas, d, est) {
   var soma = { manha: 0, tarde: 0, noite: 0 }, lidas = 0;
   linhas.forEach(function (l) {
     var hh = parseInt(String(l.HR_MEDICAO == null ? '' : l.HR_MEDICAO).slice(0, 2), 10);
@@ -941,20 +1104,55 @@ function climaDoDia(dataISO) {
     else if (local >= 12 && local < 18) soma.tarde += mm;
     else if (local >= 18) soma.noite += mm;
   });
-  if (!lidas) return { ok: false, motivo: 'Registro sem hora legível — provedor mudou o formato?' };
+  if (!lidas) {
+    return { ok: false, motivo: 'Registro sem hora legível — provedor mudou o formato?' };
+  }
 
-  var resp = {
+  return {
     ok: true,
     manha: classificarChuva_(soma.manha),
     tarde: classificarChuva_(soma.tarde),
     noite: classificarChuva_(soma.noite),
     mm: { manha: +soma.manha.toFixed(1), tarde: +soma.tarde.toFixed(1), noite: +soma.noite.toFixed(1) },
-    estacao: est,
-    fonte: 'INMET · estação ' + est
+    total_mm: +(soma.manha + soma.tarde + soma.noite).toFixed(1),
+    estacao: est.cod,
+    estacaoNome: est.nome || '',
+    km: (est.km === null || est.km === undefined) ? null : est.km,
+    fonte: descreverEstacao_(est)
   };
-  // 6 h: dia passado não muda mais, e dia corrente ainda recebe horas novas
-  try { cache.put(chave, JSON.stringify(resp), 21600); } catch (e) {}
-  return resp;
+}
+
+/* O que o RDO mostra e o que fica gravado na planilha. A distância entra
+   no texto de propósito: é ela que diz ao fiscal — e a quem julgar o
+   pleito — o quanto a medição vale para AQUELE canteiro. */
+function descreverEstacao_(est) {
+  var t = 'INMET · estação ' + est.cod;
+  if (est.nome) t += ' (' + est.nome + ')';
+  if (est.km !== null && est.km !== undefined) {
+    t += ', a ' + String(est.km).replace('.', ',') + ' km da obra';
+  }
+  return t;
+}
+
+/* Utilitário de conferência: rode no editor do Apps Script depois de
+   mexer nas coordenadas. Imprime, para cada obra, as três estações mais
+   próximas com a distância — é a prova de que a obra está apontando para
+   a estação certa, sem esperar chover para descobrir. */
+function conferirEstacoes() {
+  var cat = catalogoEstacoes_();
+  Logger.log('Catálogo do INMET: ' + cat.length + ' estações automáticas em operação.');
+  var todas = recalcularEstacoes_();          // refaz a conta na hora
+  Object.keys(CLIMA_OBRAS).forEach(function (id) {
+    var o = CLIMA_OBRAS[id];
+    var lista = (todas && todas[id]) || estacoesDaObra_(id, 3);
+    Logger.log('\n' + id + ' — ' + o.nome + '  (' + o.lat + ', ' + o.lon + ')');
+    lista.forEach(function (e, i) {
+      Logger.log('  ' + (i === 0 ? '→' : ' ') + ' ' + e.cod + '  ' +
+                 (e.nome || '(sem nome)') + '  ' +
+                 (e.km === null ? '(distância desconhecida)' : e.km + ' km'));
+    });
+  });
+  return { ok: true, estacoes: cat.length };
 }
 
 /* Milímetros medidos → o vocabulário que o RDO já usa. Os cortes seguem
@@ -1911,36 +2109,51 @@ function backupDiario() {
 }
 
 // ------------------------------------------------------------
-// CLIMA AUTOMÁTICO — busca a chuva de ONTEM na Open-Meteo (grátis,
-// sem chave) e grava na aba RDO_Diario, colunas Chuva_mm_Auto e
-// Clima_Fonte (criadas automaticamente se não existirem).
-// Serve de contraprova objetiva do clima apontado — base para
-// pleitos de prorrogação por dias improdutivos.
+// CLIMA AUTOMÁTICO — grava a chuva de ONTEM na aba RDO_Diario, colunas
+// Chuva_mm_Auto e Clima_Fonte (criadas automaticamente se não existirem).
+// Contraprova objetiva do clima apontado — base para pleitos de
+// prorrogação por dias improdutivos.
+//
+// A fonte é a MESMA do botão do RDO (climaDoDia → INMET, estação mais
+// perto de cada obra). Antes esta rotina buscava na Open-Meteo, num par
+// de coordenadas fixo da Teotônio: dava para o mesmo dia aparecer "Bom"
+// nos campos de clima, que vinham do INMET, e 12 mm na coluna ao lado,
+// que vinha de outro provedor. Pior, a Open-Meteo gratuita é licenciada
+// só para uso NÃO comercial — o que o comentário do climaDoDia já dizia,
+// enquanto esta função usava exatamente esse tier.
+//
+// E rodava para UMA obra só: o Ranário e as Ruas de Terra nunca
+// receberam contraprova nenhuma. Agora percorre todas as obras
+// declaradas em CLIMA_OBRAS.
 // ------------------------------------------------------------
-var OBRA_LAT = -23.72;  // Av. Sen. Teotônio Vilela (ajuste fino se necessário)
-var OBRA_LON = -46.66;
-
 function registrarClimaAuto() {
   var ontem = new Date(Date.now() - 24 * 3600 * 1000);
   var iso = Utilities.formatDate(ontem, Session.getScriptTimeZone(), 'yyyy-MM-dd');
 
-  var url = 'https://archive-api.open-meteo.com/v1/archive?latitude=' + OBRA_LAT +
-            '&longitude=' + OBRA_LON +
-            '&start_date=' + iso + '&end_date=' + iso +
-            '&daily=precipitation_sum&timezone=America%2FSao_Paulo';
-  var chuva = null;
-  try {
-    var resp = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
-    var dados = JSON.parse(resp.getContentText());
-    if (dados.daily && dados.daily.precipitation_sum) chuva = dados.daily.precipitation_sum[0];
-  } catch (e) {
-    Logger.log('Open-Meteo indisponível: ' + e);
-    return { ok: false, error: 'API de clima indisponível' };
-  }
-  if (chuva === null || chuva === undefined) return { ok: false, error: 'Sem dado de chuva para ' + iso };
-
   var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
   if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+
+  var resultados = [];
+  Object.keys(CLIMA_OBRAS).forEach(function (id) {
+    try {
+      resultados.push(registrarClimaDaObra_(aba, id, iso));
+    } catch (e) {
+      resultados.push({ obra: id, ok: false, error: String(e) });
+    }
+  });
+
+  Logger.log('Clima de ' + iso + ': ' + JSON.stringify(resultados));
+  // Uma obra sem dado não pode derrubar as outras: o gatilho só é
+  // "falha" quando NENHUMA obra conseguiu registrar.
+  return { ok: resultados.some(function (r) { return r.ok; }), data: iso, obras: resultados };
+}
+
+function registrarClimaDaObra_(aba, obraId, iso) {
+  var clima = climaDoDia(iso, obraId);
+  if (!clima.ok) return { obra: obraId, ok: false, error: clima.motivo };
+
+  var chuva = clima.total_mm;
+  var fonte = clima.fonte;
 
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
@@ -1962,30 +2175,31 @@ function registrarClimaAuto() {
     var iObraC = idxColuna(cab, 'obra');
     var dados2 = aba.getDataRange().getValues();
 
-    // A chuva vem das coordenadas DESTA obra (OBRA_LAT/OBRA_LON), então só
-    // carimba o diário dela. Sem o filtro, o primeiro diário daquela data —
-    // de qualquer obra — receberia a chuva de outra cidade.
+    // A chuva é da estação DESTA obra, então só carimba o diário dela.
+    // Sem o filtro, o primeiro diário daquela data — de qualquer obra —
+    // receberia a chuva de outra cidade.
     for (var i = 1; i < dados2.length; i++) {
-      if (iObraC !== -1 && normObra(dados2[i][iObraC]) !== OBRA_ID) continue;
+      if (iObraC !== -1 && normObra(dados2[i][iObraC]) !== obraId) continue;
       if (normData(dados2[i][iData]) === iso) {
         aba.getRange(i + 1, iChuva + 1).setValue(chuva);
-        aba.getRange(i + 1, iFonte + 1).setValue('Open-Meteo');
-        return { ok: true, data: iso, chuva_mm: chuva, atualizado: true };
+        aba.getRange(i + 1, iFonte + 1).setValue(fonte);
+        return { obra: obraId, ok: true, chuva_mm: chuva, estacao: clima.estacao, atualizado: true };
       }
     }
 
     // Não havia RDO na data: cria linha mínima só com data + chuva,
     // para o dia ficar documentado mesmo sem apontamento.
     garantirColuna(aba, 'obra');
-    var registro = { obra: OBRA_ID };
+    var registro = { obra: obraId };
     registro['data'] = iso;
     registro['chuva_mm_auto'] = chuva;
-    registro['clima_fonte'] = 'Open-Meteo';
+    registro['clima_fonte'] = fonte;
     registro['tem_turno_noturno'] = 'false';
     if (iId !== -1) registro['id'] = gerarIdDiario(dados2, iId);
-    var linha = cab.map(function (nc) { return registro.hasOwnProperty(nc) ? registro[nc] : ''; });
-    aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([linha]);
-    return { ok: true, data: iso, chuva_mm: chuva, inserido: true };
+    var cab2 = cabecalhoNormalizado(aba);
+    var linha = cab2.map(function (nc) { return registro.hasOwnProperty(nc) ? registro[nc] : ''; });
+    aba.getRange(aba.getLastRow() + 1, 1, 1, cab2.length).setValues([linha]);
+    return { obra: obraId, ok: true, chuva_mm: chuva, estacao: clima.estacao, inserido: true };
   } finally {
     lock.releaseLock();
   }

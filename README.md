@@ -308,13 +308,30 @@ pela chuva medida pela estação automática do **INMET** — chuva digitada de
 memória três dias depois não sustenta justificativa de prazo; chuva medida por
 estação oficial, sim.
 
-Funciona sem configurar nada (estação padrão `A701`, São Paulo – Mirante de
-Santana). Para apontar para a estação mais próxima da obra, crie nas
-**Propriedades do script**:
+### A estação é de cada obra
 
-| Propriedade | Para quê |
+Não existe "a estação do sistema": **cada obra tem a sua**, e ela sai da
+coordenada do canteiro. Antes era uma só (`A701`, Mirante de Santana) para
+tudo — a 25 km da Teotônio, 17 km das Ruas de Terra e 52 km do Ranário, que
+fica noutro município. Chuva de verão em São Paulo é convectiva: chove 30 mm
+no Grajaú com Santana seco no mesmo dia, e um pleito de prorrogação apoiado
+numa estação tão longe se defende mal.
+
+A escolha **não** é uma tabela de códigos escrita à mão — essa envelhece calada
+quando o INMET desativa uma estação. A obra declara a coordenada em
+`CLIMA_OBRAS` (no `Code.gs`) e o resto vem do catálogo do próprio INMET,
+guardado por 30 dias: ganha a estação automática **em operação mais próxima**.
+Se ela estiver muda naquele dia — e estação de campo cai —, a busca desce para
+a seguinte, e a resposta diz qual respondeu e a que distância da obra.
+
+Depois de mexer numa coordenada, rode **`conferirEstacoes()`** no editor do
+Apps Script: ela imprime, para cada obra, as três estações mais próximas com a
+distância. É a conferência que não exige esperar chover.
+
+| Propriedade do script | Para quê |
 |---|---|
-| `INMET_ESTACAO` | Código da estação automática. Catálogo: portal.inmet.gov.br/paginas/catalogoaut |
+| `INMET_ESTACAO_<OBRA>` | Trava a estação de UMA obra (ex.: `INMET_ESTACAO_TEOTONIO` = `A771`). Use quando conhecer a região melhor que a distância em linha reta |
+| `INMET_ESTACAO` | Trava a estação de TODAS as obras. Era o ajuste antigo; continua valendo, agora como último recurso |
 | `CLIMA_URL` | Só se quiser outro provedor. Molde de URL com `{ini}`, `{fim}` e `{est}` |
 
 A tradução de milímetros para o vocabulário do RDO: `0` → Bom · até `0,5 mm` →
@@ -386,7 +403,7 @@ para agendá-lo.
 No editor do Apps Script, selecione a função **`configurarGatilhos`** e clique ▶ Executar. Isso agenda:
 
 - **`backupDiario`** (02h) — cópia completa da planilha na pasta "Backups Teotonio" do Drive, mantendo as 14 mais recentes.
-- **`registrarClimaAuto`** (05h) — chuva de ontem via Open-Meteo gravada em `RDO_Diario` (colunas `Chuva_mm_Auto`/`Clima_Fonte`, criadas sozinhas). Contraprova objetiva do clima apontado — base para pleitos de prazo. Ajuste `OBRA_LAT`/`OBRA_LON` se necessário.
+- **`registrarClimaAuto`** (05h) — chuva de ontem gravada em `RDO_Diario` (colunas `Chuva_mm_Auto`/`Clima_Fonte`, criadas sozinhas), **de todas as obras**, pela mesma fonte do botão do RDO (INMET, estação de cada obra). Contraprova objetiva do clima apontado — base para pleitos de prazo.
 
 Utilitário: `criarRDOsVaziosDoMes()` preenche datas sem RDO de qualquer mês (edite `ANO_MES_ALVO` no topo da função antes de rodar).
 

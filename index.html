@@ -13940,10 +13940,17 @@ const CLIMAS = ['Bom', 'Encoberto', 'Garoa', 'Chuva', 'Chuva forte'];
    sustenta. O backend busca no INMET (ver climaDoDia no Code.gs) e
    devolve já traduzido para o vocabulário dos selects.
 
+   A OBRA VAI JUNTO na consulta: cada uma tem a sua estação, escolhida
+   pela distância até a coordenada do canteiro. Sem isso o Ranário, em
+   São Roque, recebia a chuva medida na zona norte da capital — a 52 km,
+   noutro município. Chuva de verão aqui é convectiva: chove forte num
+   bairro com o vizinho seco, e uma estação longe demais derruba o
+   pleito em vez de sustentá-lo.
+
    Preenche, mas não decide sozinho: o que veio da estação aparece
-   escrito na tela com os milímetros e a fonte, e o apontador continua
-   livre para corrigir — quem esteve na obra sabe mais que o pluviômetro
-   a 8 km de distância.
+   escrito na tela com os milímetros, a estação e a DISTÂNCIA até a
+   obra, e o apontador continua livre para corrigir — quem esteve no
+   canteiro sabe mais que o pluviômetro.
    -------------------------------------------------------------------- */
 window.buscarClima = async function () {
   const btn = document.getElementById('btnClima');
@@ -13951,7 +13958,8 @@ window.buscarClima = async function () {
   const data = (DIARIO_V4 && DIARIO_V4.data) || getLocalISODate(new Date());
   if (btn) { btn.disabled = true; btn.innerHTML = ic('ampulheta', 0, 'ic-gira') + ' Consultando…'; }
   try {
-    const r = await jsonp(CONFIG.appsScript, { action: 'clima', data, ...authParams() }, 1, 2000);
+    const r = await jsonp(CONFIG.appsScript,
+      { action: 'clima', data, obra: obraAtivaId(), ...authParams() }, 1, 2000);
     if (!r || !r.ok) {
       const motivo = (r && r.motivo) || 'A consulta não voltou.';
       if (fonte) fonte.innerHTML = ic('alerta') + ' ' + escHtml(motivo) + ' Preencha à mão.';
@@ -13967,9 +13975,15 @@ window.buscarClima = async function () {
     });
     const mm = r.mm || {};
     if (fonte) {
+      // Estação a mais de 20 km da obra não é contraprova do canteiro: o
+      // aviso é para o apontador não aceitar de olhos fechados o que a
+      // estação disse, e para quem ler o RDO depois saber de onde veio.
+      const longe = typeof r.km === 'number' && r.km > 20
+        ? '<br>' + ic('alerta') + ' A estação está longe do canteiro — confira com quem esteve na obra.'
+        : '';
       fonte.innerHTML = ic('checkCirculo') + ' <b>' + escHtml(r.fonte || 'estação oficial') + '</b> · ' +
         'chuva medida: manhã ' + fmtNum(mm.manha || 0, 1) + ' mm · tarde ' + fmtNum(mm.tarde || 0, 1) +
-        ' mm · noite ' + fmtNum(mm.noite || 0, 1) + ' mm. Confira e corrija se a obra viu diferente.';
+        ' mm · noite ' + fmtNum(mm.noite || 0, 1) + ' mm. Confira e corrija se a obra viu diferente.' + longe;
     }
     toast('Clima preenchido pela estação ' + (r.estacao || '') , 'success', 4000);
   } catch (e) {
