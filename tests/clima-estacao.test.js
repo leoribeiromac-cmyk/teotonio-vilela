@@ -16,13 +16,15 @@ const assert = require('assert');
 const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'Code.gs'), 'utf8');
 
 // ---------- INMET falso ----------
-// Coordenadas plausíveis para a região; o que o teste checa é a ESCOLHA
-// (qual fica mais perto de qual obra), não o valor absoluto.
+// Coordenadas REAIS das estações automáticas do INMET na região — assim o
+// teste prova a escolha que a obra vai ver de verdade, e não uma escolha
+// que só existe no cenário de teste.
 const CATALOGO = [
-  { CD_ESTACAO: 'A701', DC_NOME: 'SAO PAULO - MIRANTE',   SG_ESTADO: 'SP', VL_LATITUDE: -23.4961, VL_LONGITUDE: -46.6200 },
-  { CD_ESTACAO: 'A771', DC_NOME: 'SAO PAULO - INTERLAGOS', SG_ESTADO: 'SP', VL_LATITUDE: -23.7244, VL_LONGITUDE: -46.6775 },
-  { CD_ESTACAO: 'A713', DC_NOME: 'SOROCABA',               SG_ESTADO: 'SP', VL_LATITUDE: -23.4260, VL_LONGITUDE: -47.5855 },
-  { CD_ESTACAO: 'A755', DC_NOME: 'BARUERI',                SG_ESTADO: 'SP', VL_LATITUDE: -23.5236, VL_LONGITUDE: -46.8703 },
+  { CD_ESTACAO: 'A701', DC_NOME: 'SAO PAULO - MIRANTE',    SG_ESTADO: 'SP', VL_LATITUDE: -23.4833, VL_LONGITUDE: -46.6167 },
+  { CD_ESTACAO: 'A771', DC_NOME: 'SAO PAULO - INTERLAGOS', SG_ESTADO: 'SP', VL_LATITUDE: -23.7245, VL_LONGITUDE: -46.6775 },
+  { CD_ESTACAO: 'A713', DC_NOME: 'SOROCABA',               SG_ESTADO: 'SP', VL_LATITUDE: -23.4260, VL_LONGITUDE: -47.5856 },
+  { CD_ESTACAO: 'A755', DC_NOME: 'BARUERI',                SG_ESTADO: 'SP', VL_LATITUDE: -23.5233, VL_LONGITUDE: -46.8692 },
+  { CD_ESTACAO: 'A765', DC_NOME: 'BERTIOGA',               SG_ESTADO: 'SP', VL_LATITUDE: -23.8447, VL_LONGITUDE: -46.1433 },
   // desativada: não pode ser escolhida por mais perto que esteja
   { CD_ESTACAO: 'A999', DC_NOME: 'ESTACAO DESATIVADA',     SG_ESTADO: 'SP', VL_LATITUDE: -23.7205, VL_LONGITUDE: -46.7025,
     DT_FIM_OPERACAO: '2019-01-01T00:00:00.000-03:00' },
@@ -153,13 +155,19 @@ t('estação desativada nunca é escolhida, por mais perto que esteja', () => {
 
 console.log('\nQUANDO A ESTAÇÃO MAIS PERTO NÃO PUBLICA\n');
 
+// Qual é a "seguinte" não se fixa aqui de propósito: na Teotônio, Barueri
+// e Mirante estão a 27,7 e 27,8 km — praticamente empatadas. Cravar uma
+// delas seria travar o teste num desempate que o catálogo pode inverter
+// sozinho. O que importa é que a busca ANDA e diz onde parou.
 t('a busca desce para a seguinte e a resposta diz qual respondeu', () => {
   REDE.mudas = ['A771'];
   REDE.chuvaPorHora = { 14: 3 };
   const r = ctx.climaDoDia('2026-08-10', 'teotonio');
   assert.ok(r.ok, 'devolveu erro: ' + r.motivo);
-  assert.deepStrictEqual(REDE.pedidos, ['A771', 'A701'], JSON.stringify(REDE.pedidos));
-  assert.strictEqual(r.estacao, 'A701');
+  assert.strictEqual(REDE.pedidos[0], 'A771', 'não tentou a mais perto primeiro');
+  assert.strictEqual(REDE.pedidos.length, 2, JSON.stringify(REDE.pedidos));
+  assert.strictEqual(r.estacao, REDE.pedidos[1], 'a resposta não diz quem respondeu');
+  assert.notStrictEqual(r.estacao, 'A771');
 });
 
 t('estação fora do ar (HTTP 500) também cai para a seguinte', () => {
@@ -167,7 +175,8 @@ t('estação fora do ar (HTTP 500) também cai para a seguinte', () => {
   REDE.chuvaPorHora = { 9: 1 };
   const r = ctx.climaDoDia('2026-08-10', 'teotonio');
   assert.ok(r.ok, 'devolveu erro: ' + r.motivo);
-  assert.strictEqual(r.estacao, 'A701');
+  assert.notStrictEqual(r.estacao, 'A771');
+  assert.strictEqual(r.estacao, REDE.pedidos[1]);
 });
 
 t('todas mudas → erro claro, e o RDO continua sendo preenchido à mão', () => {
@@ -278,8 +287,29 @@ t('catálogo fora do ar → usa a última estação que deu certo naquela obra',
   assert.strictEqual(_props['INMET_ULTIMA_teotonio'], 'A771');
 
   REDE.catalogoNoAr = false;
-  delete _props['INMET_CATALOGO']; delete _props['INMET_CATALOGO_EM'];
+  delete _props['INMET_PERTO_teotonio']; delete _props['INMET_PERTO_EM'];
   assert.strictEqual(ctx.estacoesDaObra_('teotonio', 1)[0].cod, 'A771');
+});
+
+// O pior momento possível: catálogo fora do ar na PRIMEIRA consulta da
+// obra, quando ainda não há escolha anterior lembrada. Sem o `padrao` de
+// cada obra, o Ranário cairia no padrão global — Mirante de Santana, a
+// 53 km e noutro município, que é o defeito inteiro de volta.
+t('catálogo fora do ar na primeira consulta → cada obra tem o seu padrão', () => {
+  REDE.catalogoNoAr = false;
+  assert.strictEqual(ctx.estacoesDaObra_('ranario', 1)[0].cod, 'A755');
+  assert.strictEqual(ctx.estacoesDaObra_('teotonio', 1)[0].cod, 'A771');
+  assert.strictEqual(ctx.estacoesDaObra_('ruas-de-terra', 1)[0].cod, 'A701');
+});
+
+t('o padrão de cada obra é o que a coordenada dela realmente resolve', () => {
+  Object.keys(ctx.CLIMA_OBRAS).forEach(id => {
+    const declarado = ctx.CLIMA_OBRAS[id].padrao;
+    assert.ok(declarado, 'obra ' + id + ' sem padrao declarado');
+    limpar();
+    assert.strictEqual(ctx.estacoesDaObra_(id, 1)[0].cod, declarado,
+      'em ' + id + ' o padrao declarado não é o mais perto');
+  });
 });
 
 t('obra sem coordenada declarada não inventa estação — cai no padrão', () => {

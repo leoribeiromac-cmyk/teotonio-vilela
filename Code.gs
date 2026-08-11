@@ -920,10 +920,21 @@ var INMET_ESTACAO_PADRAO = 'A701';   // último recurso: catálogo fora do ar
 // Onde cada obra fica. É a ÚNICA coisa que precisa ser mantida à mão, e
 // dá para conferir num mapa. Rode conferirEstacoes() depois de mexer:
 // ela imprime a estação que cada coordenada resolve e a distância.
+//
+// `padrao` é a estação que a coordenada resolvia quando isto foi escrito
+// (conferida no catálogo do INMET), e serve para o caso em que o catálogo
+// está fora do ar na PRIMEIRA consulta daquela obra — aí não há escolha
+// anterior lembrada, e sem isto o Ranário cairia no Mirante de Santana,
+// a 53 km e noutro município, que é justamente o defeito que se corrigiu.
+// Não é a fonte da verdade: assim que o catálogo responde, quem manda é
+// a distância.
 var CLIMA_OBRAS = {
-  'teotonio':      { nome: 'Av. Sen. Teotônio Vilela — São Paulo/SP',   lat: -23.7205, lon: -46.7025 },
-  'ruas-de-terra': { nome: 'Itaquera — São Paulo/SP',                   lat: -23.5395, lon: -46.4585 },
-  'ranario':       { nome: 'Estrada do Ranário (SQE-479) — São Roque/SP', lat: -23.5290, lon: -47.1355 }
+  'teotonio':      { nome: 'Av. Sen. Teotônio Vilela — São Paulo/SP',
+                     lat: -23.7205, lon: -46.7025, padrao: 'A771' },   // Interlagos, 2,6 km
+  'ruas-de-terra': { nome: 'Itaquera — São Paulo/SP',
+                     lat: -23.5395, lon: -46.4585, padrao: 'A701' },   // Mirante, 17,3 km
+  'ranario':       { nome: 'Estrada do Ranário (SQE-479) — São Roque/SP',
+                     lat: -23.5290, lon: -47.1355, padrao: 'A755' }    // Barueri, 27,2 km
 };
 
 /* Distância em km entre dois pontos (haversine). Serve para ordenar
@@ -1027,9 +1038,12 @@ function estacoesDaObra_(obraId, quantas) {
   var todas = recalcularEstacoes_();
   if (todas && todas[id] && todas[id].length) return todas[id].slice(0, n);
 
-  // 5) catálogo fora do ar: a última escolha que deu certo ainda vale
+  // 5) catálogo fora do ar: vale a última escolha que deu certo; na
+  //    primeira consulta da obra não existe uma, e aí entra o `padrao`
+  //    dela — nunca o padrão global, que é de outra cidade.
   var ultima = props.getProperty('INMET_ULTIMA_' + id);
-  return [{ cod: ultima || INMET_ESTACAO_PADRAO, nome: '', km: null, semCatalogo: true }];
+  var cod = ultima || CLIMA_OBRAS[id].padrao || INMET_ESTACAO_PADRAO;
+  return [{ cod: cod, nome: '', km: null, semCatalogo: true }];
 }
 
 function climaDoDia(dataISO, obraId) {
