@@ -40,7 +40,9 @@ async function garantirServidor(porta = 8099) {
   throw new Error('Não consegui subir o servidor estático em ' + porta);
 }
 
-const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+// Na CI o Chromium vem do `playwright install` e fica noutro caminho; o
+// workflow exporta CHROME_PATH, que é o que os testes soltos já usavam.
+const CHROME = process.env.CHROME_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
 const BASE = 'http://localhost:8099/index.html';
 
 const GID = {
