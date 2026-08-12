@@ -48,14 +48,23 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
     JSON.stringify(chamadas));
 
   chamadas.length = 0;
+  // zera a janela anti-rajada para a abertura de login abaixo contar do zero
+  await p.evaluate(() => { _usuariosNomesBuscadoEm = 0; });
   for (let i = 0; i < 4; i++) {
     await p.evaluate(() => navigate('rdo'));
     await p.waitForTimeout(250);
     await p.evaluate(() => navigate('executivo'));
     await p.waitForTimeout(150);
   }
-  ok('abrir a tela de login 4× não busca de novo (a lista está fresca)',
-    chamadas.filter(a => a === 'usuariosNomes').length === 0,
+  /* A tela de login SEMPRE revalida a lista em segundo plano — mesmo fresca.
+     Era o contrário (economizar a chamada), e o efeito em obra foi: o admin
+     cadastrava o apontador num aparelho e o nome levava até 12 h para
+     aparecer no dropdown do celular do apontador. O dropdown continua
+     abrindo na hora com a lista guardada; a chamada só o atualiza.
+     A rajada (4 aberturas em ~1,6 s) tem de virar UMA busca: a janela de
+     5 s segura os renders duplicados sem atrasar quem abre para entrar. */
+  ok('abrir o login revalida a lista mesmo fresca — e a rajada vira UMA busca',
+    chamadas.filter(a => a === 'usuariosNomes').length === 1,
     JSON.stringify(chamadas));
 
   ok('a lista fresca fica gravada com carimbo',
