@@ -2898,7 +2898,12 @@ function nfImagem(p) {
 //
 // Sem a chave, o app continua funcionando: cai na chave de acesso
 // lida do codigo de barras e na digitacao.
+//
+// Quando o modelo principal estoura a cota gratuita (HTTP 429), a
+// chamada repete sozinha no modelo reserva abaixo, que tem cota
+// diaria bem maior no plano gratuito. A mesma chave serve para os dois.
 // ------------------------------------------------------------
+var NF_MODELO_RESERVA = 'gemini-2.5-flash-lite';
 function nfLerIA(p) {
   var props = PropertiesService.getScriptProperties();
   var key = props.getProperty('GEMINI_API_KEY');
@@ -2963,8 +2968,9 @@ function nfLerIA(p) {
     }
   };
 
-  var resp = nfChamarGemini(modelo, key, payload);
+  var resp = nfChamarGeminiComReserva(modelo, key, payload);
   if (!resp.ok) return resp;
+  modelo = resp.modelo || modelo;
 
   var j = resp.json;
   var cand = (j.candidates && j.candidates[0]) || null;
@@ -3115,7 +3121,15 @@ function nfChamarGemini(modelo, key, payload) {
     else if (codigo === 403) motivo = 'chave_sem_acesso';
     else if (codigo === 404) motivo = 'modelo';
     else if (codigo === 429) motivo = 'limite';
-    return { ok: false, motivo: motivo, codigo: codigo, detalhe: detalhe };
+    var falha = { ok: false, motivo: motivo, codigo: codigo, detalhe: detalhe };
+    // 429 vem em dois sabores e a resposta certa muda: cota POR MINUTO passa
+    // sozinha em instantes; a DIARIA so renova de madrugada. O corpo inteiro
+    // (nao o detalhe cortado) e que carrega o nome da cota violada.
+    if (codigo === 429) {
+      if (/per\s*day|perday|daily/i.test(corpo)) falha.cota = 'dia';
+      else if (/per\s*minute|perminute/i.test(corpo)) falha.cota = 'minuto';
+    }
+    return falha;
   }
 
   try {
@@ -3123,6 +3137,23 @@ function nfChamarGemini(modelo, key, payload) {
   } catch (e2) {
     return { ok: false, motivo: 'resposta', detalhe: corpo.slice(0, 200) };
   }
+}
+
+// Cota estourada nao precisa parar a obra: o plano gratuito conta a cota POR
+// MODELO, entao quando o principal devolve 429 a mesma chamada repete no
+// reserva (flash-lite, cota diaria ~4x maior). Quem chamou fica sabendo qual
+// modelo respondeu de fato (r.modelo) — vai para a auditoria e para o teste.
+function nfChamarGeminiComReserva(modelo, key, payload) {
+  var r = nfChamarGemini(modelo, key, payload);
+  if (r.ok) { r.modelo = modelo; return r; }
+  if (r.motivo !== 'limite' || modelo === NF_MODELO_RESERVA) return r;
+  var r2 = nfChamarGemini(NF_MODELO_RESERVA, key, payload);
+  if (r2.ok) { r2.modelo = NF_MODELO_RESERVA; r2.reserva = true; return r2; }
+  // reserva tambem falhou: o erro do modelo principal segue sendo o retrato
+  // mais fiel, so anotado de que o reserva foi tentado (e qual cota bateu la)
+  r.reservaTentada = NF_MODELO_RESERVA;
+  if (!r.cota && r2.cota) r.cota = r2.cota;
+  return r;
 }
 
 // Diagnostico da leitura automatica: diz em bom portugues o que esta faltando.
@@ -3167,22 +3198,31 @@ function nfDiag() {
       '. Confira se salvou na mesma planilha e se o nome está exatamente GEMINI_API_KEY.';
     return out;
   }
-  var r = nfChamarGemini(modelo, key, {
+  var r = nfChamarGeminiComReserva(modelo, key, {
     contents: [{ role: 'user', parts: [{ text: 'Responda apenas: OK' }] }],
     generationConfig: { temperature: 0, maxOutputTokens: 16, thinkingConfig: { thinkingBudget: 0 } }
   });
   out.leituraOk = !!r.ok;
   if (r.ok) {
-    out.mensagem = 'Leitura automática funcionando. O modelo ' + modelo + ' respondeu normalmente.';
+    out.modeloRespondeu = r.modelo;
+    out.mensagem = r.reserva
+      ? 'Leitura automática funcionando pelo modelo reserva ' + r.modelo + ' — o ' + modelo + ' está com a cota estourada e a chamada desviou sozinha.'
+      : 'Leitura automática funcionando. O modelo ' + modelo + ' respondeu normalmente.';
   } else {
     out.motivo = r.motivo;
     out.detalhe = r.detalhe || '';
+    if (r.cota) out.cota = r.cota;
+    var msgLimite = ({
+      minuto: 'Muitas leituras seguidas: a chave passou do limite por minuto. Espere um minuto e tente de novo.',
+      dia: 'A cota diária gratuita da chave acabou por hoje. Ela renova sozinha de madrugada (o Google vira o dia no fuso da Califórnia).'
+    })[r.cota] || 'A cota da chave estourou. Tente de novo daqui a pouco.';
+    if (r.reservaTentada) msgLimite += ' O modelo reserva (' + r.reservaTentada + ') também estava sem cota.';
     out.mensagem = ({
       autorizacao: 'O Apps Script ainda não tem permissão para acessar a internet. Abra o editor do script, rode qualquer função pelo botão "Executar" e aceite a autorização que aparecer. Depois republique.',
       chave_invalida: 'A GEMINI_API_KEY foi recusada. Confira se copiou a chave inteira, sem espaço no começo ou no fim.',
       chave_sem_acesso: 'A chave existe mas não tem acesso à API. Gere uma nova em aistudio.google.com/apikey.',
       modelo: 'O modelo "' + modelo + '" não existe para esta chave. Apague a propriedade GEMINI_MODEL para usar o padrão.',
-      limite: 'A cota da chave estourou. Tente de novo daqui a pouco.',
+      limite: msgLimite,
       rede: 'Não consegui falar com o servidor da IA.'
     })[r.motivo] || ('A chamada à IA falhou: ' + (r.detalhe || r.motivo));
   }
