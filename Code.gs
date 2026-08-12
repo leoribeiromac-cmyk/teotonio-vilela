@@ -1194,12 +1194,38 @@ function rdoFoto(p) {
   var b64 = String(p.foto || '');
   if (b64.indexOf('data:image') !== 0) return { ok: false, error: 'Foto inválida' };
 
-  var nome = 'rdo_teotonio_' + (p.id || Date.now()) + '_' + (p.idx || 0) + '.jpg';
-  var blob = Utilities.newBlob(Utilities.base64Decode(b64.split(',')[1]), 'image/jpeg', nome);
+  /* IDEMPOTÊNCIA — o reenvio da fila offline não pode duplicar a foto.
+     O caminho da duplicata: o servidor grava a foto, mas a resposta se
+     perde no sinal fraco do canteiro; o app entende como falha, guarda a
+     foto na fila e manda de novo — e cada reenvio criava OUTRO arquivo no
+     Drive e OUTRO ponteiro na linha. Mesmo padrão do clientId que o
+     addBatchRDO já usa: o app manda um clientId por foto, ele entra no
+     nome do arquivo, e um nome igual com o mesmo tamanho em bytes é a
+     mesma foto chegando de novo — reaproveita o arquivo em vez de criar.
+     A conferência por nome+tamanho também segura o reenvio das fotos que
+     já estavam na fila dos aparelhos sem clientId (nome determinístico
+     id+idx). */
+  var clientId = String(p.clientId || '').trim().replace(/[^\w-]/g, '').slice(0, 40);
+  var nome = 'rdo_teotonio_' + (p.id || Date.now()) + '_' + (p.idx || 0) +
+             (clientId ? '_' + clientId : '') + '.jpg';
+  var bytes = Utilities.base64Decode(b64.split(',')[1]);
   var pastas = DriveApp.getFoldersByName(PASTA_FOTOS);
   var pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder(PASTA_FOTOS);
-  var arquivo = pasta.createFile(blob);
-  arquivo.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+
+  var arquivo = null, reaproveitada = false;
+  try {
+    var iguais = pasta.getFilesByName(nome);
+    while (iguais.hasNext()) {
+      var jaExiste = iguais.next();
+      if (!jaExiste.isTrashed() && jaExiste.getSize() === bytes.length) {
+        arquivo = jaExiste; reaproveitada = true; break;
+      }
+    }
+  } catch (e) {}
+  if (!arquivo) {
+    arquivo = pasta.createFile(Utilities.newBlob(bytes, 'image/jpeg', nome));
+    arquivo.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  }
 
   var fileId = arquivo.getId();
   var ponteiro = 'drive_id:' + fileId;
@@ -1233,7 +1259,10 @@ function rdoFoto(p) {
       for (var i = 1; i < dados.length; i++) {
         if (String(dados[i][iId]).trim() === String(p.id || '').trim()) {
           var atual = String(dados[i][iFotos] == null ? '' : dados[i][iFotos]).trim();
-          aba.getRange(i + 1, iFotos + 1).setValue(atual ? atual + ' ' + ponteiro : ponteiro);
+          // reenvio de foto reaproveitada: o ponteiro pode já estar na linha
+          if (atual.split(/\s+/).indexOf(ponteiro) === -1) {
+            aba.getRange(i + 1, iFotos + 1).setValue(atual ? atual + ' ' + ponteiro : ponteiro);
+          }
           if (iLat !== -1 && !String(dados[i][iLat] == null ? '' : dados[i][iLat]).trim()) {
             aba.getRange(i + 1, iLat + 1).setValue(parseFloat(p.lat));
             aba.getRange(i + 1, iLon + 1).setValue(parseFloat(p.lon));
@@ -1244,7 +1273,8 @@ function rdoFoto(p) {
     }
   } catch (e) {}
 
-  registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoFoto', OBRA_ID, p.id || '', '', fileId);
+  registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoFoto', OBRA_ID, p.id || '',
+                     '', fileId + (reaproveitada ? ' (reenvio — arquivo reaproveitado)' : ''));
   return { ok: true, url: ponteiro, fileId: fileId };
 }
 

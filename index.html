@@ -4148,11 +4148,14 @@ let USUARIOS_UI = (function() {
   return ['Leonardo', 'Wallace', 'Guilherme'];
 })();
 
-// A lista de nomes muda quando o admin cadastra alguém — quase nunca. Buscá-la
-// de novo a cada vez que a tela de login aparece gastava uma chamada inteira ao
-// Apps Script (com o custo de partida dele) para reescrever o que já estava
-// guardado aqui. Agora só busca se não tiver nada, se já estiver velha, ou se
-// quem chamou pedir na marra (depois de salvar/excluir usuário).
+// A lista de nomes muda quando o admin cadastra alguém — quase nunca. No BOOT
+// ela só é buscada se estiver velha (12 h): gastar uma chamada ao Apps Script
+// a cada abertura do app para reescrever o que já está guardado não vale.
+// Na TELA DE LOGIN a regra é outra: o dropdown abre na hora com o que está
+// no aparelho, mas SEMPRE revalida em segundo plano — usuário recém-criado
+// pelo admin precisa aparecer no aparelho do apontador na primeira tentativa
+// de entrar, não 12 horas depois. É a tela que só quem está deslogado vê,
+// então a chamada extra é rara e chega enquanto a pessoa digita a senha.
 const USUARIOS_VALIDADE = 12 * 60 * 60 * 1000;   // 12 h
 function usuariosNomesEstaoFrescos() {
   try {
@@ -4161,8 +4164,16 @@ function usuariosNomesEstaoFrescos() {
   } catch (e) { return false; }
 }
 
+let _usuariosNomesBuscadoEm = 0;   // última ida REAL ao servidor (memória)
 async function carregarUsuariosNomes(forcar) {
   if (!forcar && usuariosNomesEstaoFrescos()) return;
+  // Duas transições de tela em voo renderizam o login duas vezes seguidas
+  // (o render agendado pelo navigate anterior ainda dispara) — e cada render
+  // pediria a lista de novo. A janela de 5 s colapsa a rajada numa busca só,
+  // sem atrasar o caso que importa: o apontador abrindo a tela para entrar.
+  const agora = Date.now();
+  if (agora - _usuariosNomesBuscadoEm < 5000) return;
+  _usuariosNomesBuscadoEm = agora;
   try {
     const r = await jsonp(CONFIG.appsScript, { action: 'usuariosNomes' }, 0);
     if (r && r.ok && Array.isArray(r.usuarios) && r.usuarios.length) {
@@ -4317,7 +4328,10 @@ function erroLegivel(msg) {
 }
 
 function renderLogin() {
-  setTimeout(() => carregarUsuariosNomes(), 50);
+  // `true` = ignora a validade de 12 h: o select abre com a lista guardada e
+  // é atualizado assim que o servidor responder (atualizarSelectLogin preserva
+  // o que já estiver selecionado).
+  setTimeout(() => carregarUsuariosNomes(true), 50);
   return `
     <div class="card login-card">
       <div class="card-header">
@@ -4892,8 +4906,11 @@ window.fotosSelecionadas = async function(input, idx, origem) {
         desenharCarimbo(thumb0, ctx, cfg),
         desenharCarimbo(full0, ctx, cfg)
       ]);
+      // cid nasce com a foto e viaja com ela até o servidor (clientId): é o
+      // que impede o reenvio da fila offline de duplicar a imagem no Drive.
       lista.push({ thumb, full, lat: coord ? coord.lat : '', lon: coord ? coord.lon : '',
-                   prec: coord ? coord.prec : '' });
+                   prec: coord ? coord.prec : '',
+                   cid: 'f' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8) });
     } catch (e) { toast('Não foi possível ler a imagem', 'error'); }
   }
   if (anexo && semCoord && cfg.ligado && cfg.campos.coord) {
@@ -5257,6 +5274,7 @@ async function enviarFotosDoLote(mapaIdParaFotos, idxBase) {
       // que já tem fotos, para o arquivo no Drive não repetir nome.
       const params = { action: 'rdoFoto', id, idx: (idxBase || 0) + i, foto: f.full,
                        lat: f.lat || '', lon: f.lon || '', prec: f.prec || '',
+                       clientId: f.cid || '',
                        ...authParams() };
       try {
         const r = await enviarPost(params);   // base64 não cabe em querystring
@@ -13774,7 +13792,8 @@ async function salvarRDO() {
           const guardou = await outboxAdicionar({
             kind: 'foto',
             params: { action: 'rdoFoto', id, idx: i, foto: f.full,
-                      lat: f.lat || '', lon: f.lon || '', prec: f.prec || '' },
+                      lat: f.lat || '', lon: f.lon || '', prec: f.prec || '',
+                      clientId: f.cid || '' },
             descricao: 'foto do serviço ' + id });
           if (guardou) fotosNaFila++;
         })));
