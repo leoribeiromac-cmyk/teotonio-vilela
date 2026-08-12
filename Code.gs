@@ -7,9 +7,11 @@
  */
 // ============================================================
 // BACKEND — Apps Script do "Teotônio Vilela"
-// COLE ESTE ARQUIVO INTEIRO no editor do Apps Script (Code.gs),
-// salve e REPUBLIQUE (Implantar > Gerenciar implantações > editar
-// > Nova versão). A URL /exec continua a mesma.
+// PUBLICAÇÃO: quando este arquivo muda na main, o fluxo
+// .github/workflows/implantar-appscript.yml empurra e republica
+// sozinho (mesma URL /exec). Só é preciso colar à mão no editor
+// (Code.gs, salvar e Implantar > Gerenciar implantações > editar
+// > Nova versão) se o fluxo estiver sem os segredos configurados.
 //
 // Por que isto corrige os 2 bugs:
 //   • "apagar não funciona"  -> deleteRDO apaga a linha pelo ID.
