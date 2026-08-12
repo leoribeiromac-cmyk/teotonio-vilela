@@ -1063,6 +1063,14 @@ function nfAutoVincular(obraId, nota) {
 let _nfUltimaFalhaIA = null;
 function nfMotivoTxt(ia) {
   const m = (ia && ia.motivo) || '';
+  // o 429 tem dois remédios diferentes: cota por minuto passa em instantes,
+  // a diária só renova de madrugada — o backend diz qual foi (ia.cota)
+  if (m === 'limite') {
+    return ({
+      minuto: 'Muitas leituras seguidas — espere um minuto e tente de novo',
+      dia: 'Cota diária da IA acabou — renova de madrugada'
+    })[ia.cota] || 'Cota da IA esgotada — tente daqui a pouco';
+  }
   return ({
     local: 'Sem servidor — confira os campos abaixo',
     sem_ia: 'Leitura por imagem não está ligada no servidor',
@@ -1070,7 +1078,6 @@ function nfMotivoTxt(ia) {
     chave_invalida: 'A chave da IA foi recusada pelo Google',
     chave_sem_acesso: 'A chave da IA não tem acesso à API',
     modelo: 'O modelo de IA configurado não existe',
-    limite: 'Cota da IA esgotada — tente daqui a pouco',
     longa: 'Nota comprida demais para uma leitura só',
     bloqueado: 'A IA recusou a imagem',
     vazia: 'A IA não devolveu os dados',
@@ -1124,7 +1131,7 @@ async function nfTestarLeitura() {
   if (r.leituraOk) {
     abrirModal('Teste da leitura', bloco('grn', ic('checkCirculo') + ' Leitura automática funcionando',
       esc(r.mensagem || ''),
-      `Modelo: <b>${esc(r.modelo || '')}</b>`), 560);
+      `Modelo: <b>${esc(r.modeloRespondeu || r.modelo || '')}</b>`), 560);
     return;
   }
   let extra = '';
@@ -1145,6 +1152,7 @@ async function nfTestarLeitura() {
   // o erro cru sempre aparece: é o que permite descobrir o que ninguém previu
   const tec = [];
   if (r.motivo) tec.push('motivo: ' + r.motivo);
+  if (r.cota) tec.push('cota: por ' + (r.cota === 'dia' ? 'dia' : 'minuto'));
   if (r.codigo) tec.push('código: ' + r.codigo);
   if (r.modelo) tec.push('modelo: ' + r.modelo);
   if (typeof r.tamanhoChave === 'number') tec.push('tamanho da chave: ' + r.tamanhoChave);
