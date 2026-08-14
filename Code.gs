@@ -47,10 +47,10 @@ var NF_PASTA_RAIZ  = 'Notas Fiscais Teotônio (Privado)';
 // Cabeçalho das abas que este script cria quando não existem.
 var HEADERS = {
   'Auditoria':    ['carimbo','usuario','perfil','acao','obra','registroId','detalhesAnteriores','detalhesNovos'],
-  'Equipamentos': ['nome','tipo','vinculo','locadora','ativo'],
-  'Locadoras':    ['nome','observacoes'],
+  'Equipamentos': ['nome','tipo','vinculo','locadora','ativo','obra'],
+  'Locadoras':    ['nome','observacoes','obra'],
   'ApontEquip':   ['carimbo','data','turno','equipamento','operador','inicio','fim','horas','paradas',
-                   'horimIni','horimFim','combustivel','situacao','observacoes','assinatura','usuario','clientId'],
+                   'horimIni','horimFim','combustivel','situacao','observacoes','assinatura','usuario','clientId','obra'],
   'NotasFiscais': ['id','clientId','obra','numero','serie','chave','dataEmissao','dataEntrada','cnpj','razaoSocial',
                    'nomeFantasia','municipio','uf','vProd','vFrete','vTotal','vBaseICMS','vICMS','itens','obs',
                    'responsavel','status','driveId','driveLink','paginas','leitura','historico','usuario','criadoEm','atualizadoEm'],
@@ -82,7 +82,7 @@ function rotear(e) {
                       'usuariosListar', 'usuarioSalvar', 'usuarioExcluir',
                       'rdoFoto', 'obterFoto',
                       'equipListar', 'equipCadastrar', 'equipDesativar', 'locadoraCadastrar',
-                      'equipApontar', 'equipApagar', 'equipApontamentos',
+                      'equipApontar', 'equipApagar', 'equipApontamentos', 'equipUltimos',
                       'nfListar', 'nfSalvar', 'nfExcluir', 'nfImagem', 'nfLerIA', 'nfDiag',
                       'nfConsultarChave', 'saidaSalvar', 'saidaExcluir'];
     if (PROTEGIDAS.indexOf(action) !== -1) {
@@ -153,13 +153,14 @@ function rotear(e) {
       case 'addRDODiario':    resp = upsertRDODiario(p, false); break;
       case 'updateRDODiario': resp = upsertRDODiario(p, true); break;
       case 'deleteRDODiario': resp = deleteRDODiario(p.id, p.data, p.token); break;
-      case 'equipListar':       resp = equipListar(); break;
+      case 'equipListar':       resp = equipListar(p.obra); break;
       case 'equipCadastrar':    resp = equipCadastrar(p); break;
-      case 'equipDesativar':    resp = equipDesativar(p.nome, p.token); break;
-      case 'locadoraCadastrar': resp = locadoraCadastrar(p.nome, p.observacoes); break;
+      case 'equipDesativar':    resp = equipDesativar(p.nome, p.token, p.obra); break;
+      case 'locadoraCadastrar': resp = locadoraCadastrar(p.nome, p.observacoes, p.obra); break;
       case 'equipApontar':      resp = equipApontar(p); break;
       case 'equipApagar':       resp = equipApagar(p.carimbo, p.token); break;
-      case 'equipApontamentos': resp = equipApontamentos(p.mes); break;
+      case 'equipUltimos':      resp = equipUltimos(p.obra, p.n); break;
+      case 'equipApontamentos': resp = equipApontamentos(p.mes, p.obra, p.de, p.ate); break;
       case 'nfListar':          resp = nfListar(p.obra); break;
       case 'nfSalvar':          resp = nfSalvar(p); break;
       case 'nfExcluir':         resp = nfExcluir(p.obra, p.id, p.token); break;
@@ -1290,7 +1291,8 @@ function rdoFoto(p) {
    `nfListar` já passava a obra desde que este backend virou multi-obra —
    mas a função ignorava o argumento, e a tela de Notas devolvia as notas
    e as saídas de TODAS as obras misturadas. Aba que não tem a coluna
-   (Equipamentos, Locadoras) segue devolvendo tudo, como antes.
+   segue devolvendo tudo, como antes (as de equipamentos ganham a sua
+   via abaEquipComObra na primeira chamada).
    Linha com a coluna em branco é da Teotônio: foi gravada quando este
    backend atendia uma obra só — a mesma regra do `normObra`. */
 function linhasObj(nomeAba, obra) {
@@ -1324,11 +1326,41 @@ function appendObj(nomeAba, obj) {
   a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
 }
 
-function equipListar() {
-  var eqs = linhasObj(ABA_EQUIP).filter(function (e) {
+/* -------------------- EQUIPAMENTOS POR OBRA --------------------
+   A Teotônio aponta no Apps Script legado do app de campo (URL no campo
+   `equipamentos` do cadastro dela, no index.html) e não passa por aqui.
+   TODAS as outras obras usam ESTE backend, nas mesmas três abas,
+   separadas pela coluna `obra` — o mesmo desenho de NotasFiscais e
+   EstoqueSaidas. A coluna nasce sozinha na primeira chamada (mesmo
+   padrão do clientId no addBatchRDO); linha antiga, com ela vazia,
+   é da Teotônio (normObra), como em toda aba desta planilha. */
+function abaEquipComObra(nome) {
+  var a = getOrCreateAba(nome);
+  garantirColuna(a, 'obra');
+  return a;
+}
+
+/* O front (js/equip) nasceu falando com o backend legado e lê `status`,
+   `horimInicial` e `horimFinal`; a aba daqui guarda `situacao`, `horimIni`
+   e `horimFim`. A tradução mora AQUI para a tela continuar uma só nos
+   dois backends. A data sai normalizada (a planilha devolve Date). */
+function equipApontParaFront(x) {
+  var o = {};
+  Object.keys(x).forEach(function (k) { o[k] = x[k]; });
+  if (o.status == null || o.status === '') o.status = x.situacao == null ? '' : x.situacao;
+  if (o.horimInicial == null || o.horimInicial === '') o.horimInicial = x.horimIni == null ? '' : x.horimIni;
+  if (o.horimFinal == null || o.horimFinal === '') o.horimFinal = x.horimFim == null ? '' : x.horimFim;
+  o.data = normData(x.data);
+  return o;
+}
+
+function equipListar(obra) {
+  abaEquipComObra(ABA_EQUIP);
+  abaEquipComObra(ABA_LOCADORA);
+  var eqs = linhasObj(ABA_EQUIP, obra).filter(function (e) {
     return String(e.ativo).toLowerCase() !== 'false';
   });
-  return { ok: true, equipamentos: eqs, locadoras: linhasObj(ABA_LOCADORA) };
+  return { ok: true, equipamentos: eqs, locadoras: linhasObj(ABA_LOCADORA, obra) };
 }
 
 function equipCadastrar(p) {
@@ -1336,61 +1368,91 @@ function equipCadastrar(p) {
   if (!nome) return { ok: false, error: 'Nome vazio' };
   var lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
-    var jaTem = linhasObj(ABA_EQUIP).some(function (e) {
+    abaEquipComObra(ABA_EQUIP);
+    // Nome repetido só conta DENTRO da obra: "Escavadeira CAT 320" pode
+    // existir no Ranário e nas Ruas de Terra ao mesmo tempo.
+    var jaTem = linhasObj(ABA_EQUIP, p.obra).some(function (e) {
       return String(e.nome).trim().toLowerCase() === nome.toLowerCase() &&
              String(e.ativo).toLowerCase() !== 'false';
     });
     if (!jaTem) {
       appendObj(ABA_EQUIP, { nome: nome, tipo: p.tipo || 'Outros',
-        vinculo: p.vinculo || 'Próprio', locadora: p.locadora || '', ativo: 'true' });
-      registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'equipCadastrar', OBRA_ID, nome, '',
+        vinculo: p.vinculo || 'Próprio', locadora: p.locadora || '', ativo: 'true',
+        obra: normObra(p.obra) });
+      registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'equipCadastrar', normObra(p.obra), nome, '',
         (p.tipo || '') + ' · ' + (p.vinculo || ''));
     }
-    return equipListar();
+    return equipListar(p.obra);
   } finally { lock.releaseLock(); }
 }
 
 // Equipamento não é apagado: é desativado. O histórico de horas apontadas
 // continua valendo para medição mesmo depois que a máquina sai da obra.
-function equipDesativar(nome, token) {
+function equipDesativar(nome, token, obra) {
   if (!ehAdminToken(token) && ['engenharia', 'administrativo'].indexOf(perfilDoToken(token)) === -1) {
     return negarPorPermissao(token, 'equipDesativar', nome, '');
   }
-  var a = getOrCreateAba(ABA_EQUIP);
+  var a = abaEquipComObra(ABA_EQUIP);
   var dados = a.getDataRange().getValues();
   var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
-  var iN = idxColuna(cab, 'nome'), iA = idxColuna(cab, 'ativo');
+  var iN = idxColuna(cab, 'nome'), iA = idxColuna(cab, 'ativo'), iO = idxColuna(cab, 'obra');
   for (var i = 1; i < dados.length; i++) {
-    if (String(dados[i][iN]).trim().toLowerCase() === String(nome).trim().toLowerCase()) {
-      if (iA !== -1) a.getRange(i + 1, iA + 1).setValue('false');
-    }
+    if (String(dados[i][iN]).trim().toLowerCase() !== String(nome).trim().toLowerCase()) continue;
+    // Só desativa o da PRÓPRIA obra — o xará da outra continua ativo.
+    if (iO !== -1 && normObra(dados[i][iO]) !== normObra(obra)) continue;
+    if (iA !== -1) a.getRange(i + 1, iA + 1).setValue('false');
   }
-  registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'equipDesativar', OBRA_ID, nome, '', '');
-  return equipListar();
+  registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'equipDesativar', normObra(obra), nome, '', '');
+  return equipListar(obra);
 }
 
-function locadoraCadastrar(nome, obs) {
+function locadoraCadastrar(nome, obs, obra) {
   nome = String(nome || '').trim();
   if (!nome) return { ok: false, error: 'Nome vazio' };
   var lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
-    var jaTem = linhasObj(ABA_LOCADORA).some(function (l) {
+    abaEquipComObra(ABA_LOCADORA);
+    var jaTem = linhasObj(ABA_LOCADORA, obra).some(function (l) {
       return String(l.nome).trim().toLowerCase() === nome.toLowerCase();
     });
-    if (!jaTem) appendObj(ABA_LOCADORA, { nome: nome, observacoes: obs || '' });
-    return { ok: true, locadoras: linhasObj(ABA_LOCADORA) };
+    if (!jaTem) appendObj(ABA_LOCADORA, { nome: nome, observacoes: obs || '', obra: normObra(obra) });
+    return { ok: true, locadoras: linhasObj(ABA_LOCADORA, obra) };
   } finally { lock.releaseLock(); }
 }
 
 function equipApontar(p) {
+  // A restrição de obra também mora aqui, não só no roteador — mesmo
+  // desenho do addBatchRDO: esconder tela não é segurança.
+  var sessObra = sessaoDoToken(p.token);
+  if (sessObra && !sessaoPodeNaObra(sessObra, p.obra)) {
+    return negarPorObra(p.token, 'equipApontar', p.obra);
+  }
   var lock = LockService.getScriptLock(); lock.waitLock(30000);
   try {
+    abaEquipComObra(ABA_APONT);
     // reenvio da fila offline não pode lançar hora duas vezes
     if (p.clientId) {
       var jaTem = linhasObj(ABA_APONT).some(function (x) {
         return String(x.clientId).trim() === String(p.clientId).trim();
       });
       if (jaTem) return { ok: true, duplicate: true };
+    }
+
+    // O mesmo aviso do backend legado: 2º apontamento do MESMO equipamento
+    // no mesmo dia e turno só entra com `forcar` — a tela pergunta antes.
+    // A régua é POR OBRA: o Ranário apontar a escavadeira dele não bloqueia
+    // a das Ruas de Terra.
+    if (String(p.forcar) !== 'true') {
+      var dia = normData(p.data), turnoP = String(p.turno || '').trim();
+      var equipP = String(p.equipamento || '').trim().toLowerCase();
+      var jaApontado = linhasObj(ABA_APONT, normObra(p.obra)).some(function (x) {
+        return String(x.equipamento).trim().toLowerCase() === equipP &&
+               normData(x.data) === dia && String(x.turno).trim() === turnoP;
+      });
+      if (jaApontado) {
+        return { ok: false, duplicado: true,
+          erro: 'Já existe apontamento de "' + (p.equipamento || '') + '" nesse dia e turno.' };
+      }
     }
 
     // A assinatura do operador é imagem: vai para o Drive privado, e a
@@ -1409,14 +1471,16 @@ function equipApontar(p) {
     }
 
     var sess = sessaoDoToken(p.token) || { usuario: '', perfil: '' };
+    var carimbo = p.carimbo || String(Date.now());
     appendObj(ABA_APONT, {
-      carimbo: p.carimbo || String(Date.now()), data: p.data || '', turno: p.turno || '',
+      carimbo: carimbo, data: p.data || '', turno: p.turno || '',
       equipamento: p.equipamento || '', operador: p.operador || '', inicio: p.inicio || '', fim: p.fim || '',
       horas: p.horas || '', paradas: p.paradas || '', horimIni: p.horimIni || '', horimFim: p.horimFim || '',
       combustivel: p.combustivel || '', situacao: p.situacao || '', observacoes: p.observacoes || '',
-      assinatura: assin, usuario: sess.usuario, clientId: p.clientId || ''
+      assinatura: assin, usuario: sess.usuario, clientId: p.clientId || '',
+      obra: normObra(p.obra)
     });
-    registrarAuditoria(sess.usuario, sess.perfil, 'equipApontar', OBRA_ID, p.carimbo || '', '',
+    registrarAuditoria(sess.usuario, sess.perfil, 'equipApontar', normObra(p.obra), carimbo, '',
       (p.equipamento || '') + ' · ' + (p.horas || '') + 'h em ' + (p.data || ''));
     return { ok: true };
   } finally { lock.releaseLock(); }
@@ -1441,11 +1505,25 @@ function equipApagar(carimbo, token) {
   return { ok: false, error: 'Apontamento não encontrado' };
 }
 
-function equipApontamentos(mes) {
-  var arr = linhasObj(ABA_APONT);
-  if (mes) arr = arr.filter(function (x) { return normData(x.data).slice(0, 7) === mes; });
+function equipApontamentos(mes, obra, de, ate) {
+  abaEquipComObra(ABA_APONT);
+  var arr = linhasObj(ABA_APONT, obra).map(equipApontParaFront);
+  if (mes) arr = arr.filter(function (x) { return String(x.data).slice(0, 7) === mes; });
+  if (de)  arr = arr.filter(function (x) { return String(x.data) >= String(de); });
+  if (ate) arr = arr.filter(function (x) { return String(x.data) <= String(ate); });
   arr.sort(function (x, y) { return String(y.data).localeCompare(String(x.data)); });
   return { ok: true, apontamentos: arr };
+}
+
+/* Os N mais recentes da obra — o modal "Últimos" da tela. O carimbo é
+   Date.now() em milissegundos: ordenar por ele é ordenar por relógio. */
+function equipUltimos(obra, n) {
+  abaEquipComObra(ABA_APONT);
+  var arr = linhasObj(ABA_APONT, obra).map(equipApontParaFront);
+  arr.sort(function (x, y) { return String(y.carimbo).localeCompare(String(x.carimbo)); });
+  var lim = parseInt(n, 10);
+  if (!lim || lim < 1) lim = 15;
+  return { ok: true, apontamentos: arr.slice(0, lim) };
 }
 
 /* `mini` devolve a MINIATURA que o Drive já mantém para o arquivo, em vez
