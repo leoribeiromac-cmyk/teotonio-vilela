@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=40"></script>
-<script src="dados/ruas-de-terra.js?v=40"></script>
+<script src="dados/ranario.js?v=41"></script>
+<script src="dados/ruas-de-terra.js?v=41"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=40"></script>
+<script src="dados/teotonio-muros.js?v=41"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=40"></script>
-<script src="js/nf/adaptador.js?v=40"></script>
-<script src="js/nf/notas.js?v=40"></script>
-<script src="js/equip/equipamentos.js?v=40"></script>
+<script src="js/ui/icones.js?v=41"></script>
+<script src="js/nf/adaptador.js?v=41"></script>
+<script src="js/nf/notas.js?v=41"></script>
+<script src="js/equip/equipamentos.js?v=41"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -2536,6 +2536,14 @@ const OBRAS_CFG = {
       rdodiario:    CSV_TEOTONIO + '1234324544&single=true&output=csv',
     },
     appsScript: 'https://script.google.com/macros/s/AKfycbwfslMjc5bmKbZ3y6OpUZyi8MD2KGriocjAVBUci5FOMiI7ho0KgTXvtAioDGWkpk5I/exec',
+    /* O apontamento de equipamentos tem backend PRÓPRIO — o Apps Script do
+       app `Equipamentos-teotonio`, anterior a este sistema — e a planilha
+       dele NÃO separa por obra. Por isso o módulo é POR OBRA: a tela só
+       existe em quem declara a URL aqui (ver obraTemEquip()). Obra nova com
+       frota própria publica o Apps Script dela e preenche este campo — sem
+       ele, a frota da Teotônio aparecia (e podia receber apontamento)
+       dentro de qualquer outra obra. */
+    equipamentos: 'https://script.google.com/macros/s/AKfycbxGsXm8_N26x_kcxLUQZ-wKNbSLKIufeRp6wcj1BrdigHi13ltMuMIzlzozag64ygd2/exec',
     estacasCB: { ini: 99, fim: 141, label: 'Centro→Bairro' },
     estacasBC: { ini: 201, fim: 244, label: 'Bairro→Centro' },
     /* A prancha do executivo. É UMA folha A1 (o "plano de ataque"), servida
@@ -2744,7 +2752,10 @@ function trocarObra(id, opcoes) {
   STATE.loaded = false;
   STATE.filtros = { mes: '', frente: '' };
   STATE.dashData = null;
-  // Equipamentos tem motor próprio (js/equip): recarrega sozinho ao abrir a tela.
+  // Equipamentos tem motor próprio (js/equip) e backend POR OBRA: o cache que
+  // a Central de Campo e a apresentação leem não pode atravessar a troca —
+  // zera aqui, e a obra que tem o módulo recarrega ao abrir a tela.
+  window.EQUIP = { carregado: false, apontamentos: [], equipamentos: [], locadoras: [] };
   // Planejamento é POR OBRA e fica em cache de módulo. Sem zerar, a obra nova
   // herdava as predecessoras, a produtividade ajustada à mão e a data-base da
   // obra anterior — e o cronograma dela saía calculado sobre dados de outra.
@@ -4263,7 +4274,14 @@ function ehAdmin() { return perfilAtual() === 'admin'; }
    menu que só leva à tela de login é promessa que o app não cumpre. */
 const TELAS_COM_LOGIN = ['rdo', 'rdodiario', 'usuarios', 'equip', 'notas'];
 
+/* Equipamentos é POR OBRA antes de ser por perfil: o backend do módulo não
+   separa por obra, então só a obra que declara o SEU no cadastro (campo
+   `equipamentos`) ganha a tela — menu, atalho e Central de Campo juntos.
+   Sem esta régua, a frota da Teotônio aparecia dentro das outras obras. */
+function obraTemEquip() { return !!(OBRA && OBRA.equipamentos); }
+
 function podeVer(tela) {
+  if (tela === 'equip' && !obraTemEquip()) return false;
   if (!STATE.usuarioLogado) return !TELAS_COM_LOGIN.includes(tela);
   if (tela === 'usuarios') return ehAdmin();
   const t = perfilInfo().telas;
@@ -4288,6 +4306,20 @@ function podeExcluir(reg) {
 function podeEditar(reg) { return podeExcluir(reg) || pode('editar'); }
 
 function telaBloqueada(tela) {
+  // Equipamentos fora da obra dele não é questão de perfil: a obra aberta
+  // não tem o módulo. A mensagem diz isso em vez de culpar o acesso.
+  if (tela === 'equip' && !obraTemEquip()) {
+    return `<div class="card" style="max-width:520px;margin:40px auto;border-top:4px solid var(--wrn,#d69e2e)">
+    <div class="card-body" style="text-align:center;padding:28px">
+      <div class="empty-icon" style="margin-bottom:14px">${ic('equipamentos')}</div>
+      <div style="font-weight:700;font-size:15px;margin-bottom:6px">Esta obra não tem apontamento de equipamentos</div>
+      <div style="font-size:13px;color:var(--muted,#718096)">
+        A frota e as horas de máquina são registradas por obra, e <b>${escHtml(OBRA.nomeCurto || OBRA.nome)}</b>
+        não tem o módulo habilitado no cadastro.<br>
+        Troque de obra no menu lateral para ver os equipamentos dela.
+      </div>
+    </div></div>`;
+  }
   const nomes = {
     executivo: 'o Painel Executivo', avancofisico: 'o Avanço Físico', cronograma: 'o Cronograma',
     medicao: 'o Apoio à Medição', improdutivos: 'os Dias Improdutivos', teoricoreal: 'o Teórico × Real', analista: 'o Analista IA', rdo: 'o lançamento de serviços',
@@ -8328,9 +8360,9 @@ function renderCentralCampo() {
               servHoje.length ? `${servHoje.length} lançamento${servHoje.length > 1 ? 's' : ''}` : 'Nada lançado ainda')}
         ${box(diarioHoje.length ? 'ok' : 'pend', 'diario', 'RDO Diário',
               diarioHoje.length ? 'Preenchido' : 'Pendente')}
-        ${box(equipHoje === null ? 'neutro' : (equipHoje ? 'ok' : 'pend'), 'equipamentos', 'Equipamentos',
+        ${obraTemEquip() ? box(equipHoje === null ? 'neutro' : (equipHoje ? 'ok' : 'pend'), 'equipamentos', 'Equipamentos',
               equipHoje === null ? 'Abra a tela para ver'
-                                 : (equipHoje ? `${equipHoje} apontamento${equipHoje > 1 ? 's' : ''}` : 'Sem apontamento hoje'))}
+                                 : (equipHoje ? `${equipHoje} apontamento${equipHoje > 1 ? 's' : ''}` : 'Sem apontamento hoje')) : ''}
       </div>
 
       ${pendencias.length ? `
