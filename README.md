@@ -459,12 +459,16 @@ de horas continua valendo depois que a máquina sai da obra.
 O backend cria sozinho as abas `Equipamentos`, `Locadoras` e `ApontEquip`.
 Sem sinal, o apontamento espera na fila do aparelho, como o RDO.
 
-**O módulo é por obra.** O backend dele (o Apps Script do app
-`Equipamentos-teotonio`) não separa por obra, então cada obra com frota
-declara a **sua** URL no campo `equipamentos` do cadastro (`OBRAS_CFG` no
-`index.html`, ou `dados/<obra>.js`). Obra sem o campo não mostra a tela, o
-atalho nem o cartão de equipamentos da Central de Campo — hoje só a Teotônio
-tem; antes disso a frota dela aparecia dentro das outras obras.
+**A tela existe em toda obra, e cada obra vê só a própria frota.** São dois
+backends: a **Teotônio** segue no Apps Script legado do app
+`Equipamentos-teotonio` (URL no campo `equipamentos` do cadastro dela — os
+apontamentos já lançados seguem valendo, nada migra); as **demais obras**
+usam o backend principal (`Code.gs`), que guarda tudo nas abas
+`Equipamentos`/`Locadoras`/`ApontEquip` separadas pela coluna `obra` — a
+coluna nasce sozinha na primeira chamada, e linha antiga sem valor é da
+Teotônio, como nas outras abas. A tela é uma só: `backendEquip()` (em
+`js/equip/equipamentos.js`) decide URL e dialeto pela obra aberta, e trocar
+de obra zera o cache que a Central de Campo e a apresentação leem.
 
 ## Fotos e Galeria
 

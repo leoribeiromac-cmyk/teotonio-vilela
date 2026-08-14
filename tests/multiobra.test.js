@@ -14,7 +14,13 @@ function Aba(cab, linhas) {
     getLastColumn: () => dados[0].length,
     getLastRow: () => dados.length,
     getDataRange: () => ({ getValues: () => dados }),
-    appendRow(l) { dados.push(l.slice()); },
+    appendRow(l) {
+      // Planilha recém-criada (insertSheet) está VAZIA: o primeiro appendRow
+      // vira a linha 1, como no Apps Script de verdade. Sem isto o cabeçalho
+      // caía na linha 2 e toda aba criada pelo getOrCreateAba saía torta.
+      if (dados.length === 1 && dados[0].length === 0) dados[0] = l.slice();
+      else dados.push(l.slice());
+    },
     getRange(r, c, nr, nc) {
       return {
         setValue(v) {
@@ -60,7 +66,10 @@ const ABAS = {
      ['n3', 'c-n3', '',         '3003', '2026-06-01', '2026-06-02', 300, '', '', 'Leonardo']]),  // ANTIGA, sem obra
   EstoqueSaidas: Aba(['id', 'obra', 'descricao', 'qtd', 'data', 'usuario'],
     [['s1', 'teotonio', 'brita', 10, '2026-07-05', 'Leonardo'],
-     ['s2', 'ranario',  'areia', 20, '2026-07-06', 'Wallace']])
+     ['s2', 'ranario',  'areia', 20, '2026-07-06', 'Wallace']]),
+  // aba do formato ANTIGO, sem a coluna obra: a linha e da Teotonio
+  Equipamentos: Aba(['nome', 'tipo', 'vinculo', 'locadora', 'ativo'],
+    [['Escavadeira Legada', 'Linha Amarela', 'Locado', 'Locarma', 'true']])
 };
 
 // Propriedades do script COM estado — e um cache que pode ser esvaziado a
@@ -460,6 +469,114 @@ t('nfListar devolve as paginas junto com a nota', () => {
   const n = ctx.nfListar('teotonio').notas.find(x => String(x.clientId) === 'cp1');
   assert.ok(n, 'nota nao voltou');
   assert.ok(/drvX/.test(String(n.paginas)), String(n.paginas));
+});
+
+console.log('\nEQUIPAMENTOS POR OBRA');
+
+// A tela de Equipamentos existe em TODAS as obras. A Teotonio aponta no
+// Apps Script legado dela; as demais falam com ESTE backend, nas abas
+// Equipamentos/Locadoras/ApontEquip separadas pela coluna `obra`.
+
+t('a aba ganha a coluna obra sozinha, e a linha antiga e da Teotonia', () => {
+  const r = ctx.equipListar('teotonio');
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(r.equipamentos.map(e => e.nome).join(','), 'Escavadeira Legada');
+  const cab = ABAS.Equipamentos.dados[0].map(c => String(c).toLowerCase());
+  assert.ok(cab.indexOf('obra') !== -1, 'a coluna obra nao nasceu');
+});
+
+t('o Ranario NAO ve a frota da Teotonia', () => {
+  assert.strictEqual(ctx.equipListar('ranario').equipamentos.length, 0);
+});
+
+t('cadastrar no Ranario nao vaza para a Teotonia', () => {
+  const r = ctx.equipCadastrar({ nome: 'Motoniveladora RAN', tipo: 'Linha Amarela',
+    vinculo: 'Locado', locadora: 'LocaRan', obra: 'ranario' });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(r.equipamentos.map(e => e.nome).join(','), 'Motoniveladora RAN');
+  assert.ok(!ctx.equipListar('teotonio').equipamentos.some(e => e.nome === 'Motoniveladora RAN'),
+    'equipamento do Ranario apareceu na Teotonia');
+});
+
+t('o mesmo nome pode existir nas duas obras', () => {
+  ctx.equipCadastrar({ nome: 'Retroescavadeira', obra: 'ranario' });
+  const r = ctx.equipCadastrar({ nome: 'Retroescavadeira', obra: 'teotonio' });
+  assert.ok(r.equipamentos.some(e => e.nome === 'Retroescavadeira'), 'a Teotonia nao pode ter o xara');
+  assert.strictEqual(ctx.equipListar('ranario').equipamentos
+    .filter(e => e.nome === 'Retroescavadeira').length, 1, 'duplicou no Ranario');
+});
+
+t('desativar no Ranario nao desativa o xara da Teotonia', () => {
+  ctx.equipDesativar('Retroescavadeira', tokenAntigo, 'ranario');
+  assert.ok(!ctx.equipListar('ranario').equipamentos.some(e => e.nome === 'Retroescavadeira'));
+  assert.ok(ctx.equipListar('teotonio').equipamentos.some(e => e.nome === 'Retroescavadeira'),
+    'o xara da Teotonia foi desativado junto');
+});
+
+t('locadoras tambem separam por obra', () => {
+  ctx.locadoraCadastrar('LocaRan', 'so do Ranario', 'ranario');
+  assert.ok(ctx.equipListar('teotonio').locadoras.every(l => l.nome !== 'LocaRan'),
+    'locadora do Ranario vazou para a Teotonia');
+  assert.ok(ctx.equipListar('ranario').locadoras.some(l => l.nome === 'LocaRan'));
+});
+
+t('apontamento do Ranario fica no Ranario', () => {
+  const r = ctx.equipApontar({ obra: 'ranario', data: '2026-08-10', turno: 'Diurno',
+    equipamento: 'Motoniveladora RAN', operador: 'A. Costa', horas: '9', clientId: 'ap-ran-1' });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.strictEqual(ctx.equipApontamentos('', 'ranario').apontamentos.length, 1);
+  assert.strictEqual(ctx.equipApontamentos('', 'teotonio').apontamentos.length, 0,
+    'apontamento do Ranario apareceu na Teotonia');
+});
+
+t('2º apontamento do equipamento no dia avisa duplicado — e forcar grava', () => {
+  const dup = ctx.equipApontar({ obra: 'ranario', data: '2026-08-10', turno: 'Diurno',
+    equipamento: 'Motoniveladora RAN', operador: 'B. Lima', horas: '4', clientId: 'ap-ran-2' });
+  assert.strictEqual(dup.ok, false);
+  assert.strictEqual(dup.duplicado, true, JSON.stringify(dup));
+  const forcado = ctx.equipApontar({ obra: 'ranario', data: '2026-08-10', turno: 'Diurno',
+    equipamento: 'Motoniveladora RAN', operador: 'B. Lima', horas: '4', clientId: 'ap-ran-3', forcar: 'true' });
+  assert.ok(forcado.ok, JSON.stringify(forcado));
+});
+
+t('o mesmo equipamento no mesmo dia NOUTRA obra nao e duplicado', () => {
+  const r = ctx.equipApontar({ obra: 'teotonio', data: '2026-08-10', turno: 'Diurno',
+    equipamento: 'Motoniveladora RAN', operador: 'C. Melo', horas: '8', clientId: 'ap-teo-1' });
+  assert.ok(r.ok, JSON.stringify(r));
+});
+
+t('reenvio da fila (mesmo clientId) nao lanca hora duas vezes', () => {
+  const antes = ctx.equipApontamentos('', 'ranario').apontamentos.length;
+  const r = ctx.equipApontar({ obra: 'ranario', data: '2026-08-11', turno: 'Diurno',
+    equipamento: 'Motoniveladora RAN', horas: '9', clientId: 'ap-ran-1' });
+  assert.ok(r.ok);
+  assert.strictEqual(r.duplicate, true);
+  assert.strictEqual(ctx.equipApontamentos('', 'ranario').apontamentos.length, antes, 'reenvio criou linha nova');
+});
+
+t('Wallace (so Ranario) NAO aponta equipamento na Teotonia', () => {
+  const r = ctx.equipApontar({ obra: 'teotonio', data: '2026-08-12', turno: 'Diurno',
+    equipamento: 'Retroescavadeira', horas: '9', token: tokenWallace, clientId: 'ap-neg-1' });
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(r.error, 'SEM_ACESSO_A_OBRA');
+});
+
+t('o front le status/horimInicial mesmo com a aba guardando situacao/horimIni', () => {
+  ctx.equipApontar({ obra: 'ranario', data: '2026-08-13', turno: 'Noturno',
+    equipamento: 'Motoniveladora RAN', horas: '9', situacao: 'OperandoNormalmente',
+    horimIni: '100', horimFim: '109', clientId: 'ap-ran-4' });
+  const a = ctx.equipUltimos('ranario', 1).apontamentos[0];
+  assert.strictEqual(a.status, 'OperandoNormalmente', JSON.stringify(a));
+  assert.strictEqual(String(a.horimInicial), '100');
+  assert.strictEqual(String(a.horimFinal), '109');
+  assert.strictEqual(a.data, '2026-08-13');
+});
+
+t('equipApontamentos filtra por periodo de/ate dentro da obra', () => {
+  const r = ctx.equipApontamentos('', 'ranario', '2026-08-11', '2026-08-13');
+  assert.ok(r.apontamentos.every(a => a.data >= '2026-08-11' && a.data <= '2026-08-13'),
+    JSON.stringify(r.apontamentos.map(a => a.data)));
+  assert.ok(r.apontamentos.length >= 1, 'o periodo deveria ter apontamento');
 });
 
 console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');

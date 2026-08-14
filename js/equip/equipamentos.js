@@ -21,21 +21,61 @@
        precisa abrir offline no canteiro;
      • o xlsx-js-style é o de `vendor/`, carregado só ao exportar.
 
-   O BACKEND continua sendo o Apps Script do app de equipamentos: os
-   apontamentos já lançados seguem valendo e nada precisa ser migrado.
-   Como ele NÃO separa por obra, a URL mora no cadastro da obra (campo
-   `equipamentos` do OBRAS_CFG, no index.html) e a tela só existe nas
-   obras que a declaram — ver obraTemEquip().
+   O BACKEND é POR OBRA, e são dois dialetos:
+     • a TEOTÔNIO segue no Apps Script legado do app de equipamentos
+       (URL no campo `equipamentos` do cadastro dela): os apontamentos
+       já lançados seguem valendo e nada precisa ser migrado;
+     • as DEMAIS obras usam o backend principal delas (Code.gs), que
+       guarda tudo nas abas Equipamentos/Locadoras/ApontEquip separadas
+       pela coluna `obra` — cada obra vê e lança só o que é dela.
+   A tela é UMA só; backendEquip() decide URL e dialeto a cada chamada.
    ==================================================================== */
 (function () {
   'use strict';
-        // A URL do Apps Script vem do CADASTRO DA OBRA (campo `equipamentos`
-        // no OBRAS_CFG / dados/<obra>.js). O backend não separa por obra —
-        // cada obra com frota tem o SEU — e é resolvida a cada chamada
-        // porque se troca de obra sem recarregar a página. Obra sem o campo
-        // nem chega aqui: obraTemEquip() esconde a tela no index.html.
-        function scriptURL() {
-            return (typeof OBRA !== 'undefined' && OBRA && OBRA.equipamentos) || '';
+        // ============== QUAL BACKEND ATENDE A OBRA ABERTA ==============
+        // Resolvido a cada chamada — troca-se de obra sem recarregar a
+        // página. Obra com `equipamentos` no cadastro fala o protocolo
+        // LEGADO nessa URL; as demais falam com o Code.gs da própria obra.
+        function backendEquip() {
+            var legado = (typeof OBRA !== 'undefined' && OBRA && OBRA.equipamentos) || '';
+            if (legado) return { url: legado, legado: true };
+            var principal = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.appsScript) || '';
+            return { url: principal, legado: false };
+        }
+
+        // O mesmo pedido, nos dois dialetos: o nome da ação muda, e o
+        // principal exige a obra e o token (as ações são protegidas lá).
+        const ACAO_PRINCIPAL = {
+            listas: 'equipListar',
+            ultimos: 'equipUltimos',
+            relatorio: 'equipApontamentos',
+            cadastrarEquipamento: 'equipCadastrar',
+            cadastrarLocadora: 'locadoraCadastrar',
+            desativarEquipamento: 'equipDesativar',
+            apagarApontamento: 'equipApagar',
+        };
+
+        function paramsPrincipal() {
+            const out = { obra: (typeof OBRA !== 'undefined' && OBRA && OBRA.id) || '' };
+            const t = (typeof tokenSessao === 'function') ? tokenSessao() : '';
+            if (t) out.token = t;
+            return out;
+        }
+
+        // URL de GET no dialeto do backend da obra aberta.
+        function urlEquip(acao, params) {
+            const be = backendEquip();
+            if (!be.url) return '';
+            const q = new URLSearchParams();
+            q.set('action', be.legado ? acao : (ACAO_PRINCIPAL[acao] || acao));
+            Object.keys(params || {}).forEach(k => {
+                if (params[k] !== '' && params[k] != null) q.set(k, params[k]);
+            });
+            if (!be.legado) {
+                const extra = paramsPrincipal();
+                Object.keys(extra).forEach(k => q.set(k, extra[k]));
+            }
+            return be.url + '?' + q.toString();
         }
 
         // Resolvidas em EQ.boot(), depois que a tela existe no DOM.
@@ -157,7 +197,7 @@
         form.addEventListener('submit', e => {
             e.preventDefault();
 
-            if (!scriptURL()) {
+            if (!backendEquip().url) {
                 showToast('Falha na autenticação: Endpoint não configurado.', 'error');
                 return;
             }
@@ -213,7 +253,7 @@
 
         async function carregarListas() {
             try {
-                const resp = await fetch(scriptURL() + '?action=listas');
+                const resp = await fetch(urlEquip('listas'));
                 const data = await resp.json();
                 if (data && data.ok) {
                     EQUIPAMENTOS = data.equipamentos || [];
@@ -314,10 +354,20 @@
         }
 
         async function postAcao(params) {
+            const be = backendEquip();
             const fd = new FormData();
             Object.keys(params).forEach(k => fd.append(k, params[k]));
-            const resp = await fetch(scriptURL(), { method: 'POST', body: fd });
-            return resp.json();
+            if (!be.legado) {
+                fd.set('action', ACAO_PRINCIPAL[params.action] || params.action);
+                const extra = paramsPrincipal();
+                Object.keys(extra).forEach(k => fd.set(k, extra[k]));
+            }
+            const resp = await fetch(be.url, { method: 'POST', body: fd });
+            const r = await resp.json();
+            // O legado avisa em `erro`; o principal, em `error`/`mensagem`.
+            // A tela lê `erro` — traduz aqui para o aviso não virar genérico.
+            if (r && !r.ok && !r.erro && (r.mensagem || r.error)) r.erro = r.mensagem || r.error;
+            return r;
         }
 
         function ligarFormLoc() {
@@ -413,9 +463,38 @@
             setLoading(true);
             try {
                 capturarAssinatura();
-                const fd = new FormData(form);
+                const be = backendEquip();
+                let fd;
+                if (be.legado) {
+                    // O legado recebe o formulário como sempre recebeu.
+                    fd = new FormData(form);
+                } else {
+                    // O principal recebe os campos com os nomes das colunas
+                    // da aba ApontEquip, mais a obra, o token e um clientId —
+                    // que é o que impede um reenvio de lançar hora duas vezes.
+                    const g = id => { const e = document.getElementById(id); return e ? e.value : ''; };
+                    fd = new FormData();
+                    fd.set('action', 'equipApontar');
+                    fd.set('clientId', 'eq_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8));
+                    fd.set('data', g('data'));
+                    fd.set('turno', g('turno'));
+                    fd.set('equipamento', g('equipamento'));
+                    fd.set('operador', g('operador'));
+                    fd.set('inicio', g('inicio'));
+                    fd.set('fim', g('fim'));
+                    fd.set('horas', g('horas'));
+                    fd.set('paradas', resumoParadas());
+                    fd.set('horimIni', g('horimInicial'));
+                    fd.set('horimFim', g('horimFinal'));
+                    fd.set('combustivel', g('combustivel'));
+                    fd.set('situacao', g('status'));
+                    fd.set('observacoes', g('observacoes'));
+                    fd.set('assinatura', g('assinatura'));
+                    const extra = paramsPrincipal();
+                    Object.keys(extra).forEach(k => fd.set(k, extra[k]));
+                }
                 if (forcar) fd.append('forcar', 'true');
-                const resp = await fetch(scriptURL(), { method: 'POST', body: fd });
+                const resp = await fetch(be.url, { method: 'POST', body: fd });
                 const r = await resp.json();
                 if (r.ok) {
                     showToast('Transmissão concluída com sucesso!', 'success');
@@ -450,7 +529,7 @@
             const box = document.getElementById('listaUltimos');
             box.innerHTML = '<p class="eq-vazio">Carregando…</p>';
             try {
-                const resp = await fetch(scriptURL() + '?action=ultimos&n=15');
+                const resp = await fetch(urlEquip('ultimos', { n: 15 }));
                 const data = await resp.json();
                 const items = (data && data.apontamentos) || [];
                 if (!items.length) { box.innerHTML = '<p class="eq-vazio">Nenhum apontamento ainda.</p>'; return; }
@@ -475,11 +554,7 @@
         async function apagarApontamentoUI(carimbo) {
             if (!confirm('Apagar este apontamento? Esta ação não pode ser desfeita.')) return;
             try {
-                const fd = new FormData();
-                fd.append('action', 'apagarApontamento');
-                fd.append('carimbo', carimbo);
-                const resp = await fetch(scriptURL(), { method: 'POST', body: fd });
-                const r = await resp.json();
+                const r = await postAcao({ action: 'apagarApontamento', carimbo });
                 if (r.ok) { showToast('Apontamento apagado.', 'success'); carregarUltimos(); }
                 else { showToast(r.erro || 'Não foi possível apagar.', 'error'); }
             } catch (err) { showToast('Erro de conexão com o servidor.', 'error'); }
@@ -546,7 +621,7 @@
             corpo.innerHTML = '<p class="eq-vazio">Carregando…</p>';
             const de = document.getElementById('relDe').value, ate = document.getElementById('relAte').value;
             try {
-                const url = scriptURL() + '?action=relatorio' + (de ? '&de=' + de : '') + (ate ? '&ate=' + ate : '');
+                const url = urlEquip('relatorio', { de: de, ate: ate });
                 const data = await (await fetch(url)).json();
                 REL_RAW = (data && data.apontamentos) || [];
                 // A Central de Campo mostra o que já foi apontado hoje. Enquanto
@@ -789,7 +864,7 @@
             btn.disabled = true; btn.classList.add('opacity-60', 'cursor-wait');
             stEl.textContent = 'Buscando apontamentos…';
             try {
-                const url = scriptURL() + '?action=relatorio&de=' + de + '&ate=' + ate;
+                const url = urlEquip('relatorio', { de: de, ate: ate });
                 const data = await (await fetch(url)).json();
                 let dados = (data && data.apontamentos) || [];
                 const eqFiltro = document.getElementById('relEquip').value;
