@@ -459,6 +459,13 @@ de horas continua valendo depois que a máquina sai da obra.
 O backend cria sozinho as abas `Equipamentos`, `Locadoras` e `ApontEquip`.
 Sem sinal, o apontamento espera na fila do aparelho, como o RDO.
 
+**O módulo é por obra.** O backend dele (o Apps Script do app
+`Equipamentos-teotonio`) não separa por obra, então cada obra com frota
+declara a **sua** URL no campo `equipamentos` do cadastro (`OBRAS_CFG` no
+`index.html`, ou `dados/<obra>.js`). Obra sem o campo não mostra a tela, o
+atalho nem o cartão de equipamentos da Central de Campo — hoje só a Teotônio
+tem; antes disso a frota dela aparecia dentro das outras obras.
+
 ## Fotos e Galeria
 
 No **Lançar Serviço**, cada linha aceita até **3 fotos** (a câmera traseira abre

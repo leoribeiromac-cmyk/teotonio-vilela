@@ -23,12 +23,21 @@
 
    O BACKEND continua sendo o Apps Script do app de equipamentos: os
    apontamentos já lançados seguem valendo e nada precisa ser migrado.
+   Como ele NÃO separa por obra, a URL mora no cadastro da obra (campo
+   `equipamentos` do OBRAS_CFG, no index.html) e a tela só existe nas
+   obras que a declaram — ver obraTemEquip().
    ==================================================================== */
 (function () {
   'use strict';
-        // === A URL DO SEU APP SCRIPT AQUI ===
-        const scriptURL = 'https://script.google.com/macros/s/AKfycbxGsXm8_N26x_kcxLUQZ-wKNbSLKIufeRp6wcj1BrdigHi13ltMuMIzlzozag64ygd2/exec';
-        
+        // A URL do Apps Script vem do CADASTRO DA OBRA (campo `equipamentos`
+        // no OBRAS_CFG / dados/<obra>.js). O backend não separa por obra —
+        // cada obra com frota tem o SEU — e é resolvida a cada chamada
+        // porque se troca de obra sem recarregar a página. Obra sem o campo
+        // nem chega aqui: obraTemEquip() esconde a tela no index.html.
+        function scriptURL() {
+            return (typeof OBRA !== 'undefined' && OBRA && OBRA.equipamentos) || '';
+        }
+
         // Resolvidas em EQ.boot(), depois que a tela existe no DOM.
         let form = null, submitBtn = null, btnText = null;
 
@@ -148,7 +157,7 @@
         form.addEventListener('submit', e => {
             e.preventDefault();
 
-            if (!scriptURL || scriptURL === 'COLE_AQUI_A_URL_DO_SEU_WEB_APP') {
+            if (!scriptURL()) {
                 showToast('Falha na autenticação: Endpoint não configurado.', 'error');
                 return;
             }
@@ -204,7 +213,7 @@
 
         async function carregarListas() {
             try {
-                const resp = await fetch(scriptURL + '?action=listas');
+                const resp = await fetch(scriptURL() + '?action=listas');
                 const data = await resp.json();
                 if (data && data.ok) {
                     EQUIPAMENTOS = data.equipamentos || [];
@@ -257,6 +266,11 @@
         }
 
         function renderListas() {
+            // O slide de equipamentos da apresentação lê a frota e as
+            // locadoras daqui (EQUIP.equipamentos / EQUIP.locadoras); sem o
+            // espelho ele quebrava ao abrir, porque só apontamentos existia.
+            window.EQUIP.equipamentos = EQUIPAMENTOS;
+            window.EQUIP.locadoras = LOCADORAS;
             const le = document.getElementById('listaEquip');
             document.getElementById('countEquip').textContent = EQUIPAMENTOS.length;
             le.innerHTML = EQUIPAMENTOS.map(eq => `
@@ -302,7 +316,7 @@
         async function postAcao(params) {
             const fd = new FormData();
             Object.keys(params).forEach(k => fd.append(k, params[k]));
-            const resp = await fetch(scriptURL, { method: 'POST', body: fd });
+            const resp = await fetch(scriptURL(), { method: 'POST', body: fd });
             return resp.json();
         }
 
@@ -401,7 +415,7 @@
                 capturarAssinatura();
                 const fd = new FormData(form);
                 if (forcar) fd.append('forcar', 'true');
-                const resp = await fetch(scriptURL, { method: 'POST', body: fd });
+                const resp = await fetch(scriptURL(), { method: 'POST', body: fd });
                 const r = await resp.json();
                 if (r.ok) {
                     showToast('Transmissão concluída com sucesso!', 'success');
@@ -436,7 +450,7 @@
             const box = document.getElementById('listaUltimos');
             box.innerHTML = '<p class="eq-vazio">Carregando…</p>';
             try {
-                const resp = await fetch(scriptURL + '?action=ultimos&n=15');
+                const resp = await fetch(scriptURL() + '?action=ultimos&n=15');
                 const data = await resp.json();
                 const items = (data && data.apontamentos) || [];
                 if (!items.length) { box.innerHTML = '<p class="eq-vazio">Nenhum apontamento ainda.</p>'; return; }
@@ -464,7 +478,7 @@
                 const fd = new FormData();
                 fd.append('action', 'apagarApontamento');
                 fd.append('carimbo', carimbo);
-                const resp = await fetch(scriptURL, { method: 'POST', body: fd });
+                const resp = await fetch(scriptURL(), { method: 'POST', body: fd });
                 const r = await resp.json();
                 if (r.ok) { showToast('Apontamento apagado.', 'success'); carregarUltimos(); }
                 else { showToast(r.erro || 'Não foi possível apagar.', 'error'); }
@@ -532,7 +546,7 @@
             corpo.innerHTML = '<p class="eq-vazio">Carregando…</p>';
             const de = document.getElementById('relDe').value, ate = document.getElementById('relAte').value;
             try {
-                const url = scriptURL + '?action=relatorio' + (de ? '&de=' + de : '') + (ate ? '&ate=' + ate : '');
+                const url = scriptURL() + '?action=relatorio' + (de ? '&de=' + de : '') + (ate ? '&ate=' + ate : '');
                 const data = await (await fetch(url)).json();
                 REL_RAW = (data && data.apontamentos) || [];
                 // A Central de Campo mostra o que já foi apontado hoje. Enquanto
@@ -775,7 +789,7 @@
             btn.disabled = true; btn.classList.add('opacity-60', 'cursor-wait');
             stEl.textContent = 'Buscando apontamentos…';
             try {
-                const url = scriptURL + '?action=relatorio&de=' + de + '&ate=' + ate;
+                const url = scriptURL() + '?action=relatorio&de=' + de + '&ate=' + ate;
                 const data = await (await fetch(url)).json();
                 let dados = (data && data.apontamentos) || [];
                 const eqFiltro = document.getElementById('relEquip').value;
@@ -1215,8 +1229,10 @@
      Inicialização — a tela existe só depois de render()
      ================================================================== */
   let ligado = false;
-  // Cache mínimo lido pela Central de Campo do painel inicial.
-  window.EQUIP = window.EQUIP || { carregado: false, apontamentos: [] };
+  // Cache mínimo lido pela Central de Campo do painel inicial e pela
+  // apresentação. trocarObra() zera com este MESMO formato — dado de
+  // equipamento é da obra que o lançou e não atravessa a troca.
+  window.EQUIP = window.EQUIP || { carregado: false, apontamentos: [], equipamentos: [], locadoras: [] };
 
   function boot() {
     // modais que abrir() mudou para o body numa montagem anterior da tela
