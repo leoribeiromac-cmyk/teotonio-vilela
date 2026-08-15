@@ -1810,6 +1810,9 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   perspective: 1400px;
   perspective-origin: 50% 30%;
 }
+/* Uma rua sozinha na cena não empilha duas pistas: ocupa menos altura, e
+   assim duas ruas cabem na tela uma embaixo da outra sem virar rolagem. */
+.scene-3d.solo { height: 250px; }
 .scene-3d::after {
   content: '';
   position: absolute;
@@ -1860,6 +1863,8 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 .bar3d.dim { background: linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.06) 100%); box-shadow: none; width: 3px; margin-left: -1.5px; }
 .bar3d.cb { bottom: 72%; }
 .bar3d.bc { bottom: 14%; }
+/* rua sozinha na cena: as barras sobem do eixo da via, não de uma pista */
+.bar3d.uni { bottom: 44%; }
 .bar3d:hover { width: 6px; margin-left: -3px; background: linear-gradient(180deg, oklch(0.92 0.18 60) 0%, oklch(0.72 0.18 38) 100%); box-shadow: 0 0 14px oklch(0.72 0.18 38 / 0.8); z-index: 5; }
 @keyframes bar3dGrow {
   from { transform: rotateX(-52deg) scaleY(0); opacity: 0; }
@@ -1881,7 +1886,22 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 }
 .scene-lane-label.cb { top: 18px; left: 50%; transform: translateX(-50%); }
 .scene-lane-label.bc { bottom: 18px; left: 50%; transform: translateX(-50%); }
+.scene-lane-label.uni { top: 16px; left: 50%; transform: translateX(-50%); }
 .scene-lane-label .acc { color: var(--acc); }
+/* quantas estacas daquela RUA já têm lançamento (só na cena de rua só) */
+.scene-lane-stat {
+  position: absolute; top: 16px; left: 18px; z-index: 3; pointer-events: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; letter-spacing: 0.04em; color: rgba(255,255,255,0.45);
+  animation: laneStatFade 0.6s 2.5s both;
+}
+.scene-lane-stat strong { color: var(--acc); font-size: 11px; }
+/* fade próprio: o da faixa central carrega um translateX(-50%) que
+   empurraria este bloco, que é ancorado pela esquerda */
+@keyframes laneStatFade {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: none; }
+}
 @keyframes laneLabelFade {
   from { opacity: 0; transform: translate(-50%, -8px); }
   to   { opacity: 1; transform: translate(-50%, 0); }
@@ -1892,7 +1912,10 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   font-family: 'JetBrains Mono', monospace;
   font-size: 9px; color: rgba(255,255,255,0.5);
   z-index: 3;
-  animation: laneLabelFade 0.6s 2.5s both;
+  /* fade SEM o translateX(-50%) do rótulo central: com ele, a legenda
+     terminava a animação meia largura à esquerda do canto onde deveria
+     parar, e caía por cima de quem estivesse no rodapé da cena. */
+  animation: laneStatFade 0.6s 2.5s both;
   align-items: center;
 }
 .scene-legend-item { display: inline-flex; align-items: center; gap: 5px; }
@@ -2122,7 +2145,11 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 /* ===== Avenida 3D mobile ===== */
 @media (max-width: 768px) {
   .avenue-card .card-body > .scene-3d { height: 220px; }
+  .avenue-card .card-body > .scene-3d.solo { height: 200px; }
   .scene-lane-label { font-size: 9px; padding: 3px 8px; }
+  /* no telefone o rótulo da rua já ocupa o alto da cena; a contagem desce
+     para o canto de baixo, do lado oposto ao da legenda */
+  .scene-lane-stat { top: auto; bottom: 8px; left: 10px; font-size: 8px; }
   .road-3d { width: 92%; height: 90px; }
   .bar3d { width: 3px; margin-left: -1.5px; }
   .scene-legend { bottom: 8px; right: 10px; gap: 8px; font-size: 8px; }
@@ -2131,7 +2158,11 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 }
 @media (max-width: 560px) {
   .avenue-card .card-body > .scene-3d { height: 180px; }
-  .scene-lane-label.cb, .scene-lane-label.bc { font-size: 8px; padding: 2px 6px; }
+  .avenue-card .card-body > .scene-3d.solo { height: 170px; }
+  .scene-lane-label.cb, .scene-lane-label.bc, .scene-lane-label.uni { font-size: 8px; padding: 2px 6px; }
+  .scene-lane-stat strong { font-size: 10px; }
+  /* "5/13 com RDO" — a linha inteira não cabe ao lado da legenda */
+  .scene-lane-stat .ln-est { display: none; }
 }
 
 /* ===== Curva S + legenda ===== */
@@ -2670,6 +2701,28 @@ function eixosDaObra(o) {
 }
 
 /* ------------------------------------------------------------------
+   PISTA DUPLA × RUAS DIFERENTES
+   ------------------------------------------------------------------
+   Dois eixos podem ser duas coisas bem diferentes. Na Teotônio são os
+   dois SENTIDOS da mesma avenida: desenhá-los como as duas pistas de uma
+   via só é o retrato fiel da obra — quem olha vê a avenida.
+
+   Nas Ruas de Terra são DUAS RUAS separadas, cada uma estaqueada a
+   partir do zero. Pôr uma em cima e outra embaixo do mesmo desenho diz
+   que são os dois lados de uma via só, e que a E5 de uma está ao lado da
+   E5 da outra — e elas nem se encostam. Rua diferente, mapa diferente.
+   ------------------------------------------------------------------ */
+function eixosSaoPistas(o) {
+  // Eixo declarado no cadastro (`eixos`) ou vindo do mapa `estacas` é
+  // sempre trecho/rua com vida própria. Só os SENTIDOS montam a via de
+  // pista dupla, e só quando os DOIS existem.
+  if (Array.isArray(o.eixos) && o.eixos.length) return false;
+  return !!(o.estacasCB && o.estacasBC &&
+            o.estacasCB.fim >= o.estacasCB.ini &&
+            o.estacasBC.fim >= o.estacasBC.ini);
+}
+
+/* ------------------------------------------------------------------
    LADO DA VIA
    ------------------------------------------------------------------
    Meia pista é meio serviço. Sem dizer o lado, "guia da E4 à E7" pode
@@ -2716,6 +2769,10 @@ function montarConfig(id) {
     // Os eixos estaqueados desta obra (ver eixosDaObra). Na Teotônio saem
     // dos dois sentidos acima; nas Ruas de Terra, das duas ruas.
     eixos: eixosDaObra(o),
+    // Os eixos são as duas pistas de UMA via (avenida de mão dupla) ou
+    // vias independentes? Ver eixosSaoPistas — é o que decide se o
+    // desenho da obra sai em uma cena ou em uma cena por rua.
+    viaPistaDupla: eixosSaoPistas(o),
     eixoRotulo: o.eixoRotulo || (o.estacasCB ? 'Sentido da via' : 'Trecho'),
     lados: ladosDaObra(o),
     refreshMs: APP.refreshMs,
@@ -8223,34 +8280,51 @@ function renderAvenida3D(rdosAtivos, pacotesAtivos) {
   const inativas = total - ativas;
   const topEstaca = [...todasEst].sort((a,b) => b.lancamentos - a.lancamentos)[0];
 
-  function bar(e, pista, i, totalN) {
+  function bar(e, pista, i, totalN, atraso) {
     const ratio = e.lancamentos / maxLanc;
     const height = e.lancamentos === 0 ? 6 : Math.max(8, 8 + ratio * 75);
     const left   = (i / Math.max(1, totalN - 1)) * 96 + 2;
     const dim    = e.lancamentos === 0 ? 'dim' : '';
-    const delay  = 500 + Math.floor(i * 15) + (pista === 'bc' ? 80 : 0);
+    const delay  = 500 + Math.floor(i * 15) + atraso;
     const title  = `${e.rot} · ${e.lancamentos} RDO${e.lancamentos!==1?'s':''} · ${e.pacotes.size} pacote${e.pacotes.size!==1?'s':''}`;
     return `<div class="bar3d ${pista} ${dim}" style="left:${left.toFixed(2)}%;height:${height}px;animation-delay:${delay}ms" title="${title}"></div>`;
   }
 
-  /* A cena tem duas pistas — é o desenho da avenida de pista dupla. Cada
-     cena recebe até DOIS eixos: na Teotônio são os dois sentidos, nas Ruas
-     de Terra são duas ruas, uma em cada pista. Obra com mais eixos ganha
-     outra cena embaixo, de dois em dois; com um eixo só, a pista de baixo
-     fica vazia e o rótulo dela não é desenhado. */
+  /* Uma cena por VIA — e via não é a mesma coisa que eixo (ver
+     eixosSaoPistas). Na Teotônio a via é a avenida e os dois sentidos são
+     as duas pistas dela: mesma cena, um em cima e outro embaixo. Nas Ruas
+     de Terra cada eixo é uma RUA que existe sozinha, e ganha a cena dela,
+     uma abaixo da outra — nada de tratar duas ruas como os dois lados de
+     uma via que não existe.
+
+     A altura das barras continua medida contra o MESMO máximo em todas as
+     cenas. Normalizar rua a rua faria um único RDO virar um pico do
+     tamanho do da rua que teve vinte. */
   const eixos = eixosDaObraAtiva();
+  const porCena = CONFIG.viaPistaDupla ? 2 : 1;
+  const solo = porCena === 1;
   const cenas = [];
-  for (let k = 0; k < eixos.length; k += 2) {
-    const par = eixos.slice(k, k + 2);
-    const lados = par.map((x, li) => {
-      const pista = li === 0 ? 'cb' : 'bc';
+  for (let k = 0; k < eixos.length; k += porCena) {
+    const grupo = eixos.slice(k, k + porCena);
+    const lados = grupo.map((x, li) => {
+      const pista = solo ? 'uni' : (li === 0 ? 'cb' : 'bc');
       const lista = todasEst.filter(e => e.eixo === x.id).sort((a, b) => a.num - b.num);
-      return { x, pista, barras: lista.map((e, i) => bar(e, pista, i, lista.length)).join('') };
+      // cada cena entra um pouco depois da anterior, para o olho seguir
+      const atraso = solo ? k * 90 : (li ? 80 : 0);
+      return { x, pista, lista,
+               barras: lista.map((e, i) => bar(e, pista, i, lista.length, atraso)).join('') };
     });
     const rot = (l) => `<div class="scene-lane-label ${l.pista}">${l.pista === 'cb' ? '↑ ' : ''}<span class="acc">${escHtml(l.x.label)}</span> · E${l.x.ini}–E${l.x.fim}${l.pista === 'bc' ? ' ↓' : ''}</div>`;
+    /* Com uma rua por cena, o número que interessa é o DELA: o total do
+       cabeçalho é da obra inteira e não diz como vai cada rua. */
+    const conta = (l) => {
+      const comRdo = l.lista.filter(e => e.lancamentos > 0).length;
+      return `<div class="scene-lane-stat"><strong>${comRdo}</strong>/${l.lista.length}<span class="ln-est"> estacas</span> com RDO</div>`;
+    };
     cenas.push(`
-        <div class="scene-3d"${k ? ' style="margin-top:14px"' : ''}>
+        <div class="scene-3d${solo ? ' solo' : ''}"${k ? ' style="margin-top:14px"' : ''}>
           ${lados.map(rot).join('')}
+          ${solo ? lados.map(conta).join('') : ''}
           <div class="scene-3d-stage">
             <div class="road-3d">${lados.map(l => l.barras).join('')}</div>
           </div>
@@ -8261,12 +8335,18 @@ function renderAvenida3D(rdosAtivos, pacotesAtivos) {
         </div>`);
   }
 
+  /* "pico em E0" não diz nada quando duas ruas têm uma E0 cada. Com ruas
+     separadas o pico vem com o nome da rua junto. */
+  const rotPico = topEstaca && (solo && eixos.length > 1
+    ? topEstaca.rot + ' da ' + ((eixoPorId(topEstaca.eixo) || {}).label || topEstaca.eixo)
+    : topEstaca.rot);
+
   return `
     <div class="card stagger-item avenue-card" style="animation-delay:.20s">
       <div class="card-header">
         <div>
           <div class="card-title-lg">Trecho da obra · atividade por estaca</div>
-          <div class="card-title-sub">${escHtml(OBRA.nome || '')} · ${total} estacas · <strong style="color:var(--acc)">${ativas}</strong> com lançamentos${topEstaca && topEstaca.lancamentos > 0 ? ' · pico em <strong style="color:var(--text)">'+escHtml(topEstaca.rot)+'</strong> ('+topEstaca.lancamentos+' RDOs)' : ''}</div>
+          <div class="card-title-sub">${escHtml(OBRA.nome || '')} · ${total} estacas · <strong style="color:var(--acc)">${ativas}</strong> com lançamentos${topEstaca && topEstaca.lancamentos > 0 ? ' · pico em <strong style="color:var(--text)">'+escHtml(rotPico)+'</strong> ('+topEstaca.lancamentos+' RDOs)' : ''}</div>
         </div>
         <div class="avenue-header-stats">
           <div class="avenue-meta-stat"><div class="avenue-meta-num">${ativas}</div><div class="avenue-meta-lbl">ativas</div></div>
