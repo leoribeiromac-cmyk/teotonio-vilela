@@ -24,13 +24,16 @@ para a navegação, então a mudança chega sem precisar limpar cache.
   inteira (`window.OBRAS_ARQ`); `teotonio-muros.js` é um **complemento** da
   Teotônio (`window.OBRAS_COMPLEMENTO`), acrescentado ao que a planilha
   devolve. Ver `aplicarComplemento()` no `index.html`.
-- `projetos/<obra>/` — as pranchas do executivo. A da Teotônio é uma
-  **pirâmide de quadrados** (`implantacao/<nível>/<linha>_<coluna>.webp` +
-  `prancha.json`), não um PDF: A1 com ~50 mil entidades trava o celular se
-  for redesenhada a cada zoom. Gerada por `ferramentas/fatiar-prancha.py`.
-  Refatiar exige subir o `VERSAO_PRANCHAS` do `sw.js` — os nomes dos arquivos
-  não mudam, então é a versão do balde que descarta os quadrados velhos.
-  O `.pdf` ao lado é o mesmo desenho, só para os botões Abrir/Baixar.
+- `projetos/<obra>/` — as pranchas do executivo. Toda prancha é uma
+  **pirâmide de quadrados** (`<prancha>/<nível>/<linha>_<coluna>.webp` +
+  `prancha.json`), não um PDF: A1 redesenhada a cada passo de zoom trava o
+  celular. Gerada por `ferramentas/fatiar-prancha.py <pdf> <pasta> [res]`;
+  `res` é o teto de pixels por ponto (12 na Teotônio, que é uma A1 lotada;
+  6 nas Ruas de Terra, plantas de rua curta). Refatiar exige subir o
+  `VERSAO_PRANCHAS` do `sw.js` — os nomes dos arquivos não mudam, então é a
+  versão do balde que descarta os quadrados velhos. O `.pdf` ao lado é o
+  mesmo desenho, só para os botões Abrir/Baixar.
+  `tests/pranchas-manifesto.test.js` confere bitmap × arquivos no disco.
 
 ## Números de cadastro escritos em arquivo
 

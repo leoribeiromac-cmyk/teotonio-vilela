@@ -80,30 +80,46 @@ window.OBRAS_ARQ['ruas-de-terra'] = {
       ] }
   ],
 
-  /* As pranchas do executivo, na tela Projetos. São PDFs (não pirâmide de
-     quadrados como a da Teotônio): A1 de rua curta abre direto no PDF.js
-     sem travar o celular. `ref` é o que a fiscalização usa para se referir
-     à folha. */
+  /* As pranchas do executivo, na tela Projetos. Cada uma é uma A1 servida
+     como PIRÂMIDE DE QUADRADOS (`tiles`), igual à da Teotônio: arrastar e
+     ampliar viram um `transform` na camada, e só os poucos quadrados que
+     entram na tela são baixados. Pelo PDF.js, a mesma folha era
+     redesenhada inteira a cada passo de zoom — no celular do canteiro
+     isso é meio segundo de tela parada por toque.
+
+     `arquivo` continua sendo o PDF: é ele que abre fora do app e vai para
+     a impressão. `ref` é como a fiscalização se refere à folha.
+
+     Fatiadas por `ferramentas/fatiar-prancha.py <pdf> <pasta> 6`. O teto
+     de 6 px/pt (~432 dpi) é metade do da Teotônio de propósito: aquela é
+     uma A1 lotada, com cota de 2,9 pt; estas são plantas de rua curta a
+     1:500, e a 6 já se lê o quadro de quantidades sem borrar — por um
+     quarto do espaço e do tempo de geração. */
   "projetos": [
     { "grupo": "Agrimensor Sugaya", "disciplina": "Pavimentação", "escala": "1:500",
       "ref": "Rua Agrimensor Sugaya — est. 0 a 12 (240,00 m)",
       "cod": "CT-AS-101-1001-0F-DE",
+      "tiles": "projetos/ruas-de-terra/agrimensor-pavimentacao/",
       "arquivo": "projetos/ruas-de-terra/agrimensor-pavimentacao.pdf" },
     { "grupo": "Agrimensor Sugaya", "disciplina": "Drenagem", "escala": "1:500",
       "ref": "Rua Agrimensor Sugaya — est. 0 a 12",
       "cod": "CT-AS-102-1001-0F-DE",
+      "tiles": "projetos/ruas-de-terra/agrimensor-drenagem/",
       "arquivo": "projetos/ruas-de-terra/agrimensor-drenagem.pdf" },
     { "grupo": "Astrogildo Pereira", "disciplina": "Pavimentação", "escala": "1:500",
       "ref": "Rua Astrogildo Pereira — est. 0 a 18 (360,00 m)",
       "cod": "CT-AP-101-1001-0G-DE",
+      "tiles": "projetos/ruas-de-terra/astrogildo-pavimentacao/",
       "arquivo": "projetos/ruas-de-terra/astrogildo-pavimentacao.pdf" },
     { "grupo": "Astrogildo Pereira", "disciplina": "Drenagem", "escala": "1:500",
       "ref": "Rua Astrogildo Pereira — est. 0 a 18",
       "cod": "CT-AP-102-1001-0G-DE",
+      "tiles": "projetos/ruas-de-terra/astrogildo-drenagem/",
       "arquivo": "projetos/ruas-de-terra/astrogildo-drenagem.pdf" },
     { "grupo": "Astrogildo Pereira", "disciplina": "Terraplenagem", "escala": "1:500",
       "ref": "Rua Astrogildo Pereira — planta e perfil, est. 0 a 18",
       "cod": "CT-AP-103-1001-0F-DE",
+      "tiles": "projetos/ruas-de-terra/astrogildo-terraplenagem/",
       "arquivo": "projetos/ruas-de-terra/astrogildo-terraplenagem.pdf" }
   ],
   "frentes": [

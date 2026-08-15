@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Fatia uma prancha em PDF na pirâmide de quadrados que o app lê.
 
-Uso: python3 ferramentas/fatiar-prancha.py <entrada.pdf> <projetos/<obra>/<nome>/>
+Uso: python3 ferramentas/fatiar-prancha.py <entrada.pdf> <projetos/<obra>/<nome>/> [res]
+
+`res` é o teto de pixels por ponto do PDF no nível mais fino (padrão 12, que é
+~864 dpi na A1). A Teotônio precisa dos 12: é uma A1 lotada, com cota de 2,9 pt.
+Prancha de rua curta, desenhada a 1:500, fica legível com 6 — e ocupa um quarto
+do espaço, o que importa porque o repositório é o próprio servidor do app.
 
 Por que quadrados e não o PDF: a prancha tem ~50 mil entidades vetoriais.
 Redesenhá-la a cada passo de zoom (PDF.js/SVG) trava o celular. Com a pirâmide,
@@ -31,12 +36,12 @@ RES_MAX = 12.0      # pixels por ponto do PDF no nível mais fino (~864 dpi no A
 BRANCO = (255, 255, 255)
 
 
-def niveis(largura_pt, altura_pt):
-    """Do nível 0 (a folha inteira num quadrado só) até RES_MAX, dobrando."""
+def niveis(largura_pt, altura_pt, res_max=RES_MAX):
+    """Do nível 0 (a folha inteira num quadrado só) até `res_max`, dobrando."""
     n = 0
-    while (largura_pt * RES_MAX) / (2 ** n) > TILE or (altura_pt * RES_MAX) / (2 ** n) > TILE:
+    while (largura_pt * res_max) / (2 ** n) > TILE or (altura_pt * res_max) / (2 ** n) > TILE:
         n += 1
-    return [RES_MAX / (2 ** k) for k in range(n, -1, -1)]
+    return [res_max / (2 ** k) for k in range(n, -1, -1)]
 
 
 def bitset(flags):
@@ -66,11 +71,12 @@ def gravar(img, caminho):
 
 def main():
     src, dest = sys.argv[1], sys.argv[2]
+    res_max = float(sys.argv[3]) if len(sys.argv) > 3 else RES_MAX
     doc = pymupdf.open(src)
     pg = doc[0]
     W_pt, H_pt = pg.rect.width, pg.rect.height
 
-    resolucoes = niveis(W_pt, H_pt)
+    resolucoes = niveis(W_pt, H_pt, res_max)
     os.makedirs(dest, exist_ok=True)
 
     manifesto = {
@@ -126,14 +132,17 @@ def main():
             del faixa
 
         manifesto["niveis"].append({
+            # `bytes` é o que o botão "Offline" mostra antes de baixar tudo
             "res": res, "w": Wpx, "h": Hpx, "cols": cols, "rows": rows,
-            "mapa": bitset(presentes),
+            "mapa": bitset(presentes), "bytes": bytes_nivel,
         })
         total_bytes += bytes_nivel
         total_tiles += sum(presentes)
         print(f"  nível {nivel}: {Wpx}x{Hpx} px  {cols}x{rows} quadrados  "
               f"{sum(presentes)}/{len(presentes)} usados  {bytes_nivel/1024:.0f} KB",
               flush=True)
+
+    manifesto["bytes"] = total_bytes
 
     with open(os.path.join(dest, "prancha.json"), "w") as f:
         json.dump(manifesto, f, separators=(",", ":"))
