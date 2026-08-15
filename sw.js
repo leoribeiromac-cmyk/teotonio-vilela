@@ -25,7 +25,7 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v42'; // v42: Equipamentos em toda obra, cada uma com a própria frota — Teotônio no backend legado, as demais no Code.gs por obra
+const VERSAO = 'teotonio-v43'; // v43: mapa por rua nas Ruas de Terra, fornecedor da nota pelo CNPJ e aviso de nota repetida
 // As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
 // app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
 // Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no
@@ -41,7 +41,12 @@ const VERSAO_PRANCHAS = 'teotonio-pranchas-v1';
 const BALDES = [VERSAO, VERSAO_VENDOR, VERSAO_PRANCHAS];
 // Quadrado de prancha: o conteúdo de cada URL nunca muda dentro de uma versão.
 const IMUTAVEL = /\/projetos\/.+\/\d+\/\d+_\d+\.webp$/;
-const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleusercontent.com', 'generativelanguage.googleapis.com'];
+// brasilapi/minhareceita: cadastro de CNPJ do fornecedor da nota fiscal. Não
+// pode entrar no balde de estáticos — lá a regra é cache-primeiro, e a razão
+// social do fornecedor ficaria congelada no aparelho para sempre. Quem guarda
+// esse cadastro (por meio ano) é o próprio módulo de notas, em localStorage.
+const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleusercontent.com',
+                 'generativelanguage.googleapis.com', 'brasilapi.com.br', 'minhareceita.org'];
 
 // Em qual balde este pedido mora.
 function baldeDe(url) {

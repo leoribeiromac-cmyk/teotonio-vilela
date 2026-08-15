@@ -315,6 +315,149 @@ async function nfConsultarPelaChave(chave) {
   }
 }
 
+/* ============================================================
+   2b) CADASTRO DO EMITENTE PELO CNPJ
+   ------------------------------------------------------------
+   A chave de acesso NAO carrega o nome de quem emitiu: ela tem o CNPJ e
+   mais nada. Era por isso que ler o codigo de barras preenchia numero,
+   serie, CNPJ e UF e parava ali — o fornecedor, que e o campo que a
+   pessoa mais olha, continuava em branco quando a IA nao respondia.
+
+   O CNPJ, porem, e publico. A Receita Federal publica o cadastro inteiro
+   todo mes, e ha espelhos com CORS liberado e SEM chave de API:
+   BrasilAPI e Minha Receita. Um pedido de ~2 KB traz razao social, nome
+   fantasia, municipio, UF, atividade e a situacao cadastral.
+
+   Tres cuidados, porque isto roda no canteiro:
+   • o que volta fica GUARDADO no aparelho — o mesmo fornecedor entrega
+     dezenas de notas, e da segunda em diante nem precisa de rede;
+   • e tudo melhor-esforco: sem sinal, a nota e cadastrada do mesmo
+     jeito, como sempre foi. Nada aqui bloqueia nada;
+   • nao sobrescreve o que veio do XML da NF-e nem o que foi digitado.
+     So preenche campo vazio — o XML e a nota de verdade, isto e cadastro.
+   ============================================================ */
+const NF_CNPJ_CACHE = 'gestor:nf:cnpj:v1';
+const NF_CNPJ_VALIDADE = 180 * 86400000;   // meio ano: o cadastro muda pouco
+const NF_CNPJ_GUARDA = 400;                // quantos fornecedores ficam no aparelho
+const NF_CNPJ_FONTES = [
+  cnpj => 'https://brasilapi.com.br/api/cnpj/v1/' + cnpj,
+  cnpj => 'https://minhareceita.org/' + cnpj
+];
+
+function nfCnpjCacheLer(d) {
+  try {
+    const m = JSON.parse(localStorage.getItem(NF_CNPJ_CACHE) || '{}');
+    const x = m[d];
+    if (!x || !x.razaoSocial) return null;
+    if (Date.now() - (x.quando || 0) > NF_CNPJ_VALIDADE) return null;
+    return x;
+  } catch (e) { return null; }
+}
+function nfCnpjCacheGravar(d, dados) {
+  try {
+    const m = JSON.parse(localStorage.getItem(NF_CNPJ_CACHE) || '{}');
+    m[d] = Object.assign({}, dados, { quando: Date.now() });
+    const chaves = Object.keys(m);
+    if (chaves.length > NF_CNPJ_GUARDA) {
+      chaves.sort((a, b) => (m[a].quando || 0) - (m[b].quando || 0))
+            .slice(0, chaves.length - NF_CNPJ_GUARDA).forEach(k => { delete m[k]; });
+    }
+    localStorage.setItem(NF_CNPJ_CACHE, JSON.stringify(m));
+  } catch (e) { /* aparelho cheio: segue sem guardar */ }
+}
+
+/* Pedido com prazo. Sem o AbortController, um servico fora do ar deixava a
+   tela de leitura parada no "buscando" ate o navegador desistir sozinho. */
+async function nfBuscarJSON(url, ms) {
+  if (typeof fetch !== 'function') return null;
+  let ctl = null, t = 0;
+  try { ctl = new AbortController(); } catch (e) { ctl = null; }
+  if (ctl) t = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, ms || 7000);
+  try {
+    const r = await fetch(url, { signal: ctl ? ctl.signal : undefined, headers: { 'Accept': 'application/json' } });
+    if (!r || !r.ok) return null;
+    return await r.json();
+  } catch (e) {
+    return null;
+  } finally { if (t) clearTimeout(t); }
+}
+
+/* As duas fontes devolvem o mesmo desenho de objeto (a BrasilAPI espelha o
+   formato da Minha Receita), mas os nomes alternativos ficam aqui para
+   nenhuma troca de servico depois virar campo vazio na tela. */
+function nfEmitenteDoJSON(j) {
+  if (!j || typeof j !== 'object') return null;
+  const t = v => String(v == null ? '' : v).trim();
+  const razao = t(j.razao_social || j.razaoSocial || j.nome);
+  if (!razao) return null;
+  const num = t(j.numero), compl = t(j.complemento);
+  const endereco = [
+    [t(j.descricao_tipo_de_logradouro), t(j.logradouro)].filter(Boolean).join(' '),
+    num, compl, t(j.bairro)
+  ].filter(Boolean).join(', ');
+  return {
+    razaoSocial: razao,
+    nomeFantasia: t(j.nome_fantasia || j.fantasia),
+    municipio: t(j.municipio || j.cidade),
+    uf: t(j.uf || j.estado).toUpperCase().slice(0, 2),
+    situacao: t(j.descricao_situacao_cadastral || j.situacao_cadastral || j.situacao).toUpperCase(),
+    atividade: t(j.cnae_fiscal_descricao || j.atividade_principal_descricao),
+    telefone: t(j.ddd_telefone_1 || j.telefone),
+    endereco: endereco,
+    cep: t(j.cep)
+  };
+}
+
+/* Busca o cadastro do CNPJ. Devolve sempre um objeto: `{ok:false, motivo}`
+   quando nao deu, para quem chama nunca precisar de try/catch. */
+async function nfConsultarCNPJ(cnpj) {
+  const d = nfCNPJnorm(cnpj);
+  // CNPJ alfanumerico (NT 2026.004) ainda nao entra no cadastro publico:
+  // as duas fontes so aceitam os 14 digitos.
+  if (!/^\d{14}$/.test(d) || !nfCNPJvalido(d)) return { ok: false, motivo: 'cnpj_invalido' };
+
+  const guardado = nfCnpjCacheLer(d);
+  if (guardado) return { ok: true, fonte: 'aparelho', dados: guardado };
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return { ok: false, motivo: 'offline' };
+
+  for (const monta of NF_CNPJ_FONTES) {
+    const j = await nfBuscarJSON(monta(d), 7000);
+    const dados = nfEmitenteDoJSON(j);
+    if (dados) {
+      nfCnpjCacheGravar(d, dados);
+      return { ok: true, fonte: 'receita', dados: dados };
+    }
+  }
+  return { ok: false, motivo: 'sem_resposta' };
+}
+
+/* Completa o emitente da nota com o cadastro do CNPJ, sem passar por cima
+   de nada que ja esteja preenchido. Devolve o que veio da Receita (ou
+   null), para a tela poder dizer de onde saiu o nome. */
+async function nfCompletarEmitente(nota) {
+  if (!nota || !nota.cnpj) return null;
+  if (nota.razaoSocial && nota.municipio && nota.uf) return null;   // ja esta completo
+  const r = await nfConsultarCNPJ(nota.cnpj);
+  if (!r.ok) return null;
+  const d = r.dados;
+  if (!nota.razaoSocial) { nota.razaoSocial = d.razaoSocial; nfConfMarcar(nota, 'razaoSocial', 0.95); }
+  if (!nota.nomeFantasia && d.nomeFantasia) nota.nomeFantasia = d.nomeFantasia;
+  if (!nota.municipio && d.municipio) { nota.municipio = d.municipio; nfConfMarcar(nota, 'municipio', 0.95); }
+  if (!nota.uf && d.uf) { nota.uf = d.uf; nfConfMarcar(nota, 'uf', 0.95); }
+  return d;
+}
+function nfConfMarcar(nota, campo, c) {
+  nota.leituraConf = nota.leituraConf || {};
+  nota.leituraConf[campo] = c;
+}
+/* Situacao cadastral que NAO seja ATIVA e assunto de quem paga a nota:
+   material comprado de CNPJ baixado ou inapto costuma travar a medicao. */
+function nfEmitenteAlerta(cnpj) {
+  const d = nfCnpjCacheLer(nfCNPJnorm(cnpj));
+  if (!d || !d.situacao || d.situacao === 'ATIVA') return '';
+  return 'A Receita Federal marca este CNPJ como <b>' + esc(d.situacao) + '</b>.';
+}
+
 async function nfLerImagemIA(dataUrl, chave, texto) {
   if (!BACKEND || isDemo()) return { ok: false, motivo: 'local' };
   try {
@@ -541,6 +684,92 @@ function nfFornecedorConhecido(obraId, cnpj) {
   const d = nfCNPJnorm(cnpj);
   if (d.length !== 14) return null;
   return nfFornecedores(obraId).find(f => f.cnpj === d) || null;
+}
+
+/* ============================================================
+   NOTAS REPETIDAS
+   ------------------------------------------------------------
+   A mesma nota entra duas vezes com mais frequencia do que parece: o
+   motorista deixa uma via no barracao e outra no escritorio, a foto sai
+   tremida e a pessoa lanca de novo, dois apontadores fotografam a mesma
+   DANFE no mesmo dia. So aparece semanas depois — o material dobrado no
+   estoque, o valor dobrado no painel de precos — e ai ninguem sabe mais
+   qual das duas e a boa.
+
+   Tres pistas, da mais forte para a mais fraca:
+   • CHAVE igual: e a MESMA NF-e, sem discussao — a chave e unica por
+     emitente e leva o proprio digito verificador;
+   • CNPJ + numero + serie: a mesma nota lancada sem a chave. Os zeros a
+     esquerda saem antes de comparar, senao "000123" e "123" passariam
+     por notas diferentes;
+   • CNPJ + valor + data de emissao: nota digitada a mao, sem numero.
+
+   Nota Cancelada nunca conta: ela existe justamente para ser substituida
+   por outra igual.
+   ============================================================ */
+function nfSemZeros(v) { return String(v == null ? '' : v).trim().replace(/^0+/, ''); }
+
+/* `lista` evita reler o localStorage a cada nota quando quem chama ja tem
+   as notas em maos — a tela mostra 24 cartoes por vez, e sem isso seriam
+   24 leituras e 24 JSON.parse da obra inteira so para pintar uma tarja. */
+function nfDuplicadas(obraId, nota, lista) {
+  if (!nota) return [];
+  const ch = nfChaveNorm(nota.chave);
+  const cnpj = nfCNPJnorm(nota.cnpj);
+  const num = nfSemZeros(nota.numero);
+  const serie = nfSemZeros(nota.serie);
+  const cent = Math.round(nfNum(nota.vTotal) * 100);
+  const emissao = nota.dataEmissao || '';
+  const achados = [];
+  (lista || nfGet(obraId)).forEach(x => {
+    if (x.id === nota.id || x.status === 'Cancelada') return;
+    if (ch.length === 44 && nfChaveNorm(x.chave) === ch) {
+      achados.push({ nota: x, certeza: true, motivo: 'mesma chave de acesso' });
+      return;
+    }
+    if (cnpj && nfCNPJnorm(x.cnpj) !== cnpj) return;
+    if (cnpj && num && nfSemZeros(x.numero) === num && nfSemZeros(x.serie) === serie) {
+      achados.push({ nota: x, certeza: true, motivo: 'mesmo fornecedor, número e série' });
+      return;
+    }
+    if (cnpj && !num && cent && emissao &&
+        Math.round(nfNum(x.vTotal) * 100) === cent && (x.dataEmissao || '') === emissao) {
+      achados.push({ nota: x, certeza: false, motivo: 'mesmo fornecedor, valor e data' });
+    }
+  });
+  return achados;
+}
+
+/* Uma linha por nota repetida, para os avisos: "NF 123 · série 1 · 12/08 ·
+   R$ 1.234,00 · lançada por Fulano". */
+function nfDupResumo(n) {
+  return 'NF ' + (n.numero || '—') + (n.serie ? ' · série ' + n.serie : '') +
+    ' · ' + (nfDataBR(n.dataEntrada || n.dataEmissao) || 'sem data') +
+    ' · ' + fmtBRL(nfNum(n.vTotal)) +
+    (n.responsavel ? ' · ' + n.responsavel : '');
+}
+
+/* Grupos de notas repetidas ENTRE AS JA SALVAS — o aviso da lista. Cada
+   nota entra num grupo so, e o grupo guarda a ordem de cadastro. */
+function nfGruposDuplicados(obraId) {
+  const notas = nfGet(obraId).filter(n => n.status !== 'Cancelada');
+  const vistos = {}, grupos = [];
+  notas.forEach(n => {
+    if (vistos[n.id]) return;
+    const iguais = nfDuplicadas(obraId, n, notas).filter(d => d.certeza && !vistos[d.nota.id]);
+    if (!iguais.length) return;
+    const grupo = [n].concat(iguais.map(d => d.nota));
+    grupo.forEach(x => { vistos[x.id] = 1; });
+    grupos.push({ notas: grupo, motivo: iguais[0].motivo });
+  });
+  return grupos;
+}
+/* Ids de todas as notas que estao em algum grupo repetido — uma varredura
+   so, para a lista poder marcar os cartoes sem recalcular por cartao. */
+function nfIdsDuplicadas(obraId) {
+  const ids = {};
+  nfGruposDuplicados(obraId).forEach(g => g.notas.forEach(n => { ids[n.id] = 1; }));
+  return ids;
 }
 
 /* ============================================================
@@ -908,7 +1137,8 @@ async function nfArquivoSelecionado(inp) {
   const passos = [
     { ic: 'ampulheta', t: ehPDF ? 'Abrindo o PDF…' : 'Preparando a imagem…', st: '' },
     { ic: '', t: ehPDF ? 'Procurando a chave de acesso no arquivo' : 'Procurando o código de barras da DANFE', st: '' },
-    { ic: '', t: 'Lendo os dados da nota', st: '' }
+    { ic: '', t: 'Lendo os dados da nota', st: '' },
+    { ic: '', t: 'Identificando o fornecedor', st: '' }
   ];
   nfPassoUI(passos);
 
@@ -995,6 +1225,25 @@ async function nfArquivoSelecionado(inp) {
   }
 
   let nota = nfMesclarLeitura(_nfRascunho, daChave, fonte);
+
+  // 4) o CNPJ ja veio da chave; o NOME de quem emitiu, nao. Busca no
+  //    cadastro publico da Receita — e o que transforma "20.123.456/0001-90"
+  //    em "Concreteira Tal Ltda" sem ninguem digitar.
+  let emitente = null;
+  // fornecedor que ja entregou nesta obra vale mais que o cadastro publico:
+  // e o nome que a propria equipe conferiu da outra vez
+  nfAutoVincular(o.id, nota);
+  if (nota.cnpj && !nota.razaoSocial) {
+    passos[3] = { ic: 'ampulheta', t: 'Identificando o fornecedor pelo CNPJ', st: '' };
+    nfPassoUI(passos);
+    emitente = await nfCompletarEmitente(nota);
+  }
+  passos[3] = emitente
+    ? { ic: 'check', t: 'Fornecedor: ' + emitente.razaoSocial, st: 'ok' }
+    : { ic: nota.razaoSocial ? 'check' : 'traco',
+        t: nota.razaoSocial ? 'Fornecedor: ' + nota.razaoSocial : 'Fornecedor não identificado', st: nota.razaoSocial ? 'ok' : '' };
+  nfPassoUI(passos);
+
   const leuAlgo = !!daChave || !!(fonte && fonte.ok);
   nota.leitura = {
     metodo: (consulta && consulta.ok) ? 'consulta'
@@ -1038,6 +1287,15 @@ async function nfUsarChaveDigitada() {
   };
   nfRegistrar(_nfRascunho, (consulta && consulta.ok) ? 'nota obtida pela chave' : 'chave digitada', ch);
   nfAutoVincular(obra().id, _nfRascunho);
+  // a chave da o CNPJ; o nome do fornecedor vem do cadastro publico
+  if (!_nfRascunho.razaoSocial) {
+    nfPassoUI([
+      { ic: 'check', t: 'Chave de acesso conferida', st: 'ok' },
+      { ic: 'check', t: (consulta && consulta.ok) ? 'Nota obtida pela chave' : 'Dados preenchidos pela chave', st: 'ok' },
+      { ic: 'ampulheta', t: 'Identificando o fornecedor pelo CNPJ', st: '' }
+    ]);
+    await nfCompletarEmitente(_nfRascunho);
+  }
   _nfModoSimples = false;
   nfConferir();
 }
@@ -1171,12 +1429,17 @@ async function nfTestarLeitura() {
 function nfConferir() {
   const o = obra(); if (!o || !_nfRascunho) return;
   const n = _nfRascunho;
-  const dup = nfGet(o.id).find(x => x.id !== n.id && ((n.chave && x.chave === n.chave) ||
-    (n.numero && n.cnpj && x.numero === n.numero && x.cnpj === n.cnpj)));
+  const dups = nfDuplicadas(o.id, n);
+  const alertaCNPJ = nfEmitenteAlerta(n.cnpj);
   const marca = c => nfConfBaixa(n, c) ? ' nf-confira' : '';
   const aviso = c => nfConfBaixa(n, c) ? '<span class="nf-tag-confira">confira</span>' : '';
   const totItens = (n.itens || []).reduce((a, it) => a + nfNum(it.vTotal), 0);
-  const difer = nfNum(n.vTotal) && Math.abs(nfNum(n.vTotal) - (totItens + nfNum(n.vFrete))) > 0.05;
+  /* Só faz sentido comparar a soma dos itens com o total quando HÁ itens.
+     Sem essa condição (a lista já a tinha, esta tela não), toda nota
+     lançada sem itens abria com um alerta vermelho dizendo que R$ 0,00
+     não bate com o valor da nota — o que é obvio e não é divergência. */
+  const difer = (n.itens || []).length && nfNum(n.vTotal) &&
+    Math.abs(nfNum(n.vTotal) - (totItens + nfNum(n.vFrete))) > 0.05;
 
   // Todos os campos ficam no formulário; o modo enxuto apenas ESCONDE os
   // acessórios. Assim alternar não perde nada do que já foi digitado.
@@ -1207,7 +1470,16 @@ function nfConferir() {
         </div>
       </div></div>`;
     })()}
-    ${dup ? `<div class="nf-alerta nf-alerta-red">Já existe a nota <b>${esc(dup.numero || '—')}</b> deste fornecedor no sistema. Salvar vai criar uma segunda.</div>` : ''}
+    ${dups.length ? `<div class="nf-alerta ${dups.some(d => d.certeza) ? 'nf-alerta-red' : 'nf-alerta-ylw'}">
+      <b>${dups.some(d => d.certeza) ? 'Esta nota já está lançada nesta obra.' : 'Talvez esta nota já esteja lançada.'}</b>
+      ${dups.slice(0, 3).map(d => `<div style="margin-top:6px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
+        <span>${esc(nfDupResumo(d.nota))} <span class="kpi-s">(${esc(d.motivo)})</span></span>
+        <button class="btn btn-sm btn-ghost" style="padding:2px 8px" onclick="nfAbrirDuplicada('${d.nota.id}')">Abrir a que já existe</button>
+      </div>`).join('')}
+      ${dups.length > 3 ? `<div class="kpi-s" style="margin-top:4px">e mais ${dups.length - 3}</div>` : ''}
+      <div class="kpi-s" style="margin-top:6px">Salvar assim mesmo cria uma SEGUNDA nota — o material entra dobrado no estoque.</div>
+    </div>` : ''}
+    ${alertaCNPJ ? `<div class="nf-alerta nf-alerta-ylw">${alertaCNPJ} Confira antes de pagar.</div>` : ''}
     ${difer ? `<div class="nf-alerta nf-alerta-ylw">A soma dos itens + frete (${fmtBRL(totItens + nfNum(n.vFrete))}) não bate com o valor total da nota (${fmtBRL(nfNum(n.vTotal))}).</div>` : ''}
 
     <div id="nfForm" class="${_nfModoSimples ? 'nf-simples' : ''}">
@@ -1372,7 +1644,46 @@ function nfCnpjNoForm() {
     if (el('nf_razaoSocial') && !el('nf_razaoSocial').value) el('nf_razaoSocial').value = f.nome;
     if (el('nf_municipio') && !el('nf_municipio').value) el('nf_municipio').value = f.municipio;
     if (el('nf_uf') && !el('nf_uf').value) el('nf_uf').value = f.uf;
-  } else msg.innerHTML = '<span style="color:var(--muted)">Fornecedor novo — será cadastrado com esta nota</span>';
+    return;
+  }
+  msg.innerHTML = '<span style="color:var(--muted)">Fornecedor novo — será cadastrado com esta nota</span>';
+  nfCnpjBuscarNoForm(d);
+}
+
+/* CNPJ digitado no formulario: busca o cadastro publico e preenche o que
+   estiver vazio. Nao trava o campo — quem digitou segue editando enquanto
+   a resposta nao chega, e o que ela traz nunca apaga o que ja foi escrito. */
+async function nfCnpjBuscarNoForm(d) {
+  const msg = el('nf_cnpjMsg');
+  const guardado = nfCnpjCacheLer(d);
+  if (msg && !guardado) msg.innerHTML = '<span style="color:var(--muted)">Procurando o CNPJ na Receita…</span>';
+  const r = await nfConsultarCNPJ(d);
+  // a pessoa pode ter fechado o modal ou trocado o CNPJ enquanto isso
+  const campo = el('nf_cnpj');
+  if (!campo || nfCNPJnorm(campo.value) !== d) return;
+  const msg2 = el('nf_cnpjMsg');
+  if (!r.ok) {
+    if (msg2) msg2.innerHTML = '<span style="color:var(--muted)">Fornecedor novo — será cadastrado com esta nota</span>';
+    return;
+  }
+  const x = r.dados;
+  const por = (id, v) => { const e = el(id); if (e && !e.value && v) { e.value = v; e.classList.remove('nf-confira'); } };
+  por('nf_razaoSocial', x.razaoSocial);
+  por('nf_nomeFantasia', x.nomeFantasia);
+  por('nf_municipio', x.municipio);
+  por('nf_uf', x.uf);
+  if (_nfRascunho) {
+    if (!_nfRascunho.razaoSocial) _nfRascunho.razaoSocial = x.razaoSocial;
+    if (!_nfRascunho.municipio) _nfRascunho.municipio = x.municipio;
+    if (!_nfRascunho.uf) _nfRascunho.uf = x.uf;
+  }
+  if (msg2) {
+    const inativo = x.situacao && x.situacao !== 'ATIVA';
+    msg2.innerHTML = `<span style="color:${inativo ? 'var(--vermelho)' : 'var(--accent)'}">` +
+      `<b>${esc(x.razaoSocial)}</b>${x.municipio ? ' · ' + esc(x.municipio) + (x.uf ? '/' + esc(x.uf) : '') : ''}` +
+      `${x.situacao ? ' · ' + esc(x.situacao) : ''}</span>` +
+      `<span style="color:var(--muted)"> · ${r.fonte === 'aparelho' ? 'cadastro guardado no aparelho' : 'cadastro da Receita Federal'}</span>`;
+  }
 }
 /* O valor da nota se vira sozinho a partir dos itens e do frete ENQUANTO
    ninguem o digitou. No instante em que a pessoa digita o total, ele passa a
@@ -1410,6 +1721,19 @@ function nfSalvarForm() {
   n.itens = (n.itens || []).filter(it => String(it.descricao || '').trim());
   n.obraId = o.id;
   if (!n.numero && !n.chave && !n.vTotal) { toast('Informe ao menos o número ou o valor da nota'); return; }
+
+  /* Ultima barreira contra a nota repetida. O aviso do alto da tela pode
+     ter sido dado antes de a pessoa digitar o numero — e e justamente ao
+     digitar que a repetida se revela. Pergunta, nao impede: existe nota
+     legitima com o mesmo valor e a mesma data do mesmo fornecedor. */
+  const dups = nfDuplicadas(o.id, n).filter(d => d.certeza);
+  if (dups.length && !confirm(
+      'Esta nota já está lançada nesta obra:\n\n' +
+      dups.slice(0, 3).map(d => '• ' + nfDupResumo(d.nota) + ' (' + d.motivo + ')').join('\n') +
+      '\n\nSalvar assim mesmo cria uma segunda nota, e o material entra dobrado no estoque.\n' +
+      'Deseja salvar mesmo assim?')) {
+    return;
+  }
 
   const paraEstoque = el('nf_estoque') && el('nf_estoque').checked;
 
@@ -1576,6 +1900,16 @@ function nfEditar(id) {
   _nfModoSimples = (met === 'manual');
   nfConferir();
 }
+/* Abre a nota que ja existe, no lugar do rascunho. Pergunta antes: quem
+   chegou ate a tela de conferencia ja pode ter digitado bastante coisa. */
+function nfAbrirDuplicada(id) {
+  const o = obra(); if (!o) return;
+  if (!nfPorId(o.id, id)) { toast('A nota já lançada não está mais neste aparelho'); return; }
+  if (!confirm('Abrir a nota que já está lançada? O que você preencheu aqui será descartado.')) return;
+  _nfRascunho = null; _nfFull = ''; _nfPags = [];
+  nfEditar(id);
+}
+
 function nfExcluir(id) {
   const o = obra(); const n = nfPorId(o.id, id); if (!n) return;
   if (!podeExcluir(n)) { toast('Só quem lançou ou o administrador pode excluir'); return; }
@@ -1757,6 +2091,28 @@ function nfViewLista(o) {
     <span class="kpi-s">Toque em <b>Nova nota fiscal</b> e fotografe a DANFE — o resto o sistema preenche.</span></div>`;
   if (!fs.length) return filtros + `<div class="empty">${ic('lupa')}Nenhuma nota encontrada com esse filtro.</div>`;
 
+  /* Notas repetidas JA SALVAS. O aviso da tela de conferência pega a que
+     está entrando; este pega as que já entraram — inclusive as que vieram
+     da sincronização, lançadas noutro aparelho, que ninguém conferiu aqui. */
+  const grupos = nfGruposDuplicados(o.id);
+  const idsDup = {};
+  grupos.forEach(g => g.notas.forEach(x => { idsDup[x.id] = 1; }));
+  const repetidas = Object.keys(idsDup).length;
+  const avisoDup = grupos.length ? `<div class="nf-alerta nf-alerta-red" style="margin-bottom:16px">
+    <b>${grupos.length === 1 ? 'Uma nota está lançada em duplicidade' : grupos.length + ' notas estão lançadas em duplicidade'}</b>
+    <span class="kpi-s"> (${repetidas} lançamentos)</span>
+    ${grupos.slice(0, 5).map(g => `<div style="margin-top:6px">
+      ${esc(g.notas[0].razaoSocial || g.notas[0].nomeFantasia || nfCNPJfmt(g.notas[0].cnpj) || 'Fornecedor não informado')} ·
+      ${esc(nfDupResumo(g.notas[0]))} <span class="kpi-s">— ${g.notas.length} lançamentos, ${esc(g.motivo)}</span>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+        ${g.notas.map(x => `<button class="btn btn-sm" style="padding:2px 9px" onclick="nfEditar('${x.id}')"
+          title="Lançada por ${esc(x.responsavel || x.usuario || '—')}">${ic('editar')} Abrir a de ${esc(nfDataBR(x.dataEntrada || x.dataEmissao) || 'sem data')}</button>`).join('')}
+      </div>
+    </div>`).join('')}
+    ${grupos.length > 5 ? `<div class="kpi-s" style="margin-top:4px">e mais ${grupos.length - 5}</div>` : ''}
+    <div class="kpi-s" style="margin-top:7px">Abra a que sobrou e mude o status para <b>Cancelada</b> — a entrada de estoque dela sai junto.</div>
+  </div>` : '';
+
   const cards = mostra.map(n => {
     const div = nfDivergencia(n);
     return `<div class="card nf-card">
@@ -1765,7 +2121,8 @@ function nfViewLista(o) {
           ? `<img src="${esc(n.thumb)}" alt="nota ${esc(n.numero)}">`
           : `<img id="nfmini-${n.id}" alt="nota ${esc(n.numero)}" style="display:none">
              <div id="nfsem-${n.id}" class="nf-card-sem">${ic('notas', 40)}</div>`}
-        <span class="pill ${NF_STATUS_COR[n.status] || 'pill-blu'} nf-card-st">${esc(n.status)}</span></div>
+        <span class="pill ${NF_STATUS_COR[n.status] || 'pill-blu'} nf-card-st">${esc(n.status)}</span>
+        ${idsDup[n.id] ? '<span class="pill pill-red nf-card-dup" title="Esta nota está lançada mais de uma vez">repetida</span>' : ''}</div>
       <div class="nf-card-b">
         <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">
           <div style="font-weight:700;font-size:14.5px">NF ${esc(n.numero || '—')}${n.serie ? '<span class="kpi-s"> · série ' + esc(n.serie) + '</span>' : ''}</div>
@@ -1784,7 +2141,7 @@ function nfViewLista(o) {
 
   const mais = fs.length > mostra.length
     ? `<div style="text-align:center;margin-top:18px"><button class="btn" onclick="nfMais()">Mostrar mais ${Math.min(NF_PAGINA, fs.length - mostra.length)} de ${fs.length - mostra.length}</button></div>` : '';
-  return filtros + `<div class="grid nf-grid">${cards}</div>${mais}`;
+  return filtros + avisoDup + `<div class="grid nf-grid">${cards}</div>${mais}`;
 }
 function nfDivergencia(n) {
   const itens = (n.itens || []).reduce((a, it) => a + nfNum(it.vTotal), 0);
