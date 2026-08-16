@@ -25,7 +25,7 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v47'; // v47: escala de tipografia e espaçamento em tokens, acesso e medição redesenhados
+const VERSAO = 'teotonio-v48'; // v48: filtros da curva S mostram o que mudou no período
 // As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
 // app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
 // Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no
