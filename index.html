@@ -881,7 +881,55 @@ body.proj-cheia-ativa{overflow:hidden}
 .conta-btn--entrar:hover{background:var(--acc-d);color:#fff}
 
 /* ---- tela de acesso ---- */
-.login-card{max-width:400px;margin:40px auto;border-top:4px solid var(--acc)}
+
+/* ===== Prévia de medição — a faixa de resumo ===== */
+.medicao-resumo{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:1px;
+  background:var(--border); border:1px solid var(--border); border-radius:var(--r);
+  overflow:hidden; margin-bottom:16px;
+}
+.med-kpi{background:var(--surface); padding:13px 16px; display:flex; flex-direction:column; gap:4px}
+.med-kpi-lbl{
+  font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
+}
+.med-kpi-val{
+  font-family:'JetBrains Mono',monospace; font-size:20px; font-weight:600;
+  font-variant-numeric:tabular-nums; color:var(--text); line-height:1.15;
+}
+.med-kpi.alerta .med-kpi-val{color:var(--red)}
+.med-kpi.atencao .med-kpi-val{color:var(--ylw-d)}
+.med-kpi-ok{font-family:inherit; font-size:12px; font-weight:500; color:var(--grn)}
+
+/* ===== Tela de acesso =====
+   O formulário fica à esquerda e o contexto à direita, no computador; no
+   celular o contexto some e sobra só o que se preenche. */
+.login-layout{
+  display:grid; grid-template-columns:minmax(0,1fr); gap:22px;
+  width:100%; max-width:420px; margin:40px auto; align-items:start;
+}
+@media (min-width:960px){
+  .login-layout{grid-template-columns:minmax(360px,420px) minmax(0,1fr); max-width:940px; gap:44px}
+}
+.login-card{width:100%;border-top:4px solid var(--acc);margin:0}
+.login-contexto{display:none}
+@media (min-width:960px){ .login-contexto{display:block; padding-top:6px} }
+.login-ctx-obra{margin-bottom:22px; padding-bottom:18px; border-bottom:1px solid var(--border)}
+.login-ctx-badge{
+  display:inline-block; font-size:19px; font-weight:700; letter-spacing:-.02em;
+  color:var(--text); line-height:1.25;
+}
+.login-ctx-obra p{font-size:13.5px; color:var(--muted); margin-top:4px}
+.login-ctx-lista{display:flex; flex-direction:column; gap:17px}
+.login-ctx-item{display:flex; gap:13px; align-items:flex-start}
+.login-ctx-ic{
+  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  width:34px; height:34px; border-radius:9px;
+  background:var(--surface-2); border:1px solid var(--border); color:var(--acc-d);
+}
+.login-ctx-ic svg{width:17px;height:17px}
+.login-ctx-item div{display:flex; flex-direction:column; gap:2px; min-width:0}
+.login-ctx-item b{font-size:13.5px; font-weight:650; color:var(--text)}
+.login-ctx-item span{font-size:12.5px; color:var(--muted); line-height:1.55}
 .login-selo{
   width:40px;height:40px;flex-shrink:0;border-radius:12px;
   display:flex;align-items:center;justify-content:center;
@@ -4667,6 +4715,7 @@ function renderLogin() {
   // o que já estiver selecionado).
   setTimeout(() => carregarUsuariosNomes(true), 50);
   return `
+    <div class="login-layout">
     <div class="card login-card">
       <div class="card-header">
         <div style="display:flex;align-items:center;gap:12px">
@@ -4693,7 +4742,41 @@ function renderLogin() {
         <div class="login-nota">${ic('info')} Sem entrar, o sistema segue aberto para consulta: painel, avanço, cronograma e histórico.</div>
       </div>
     </div>
+    ${renderLoginContexto()}
+    </div>
   `;
+}
+
+/* ------------------------------------------------------------------
+   O QUE SE GANHA ENTRANDO
+   ------------------------------------------------------------------
+   A tela de acesso era um cartão de 400px no meio da página vazia, e
+   pedia identificação sem dizer para quê. Quem chega aqui pela primeira
+   vez costuma ser apontador novo no canteiro — o que ele precisa saber
+   é o que vai fazer depois de entrar, e que dá para trabalhar sem sinal.
+   O painel some no celular: lá a tela tem de ser o formulário e o
+   teclado, sem nada para rolar antes.
+   ------------------------------------------------------------------ */
+function renderLoginContexto() {
+  const itens = [
+    ['lancar',  'Lançar serviço',   'A produção do dia por pacote, estaca e turno — com foto carimbada com data, hora e trecho.'],
+    ['diario',  'RDO Diário',       'Efetivo, equipamentos, clima e ocorrências. O PDF oficial sai pronto para a fiscalização assinar.'],
+    ['antena',  'Funciona sem sinal','O lançamento fica na fila do aparelho e sobe sozinho quando a internet volta. Nada se perde no canteiro.'],
+  ];
+  return `
+    <div class="login-contexto">
+      <div class="login-ctx-obra">
+        <span class="login-ctx-badge">${escHtml(OBRA.nome || 'Obra')}</span>
+        <p>${escHtml(OBRA.subtitulo || '')}</p>
+      </div>
+      <div class="login-ctx-lista">
+        ${itens.map(([icone, titulo, txt]) => `
+          <div class="login-ctx-item">
+            <span class="login-ctx-ic">${ic(icone)}</span>
+            <div><b>${escHtml(titulo)}</b><span>${escHtml(txt)}</span></div>
+          </div>`).join('')}
+      </div>
+    </div>`;
 }
 // Enquanto o servidor responde, o botão DIZ que está trabalhando. Antes ele
 // ficava igual ao estado parado: quem clicava não tinha como saber se o toque
@@ -11439,7 +11522,39 @@ function renderMedicao(){
     </div>
   </div>` : '';
 
-  return faixaFechamento + avisoDuplicadasMedicao() + avisoEstouro + `<div class="card stagger-item">
+  /* ------------------------------------------------------------------
+     O RESUMO ANTES DA TABELA
+     ------------------------------------------------------------------
+     A tela abria direto na tabela e o engenheiro tinha de lê-la inteira
+     para responder as três perguntas de sempre: quantos itens entraram,
+     tem algum estourando o contrato, e isto aqui já está fechado?
+     Não somo as quantidades: os itens têm unidades diferentes (m³, m², m)
+     e um total misturando tudo seria um número bonito e sem sentido.
+     ------------------------------------------------------------------ */
+  const emAlerta = temContrato
+    ? lista.filter(x => !x.estourou && x.pctContrato !== null && x.pctContrato >= 0.9).length
+    : 0;
+  const resumoMedicao = !lista.length ? '' : `
+    <div class="medicao-resumo stagger-item">
+      <div class="med-kpi">
+        <span class="med-kpi-lbl">Período</span>
+        <span class="med-kpi-val">${escHtml(MEDICAO_MES ? nomeMesAno(MEDICAO_MES) : 'Obra inteira')}</span>
+      </div>
+      <div class="med-kpi">
+        <span class="med-kpi-lbl">Itens medidos</span>
+        <span class="med-kpi-val">${lista.length}</span>
+      </div>
+      <div class="med-kpi${estourados.length ? ' alerta' : ''}">
+        <span class="med-kpi-lbl">Acima do contrato</span>
+        <span class="med-kpi-val">${estourados.length}${estourados.length ? '' : ' <span class="med-kpi-ok">nenhum</span>'}</span>
+      </div>
+      ${temContrato ? `<div class="med-kpi${emAlerta ? ' atencao' : ''}">
+        <span class="med-kpi-lbl">Saldo abaixo de 10%</span>
+        <span class="med-kpi-val">${emAlerta}</span>
+      </div>` : ''}
+    </div>`;
+
+  return faixaFechamento + avisoDuplicadasMedicao() + avisoEstouro + resumoMedicao + `<div class="card stagger-item">
     <div class="card-header">
       <div><div class="card-title">Prévia de medição — consumo por item contratual</div><div class="card-title-sub">RDOs × matriz de coeficientes · filtre o mês da medição e exporte o CSV para conferir contra a Planilha Geral</div></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
