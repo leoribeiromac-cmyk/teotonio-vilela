@@ -433,6 +433,25 @@
 @media (max-width: 700px) {
   .cc-acoes { margin-left: 0; width: 100%; }
   .cc-acoes .btn { flex: 1; justify-content: center; }
+
+  /* ----------------------------------------------------------------
+     A Central de Campo diz três coisas curtas ("nada lançado ainda",
+     "pendente", "abra a tela para ver") e gastava 186px para isso: as
+     caixas só cabem numa coluna no celular, e dentro de cada uma o
+     rótulo ficava em cima do valor. Somada ao resto do cartão, ela
+     empurrava o número do avanço para fora da dobra.
+     Aqui rótulo e valor vão na MESMA linha e o cartão aperta as folgas.
+     ---------------------------------------------------------------- */
+  .central-campo { padding: 12px 13px; margin-bottom: 14px; }
+  .cc-head { gap: 8px; margin-bottom: 10px; }
+  .cc-title { font-size: 15px; margin-top: 5px; }
+  .cc-grid { gap: 7px; }
+  .cc-box { padding: 9px 11px; gap: 9px; align-items: center; }
+  .cc-box .cc-ic .ic { width: 18px; height: 18px; }
+  .cc-info { flex-direction: row; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+  .cc-lbl { font-size: 10px; }
+  .cc-val { margin-top: 0; font-size: 13.5px; }
+  .cc-aviso { margin-top: 9px; padding: 9px 11px; font-size: 12px; }
 }
 
 /* Interatividade nas frentes */
@@ -1371,6 +1390,25 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   }
   .sidebar.open{transform:translateX(0)}
   .sidebar .sync-block{padding-bottom:calc(16px + var(--sab))}
+
+  /* ----------------------------------------------------------------
+     A GAVETA INTEIRA ROLA — o rodapé não pode roubar a navegação
+     ----------------------------------------------------------------
+     Medido num celular de 844px: logo 97px, rodapé 355px (conta, estado
+     da sincronização, ATUALIZAR, APRESENTAR, tema e crédito) e sobravam
+     309px para a navegação, cujo conteúdo tem 894px. Resultado: 6 dos 15
+     itens visíveis — só o grupo "Análise". Todo o grupo "Operação"
+     (Lançar, RDO, Histórico, Equipamentos, Galeria, Projetos) ficava
+     fora de vista, sem nenhuma pista de que havia mais coisa embaixo.
+     No computador o rodapé preso faz sentido, porque a tela é alta. No
+     celular, quem rola é a gaveta toda: a navegação aparece inteira e o
+     rodapé vem depois dela, como em qualquer gaveta de aplicativo.
+     ---------------------------------------------------------------- */
+  .sidebar{overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  .sidebar-nav{flex:0 0 auto;overflow-y:visible;min-height:auto}
+  .sidebar .sync-block{flex:0 0 auto}
+  /* o cabeçalho aperta um pouco: ele se repete em toda abertura da gaveta */
+  .sidebar-logo{padding:14px 18px 12px}
   .sidebar-overlay{
     display:block;position:fixed;inset:0;
     background:rgba(0,0,0,.4);z-index:1000;
@@ -2019,6 +2057,32 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   #topbarActions .btn { padding: 7px 10px; font-size: 12px; }
 }
 
+/* ------------------------------------------------------------------
+   A TOPBAR NÃO PODE EMPURRAR BOTÃO PARA FORA DA TELA
+   ------------------------------------------------------------------
+   "Sair (Leonardo · Administrador)" ocupava a largura toda e o
+   "+ Novo Serviço" terminava em 492px numa janela de 390px: o atalho
+   mais usado do app ficava fora do alcance de quem só tem celular.
+   Agora quem encolhe é o título (com reticências), o rótulo do acesso
+   some abaixo de 768px — o nome continua no rodapé do menu — e as ações
+   nunca encolhem.
+   ------------------------------------------------------------------ */
+@media (max-width: 768px) {
+  .topbar { overflow: hidden; }
+  /* o bloco do título é o que cede espaço */
+  .topbar > div:first-child { min-width: 0; flex: 1 1 auto; }
+  .topbar-title, .topbar-sub {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* as ações têm o espaço de que precisam */
+  #topbarActions { flex: 0 0 auto; }
+  .topbar-acesso-txt { display: none; }
+  /* Sem rótulo, o botão vira um quadradinho de 30px. Alvo de toque no
+     canteiro é 44×44 — de pé, com luva, no sol. */
+  #topbarActions .btn { padding: 7px 9px; }
+  #topbarActions .btn:not(.btn-primary) { min-width: 44px; justify-content: center; }
+}
+
 /* ===== Page padding ===== */
 @media (max-width: 768px) {
   .page { padding: 12px 14px; gap: 14px; }
@@ -2027,21 +2091,48 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .page { padding: 10px 12px; gap: 12px; }
 }
 
-/* ===== Filter bar mobile ===== */
+/* ===== Filter bar mobile =====
+   ------------------------------------------------------------------
+   Empilhado em coluna, cada controle ocupava a largura inteira e a barra
+   passava de 196px numa tela de 844px — 23% do celular gasto com filtros
+   que quase nunca mudam. No Painel Executivo isso jogava o número do
+   avanço para y=753: quem abria a obra no celular via dois seletores e
+   um aviso, e tinha de rolar para ver como a obra estava.
+   Agora os controles vão DOIS POR LINHA (busca em linha própria, que é
+   onde se digita), e a barra cabe numa faixa. Continuam com 44px de
+   altura — alvo de dedo com luva.
+   ------------------------------------------------------------------ */
 @media (max-width: 768px) {
   .filter-bar {
-    flex-direction: column;
-    align-items: stretch;
-    padding: 10px 12px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 8px 10px;
     gap: 8px;
   }
-  .filter-bar > span { font-size: 11px; }
-  .filter-bar select { width: 100%; padding: 10px 12px; min-height: 44px; }
-  /* A regra acima só pegava os <select>. A caixa de busca e o seletor de dia
-     do Histórico são <input> e ficavam com 32 px — alvo de dedo com luva de
-     vaqueta, no celular do apontador. O !important vence o style= inline que
-     vem do template da barra. */
-  .filter-bar input { width: 100%; padding: 10px 12px !important; min-height: 44px; font-size: 14px !important; }
+  /* "FILTROS:" não informa nada que os próprios seletores já não digam */
+  .filter-bar > span { display: none; }
+  .filter-bar select,
+  .filter-bar input[type="date"] {
+    /* base de ~40% (não 50%) para que dois seletores AINDA dividam a linha
+       com o botão de PDF, em vez de empurrá-lo para uma segunda faixa */
+    flex: 1 1 40%; min-width: 128px; width: auto;
+    /* fonte e folga menores para "Todas as frentes" caber inteiro: sem isso
+       o seletor cortava no meio da palavra ("Todas as fre…"), que lido rápido
+       parece defeito de tela */
+    padding: 10px 8px; min-height: 44px; font-size: 13px;
+  }
+  /* campo de digitar merece a linha inteira */
+  .filter-bar input:not([type="date"]) { flex: 1 1 100%; min-width: 100%; }
+  .filtro-pdf { margin-left: 0 !important; flex: 0 0 auto; min-height: 44px; min-width: 44px; justify-content: center; }
+  .filtro-pdf-txt { display: none; }
+  /* A caixa de busca e o seletor de dia do Histórico são <input> e ficavam
+     com 32px — alvo de dedo com luva de vaqueta, no celular do apontador. O
+     !important vence o style= inline que vem do template da barra.
+     A LARGURA fica com as regras de cima (dois por linha, busca em linha
+     própria): repetir width:100% aqui desmanchava o arranjo, porque esta
+     regra vem depois. */
+  .filter-bar input { padding: 10px 12px !important; min-height: 44px; font-size: 14px !important; }
   .filter-clear { width: 100%; text-align: center; padding: 8px; background: var(--bg); border-radius: 6px; }
 }
 
@@ -4543,9 +4634,14 @@ window.atualizarBotoesTopo = function() {
   if (!tb) return;
   // Entrar/sair mora no rodapé do menu lateral; aqui fica o atalho de topo,
   // que no celular é o único visível sem abrir a gaveta.
+  /* O nome e o perfil ficam num <span> próprio porque no celular eles SOMEM:
+     "Sair (Leonardo · Administrador)" ocupava a largura toda e empurrava o
+     "+ Novo Serviço" para fora da tela — medido, o botão terminava em 492px
+     numa janela de 390px, fora do alcance justamente de quem só tem celular.
+     Quem está logado continua sabendo quem é pelo rodapé do menu lateral. */
   const acesso = STATE.usuarioLogado
-    ? `<button class="btn btn-ghost btn-sm" onclick="fazerLogout()" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">${ic('sair')} Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</button>`
-    : `<button class="btn btn-outline btn-sm" onclick="irParaLogin()" title="Entrar para lançar serviços e RDOs">${ic('entrar')} Entrar</button>`;
+    ? `<button class="btn btn-ghost btn-sm" onclick="fazerLogout()" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">${ic('sair')} <span class="topbar-acesso-txt">Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</span></button>`
+    : `<button class="btn btn-outline btn-sm" onclick="irParaLogin()" title="Entrar para lançar serviços e RDOs">${ic('entrar')} <span class="topbar-acesso-txt">Entrar</span></button>`;
   const novo = pode('lancarServico')
     ? `<button class="btn btn-primary btn-sm" onclick="navigate('rdo')">${ic('mais')} Novo Serviço</button>`
     : '';
@@ -8685,7 +8781,7 @@ function renderExecutivo() {
       </select>
       ${(STATE.filtros.mes || STATE.filtros.frente) ? 
         `<div class="filter-clear" onclick="limparFiltros()">Limpar Filtros ${ic('fechar')}</div>` : ''}
-      <button type="button" class="btn btn-primary btn-sm" style="margin-left:auto" onclick="exportarRelatorioExecutivoPDF()" title="Exportar Relatório Executivo da Obra em PDF">${ic('baixar')} Exportar PDF</button>
+      <button type="button" class="btn btn-primary btn-sm filtro-pdf" style="margin-left:auto" onclick="exportarRelatorioExecutivoPDF()" title="Exportar Relatório Executivo da Obra em PDF">${ic('baixar')} <span class="filtro-pdf-txt">Exportar PDF</span></button>
     </div>
 
     ${renderCentralCampo()}
