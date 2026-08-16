@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=44"></script>
-<script src="dados/ruas-de-terra.js?v=44"></script>
+<script src="dados/ranario.js?v=45"></script>
+<script src="dados/ruas-de-terra.js?v=45"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=44"></script>
+<script src="dados/teotonio-muros.js?v=45"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=44"></script>
-<script src="js/nf/adaptador.js?v=44"></script>
-<script src="js/nf/notas.js?v=44"></script>
-<script src="js/equip/equipamentos.js?v=44"></script>
+<script src="js/ui/icones.js?v=45"></script>
+<script src="js/nf/adaptador.js?v=45"></script>
+<script src="js/nf/notas.js?v=45"></script>
+<script src="js/equip/equipamentos.js?v=45"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -338,6 +338,65 @@
 .nf-1linha{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nf-simples .nf-extra{display:none!important}
 
+
+
+/* ==================================================================
+   BUSCA GLOBAL — a caixa
+   ------------------------------------------------------------------
+   Fica no alto, não no meio: a lista cresce para baixo e o olho não
+   precisa reencontrar o campo a cada tecla. No celular ela ocupa a
+   largura toda e o teclado sobe por baixo dela.
+   ================================================================== */
+#buscaOverlay{
+  position:fixed; inset:0; z-index:10000; display:flex; justify-content:center;
+  align-items:flex-start; background:rgba(15,12,8,.5); backdrop-filter:blur(3px);
+  padding:calc(64px + var(--sat)) 16px calc(20px + var(--sab));
+  animation:pageEnter calc(.18s * var(--anim-speed)) ease-out;
+}
+.busca-caixa{
+  width:100%; max-width:620px; background:var(--surface); border:1px solid var(--border-strong);
+  border-radius:var(--r-lg); box-shadow:var(--sh-lg); overflow:hidden; display:flex; flex-direction:column;
+  max-height:min(70vh, 560px);
+}
+.busca-topo{display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--border)}
+.busca-ic-topo{display:flex; color:var(--muted); flex-shrink:0}
+.busca-ic-topo svg{width:19px; height:19px}
+#buscaInput{
+  flex:1; min-width:0; border:none; outline:none; background:transparent; color:var(--text);
+  font-family:inherit; font-size:16px; font-weight:500; padding:2px 0;
+}
+#buscaInput::placeholder{color:var(--muted-2); font-weight:400}
+#buscaInput::-webkit-search-cancel-button{display:none}
+.busca-esc{
+  font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--muted);
+  border:1px solid var(--border-strong); border-radius:4px; padding:2px 6px; flex-shrink:0;
+}
+.busca-resultados{overflow-y:auto; overscroll-behavior:contain; padding:6px 0 8px}
+.busca-grupo{
+  font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--muted); padding:11px 16px 5px;
+}
+.busca-item{
+  display:flex; align-items:center; gap:11px; width:100%; text-align:left; cursor:pointer;
+  background:transparent; border:none; border-left:3px solid transparent;
+  padding:9px 16px; font-family:inherit; color:var(--text); min-height:48px;
+}
+.busca-item.on{background:var(--acc-l); border-left-color:var(--acc)}
+.busca-ic{display:flex; color:var(--muted); flex-shrink:0}
+.busca-item.on .busca-ic{color:var(--acc-d)}
+.busca-ic svg{width:17px; height:17px}
+.busca-txt{display:flex; flex-direction:column; min-width:0; gap:1px}
+.busca-txt b{font-size:14px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.busca-txt span{font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.busca-item.on .busca-txt span{color:var(--acc-d)}
+.busca-dica{padding:20px 18px; font-size:13.5px; color:var(--muted); line-height:1.6; text-align:center}
+.busca-dica b{color:var(--text-2)}
+@media (max-width:640px){
+  #buscaOverlay{padding:calc(12px + var(--sat)) 10px calc(12px + var(--sab))}
+  .busca-caixa{max-height:calc(100vh - 24px - var(--sat) - var(--sab))}
+  .busca-esc{display:none}
+}
+@media (prefers-reduced-motion: reduce){ #buscaOverlay{animation:none} }
 
 @keyframes pageEnter {
   from { opacity: 0; transform: translateY(16px); }
@@ -4718,6 +4777,7 @@ window.atualizarBotoesTopo = function() {
     ? `<button class="btn btn-primary btn-sm" onclick="navigate('rdo')">${ic('mais')} Novo Serviço</button>`
     : '';
   tb.innerHTML = acesso +
+    '<button class="btn btn-outline btn-sm btn-icone" onclick="buscaAbrir()" title="Buscar estaca, pacote, lançamento ou RDO (Ctrl+K)" aria-label="Buscar">' + ic('lupa') + '</button>' +
     '<button class="btn btn-outline btn-sm btn-icone" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">' + ic('atualizar') + '</button>' +
     novo;
 };
@@ -6108,6 +6168,205 @@ function faixaObraNotas() {
       ${lista.map(o => `<option value="${escHtml(o.id)}" ${o.id === OBRA.id ? 'selected' : ''}>${escHtml(o.nomeCurto || o.nome)}</option>`).join('')}
     </select>${acoes}</div>`;
 }
+
+/* ==================================================================
+   BUSCA GLOBAL
+   ------------------------------------------------------------------
+   São 15 telas e nenhum caminho entre elas: quem lembra da estaca E112,
+   do pacote "Muro C" ou do RDO de um dia tinha de adivinhar em qual tela
+   procurar e refazer o filtro na mão. Aqui um campo só entende as quatro
+   coisas que se procura numa obra — estaca, pacote, lançamento e RDO —
+   e leva direto ao lugar, já filtrado.
+
+   Abre com Ctrl/⌘+K, com "/" ou pelo botão da barra de topo. Anda com as
+   setas, entra com Enter, sai com Esc.
+   ================================================================== */
+/* As telas, com o vocabulário de quem procura: o apontador digita
+   "medição" ou "foto", não "medicao" nem o id interno. */
+const TELAS_BUSCAVEIS = [
+  ['executivo',    'Painel Executivo',   'avanço ponderado, curva S, status vs cronograma'],
+  ['avancofisico', 'Avanço Físico',      'pacotes, mapa de estacas, produtividade, planta'],
+  ['cronograma',   'Cronograma',         'planejamento reverso, saldo, quando iniciar, atraso'],
+  ['medicao',      'Apoio à Medição',    'item contratual, coeficientes, prévia, fechar medição'],
+  ['improdutivos', 'Dias Improdutivos',  'chuva, paralisação, pleito, prorrogação de prazo'],
+  ['teoricoreal',  'Teórico × Real',     'consumo teórico contra estoque, divergência'],
+  ['analista',     'Analista IA',        'leitura executiva, recomendação, projeção'],
+  ['rdo',          'Lançar Serviço',     'novo lançamento, produção do dia, foto, quantidade'],
+  ['rdodiario',    'RDO Diário',         'efetivo, equipamentos, clima, ocorrências, PDF'],
+  ['historico',    'Histórico',          'serviços lançados, editar, apagar, exportar CSV'],
+  ['equip',        'Equipamentos',       'frota, horímetro, horas paradas, combustível'],
+  ['galeria',      'Galeria de Fotos',   'registro fotográfico carimbado'],
+  ['projetos',     'Projetos',           'pranchas do executivo, desenho, planta'],
+  ['notas',        'Notas Fiscais',      'DANFE, fornecedor, estoque, entrada de material'],
+  ['usuarios',     'Usuários',           'acesso, perfil, senha, permissão'],
+];
+
+const BUSCA = { aberta: false, termo: '', sel: 0, itens: [] };
+
+/* sem acento e sem caixa: no canteiro ninguém digita "Contenção" com til */
+function buscaNorm(s) {
+  return String(s == null ? '' : s).toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
+function buscaCalcular(termo) {
+  const t = buscaNorm(termo).trim();
+  if (t.length < 1) return [];
+  const itens = [];
+  const cabe = grupo => itens.filter(x => x.grupo === grupo).length < 6;
+
+  // ---- telas
+  TELAS_BUSCAVEIS.forEach(([id, nome, desc]) => {
+    if (!podeVer(id)) return;
+    if (!cabe('Telas')) return;
+    if (buscaNorm(nome).includes(t) || buscaNorm(desc).includes(t))
+      itens.push({ grupo: 'Telas', icone: 'painel', titulo: nome, sub: desc, ir: () => navigate(id) });
+  });
+
+  // ---- pacotes (código, nome ou frente)
+  (STATE.pacotes || []).forEach(p => {
+    if (!cabe('Pacotes')) return;
+    const id = getCSVField(p, 'ID'), nome = getCSVField(p, 'Pacote'), fr = getCSVField(p, 'Frente');
+    if (buscaNorm(id) === t || buscaNorm(nome).includes(t) || buscaNorm(fr).includes(t)) {
+      itens.push({
+        grupo: 'Pacotes', icone: 'avanco', titulo: nome || id,
+        sub: `${id}${fr ? ' · ' + fr : ''} — ver no Avanço Físico`,
+        ir: () => navigate('avancofisico'),
+      });
+    }
+  });
+
+  // ---- serviços lançados (do mais novo para o mais velho)
+  const rdos = STATE.rdoavanco || [];
+  for (let i = rdos.length - 1; i >= 0 && cabe('Serviços lançados'); i--) {
+    const r = rdos[i];
+    const estaca = getCSVField(r, 'Local_Estaca') || '';
+    const alvo = buscaNorm([getCSVField(r, 'ID'), estaca, nomeDoPacote(r),
+                            getCSVField(r, 'Equipe'), getCSVField(r, 'Apontador'),
+                            getCSVField(r, 'Observacao')].join(' '));
+    if (!alvo.includes(t)) continue;
+    const data = fmtData(getCSVField(r, 'Data'));
+    itens.push({
+      grupo: 'Serviços lançados', icone: 'servicos',
+      titulo: nomeDoPacote(r) || '(sem pacote)',
+      sub: `${data}${estaca ? ' · ' + estaca : ''} · ${fmtNum(num(getCSVField(r, 'Quantidade')))} ${getCSVField(r, 'Unidade') || ''}`.trim(),
+      ir: () => { HIST_FILTRO.busca = estaca || getCSVField(r, 'ID'); HIST_LIMITE = 100; navigate('historico'); },
+    });
+  }
+
+  // ---- RDOs diários (por data, escrita como for)
+  const diarios = STATE.rdodiario || [];
+  for (let i = diarios.length - 1; i >= 0 && cabe('RDOs diários'); i--) {
+    const d = diarios[i];
+    const iso = getCSVField(d, 'Data') || '';
+    const alvo = buscaNorm([iso, fmtData(iso), getCSVField(d, 'ID'),
+                            getCSVField(d, 'Apontador')].join(' '));
+    if (!alvo.includes(t)) continue;
+    const id = getCSVField(d, 'ID');
+    itens.push({
+      grupo: 'RDOs diários', icone: 'diario', titulo: 'RDO de ' + fmtData(iso),
+      sub: `${getCSVField(d, 'Turno') || ''} — abrir o relatório`.trim(),
+      ir: () => { navigate('historico'); setTimeout(() => visualizarRDO(id), 220); },
+    });
+  }
+
+  return itens;
+}
+
+function buscaRender() {
+  const cx = document.getElementById('buscaResultados');
+  if (!cx) return;
+  if (!BUSCA.termo.trim()) {
+    cx.innerHTML = `<div class="busca-dica">
+      Procure por <b>estaca</b> (E112), <b>pacote</b> (P07 ou "Muro C"),
+      um <b>lançamento</b> ou a <b>data de um RDO</b>.</div>`;
+    return;
+  }
+  if (!BUSCA.itens.length) {
+    cx.innerHTML = `<div class="busca-dica">Nada encontrado para “${escHtml(BUSCA.termo)}”.</div>`;
+    return;
+  }
+  let html = '', grupoAtual = '';
+  BUSCA.itens.forEach((it, i) => {
+    if (it.grupo !== grupoAtual) { grupoAtual = it.grupo; html += `<div class="busca-grupo">${escHtml(grupoAtual)}</div>`; }
+    html += `<button type="button" class="busca-item${i === BUSCA.sel ? ' on' : ''}" data-i="${i}"
+        onclick="buscaIr(${i})" onmousemove="buscaSelecionar(${i})">
+      <span class="busca-ic">${ic(it.icone)}</span>
+      <span class="busca-txt"><b>${escHtml(it.titulo)}</b><span>${escHtml(it.sub)}</span></span>
+    </button>`;
+  });
+  cx.innerHTML = html;
+  const ativo = cx.querySelector('.busca-item.on');
+  if (ativo) ativo.scrollIntoView({ block: 'nearest' });
+}
+
+window.buscaSelecionar = function (i) {
+  if (BUSCA.sel === i) return;
+  BUSCA.sel = i;
+  const cx = document.getElementById('buscaResultados');
+  if (!cx) return;
+  cx.querySelectorAll('.busca-item').forEach(el => el.classList.toggle('on', +el.dataset.i === i));
+};
+
+window.buscaIr = function (i) {
+  const it = BUSCA.itens[i];
+  if (!it) return;
+  buscaFechar();
+  it.ir();
+};
+
+window.buscaDigitou = function (v) {
+  BUSCA.termo = v;
+  BUSCA.itens = buscaCalcular(v);
+  BUSCA.sel = 0;
+  buscaRender();
+};
+
+window.buscaAbrir = function () {
+  if (BUSCA.aberta) return;
+  BUSCA.aberta = true; BUSCA.termo = ''; BUSCA.itens = []; BUSCA.sel = 0;
+  const m = document.createElement('div');
+  m.id = 'buscaOverlay';
+  m.innerHTML = `<div class="busca-caixa" role="dialog" aria-modal="true" aria-label="Busca global">
+      <div class="busca-topo">
+        <span class="busca-ic-topo">${ic('lupa')}</span>
+        <input id="buscaInput" type="search" autocomplete="off" autocapitalize="off" spellcheck="false"
+               placeholder="Estaca, pacote, lançamento ou data do RDO…"
+               oninput="buscaDigitou(this.value)" aria-label="O que você procura">
+        <kbd class="busca-esc">Esc</kbd>
+      </div>
+      <div id="buscaResultados" class="busca-resultados"></div>
+    </div>`;
+  document.body.appendChild(m);
+  m.addEventListener('click', e => { if (e.target === m) buscaFechar(); });
+  buscaRender();
+  const inp = document.getElementById('buscaInput');
+  if (inp) inp.focus();
+};
+
+window.buscaFechar = function () {
+  BUSCA.aberta = false;
+  const m = document.getElementById('buscaOverlay');
+  if (m) m.remove();
+};
+
+/* Um atalho que não atrapalha quem está digitando: "/" só abre fora de
+   campo de texto; Ctrl/⌘+K abre de qualquer lugar. */
+document.addEventListener('keydown', e => {
+  const alvo = e.target || {};
+  const digitando = /^(INPUT|TEXTAREA|SELECT)$/.test(alvo.tagName || '') || alvo.isContentEditable;
+
+  if (!BUSCA.aberta) {
+    if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) { e.preventDefault(); buscaAbrir(); }
+    else if (e.key === '/' && !digitando) { e.preventDefault(); buscaAbrir(); }
+    return;
+  }
+  if (e.key === 'Escape') { e.preventDefault(); buscaFechar(); return; }
+  if (!BUSCA.itens.length) return;
+  if (e.key === 'ArrowDown') { e.preventDefault(); buscaSelecionar((BUSCA.sel + 1) % BUSCA.itens.length); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); buscaSelecionar((BUSCA.sel - 1 + BUSCA.itens.length) % BUSCA.itens.length); }
+  else if (e.key === 'Enter') { e.preventDefault(); buscaIr(BUSCA.sel); }
+});
 
 function renderShell() {
   const root = document.getElementById('root');
@@ -11850,7 +12109,136 @@ function renderHistoricoServicos() {
             ${podeExcluir(r) ? `<button class="gantt-edit-btn" onclick="histDeletarServico(${idx})" title="Apagar este lançamento" aria-label="Apagar lançamento" style="color:var(--err,#e53e3e);margin-left:2px">${ic('lixeira')} <span class="so-mob">Apagar</span></button>` : ''}
           </td>
         </tr>
-        <tr id="hist-edit-row-${idx}" style="display:none">
+        <tr id="hist-edit-row-${idx}" style="display:none"></tr>`;
+    }).join('');
+
+    /* PAGINAÇÃO DE VERDADE. Antes o corte era cego em 100 e não havia como
+       chegar no resto: o Histórico é a única tela de onde se edita e se apaga
+       um lançamento, então tudo que passasse dos 100 mais recentes ficava sem
+       conserto. E o corte era aplicado DEPOIS do filtro, então filtrar também
+       não destravava. */
+    const restam = visiveis.length - Math.min(HIST_LIMITE, visiveis.length);
+    const moreText = visiveis.length > HIST_LIMITE ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;padding:14px">
+        <button class="btn btn-outline btn-sm" onclick="histMostrarMais()">Mostrar mais ${Math.min(HIST_PAGINA, restam)}</button>
+        <div style="color:var(--muted);font-size:11px;margin-top:6px">mostrando ${Math.min(HIST_LIMITE, visiveis.length)} de ${visiveis.length}${filtroAtivo?' (filtrados)':''}</div>
+      </td></tr>` : (visiveis.length > HIST_PAGINA
+        ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">mostrando todos os ${visiveis.length}${filtroAtivo?' (filtrados)':''}</td></tr>`
+        : '');
+
+    bodyContent = `
+      <table class="t t-cartoes">
+        <thead><tr>
+          <th>Pacote</th><th>ID</th><th>Data</th><th>Turno</th>
+          <th class="t-num" style="text-align:right">Qtd</th>
+          <th>Estaca</th><th>Equipe</th><th>Apontador</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${tableRows}
+          ${moreText}
+        </tbody>
+      </table>
+    `;
+  }
+  
+  return `
+    <div class="card stagger-item" style="animation-delay: .1s">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Serviços lançados</div>
+          <div class="card-title-sub">Cada linha = 1 pacote executado · alimenta avanço físico e medição</div>
+        </div>
+        <div class="hist-acoes" style="display:flex;gap:6px;flex-wrap:wrap">
+          ${rdos.length > 0 ? `<button class="btn btn-outline btn-sm" onclick="exportarHistoricoCSV()">${ic('baixar')} CSV</button>` : ''}
+          ${ehAdmin() && rdos.length > 0 ? `<button class="btn btn-sm" style="background:var(--err,#e53e3e);color:#fff;border:none;padding:5px 12px;border-radius:var(--r);cursor:pointer;font-size:12px;font-weight:600" onclick="apagarDuplicatasRDO()">${ic('lixeira')} Apagar duplicatas</button>` : ''}
+        </div>
+      </div>
+      <div class="card-body flush">
+        ${filtroBar}
+        ${bodyContent}
+      </div>
+    </div>
+  `;
+}
+
+window.exportarHistoricoCSV = function() {
+  const rdos = [...STATE.rdoavanco].reverse();
+  const header = ['ID','Data','Turno','Pacote','Quantidade','Unidade','Estaca','Equipe','Apontador'];
+  const rows = rdos.map(r => [
+    getCSVField(r,'ID')||'',
+    fmtData(getCSVField(r,'Data')),
+    getCSVField(r,'Turno')||'',
+    nomeDoPacote(r),
+    fmtNum(num(getCSVField(r,'Quantidade'))),
+    getCSVField(r,'Unidade')||'',
+    getCSVField(r,'Local_Estaca')||'',
+    getCSVField(r,'Equipe')||getCSVField(r,'Subcontratado')||'',
+    getCSVField(r,'Apontador')||''
+  ].map(v => `"${String(v).replace(/"/g,'""')}"`));
+  const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'Historico_Servicos.csv';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  toast('CSV exportado com sucesso!', 'success');
+};
+
+/* Chave das fotos pendentes de um serviço já lançado. Vem do ID do serviço
+   (não da posição na tabela, que muda a cada sincronização) e é limpa para
+   servir de id de elemento no HTML. */
+function chaveFotoServico(id) {
+  return 'h' + String(id || '').replace(/[^A-Za-z0-9_-]/g, '');
+}
+
+/* ------------------------------------------------------------------
+   O FORMULÁRIO DE EDIÇÃO, MONTADO SÓ QUANDO ABRE
+   ------------------------------------------------------------------
+   Ele vinha pronto em TODA linha da tabela, escondido com display:none.
+   Medido com 100 linhas na tela: 14.327 nós no DOM, dos quais 11.500
+   dentro dessas linhas invisíveis — e 5.330 <option>, porque cada linha
+   carregava um <select> com os 49 pacotes da obra. Era o maior DOM do
+   app, montado para um formulário que quase nunca é aberto, no aparelho
+   que menos aguenta.
+   Agora a linha nasce vazia e o formulário é construído no clique. O
+   `idx` é a posição na lista invertida — a mesma que histEditarServico
+   já usava para achar a linha.
+   ------------------------------------------------------------------ */
+function histFormEdicao(idx) {
+  const r = [...STATE.rdoavanco].reverse()[idx];
+  if (!r) return '';
+
+  const id          = getCSVField(r, 'ID') || '';
+  const dataVal     = getCSVField(r, 'Data') || '';
+  const turno       = getCSVField(r, 'Turno') || 'Diurno';
+  const pacoteId    = getCSVField(r, 'Pacote_ID') || '';
+  const qtd         = getCSVField(r, 'Quantidade') || '';
+  const localEstaca = getCSVField(r, 'Local_Estaca') || '';
+  const equipe      = getCSVField(r, 'Equipe') || getCSVField(r, 'Subcontratado') || '';
+  const apontador   = getCSVField(r, 'Apontador') || '';
+  const obs         = getCSVField(r, 'Observacao') || '';
+
+  let estIni = '', estFim = '', sentido = eixoPadrao();
+  const lado = lerLadoDaVia(localEstaca);
+  const m1 = localEstaca.match(/^(E\d+)\s+a\s+(E\d+)\s+\((\w+)\)/);
+  const m2 = localEstaca.match(/^(E\d+)\s+\((\w+)\)/);
+  if (m1) { estIni = m1[1]; estFim = m1[2]; sentido = m1[3]; }
+  else if (m2) { estIni = m2[1]; sentido = m2[2]; }
+
+  const mesmoPacote = p => String(getCSVField(p, 'ID')) === String(pacoteId);
+  const listaPac = STATE.pacotes.filter(p => getCSVField(p, 'Status') !== 'Histórico' || mesmoPacote(p));
+  const pacoteOpts =
+    (pacoteId && listaPac.some(mesmoPacote) ? '' :
+      `<option value="${escHtml(pacoteId)}" selected>${escHtml(getCSVField(r,'Pacote_Nome') ? getCSVField(r,'Pacote_Nome') + ' (atual)' : '(pacote deste lançamento)')}</option>`) +
+    listaPac
+      .map(p => `<option value="${escHtml(getCSVField(p,'ID'))}"${mesmoPacote(p)?' selected':''}>${escHtml(getCSVField(p,'Pacote'))}</option>`)
+      .join('');
+
+  const esc = v => String(v).replace(/"/g,'&quot;');
+  const jaTemFotos = fotosDaLinha(r).length;
+  const chaveFoto = chaveFotoServico(id);
+
+  return `
           <td class="celula-larga" colspan="9" style="padding:0">
             <div style="padding:12px 16px;background:var(--bg-2);border-left:3px solid var(--primary)">
               <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
@@ -11938,95 +12326,23 @@ function renderHistoricoServicos() {
               </div>
             </div>
           </td>
-        </tr>`;
-    }).join('');
-
-    /* PAGINAÇÃO DE VERDADE. Antes o corte era cego em 100 e não havia como
-       chegar no resto: o Histórico é a única tela de onde se edita e se apaga
-       um lançamento, então tudo que passasse dos 100 mais recentes ficava sem
-       conserto. E o corte era aplicado DEPOIS do filtro, então filtrar também
-       não destravava. */
-    const restam = visiveis.length - Math.min(HIST_LIMITE, visiveis.length);
-    const moreText = visiveis.length > HIST_LIMITE ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;padding:14px">
-        <button class="btn btn-outline btn-sm" onclick="histMostrarMais()">Mostrar mais ${Math.min(HIST_PAGINA, restam)}</button>
-        <div style="color:var(--muted);font-size:11px;margin-top:6px">mostrando ${Math.min(HIST_LIMITE, visiveis.length)} de ${visiveis.length}${filtroAtivo?' (filtrados)':''}</div>
-      </td></tr>` : (visiveis.length > HIST_PAGINA
-        ? `<tr><td class="celula-larga" colspan="9" style="text-align:center;color:var(--muted);font-size:11px;padding:14px">mostrando todos os ${visiveis.length}${filtroAtivo?' (filtrados)':''}</td></tr>`
-        : '');
-
-    bodyContent = `
-      <table class="t t-cartoes">
-        <thead><tr>
-          <th>Pacote</th><th>ID</th><th>Data</th><th>Turno</th>
-          <th class="t-num" style="text-align:right">Qtd</th>
-          <th>Estaca</th><th>Equipe</th><th>Apontador</th><th></th>
-        </tr></thead>
-        <tbody>
-          ${tableRows}
-          ${moreText}
-        </tbody>
-      </table>
-    `;
-  }
-  
-  return `
-    <div class="card stagger-item" style="animation-delay: .1s">
-      <div class="card-header">
-        <div>
-          <div class="card-title">Serviços lançados</div>
-          <div class="card-title-sub">Cada linha = 1 pacote executado · alimenta avanço físico e medição</div>
-        </div>
-        <div class="hist-acoes" style="display:flex;gap:6px;flex-wrap:wrap">
-          ${rdos.length > 0 ? `<button class="btn btn-outline btn-sm" onclick="exportarHistoricoCSV()">${ic('baixar')} CSV</button>` : ''}
-          ${ehAdmin() && rdos.length > 0 ? `<button class="btn btn-sm" style="background:var(--err,#e53e3e);color:#fff;border:none;padding:5px 12px;border-radius:var(--r);cursor:pointer;font-size:12px;font-weight:600" onclick="apagarDuplicatasRDO()">${ic('lixeira')} Apagar duplicatas</button>` : ''}
-        </div>
-      </div>
-      <div class="card-body flush">
-        ${filtroBar}
-        ${bodyContent}
-      </div>
-    </div>
-  `;
-}
-
-window.exportarHistoricoCSV = function() {
-  const rdos = [...STATE.rdoavanco].reverse();
-  const header = ['ID','Data','Turno','Pacote','Quantidade','Unidade','Estaca','Equipe','Apontador'];
-  const rows = rdos.map(r => [
-    getCSVField(r,'ID')||'',
-    fmtData(getCSVField(r,'Data')),
-    getCSVField(r,'Turno')||'',
-    nomeDoPacote(r),
-    fmtNum(num(getCSVField(r,'Quantidade'))),
-    getCSVField(r,'Unidade')||'',
-    getCSVField(r,'Local_Estaca')||'',
-    getCSVField(r,'Equipe')||getCSVField(r,'Subcontratado')||'',
-    getCSVField(r,'Apontador')||''
-  ].map(v => `"${String(v).replace(/"/g,'""')}"`));
-  const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
-  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = 'Historico_Servicos.csv';
-  document.body.appendChild(a); a.click();
-  document.body.removeChild(a); URL.revokeObjectURL(url);
-  toast('CSV exportado com sucesso!', 'success');
-};
-
-/* Chave das fotos pendentes de um serviço já lançado. Vem do ID do serviço
-   (não da posição na tabela, que muda a cada sincronização) e é limpa para
-   servir de id de elemento no HTML. */
-function chaveFotoServico(id) {
-  return 'h' + String(id || '').replace(/[^A-Za-z0-9_-]/g, '');
+`;
 }
 
 window.histEditarServico = function(idx) {
   const row = document.getElementById(`hist-edit-row-${idx}`);
   if (!row) return;
   const isOpen = row.style.display !== 'none';
-  document.querySelectorAll('[id^="hist-edit-row-"]').forEach(r => { r.style.display = 'none'; });
+  /* Fechar ESVAZIA a linha: é o que devolve os ~115 nós do formulário ao
+     navegador. Só uma edição fica aberta por vez, então no máximo um
+     formulário existe no DOM a qualquer momento. */
+  document.querySelectorAll('[id^="hist-edit-row-"]').forEach(r => {
+    r.style.display = 'none';
+    r.innerHTML = '';
+  });
   document.querySelectorAll('[id^="hedit-toggle-"]').forEach(b => { b.style.color = ''; });
   if (!isOpen) {
+    row.innerHTML = histFormEdicao(idx);
     row.style.display = '';
     const toggle = document.getElementById(`hedit-toggle-${idx}`);
     if (toggle) toggle.style.color = 'var(--primary)';
