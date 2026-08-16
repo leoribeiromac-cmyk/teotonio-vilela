@@ -160,6 +160,63 @@ const filtrarMes = (mes) => {
   ok('nenhum erro de JS (sem estouro)', s2.erros.length === 0, s2.erros.slice(0, 3).join(' | '));
   await s2.fechar();
 
+  // ============================================ botões de horizonte
+  // Os botões "Obra toda / 12 meses / 3 meses" são os filtros DA CURVA, e
+  // não mexiam no eixo: medida a obra em 72,9%, o recorte de 3 meses
+  // desenhava realizado de 72,9 a 72,9 contra previsto de 100 a 100 numa
+  // régua de 0 a 100 — duas retas paralelas onde nada acontecia.
+  console.log('\n── os botões de horizonte ──');
+  const s3 = await H.abrir(Object.assign({}, comum, { rdo: H.gerarRDO({ linhas: 2000, dias: 500 }) }));
+  await s3.ir('executivo');
+  await s3.p.waitForTimeout(1300);
+
+  const janela = async (hz) => {
+    await s3.p.evaluate(h => { STATE.curvaHorizonte = h; STATE.filtros.mes = ''; transitionTo(render); }, hz);
+    await s3.p.waitForTimeout(900);
+    await s3.p.evaluate(() => montarGraficos());
+    await s3.p.waitForTimeout(700);
+    return s3.p.evaluate(() => {
+      const g = window.meuGraficoCurvaS;
+      const el = document.getElementById('curvaLeitura');
+      return { min: g.options.scales.y.min, max: g.options.scales.y.max,
+               dias: g.data.labels.length,
+               leitura: el ? el.textContent.replace(/\s+/g, ' ').trim() : '',
+               fill: JSON.stringify(g.data.datasets[1].fill) };
+    });
+  };
+
+  const obra = await janela('obra');
+  ok('na obra toda a régua vai de 0 a 100', obra.min === 0 && obra.max === 100,
+     `${obra.min}–${obra.max}`);
+
+  const doze = await janela('12m');
+  ok('em 12 meses a régua se fecha na janela', doze.min > 0 || doze.max < 100,
+     `${doze.min}–${doze.max}`);
+
+  const tres = await janela('3m');
+  ok('em 3 meses a régua se fecha na janela', tres.min > 0 || tres.max < 100,
+     `${tres.min}–${tres.max}`);
+  ok('e a janela de 3 meses é mais apertada que a de 12',
+     (tres.max - tres.min) <= (doze.max - doze.min),
+     `3m ${tres.max - tres.min} · 12m ${doze.max - doze.min}`);
+  ok('a janela de 3 meses tem menos dias que a de 12', tres.dias < doze.dias,
+     `${tres.dias} vs ${doze.dias}`);
+
+  // a faixa entre as duas linhas é o que mostra a distância sem precisar ler
+  ok('a faixa entre realizado e previsto é pintada', /"target":0/.test(obra.fill), obra.fill);
+
+  // a leitura em palavras
+  ok('sem recorte, a leitura diz o estado de hoje',
+     /cronograma hoje/.test(obra.leitura), obra.leitura);
+  ok('com recorte, a leitura diz o que mudou NO PERÍODO',
+     /No período/.test(tres.leitura) && /distância para o cronograma/.test(tres.leitura),
+     tres.leitura);
+  ok('e a leitura traz as duas pontas da distância',
+     /→/.test(tres.leitura), tres.leitura);
+
+  ok('nenhum erro de JS nos horizontes', s3.erros.length === 0, s3.erros.slice(0, 3).join(' | '));
+  await s3.fechar();
+
   console.log(falhas === 0 ? '\nTUDO CERTO' : `\n${falhas} FALHA(S)`);
   process.exit(falhas === 0 ? 0 : 1);
 })();

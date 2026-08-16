@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=47"></script>
-<script src="dados/ruas-de-terra.js?v=47"></script>
+<script src="dados/ranario.js?v=48"></script>
+<script src="dados/ruas-de-terra.js?v=48"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=47"></script>
+<script src="dados/teotonio-muros.js?v=48"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=47"></script>
-<script src="js/nf/adaptador.js?v=47"></script>
-<script src="js/nf/notas.js?v=47"></script>
-<script src="js/equip/equipamentos.js?v=47"></script>
+<script src="js/ui/icones.js?v=48"></script>
+<script src="js/nf/adaptador.js?v=48"></script>
+<script src="js/nf/notas.js?v=48"></script>
+<script src="js/equip/equipamentos.js?v=48"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -917,6 +917,19 @@ body.proj-cheia-ativa{overflow:hidden}
 .conta-btn--entrar:hover{background:var(--acc-d);color:#fff}
 
 /* ---- tela de acesso ---- */
+
+
+/* ===== Curva S — a leitura embaixo do gráfico ===== */
+.curva-leitura{
+  display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;
+  margin-top:10px; padding-top:10px; border-top:1px solid var(--border);
+  font-size:var(--fs-sm); color:var(--muted); line-height:1.5;
+}
+.curva-leitura:empty{display:none}
+.cl-forte{font-weight:650}
+.cl-pos{color:var(--grn)}
+.cl-neg{color:var(--red)}
+.cl-neutro{color:var(--text-2)}
 
 /* ===== Prévia de medição — a faixa de resumo ===== */
 .medicao-resumo{
@@ -9408,6 +9421,8 @@ function renderExecutivo() {
         <div class="card-body">
           ${rdosOrdenados.length > 0 ? `
             <div style="position:relative;height:260px"><canvas id="curvaS"></canvas></div>
+            <!-- preenchido por montarGraficos(): a leitura depende das séries -->
+            <div class="curva-leitura" id="curvaLeitura"></div>
           ` : `<div class="empty"><div class="empty-icon">${ic('relogio')}</div><div class="empty-title">Sem dados no filtro</div><div class="empty-sub">Altere o filtro de mês ou frente.</div></div>`}
         </div>
       </div>
@@ -10115,8 +10130,14 @@ async function montarGraficos() {
      está na janela, com folga, arredondada de 5 em 5 para os rótulos
      saírem redondos.
      ------------------------------------------------------------------ */
+  /* Recortou alguma coisa? Vale tanto o filtro de mês quanto os botões de
+     horizonte (12 meses / 3 meses) — que são os filtros DA CURVA e antes não
+     mexiam no eixo. Medido com a obra em 72,9%: em "3 meses" o realizado ia
+     de 72,9 a 72,9 e o previsto de 100 a 100 numa régua de 0 a 100, ou seja,
+     duas retas paralelas onde nada acontecia. */
+  const janelaRecortada = !!STATE.filtros.mes || (STATE.curvaHorizonte && STATE.curvaHorizonte !== 'obra');
   let yMin = 0, yMax = 100;
-  if (STATE.filtros.mes) {
+  if (janelaRecortada) {
     const visiveis = realizado.concat(previsto, projecao)
       .filter(v => v !== null && v !== undefined && !isNaN(v));
     if (visiveis.length) {
@@ -10128,6 +10149,49 @@ async function montarGraficos() {
       // faixa muito estreita vira ruído: nunca menos de 10 p.p. de régua
       if (yMax - yMin < 10) yMax = Math.min(100, yMin + 10);
       if (yMax - yMin < 10) yMin = Math.max(0, yMax - 10);
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     QUANTO A DISTÂNCIA PARA O CRONOGRAMA ANDOU NA JANELA
+     ------------------------------------------------------------------
+     Duas linhas acumuladas quase paralelas não respondem a pergunta de
+     quem recorta um período: "neste tempo eu abri ou fechei distância?".
+     O número sai da diferença entre as pontas — e a faixa pintada entre
+     as duas linhas (o fill do dataset do previsto mirando o realizado)
+     mostra a mesma coisa sem precisar ler nada.
+     ------------------------------------------------------------------ */
+  const paresValidos = labels.map((_, i) => [realizado[i], previsto[i]])
+    .filter(([r, pv]) => r !== null && r !== undefined && pv !== null && pv !== undefined);
+  let deltaJanela = null;
+  if (paresValidos.length >= 2) {
+    const [r0, p0] = paresValidos[0];
+    const [r1, p1] = paresValidos[paresValidos.length - 1];
+    deltaJanela = { ini: r0 - p0, fim: r1 - p1 };
+    deltaJanela.mudanca = deltaJanela.fim - deltaJanela.ini;
+  }
+  STATE.dashData.curvaDelta = deltaJanela;
+
+  /* A leitura em palavras, embaixo do gráfico. Ela responde o que a faixa
+     mostra em cor: neste recorte a obra abriu ou fechou distância? Sem
+     recorte não há "durante" nenhum — aí vale o estado de hoje. */
+  const cxLeitura = document.getElementById('curvaLeitura');
+  if (cxLeitura) {
+    const pp = v => fmtNum(Math.abs(v), 1).replace('-', '');
+    if (!deltaJanela) {
+      cxLeitura.innerHTML = '';
+    } else if (!janelaRecortada) {
+      const atras = deltaJanela.fim < 0;
+      cxLeitura.innerHTML = `<span class="cl-forte ${atras ? 'cl-neg' : 'cl-pos'}">${pp(deltaJanela.fim)} p.p.</span>
+        <span>${atras ? 'atrás do' : 'à frente do'} cronograma hoje</span>`;
+    } else {
+      const m = deltaJanela.mudanca;
+      const parado = Math.abs(m) < 0.05;
+      const cls = parado ? 'cl-neutro' : (m > 0 ? 'cl-pos' : 'cl-neg');
+      const verbo = parado ? 'manteve a distância' : (m > 0 ? `recuperou ${pp(m)} p.p.` : `perdeu ${pp(m)} p.p.`);
+      cxLeitura.innerHTML = `<span class="cl-forte ${cls}">No período, a obra ${verbo}</span>
+        <span>· distância para o cronograma: ${deltaJanela.ini < 0 ? '−' : '+'}${pp(deltaJanela.ini)}
+        → ${deltaJanela.fim < 0 ? '−' : '+'}${pp(deltaJanela.fim)} p.p.</span>`;
     }
   }
 
@@ -10211,9 +10275,17 @@ async function montarGraficos() {
           label: 'Previsto (cronograma)',
           data: previsto,
           borderColor: 'oklch(0.65 0.02 60)',
-          backgroundColor: 'transparent',
-          borderWidth: 1.5, borderDash: [6, 5],
-          fill: false, tension: 0,
+          /* A FAIXA ENTRE AS DUAS LINHAS é a distância para o cronograma.
+             Pintá-la custa uma linha de config e diz, sem número, o que
+             duas curvas paralelas escondem: onde ela engorda, a obra
+             perdeu terreno; onde afina, recuperou. Vermelha quando o
+             realizado está abaixo do previsto, verde quando está acima. */
+          backgroundColor: (c) => {
+            const d = (STATE.dashData && STATE.dashData.curvaDelta) || null;
+            const atras = !d || d.fim <= 0;
+            return atras ? 'oklch(0.58 0.2 20 / 0.10)' : 'oklch(0.62 0.16 150 / 0.12)';
+          },
+          fill: { target: 0 }, tension: 0,
           pointRadius: 0, pointHoverRadius: 4,
           pointHoverBackgroundColor: '#fff',
           pointHoverBorderColor: 'oklch(0.45 0.02 60)',
@@ -10252,10 +10324,14 @@ async function montarGraficos() {
             callback: function(val) {
               const d = parseISODate(this.getLabelForValue(val));
               if (!d) return '';
-              /* Numa janela de um mês, "jun. de 25" oito vezes seguidas não
-                 informa nada: o que muda ali é o DIA. Na obra toda é o
-                 contrário — o dia é ruído e o mês é a referência. */
-              if (STATE.filtros.mes) return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+              /* O rótulo segue o TAMANHO da janela, não qual filtro está
+                 ligado: numa faixa de poucas semanas o que muda é o DIA, e
+                 repetir "jun. de 25" oito vezes não informa nada; numa de
+                 anos, o dia é ruído. Antes isso olhava só o filtro de mês,
+                 então "3 meses" caía na régua de ano. */
+              const diasJanela = labels.length;
+              if (diasJanela <= 45)  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+              if (diasJanela <= 200) return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
               return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
             }
           },
