@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=45"></script>
-<script src="dados/ruas-de-terra.js?v=45"></script>
+<script src="dados/ranario.js?v=46"></script>
+<script src="dados/ruas-de-terra.js?v=46"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=45"></script>
+<script src="dados/teotonio-muros.js?v=46"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=45"></script>
-<script src="js/nf/adaptador.js?v=45"></script>
-<script src="js/nf/notas.js?v=45"></script>
-<script src="js/equip/equipamentos.js?v=45"></script>
+<script src="js/ui/icones.js?v=46"></script>
+<script src="js/nf/adaptador.js?v=46"></script>
+<script src="js/nf/notas.js?v=46"></script>
+<script src="js/equip/equipamentos.js?v=46"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -339,6 +339,47 @@
 .nf-simples .nf-extra{display:none!important}
 
 
+
+
+/* ==================================================================
+   RDO DIÁRIO — SELETOR + ÚLTIMOS DIAS
+   ------------------------------------------------------------------
+   No computador a tela era um cartão de 680px no meio de 1440px de
+   página vazia. Agora o seletor divide o espaço com o painel dos
+   últimos 14 dias — que é onde se descobre o RDO que ficou para trás.
+   No celular eles empilham, seletor primeiro: quem está no canteiro
+   veio preencher o de hoje.
+   ================================================================== */
+.rdo-seletor-layout{
+  display:grid; grid-template-columns:minmax(0,1fr); gap:16px;
+  /* a .page é flex e encolhe o filho ao conteúdo: sem o width:100% o grid
+     nasce com a largura natural das colunas e ignora o max-width */
+  width:100%; max-width:680px; margin:0 auto;
+}
+@media (min-width:1000px){
+  .rdo-seletor-layout{grid-template-columns:minmax(0,1.45fr) minmax(280px,1fr); max-width:1020px; align-items:start}
+}
+.dias-rdo .card-body{max-height:none}
+.dia-linha{
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  width:100%; background:transparent; border:none; border-left:3px solid transparent;
+  padding:8px 16px; cursor:pointer; font-family:inherit; color:var(--text);
+  min-height:44px; text-align:left; transition:background .12s;
+}
+.dia-linha:hover{background:var(--surface-2); border-left-color:var(--border-strong)}
+.dia-linha.hoje{border-left-color:var(--acc); background:var(--acc-l)}
+.dia-linha.domingo .dia-data b{color:var(--muted)}
+.dia-data{display:flex; align-items:baseline; gap:7px; min-width:0}
+.dia-data b{font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600; font-variant-numeric:tabular-nums}
+.dia-data span{font-size:11px; color:var(--muted); text-transform:lowercase}
+.dia-pills{display:flex; gap:5px; flex-shrink:0}
+.dia-pill{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:23px; height:23px; border-radius:5px; font-size:10.5px; font-weight:700;
+  font-family:'JetBrains Mono',monospace; border:1px solid transparent;
+}
+.dia-pill.ok{background:var(--grn-l); color:var(--grn); border-color:var(--grn)}
+.dia-pill.falta{background:transparent; color:var(--muted-2); border-color:var(--border-strong)}
 
 /* ==================================================================
    BUSCA GLOBAL — a caixa
@@ -14974,6 +15015,75 @@ function renderRDODiarioV4() {
   return renderFormularioTurno();
 }
 
+/* ------------------------------------------------------------------
+   OS ÚLTIMOS DIAS, AO LADO DO SELETOR
+   ------------------------------------------------------------------
+   No computador esta tela era um cartão pequeno no meio de uma página
+   vazia: escolher a data e o turno, e nada mais. Só que a pergunta que
+   se faz aqui quase nunca é "que dia é hoje" — é "que dia ficou para
+   trás". Sem isso, descobrir um RDO esquecido dependia de abrir data
+   por data no seletor.
+   Este painel mostra as duas últimas semanas com o estado de cada turno,
+   e um clique já abre o dia. Cor com significado, no mesmo critério da
+   Central de Campo: verde = registrado, âmbar = falta. Nada de vermelho —
+   RDO de hoje ainda não preenchido não é erro, é dia começando.
+   ------------------------------------------------------------------ */
+function renderDiasRecentesRDO() {
+  const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
+  const linhaDaData = {};
+  (STATE.rdodiario || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d) linhaDaData[getLocalISODate(d)] = r;
+  });
+
+  const dias = [];
+  for (let i = 0; i < 14; i++) {
+    const d = new Date(hoje.getTime() - i * 86400000);
+    const iso = getLocalISODate(d);
+    const linha = linhaDaData[iso];
+    const diu = !!(linha && (getCSVField(linha, 'Apontador_Diurno') || getCSVField(linha, 'apontador_diurno')));
+    const not = !!(linha && (getCSVField(linha, 'Apontador_Noturno') || getCSVField(linha, 'apontador_noturno')));
+    dias.push({ iso, d, diu, not, domingo: d.getDay() === 0, hoje: i === 0 });
+  }
+
+  const faltando = dias.filter(x => !x.diu && !x.not && !x.domingo && !x.hoje).length;
+
+  const pill = (ok, letra, titulo) =>
+    `<span class="dia-pill ${ok ? 'ok' : 'falta'}" title="${titulo}">${letra}</span>`;
+
+  return `
+    <div class="card stagger-item dias-rdo">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Últimos 14 dias</div>
+          <div class="card-title-sub">${faltando === 0
+            ? 'Nenhum dia útil em aberto'
+            : `<b>${faltando}</b> dia${faltando > 1 ? 's' : ''} sem RDO nenhum`}</div>
+        </div>
+      </div>
+      <div class="card-body" style="padding:6px 0 8px">
+        ${dias.map(x => `
+          <button type="button" class="dia-linha${x.hoje ? ' hoje' : ''}${x.domingo ? ' domingo' : ''}"
+                  onclick="abrirDiarioNaData('${x.iso}')"
+                  title="Abrir o RDO de ${fmtData(x.iso)}">
+            <span class="dia-data">
+              <b>${x.d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}</b>
+              <span>${x.hoje ? 'hoje' : x.d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '')}</span>
+            </span>
+            <span class="dia-pills">
+              ${pill(x.diu, 'D', x.diu ? 'Diurno preenchido' : 'Diurno em aberto')}
+              ${pill(x.not, 'N', x.not ? 'Noturno preenchido' : 'Noturno em aberto')}
+            </span>
+          </button>`).join('')}
+      </div>
+    </div>`;
+}
+
+window.abrirDiarioNaData = function (iso) {
+  DIARIO_V4 = carregarDiarioDaSheet(iso) || loadDiarioV4(iso) || defaultDiarioV4(iso);
+  transitionTo(render);
+};
+
 function renderSeletorTurno() {
   const d = DIARIO_V4;
 
@@ -14984,13 +15094,14 @@ function renderSeletorTurno() {
 
   let botoesHtml = '';
   if (d.diurno.preenchido || d.noturno.preenchido) {
-    botoesHtml += `<div style="margin-top:16px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r-sm);font-size:12px;color:var(--muted)">ℹ Selecionar um turno já preenchido permite editar os dados.</div>`;
+    botoesHtml += `<div style="margin-top:16px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r-sm);font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center">${ic('info')} Selecionar um turno já preenchido permite editar os dados.</div>`;
     botoesHtml += `<div style="margin-top:14px;text-align:center"><button class="btn btn-outline" onclick="gerarPDFDiarioV4('${DIARIO_V4.data}')">${ic('pdf')} Gerar PDF Oficial Completo</button></div>`;
   }
 
   return `
     ${bannerPend}
-    <div class="card stagger-item" style="max-width:680px;margin:0 auto">
+    <div class="rdo-seletor-layout">
+    <div class="card stagger-item">
       <div class="card-header">
         <div>
           <div class="card-title">RDO Diário</div>
@@ -15029,6 +15140,8 @@ function renderSeletorTurno() {
         ${botoesHtml}
       </div>
     </div>
+    ${renderDiasRecentesRDO()}
+    </div>
   `;
 }
 
@@ -15048,7 +15161,7 @@ function renderFormularioTurno() {
   if (outroPreenchido) {
     infoOutroHtml = `
       <div style="background:var(--blu-l);border:1px solid var(--blu);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:12px;color:var(--blu)">
-        ℹ Turno ${outroLabel} já foi preenchido por <strong>${d[outroTurno].apontador}</strong>. Você está adicionando o ${turnoLabel}.
+        ${ic('info')} Turno ${outroLabel} já foi preenchido por <strong>${d[outroTurno].apontador}</strong>. Você está adicionando o ${turnoLabel}.
       </div>
     `;
   }
