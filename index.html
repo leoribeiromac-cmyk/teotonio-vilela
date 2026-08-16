@@ -9943,6 +9943,34 @@ async function montarGraficos() {
     }
   }
 
+  /* ------------------------------------------------------------------
+     A RÉGUA DO EIXO Y
+     ------------------------------------------------------------------
+     Na obra toda ela vai de 0 a 100%: ali o que se lê é a FORMA do S, e
+     cortar a base mentiria sobre o quanto já andou.
+     Na janela de um mês a pergunta é outra — "quanto de distância abri
+     para o cronograma neste mês?" — e numa régua de 0 a 100 as duas
+     linhas ficam coladas perto do topo, com a diferença toda espremida
+     em dois traços quase juntos. Aqui a régua se fecha em volta do que
+     está na janela, com folga, arredondada de 5 em 5 para os rótulos
+     saírem redondos.
+     ------------------------------------------------------------------ */
+  let yMin = 0, yMax = 100;
+  if (STATE.filtros.mes) {
+    const visiveis = realizado.concat(previsto, projecao)
+      .filter(v => v !== null && v !== undefined && !isNaN(v));
+    if (visiveis.length) {
+      const lo = Math.min.apply(null, visiveis);
+      const hi = Math.max.apply(null, visiveis);
+      const folga = Math.max(4, (hi - lo) * 0.25);
+      yMin = Math.max(0, Math.floor((lo - folga) / 5) * 5);
+      yMax = Math.min(100, Math.ceil((hi + folga) / 5) * 5);
+      // faixa muito estreita vira ruído: nunca menos de 10 p.p. de régua
+      if (yMax - yMin < 10) yMax = Math.min(100, yMin + 10);
+      if (yMax - yMin < 10) yMin = Math.max(0, yMax - 10);
+    }
+  }
+
   const todayIdx = labels.findIndex(l => l === ymd(today));
   const linhaHojePlugin = {
     id: 'linhaHoje',
@@ -10051,7 +10079,7 @@ async function montarGraficos() {
       interaction: { mode: 'index', intersect: false },
       scales: {
         y: {
-          beginAtZero: true, max: 100,
+          beginAtZero: yMin === 0, min: yMin, max: yMax,
           ticks: { callback: v => v + '%', font: { size: 10, family: 'JetBrains Mono, monospace' }, color: 'oklch(0.55 0.02 60)' },
           grid: { color: 'rgba(20,15,10,0.05)' },
           border: { display: false },
@@ -10064,6 +10092,10 @@ async function montarGraficos() {
             callback: function(val) {
               const d = parseISODate(this.getLabelForValue(val));
               if (!d) return '';
+              /* Numa janela de um mês, "jun. de 25" oito vezes seguidas não
+                 informa nada: o que muda ali é o DIA. Na obra toda é o
+                 contrário — o dia é ruído e o mês é a referência. */
+              if (STATE.filtros.mes) return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
               return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
             }
           },
