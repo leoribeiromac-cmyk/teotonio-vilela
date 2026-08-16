@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=43"></script>
-<script src="dados/ruas-de-terra.js?v=43"></script>
+<script src="dados/ranario.js?v=44"></script>
+<script src="dados/ruas-de-terra.js?v=44"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=43"></script>
+<script src="dados/teotonio-muros.js?v=44"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=43"></script>
-<script src="js/nf/adaptador.js?v=43"></script>
-<script src="js/nf/notas.js?v=43"></script>
-<script src="js/equip/equipamentos.js?v=43"></script>
+<script src="js/ui/icones.js?v=44"></script>
+<script src="js/nf/adaptador.js?v=44"></script>
+<script src="js/nf/notas.js?v=44"></script>
+<script src="js/equip/equipamentos.js?v=44"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -2940,6 +2940,49 @@ function getCSVField(row, fieldName) {
   return key ? row[key] : '';
 }
 
+/* ------------------------------------------------------------------
+   O NOME DO SERVIÇO DE UM LANÇAMENTO
+   ------------------------------------------------------------------
+   A aba RDO_Avanco guarda `Pacote_ID` (a chave) e `Pacote_Nome` (o nome
+   como estava no dia do lançamento). O app manda o nome ao gravar, mas o
+   `addBatchRDO` NÃO cria essa coluna sozinho como faz com clientId,
+   usuario e obra: se a planilha de uma obra nova não tiver `Pacote_Nome`,
+   o valor é descartado em silêncio. Linha digitada à mão na planilha
+   também chega sem ele.
+
+   Meia dúzia de lugares liam `Pacote_Nome` direto, sem procurar pelo ID —
+   e aí o serviço saía sem nome: a coluna "Pacote" do Histórico virava um
+   traço, e o PDF do RDO imprimia só a frente e um separador solto, no
+   documento que a fiscalização assina.
+
+   Nas TELAS DE ANÁLISE vale o nome ATUAL do cadastro: renomear um pacote é
+   quase sempre correção, e quem está olhando o Histórico ou o Avanço quer o
+   vocabulário de hoje. Depois vem o que ficou gravado na linha, e por fim o
+   próprio ID — que é feio, mas identifica.
+   ------------------------------------------------------------------ */
+function nomeDoPacote(linha, pid) {
+  const id = pid || getCSVField(linha, 'Pacote_ID') || getCSVField(linha, 'Pacote_id') || '';
+  const p = (STATE.pacotes || []).find(x => getCSVField(x, 'ID') === id);
+  return (p && getCSVField(p, 'Pacote')) || getCSVField(linha, 'Pacote_Nome') || id || '';
+}
+
+/* O MESMO NOME, MAS PARA O DOCUMENTO.
+   No RDO a ordem se inverte: vale o nome COMO FOI LANÇADO. O RDO é o registro
+   do que se escreveu naquele dia, e a fiscalização assina aquele texto —
+   renomear um pacote meses depois não pode reescrever, de trás para frente, o
+   documento que já foi entregue. Reimprimir um RDO antigo tem de sair igual
+   ao que saiu na primeira vez.
+   O cadastro entra como segunda opção, que é o que conserta o defeito real:
+   linha sem `Pacote_Nome` (obra nova cuja planilha não tem a coluna, ou linha
+   digitada à mão) imprimia a frente e um separador solto, sem nome nenhum. */
+function nomeDoPacoteNoLancamento(linha, pid) {
+  const id = pid || getCSVField(linha, 'Pacote_ID') || getCSVField(linha, 'Pacote_id') || '';
+  const gravado = getCSVField(linha, 'Pacote_Nome');
+  if (gravado) return gravado;
+  const p = (STATE.pacotes || []).find(x => getCSVField(x, 'ID') === id);
+  return (p && getCSVField(p, 'Pacote')) || id || '';
+}
+
 // Escapa texto para interpolação segura no HTML gerado (conteúdo e atributos
 // value="…"). Sem isso, uma aspa digitada num campo livre quebra o markup do
 // formulário no próximo re-render.
@@ -3684,6 +3727,35 @@ function nomeMesAno(mes) {
 function fmtNum(n, decimals = 2) {
   if (n === null || n === undefined || isNaN(n)) return '0';
   return n.toLocaleString('pt-BR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+
+/* O COEFICIENTE DA MATRIZ.
+   Ele é o único número da tela de Medição que ia para a tela CRU, por
+   interpolação direta: aparecia "Serviço 5 × 0.15000000000000002" — ponto
+   como separador decimal (que em pt-BR se lê como milhar) e o lixo de ponto
+   flutuante inteiro. Numa tela sobre dinheiro, isso corrói a confiança em
+   todo o resto da conta.
+   Casa fixa também não serve: o coeficiente vai de 0,2 a 0,00035 conforme o
+   item contratual, e duas casas zerariam o segundo. Aqui as casas seguem a
+   grandeza do número, e zero à direita não aparece. */
+function fmtCoef(n) {
+  if (n === null || n === undefined || isNaN(n)) return '0';
+  const abs = Math.abs(n);
+  const casas = abs === 0 ? 0 : abs >= 1 ? 3 : abs >= 0.01 ? 4 : 6;
+  return n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: casas });
+}
+
+/* A coluna "Pacotes" da prévia de medição diz de ONDE veio a quantidade —
+   é a memória de cálculo resumida numa linha. Só que um item contratual
+   puxado por 36 pacotes virava um parágrafo de 36 termos dentro de uma
+   célula: ninguém lê, e o que era prestação de contas vira ruído.
+   Na tela ficam os primeiros; o resto vai no `title`, e a lista inteira
+   continua no CSV de conferência — que é onde a conferência acontece. */
+function resumoPacotesMedicao(lista, mostra = 3) {
+  if (!lista || !lista.length) return '';
+  if (lista.length <= mostra) return lista.join(' + ');
+  const resto = lista.length - mostra;
+  return lista.slice(0, mostra).join(' + ') + ` + ${resto} outro${resto > 1 ? 's' : ''}`;
 }
 
 function fmtPct(n) {
@@ -5805,7 +5877,7 @@ function calcularConsumoItens(avanco) {
       const qc = num(getCSVField(c, 'Qtd Contratual') || getCSVField(c, 'Qtd_Contratual'));
       if (qc > out[chave].qtdContratual) out[chave].qtdContratual = qc;
       out[chave].consumido += consumo;
-      out[chave].pacotes.push(`${getCSVField(a.pacote, 'Pacote')} × ${coef}`);
+      out[chave].pacotes.push(`${getCSVField(a.pacote, 'Pacote')} × ${fmtCoef(coef)}`);
     });
   });
   return out;
@@ -6357,7 +6429,7 @@ function fotosDaObra() {
     ponteiros.forEach((ponteiro, i) => out.push({
       fileId: fotoFileId(ponteiro), idx: i, data,
       id: getCSVField(r, 'ID') || '',
-      pacote: getCSVField(r, 'Pacote_Nome') || getCSVField(r, 'Pacote_ID') || 'Serviço',
+      pacote: nomeDoPacote(r) || 'Serviço',
       pacoteId: getCSVField(r, 'Pacote_ID') || '',
       estaca: getCSVField(r, 'Local_Estaca') || '',
       turno: getCSVField(r, 'Turno') || '',
@@ -11053,7 +11125,7 @@ function renderMedicao(){
       <!-- Tudo que vem da planilha passa por escHtml: o código, a descrição e a
            unidade do item são digitados à mão na aba Coeficientes, e um "<" ali
            quebrava a tabela da medição (ou pior, injetava marcação na tela). -->
-      <tbody>${lista.map((x,i)=>`<tr${estiloLinhaMedicao(x)}><td class="t-mono"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${escHtml(x.descricao)}</td><td class="t-mono">${escHtml(x.unidadeItem)}</td>${snap?`<td class="t-num" style="color:var(--muted)">${x._novo?'—':fmtNum(x._medido)}</td>`:''}<td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td>${snap?`<td class="t-num"${(x._novo||Math.abs(x._dif)>TOL)?' style="color:var(--red);font-weight:700"':''}>${x._novo?'não medido':(Math.abs(x._dif)<=TOL?'—':(x._dif>0?'+':'')+fmtNum(x._dif))}</td>`:''}${temContrato?`<td class="t-num" style="color:var(--muted)">${x.anterior?fmtNum(x.anterior):'—'}</td><td class="t-num">${fmtNum(x.acumulado)}</td><td class="t-num t-mono">${x.qtdContratual>0?fmtNum(x.qtdContratual):'—'}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.saldo===null?'—':fmtNum(x.saldo)}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.pctContrato===null?'—':fmtPct(x.pctContrato)}</td>`:''}<td style="font-size:11px;color:var(--muted)">${escHtml(x.pacotes.join(' + '))}</td></tr>`).join('')}</tbody>
+      <tbody>${lista.map((x,i)=>`<tr${estiloLinhaMedicao(x)}><td class="t-mono"><strong>${escHtml(x.item)}</strong>${x.itemPlanilha?`<div style="font-size:10px;color:var(--muted);font-weight:400">item ${escHtml(x.itemPlanilha)}</div>`:''}</td><td>${escHtml(x.descricao)}</td><td class="t-mono">${escHtml(x.unidadeItem)}</td>${snap?`<td class="t-num" style="color:var(--muted)">${x._novo?'—':fmtNum(x._medido)}</td>`:''}<td class="t-num"><strong>${fmtNum(x.consumido)}</strong></td>${snap?`<td class="t-num"${(x._novo||Math.abs(x._dif)>TOL)?' style="color:var(--red);font-weight:700"':''}>${x._novo?'não medido':(Math.abs(x._dif)<=TOL?'—':(x._dif>0?'+':'')+fmtNum(x._dif))}</td>`:''}${temContrato?`<td class="t-num" style="color:var(--muted)">${x.anterior?fmtNum(x.anterior):'—'}</td><td class="t-num">${fmtNum(x.acumulado)}</td><td class="t-num t-mono">${x.qtdContratual>0?fmtNum(x.qtdContratual):'—'}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.saldo===null?'—':fmtNum(x.saldo)}</td><td class="t-num"${x.estourou?' style="color:var(--red);font-weight:700"':''}>${x.pctContrato===null?'—':fmtPct(x.pctContrato)}</td>`:''}<td style="font-size:11px;color:var(--muted)" title="${escHtml(x.pacotes.join(' + '))}">${escHtml(resumoPacotesMedicao(x.pacotes))}</td></tr>`).join('')}</tbody>
       </table>`}
     </div>
   </div>`;
@@ -11765,7 +11837,7 @@ function renderHistoricoServicos() {
 
       return `
         <tr>
-          <td class="celula-titulo"><strong>${escHtml(getCSVField(r,'Pacote_Nome')||'—')}</strong></td>
+          <td class="celula-titulo"><strong>${escHtml(nomeDoPacote(r)||'—')}</strong></td>
           <td class="t-mono" data-rot="ID">${id}</td>
           <td style="font-size:12px" data-rot="Data">${fmtData(dataVal)}</td>
           <td data-rot="Turno"><span class="pill ${turno==='Noturno'?'pill-blu':'pill-ylw'}">${turno}</span></td>
@@ -11924,7 +11996,7 @@ window.exportarHistoricoCSV = function() {
     getCSVField(r,'ID')||'',
     fmtData(getCSVField(r,'Data')),
     getCSVField(r,'Turno')||'',
-    getCSVField(r,'Pacote_Nome')||'',
+    nomeDoPacote(r),
     fmtNum(num(getCSVField(r,'Quantidade'))),
     getCSVField(r,'Unidade')||'',
     getCSVField(r,'Local_Estaca')||'',
@@ -12110,7 +12182,7 @@ window.histDeletarServico = async function(idx) {
   const id = getCSVField(r, 'ID');
   if (!id) { toast('ID do lançamento não encontrado', 'error'); return; }
 
-  const pacote = getCSVField(r, 'Pacote_Nome') || getCSVField(r, 'Pacote_ID') || '';
+  const pacote = nomeDoPacote(r);
   const data   = fmtData(getCSVField(r, 'Data'));
   if (!confirm(`Apagar este lançamento?\n\n${data} · ${pacote}\n\nEsta ação não pode ser desfeita.`)) return;
 
@@ -12371,7 +12443,7 @@ function visualizarRDO(id) {
     <table class="t" style="width:100%;font-size:12px;margin-top:6px">
       <thead><tr><th style="text-align:left">Pacote</th><th style="text-align:left">Local</th><th style="text-align:right">Qtd</th><th>Turno</th></tr></thead>
       <tbody>${servs.map(sv => `<tr>
-        <td>${getCSVField(sv, 'Pacote_Nome') || getCSVField(sv, 'Pacote_ID') || '—'}</td>
+        <td>${escHtml(nomeDoPacoteNoLancamento(sv) || '—')}</td>
         <td class="t-mono" style="font-size:11px">${getCSVField(sv, 'Local_Estaca') || '—'}</td>
         <td style="text-align:right">${fmtNum(num(getCSVField(sv, 'Quantidade') || 0))} ${getCSVField(sv, 'Unidade') || ''}</td>
         <td style="text-align:center">${getCSVField(sv, 'Turno') || 'Diurno'}</td>
@@ -12870,7 +12942,7 @@ function wsRDOModeloPDF(d, data) {
     lista.forEach((s, i) => {
       const pacote = STATE.pacotes.find(pp => String(getCSVField(pp, 'ID')) === String(getCSVField(s, 'Pacote_ID')));
       const frente = pacote ? (getCSVField(pacote, 'Frente') || '') : '';
-      const txtPacote = (frente ? frente + ' · ' : '') + (getCSVField(s, 'Pacote_Nome') || '');
+      const txtPacote = (frente ? frente + ' · ' : '') + nomeDoPacoteNoLancamento(s);
       const rr = push([txtPacote, String(getCSVField(s, 'Local_Estaca') || ''), String(getCSVField(s, 'Equipe') || getCSVField(s, 'Subcontratado') || ''), '', '', '']);
       styRange(rr, 0, 2, rdoXlsZebra(ST.cellL, i % 2));
     });
@@ -15738,7 +15810,7 @@ function _gerarPDFDiario(data) {
     lista.forEach((s, i) => {
       const pacote = STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']);
       const frente = pacote ? (pacote['Frente'] || '') : '';
-      const txtPac = (frente ? frente + ' · ' : '') + (s['Pacote_Nome'] || '');
+      const txtPac = (frente ? frente + ' · ' : '') + nomeDoPacoteNoLancamento(s);
       const txtLoc = s['Local_Estaca'] || '';
       const txtEqu = s['Equipe'] || s['Subcontratado'] || '';
       const h = alturaLinha([
@@ -15854,7 +15926,7 @@ const MAX_FOTOS_PDF = 24;   // 6 páginas: o suficiente sem estourar o WhatsApp
 function legendaServicoPDF(linha) {
   const pac = (STATE && STATE.pacotes) ? STATE.pacotes.find(p => p['ID'] === linha['Pacote_ID']) : null;
   const frente = pac ? (pac['Frente'] || '') : '';
-  return ((frente ? frente + ' · ' : '') + (linha['Pacote_Nome'] || '')).trim();
+  return ((frente ? frente + ' · ' : '') + nomeDoPacoteNoLancamento(linha)).trim();
 }
 
 /* Acrescenta as páginas de fotos ao documento. Devolve quantas entraram.
@@ -16212,7 +16284,7 @@ async function _gerarPDFInterno(data, turnoFocus) {
       const frente = pacote ? (pacote['Frente'] || '') : '';
       
       sf(7, 'bold', NAVY);
-      tx((frente ? frente + ' · ' : '') + (s['Pacote_Nome'] || ''), ML + 3, y + 3.5);
+      tx((frente ? frente + ' · ' : '') + nomeDoPacoteNoLancamento(s), ML + 3, y + 3.5);
       sf(7, 'normal', [50, 50, 50]);
       tx(s['Local_Estaca'] || '', ML + 75, y + 3.5);
       sf(7, 'bold', TERRA_DARK);
