@@ -7862,19 +7862,59 @@ function fmtPctDelta(v, decimals = 2) {
 }
 function ymd(d) { return getLocalISODate(d); }
 
+/* ------------------------------------------------------------------
+   O ACUMULADO DIA A DIA — COM O MESMO TETO DO PAINEL
+   ------------------------------------------------------------------
+   Esta série alimenta a Curva S, o sparkline e a velocidade. O número
+   grande do painel vem de `calcularAvancoPorPacote`, que limita cada
+   pacote a 100% (`Math.min(pct, 1)`): entregar 120% de um pacote não
+   empurra a obra além do que aquele pacote vale.
+
+   Aqui a soma era CRUA — cada lançamento entrava inteiro, sem teto. O
+   resultado é que as duas contas discordavam na mesma tela: medido com
+   pacotes entregues acima do previsto, o topo mostrava 64,0% e a curva
+   terminava em 75,9%. E, no limite, a linha do realizado passava de 100%.
+   Quantidade acima do previsto é rotina em obra (é o que vira aditivo),
+   então isso não era caso de canto.
+
+   Agora a contribuição de um lançamento é a DIFERENÇA entre o percentual
+   do pacote antes e depois dele, já capada — o que faz a série terminar
+   exatamente no número que o painel mostra.
+   ------------------------------------------------------------------ */
 function calcCumulativoDia(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
-  const validPids = new Set(pacotesAtivos.map(p => getCSVField(p, 'ID')));
-  const byDay = {};
+  const info = {};
+  pacotesAtivos.forEach(p => {
+    const id = getCSVField(p, 'ID');
+    if (!id) return;
+    const est = num(getCSVField(p, 'Qtd Estimada'));
+    const estOk = est > 0 ? est : 0;
+    info[id] = { est: estOk, dias: diasEquivalentes(estOk, id), exec: 0 };
+  });
+
+  /* Em ordem de data: o teto só faz sentido sobre o acumulado do pacote,
+     e um lançamento tardio não pode "descapar" um anterior. */
+  const lancamentos = [];
   rdosAtivos.forEach(r => {
     const d = parseISODate(getCSVField(r, 'Data'));
     if (!d) return;
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
-    if (!validPids.has(pid)) return;
-    const dias = diasDoLancamento(num(getCSVField(r, 'Quantidade')), pid);
-    const contribPct = totalDiasEstimados > 0 ? dias / totalDiasEstimados : 0;
-    const k = ymd(d);
-    byDay[k] = (byDay[k] || 0) + contribPct;
+    if (!info[pid]) return;
+    lancamentos.push({ k: ymd(d), pid, qtd: num(getCSVField(r, 'Quantidade')) });
   });
+  lancamentos.sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
+
+  const byDay = {};
+  lancamentos.forEach(l => {
+    const it = info[l.pid];
+    // pacote sem quantidade prevista ou sem peso não move o avanço — igual ao painel
+    if (it.est <= 0 || it.dias <= 0) return;
+    const antes  = Math.min(it.exec / it.est, 1);
+    it.exec += l.qtd;
+    const depois = Math.min(it.exec / it.est, 1);
+    const contribPct = totalDiasEstimados > 0 ? ((depois - antes) * it.dias) / totalDiasEstimados : 0;
+    byDay[l.k] = (byDay[l.k] || 0) + contribPct;
+  });
+
   const sortedDays = Object.keys(byDay).sort();
   const cum = {};
   let acc = 0;
@@ -8457,6 +8497,10 @@ function renderExecutivo() {
     rdosAtivos = rdosAtivos.filter(r => pacotesIds.includes(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
   }
 
+  /* O escopo é o que o filtro de FRENTE deixou passar, com todos os meses.
+     Ele é a base de tudo que é ACUMULADO — ver o bloco do mês logo abaixo. */
+  const rdosEscopo = rdosAtivos;
+
   let LabelPeriodo = 'GERAL';
   if (STATE.filtros.mes) {
     rdosAtivos = rdosAtivos.filter(r => {
@@ -8470,6 +8514,39 @@ function renderExecutivo() {
     const nomeMes = new Date(y, parseInt(m)-1, 1).toLocaleString('pt-BR', {month:'short'}).toUpperCase();
     LabelPeriodo = `${nomeMes}/${y}`;
   }
+
+  /* ------------------------------------------------------------------
+     O MÊS É UMA JANELA, NÃO UMA FATIA
+     ------------------------------------------------------------------
+     O filtro de mês responde "o que aconteceu neste mês", e é isso que os
+     cartões "no período" mostram. Mas Curva S e comparação com o cronograma
+     são ACUMULADOS por definição. Enquanto o realizado era fatiado pelo mês,
+     ele recomeçava do zero no dia 1º — e o previsto continuava vindo do
+     início da obra, porque `calcCurvaPrevista` nunca soube do filtro. As duas
+     linhas ficavam em bases diferentes: medido em junho/25, o gráfico punha
+     8% de realizado contra 62% de previsto. QUALQUER mês escolhido pintava a
+     obra como desesperadamente atrasada, e o "status vs cronograma" repetia o
+     mesmo erro em número vermelho.
+
+     Agora o acumulado é calculado à parte, do início da obra até a DATA DE
+     REFERÊNCIA — o fim do mês escolhido, ou hoje, o que vier primeiro. O mês
+     só estreita a janela do eixo do gráfico. Sem filtro de mês nada muda:
+     a referência é hoje e o acumulado é o escopo inteiro.
+     ------------------------------------------------------------------ */
+  const hojeRef = new Date(); hojeRef.setHours(0,0,0,0);
+  let dataRef = hojeRef;
+  if (STATE.filtros.mes) {
+    const [ay, am] = STATE.filtros.mes.split('-');
+    const fimDoMes = new Date(parseInt(ay), parseInt(am), 0);
+    fimDoMes.setHours(0,0,0,0);
+    dataRef = fimDoMes < hojeRef ? fimDoMes : hojeRef;
+  }
+  const rdosAcum = STATE.filtros.mes
+    ? rdosEscopo.filter(r => {
+        const d = parseISODate(getCSVField(r, 'Data'));
+        return d && d <= dataRef;
+      })
+    : rdosEscopo;
 
   const av = calcularAvancoPorPacote(rdosAtivos, pacotesAtivos);
   const pacotesFiltrados = Object.values(av).filter(a => a.pacote);
@@ -8487,7 +8564,40 @@ function renderExecutivo() {
 
   const totalDiasEstimados = pacotesFiltrados.reduce((s,a) => s + a.diasEstimados, 0);
   const pctPond = totalDiasEstimados > 0 ? pacotesFiltrados.reduce((s,a) => s + a.diasExecutados, 0) / totalDiasEstimados : 0;
-  
+
+  /* O mesmo cálculo ponderado do `pctPond`, para outros recortes de tempo.
+     O denominador é sempre o escopo INTEIRO (`totalDiasEstimados`): é o que
+     mantém acumulado, ganho do mês e meta do cronograma na mesma régua. */
+  const pctPonderadoDe = (rdos) => {
+    if (totalDiasEstimados <= 0) return 0;
+    const a = calcularAvancoPorPacote(rdos, pacotesAtivos);
+    let exec = 0;
+    Object.values(a).filter(x => x.pacote).forEach(x => {
+      exec += x.pct * diasEquivalentes(x.qtdEstimada, getCSVField(x.pacote, 'ID'));
+    });
+    return exec / totalDiasEstimados;
+  };
+
+  /* Acumulado até a data de referência — é ESTE o número do topo do painel e
+     o que entra no "status vs cronograma". Sem filtro de mês é o próprio
+     `pctPond`, então a tela de sempre não muda em nada. */
+  const pctPondAcum = STATE.filtros.mes ? pctPonderadoDe(rdosAcum) : pctPond;
+
+  /* E quanto a obra ganhou DENTRO do mês — o que o filtro de fato promete.
+     Vem da diferença entre dois acumulados, não da soma do mês solto: assim
+     um pacote que já estava cheio antes do mês não conta duas vezes. */
+  let ganhoNoPeriodo = null;
+  if (STATE.filtros.mes) {
+    const [gy, gm] = STATE.filtros.mes.split('-');
+    const inicioMes = new Date(parseInt(gy), parseInt(gm) - 1, 1);
+    inicioMes.setHours(0,0,0,0);
+    const rdosAntes = rdosEscopo.filter(r => {
+      const d = parseISODate(getCSVField(r, 'Data'));
+      return d && d < inicioMes;
+    });
+    ganhoNoPeriodo = pctPondAcum - pctPonderadoDe(rdosAntes);
+  }
+
   const porFrente = {};
   pacotesFiltrados.forEach(a => {
     const f = getCSVField(a.pacote, 'Frente') || 'Outros';
@@ -8516,13 +8626,25 @@ function renderExecutivo() {
 
   // ====== Métricas executivas V2 ======
   const metrics = calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados);
+  /* A Curva S lê daqui. Com filtro de mês, `metrics` enxerga só o mês e o
+     acumulado dela recomeça do zero; `metricsAcum` vem do escopo inteiro até a
+     data de referência, que é o que se compara com o cronograma. Sem filtro os
+     dois são o mesmo objeto — nenhum cálculo a mais na tela de sempre. */
+  const metricsAcum = STATE.filtros.mes
+    ? calcExecMetrics(rdosAcum, pacotesAtivos, totalDiasEstimados)
+    : metrics;
   const fa      = calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados);
   const baseline = calcCurvaPrevista(pacotesAtivos, totalDiasEstimados);
   const todayHoje = new Date(); todayHoje.setHours(0,0,0,0);
-  const todayPlanned = pctAteDia(baseline.cum, baseline.sortedDays, ymd(todayHoje));
-  const gap = pctPond - todayPlanned;
+  /* A meta do cronograma é lida na MESMA data do acumulado. Era sempre "hoje",
+     e com um mês passado selecionado isso comparava o ganho de junho com a
+     meta de agosto. */
+  const todayPlanned = pctAteDia(baseline.cum, baseline.sortedDays, ymd(dataRef));
+  const gap = pctPondAcum - todayPlanned;
   const narrativa = gerarNarrativaSemana(metrics, fa, totalPac, iniciados);
   STATE.dashData.metrics = metrics;
+  STATE.dashData.metricsAcum = metricsAcum;
+  STATE.dashData.dataRef = dataRef;
   STATE.dashData.fa = fa;
   STATE.dashData.baseline = baseline;
   STATE.dashData.todayPlanned = todayPlanned;
@@ -8577,29 +8699,43 @@ function renderExecutivo() {
     <div class="exec-hero stagger-item" style="animation-delay:.04s">
       <div class="hero-main">
         <div>
-          <span class="hero-label">Avanço Ponderado · escopo em dias-equivalentes</span>
+          <span class="hero-label">Avanço Ponderado · escopo em dias-equivalentes${STATE.filtros.mes ? ` · acumulado até ${fmtData(dataRef)}` : ''}</span>
           <span class="hero-period">${periodoTag}${frenteTag ? ' · ' + frenteTag : ''}</span>
         </div>
         <div class="hero-value-row">
-          <div class="hero-value">${(pctPond*100).toFixed(1).replace('.', ',')}<span class="pp">%</span></div>
+          <div class="hero-value">${(pctPondAcum*100).toFixed(1).replace('.', ',')}<span class="pp">%</span></div>
           <div class="hero-gap">
             <div class="hero-gap-title">Status vs Cronograma</div>
             <div class="hero-gap-num ${statusCls}">${statusArr} ${gapAbs.toFixed(1).replace('.', ',')}<span style="font-size:0.45em;color:rgba(255,255,255,0.4);font-weight:600;letter-spacing:0;margin-left:2px"> p.p.</span></div>
             <div class="hero-gap-direction ${statusCls}">${statusText}</div>
-            <div class="hero-gap-lbl">meta do cronograma: <strong style="color:rgba(255,255,255,0.75)">${(todayPlanned*100).toFixed(1).replace('.', ',')}%</strong> até hoje</div>
+            <div class="hero-gap-lbl">meta do cronograma: <strong style="color:rgba(255,255,255,0.75)">${(todayPlanned*100).toFixed(1).replace('.', ',')}%</strong> até ${STATE.filtros.mes ? fmtData(dataRef) : 'hoje'}</div>
           </div>
           <div class="hero-deltas">
             <div class="hero-delta-title">Avanço ganho no período</div>
+            ${ganhoNoPeriodo !== null ? `
+            <!-- Com um mês escolhido, "últimos 7/30 dias" é sempre 0,00 se o mês
+                 já passou. O que interessa é quanto a obra ganhou NAQUELE mês. -->
+            <div class="hero-delta ${ganhoNoPeriodo > 0.0001 ? 'up' : 'flat'}">
+              <span class="hero-delta-arr">${ganhoNoPeriodo > 0.0001 ? '↑' : '→'}</span>
+              <span class="hero-delta-num">${fmtPctDelta(ganhoNoPeriodo)}</span>
+              <span class="hero-delta-lbl">em ${escHtml(LabelPeriodo.toLowerCase())}</span>
+            </div>` : `
             <div class="hero-delta ${cls7}">
               <span class="hero-delta-arr">${arr7}</span>
               <span class="hero-delta-num">${fmtPctDelta(metrics.delta7d)}</span>
               <span class="hero-delta-lbl">últimos 7 dias</span>
-            </div>
+            </div>`}
+            ${ganhoNoPeriodo !== null ? `
+            <div class="hero-delta flat">
+              <span class="hero-delta-arr">→</span>
+              <span class="hero-delta-num">${(pctPondAcum*100 - ganhoNoPeriodo*100).toFixed(1).replace('.', ',')}<span class="small"> p.p.</span></span>
+              <span class="hero-delta-lbl">antes do mês</span>
+            </div>` : `
             <div class="hero-delta ${cls30}">
               <span class="hero-delta-arr">${arr30}</span>
               <span class="hero-delta-num">${fmtPctDelta(metrics.delta30d)}</span>
               <span class="hero-delta-lbl">últimos 30 dias</span>
-            </div>
+            </div>`}
           </div>
         </div>
         <div class="hero-spark">
@@ -9310,7 +9446,12 @@ async function montarGraficos() {
   const totalDiasObra = STATE.dashData.totalDiasEstimados;
   if (totalDiasObra === 0) return;
 
-  const metrics = STATE.dashData.metrics;
+  /* ACUMULADO, sempre. Com filtro de mês, `metrics` só enxerga o mês e a curva
+     recomeçava do zero no dia 1º, contra um "previsto" que seguia vindo do
+     início da obra — bases diferentes no mesmo gráfico. `metricsAcum` traz o
+     escopo inteiro até a data de referência; o mês continua estreitando a
+     janela do eixo, mais abaixo. Sem filtro, é o mesmo objeto de antes. */
+  const metrics = STATE.dashData.metricsAcum || STATE.dashData.metrics;
   const sortedDays = metrics.sortedDays;
   const cumulative = metrics.cumulative;
   if (sortedDays.length === 0) return;
