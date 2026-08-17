@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=48"></script>
-<script src="dados/ruas-de-terra.js?v=48"></script>
+<script src="dados/ranario.js?v=49"></script>
+<script src="dados/ruas-de-terra.js?v=49"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=48"></script>
+<script src="dados/teotonio-muros.js?v=49"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=48"></script>
-<script src="js/nf/adaptador.js?v=48"></script>
-<script src="js/nf/notas.js?v=48"></script>
-<script src="js/equip/equipamentos.js?v=48"></script>
+<script src="js/ui/icones.js?v=49"></script>
+<script src="js/nf/adaptador.js?v=49"></script>
+<script src="js/nf/notas.js?v=49"></script>
+<script src="js/equip/equipamentos.js?v=49"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -309,6 +309,11 @@
 .grid{display:grid;gap:14px}
 .grid.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 .grid.g4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+/* .btn-pri é o "primário" terracota que veio do Gestor. O app tem UM
+   primário — .btn-primary, azul --pri —, e dois primários convivendo fazem
+   a tela ter duas respostas para "qual é a ação principal aqui". A regra
+   fica de pé para não quebrar HTML antigo guardado em cache, mas nenhum
+   botão novo deve usá-la. */
 .btn-pri{background:var(--acc);color:#fff;border-color:var(--acc)}
 .btn-pri:hover{filter:brightness(1.06)}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--border-strong);
@@ -677,6 +682,16 @@ html,body{
   font-size:var(--fs-2xs);font-weight:700;letter-spacing:.12em;
   color:var(--sidebar-text);opacity:.45;padding:0 20px 6px;text-transform:uppercase;
 }
+/* Grupo dobrável (Conferência): o cabeçalho vira o botão de abrir. */
+.nav-group-dobra > summary{
+  cursor:pointer;list-style:none;display:flex;align-items:center;
+  justify-content:space-between;gap:8px;min-height:32px;
+}
+.nav-group-dobra > summary::-webkit-details-marker{display:none}
+.nav-group-dobra > summary:hover{opacity:.8}
+.nav-chevron{display:flex;align-items:center;transition:transform .18s}
+.nav-chevron .ic{width:14px;height:14px;vertical-align:0}
+.nav-group-dobra[open] > summary .nav-chevron{transform:rotate(180deg)}
 .nav-item{
   display:flex;align-items:center;gap:12px;
   padding:9px 14px;margin:1px 12px;
@@ -766,12 +781,21 @@ html,body{
 .proj-item.ativo .proj-item-sub{color:var(--acc-d);opacity:.8}
 .proj-item-cod{font:500 var(--fs-2xs) 'JetBrains Mono',ui-monospace,monospace;color:var(--muted)}
 .proj-header{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
-.proj-acoes{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.proj-acoes{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-left:auto}
 .proj-acoes .ic{width:14px;height:14px;vertical-align:-2px}
+/* Zoom · vista · arquivo. O traço à esquerda separa as famílias — nove
+   botões idênticos em fila não dizem que fazem coisas diferentes. */
+.proj-grupo-acao{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.proj-grupo-acao + .proj-grupo-acao{border-left:1px solid var(--border);padding-left:12px}
 .proj-zoom{
   min-width:46px;text-align:center;font:600 var(--fs-sm) 'JetBrains Mono',ui-monospace,monospace;
-  color:var(--text-2);
+  color:var(--text-2);white-space:nowrap;
 }
+/* O nível diz quanto AINDA CABE de zoom: a pirâmide vai até 12px por ponto
+   do PDF, e quem não leu o README parava no primeiro borrão achando que
+   tinha chegado ao fim. */
+.proj-zoom .proj-nivel{font-weight:500;color:var(--muted)}
+@media(max-width:560px){ .proj-zoom .proj-nivel{display:none} }
 
 /* ---- visor de quadrados (a prancha grande) ----
    `touch-action:none` é o que faz a pinça do celular chegar até aqui em vez
@@ -1136,6 +1160,9 @@ table.t td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:var
 table.t tr:last-child td{border-bottom:none}
 table.t tr:hover td{background:var(--bg)}
 table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.04em;padding:8px 14px}
+/* o avanço da frente, na mesma régua do Painel */
+table.t tr.summary .summary-pct{margin-left:10px;font-family:'JetBrains Mono',monospace;font-weight:700}
+table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:none;letter-spacing:0;opacity:.75}
 .t-num{font-variant-numeric:tabular-nums;text-align:right;font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm)}
 .t-mono{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--muted)}
 
@@ -6578,18 +6605,34 @@ function consumoComSaldo(mes) {
 /* Um grupo do menu lateral. Item que o perfil não enxerga não é renderizado —
    e grupo que ficou sem nenhum item some junto com o seu divisor, para não
    deixar título órfão na barra. */
-function grupoNav(titulo, itens) {
-  const vis = itens.filter(it => podeVer(it.id));
-  if (!vis.length) return '';
-  const divisor = titulo === 'Análise' ? '' : '<hr class="nav-divider">';
-  return `${divisor}
-        <div class="nav-group">
-          <div class="nav-label">${titulo}</div>
-          ${vis.map(it => `<div class="nav-item ${STATE.currentPage === it.id ? 'active' : ''}" data-page="${it.id}" onclick="navigate('${it.id}')">
+function itemNav(it) {
+  return `<div class="nav-item ${STATE.currentPage === it.id ? 'active' : ''}" data-page="${it.id}" onclick="navigate('${it.id}')">
             <span class="nav-icon">${ic(it.icone)}</span>
             <span>${it.texto}</span>
             ${it.contador ? `<span class="nav-counter" id="${it.contador}">0</span>` : ''}
-          </div>`).join('')}
+          </div>`;
+}
+
+/* Quinze telas em fila, todas com o mesmo peso, é uma lista para procurar,
+   não um menu para navegar. `dobravel` recolhe as telas de CONFERÊNCIA — as
+   que se abrem quando um número não bate, não todo dia. Fechadas por
+   padrão; abrir uma delas mantém o grupo aberto. */
+function grupoNav(titulo, itens, dobravel) {
+  const vis = itens.filter(it => podeVer(it.id));
+  if (!vis.length) return '';
+  const divisor = titulo === 'Análise' ? '' : '<hr class="nav-divider">';
+  if (dobravel) {
+    const aberto = vis.some(it => it.id === STATE.currentPage);
+    return `${divisor}
+        <details class="nav-group nav-group-dobra"${aberto ? ' open' : ''}>
+          <summary class="nav-label">${titulo}<span class="nav-chevron">${ic('chevronBaixo')}</span></summary>
+          ${vis.map(itemNav).join('')}
+        </details>`;
+  }
+  return `${divisor}
+        <div class="nav-group">
+          <div class="nav-label">${titulo}</div>
+          ${vis.map(itemNav).join('')}
         </div>`;
 }
 
@@ -6909,10 +6952,16 @@ function renderShell() {
           { id: 'avancofisico', icone: 'avanco',     texto: 'Avanço Físico' },
           { id: 'cronograma',   icone: 'cronograma', texto: 'Cronograma' },
           { id: 'medicao',      icone: 'medicao',    texto: 'Apoio Medição' },
-          { id: 'improdutivos', icone: 'nuvem',      texto: 'Dias Improdutivos' },
-          { id: 'teoricoreal',  icone: 'balanca',    texto: 'Teórico × Real' },
           { id: 'analista',     icone: 'ia',         texto: 'Analista IA' },
         ])}
+
+        <!-- CONFERÊNCIA: as telas que se abrem quando um número não bate, e
+             não todo dia. Dobradas, devolvem duas linhas de altura à gaveta
+             do celular — onde metade do menu já ficava fora da tela. -->
+        ${grupoNav('Conferência', [
+          { id: 'improdutivos', icone: 'nuvem',      texto: 'Dias Improdutivos' },
+          { id: 'teoricoreal',  icone: 'balanca',    texto: 'Teórico × Real' },
+        ], true)}
 
         ${grupoNav('Operação', [
           { id: 'rdo',       icone: 'lancar',       texto: 'Lançar Serviço', contador: 'rdoCount' },
@@ -7352,18 +7401,28 @@ function renderProjetos() {
             <div class="card-title-sub">${[sel.ref, sel.cod, sel.escala ? 'Escala ' + sel.escala : '']
               .filter(Boolean).map(escHtml).join(' · ')}</div>
           </div>
+          <!-- Nove controles do mesmo tamanho na mesma fileira eram quatro
+               famílias com a mesma aparência — e a única em azul era a que
+               TIRA o desenho do sistema (Baixar). Vão para três blocos
+               separados por um traço: zoom · vista · arquivo. -->
           <div class="proj-acoes">
-            <button type="button" class="btn btn-sm" onclick="prachaZoom(-1)" title="Reduzir" aria-label="Reduzir">${ic('menos')}</button>
-            <span class="proj-zoom" id="projZoom">100%</span>
-            <button type="button" class="btn btn-sm" onclick="prachaZoom(1)" title="Ampliar" aria-label="Ampliar">${ic('mais')}</button>
-            <button type="button" class="btn btn-sm" onclick="prachaAjustar()" title="Enquadrar a folha inteira">Ajustar</button>
+            <div class="proj-grupo-acao">
+              <button type="button" class="btn btn-sm" onclick="prachaZoom(-1)" title="Reduzir" aria-label="Reduzir">${ic('menos')}</button>
+              <span class="proj-zoom" id="projZoom">100%</span>
+              <button type="button" class="btn btn-sm" onclick="prachaZoom(1)" title="Ampliar" aria-label="Ampliar">${ic('mais')}</button>
+              <button type="button" class="btn btn-sm" onclick="prachaAjustar()" title="Enquadrar a folha inteira">Ajustar</button>
+            </div>
             ${emQuadrados ? `
-            <button type="button" class="btn btn-sm" onclick="prachaGirar()" title="Girar 90°">Girar</button>
-            <button type="button" class="btn btn-sm" id="projBtnCheia" onclick="prachaTelaCheia()">Tela cheia</button>
-            <button type="button" class="btn btn-sm" id="projBtnGuardar" onclick="prachaGuardar()"
+            <div class="proj-grupo-acao">
+              <button type="button" class="btn btn-sm" onclick="prachaGirar()" title="Girar 90°">Girar</button>
+              <button type="button" class="btn btn-sm" id="projBtnCheia" onclick="prachaTelaCheia()">Tela cheia</button>
+            </div>` : ''}
+            <div class="proj-grupo-acao">
+              ${emQuadrados ? `<button type="button" class="btn btn-sm" id="projBtnGuardar" onclick="prachaGuardar()"
                     title="Baixar a prancha inteira para abrir sem sinal">${ic('nuvem')} Offline</button>` : ''}
-            <a class="btn btn-sm" href="${escHtml(sel.arquivo)}" target="_blank" rel="noopener">${ic('enviar')} Abrir</a>
-            <a class="btn btn-sm btn-primary" href="${escHtml(sel.arquivo)}" download>${ic('baixar')} Baixar</a>
+              <a class="btn btn-sm" href="${escHtml(sel.arquivo)}" target="_blank" rel="noopener">${ic('enviar')} Abrir</a>
+              <a class="btn btn-sm" href="${escHtml(sel.arquivo)}" download>${ic('baixar')} Baixar</a>
+            </div>
           </div>
         </div>
         <div id="projVisor" class="${emQuadrados ? 'proj-mapa' : 'proj-canvas'}">
@@ -7414,7 +7473,7 @@ const VISOR = {
   el: null, folha: null, man: null, base: '', niveis: [],
   s: 1, tx: 0, ty: 0, rot: 0, fit: 1, min: 1, max: 8,
   cx: 0, cy: 0, rect: null, giroManual: false,
-  raf: 0, animId: 0, inerciaId: 0, ouvintes: [], gesto: 0, tNivel: 0, elZoom: null,
+  raf: 0, animId: 0, inerciaId: 0, ouvintes: [], gesto: 0, tNivel: 0, elZoom: null, nivelAtual: 0,
 };
 
 /* base64 -> bytes. O manifesto guarda "quais quadrados existem" como bitmap:
@@ -7492,7 +7551,7 @@ function visorFechar() {
   const cartao = document.querySelector('.proj-visor.cheia');
   if (cartao) cartao.classList.remove('cheia');
   document.body.classList.remove('proj-cheia-ativa');
-  V.el = null; V.folha = null; V.man = null; V.niveis = [];
+  V.el = null; V.folha = null; V.man = null; V.niveis = []; V.nivelAtual = 0;
 }
 
 function _visorEscutar(alvo, tipo, fn, op) {
@@ -7558,6 +7617,20 @@ function visorLimitar() {
   V.ty = at <= V.cy ? (V.cy - at) / 2 - y0 : Math.min(-y0, Math.max(V.cy - y1, V.ty));
 }
 
+/* O percentual sozinho não dizia quanto AINDA CABE de zoom: a pirâmide vai
+   até 12 px por ponto do PDF, e quem não leu o README parava no primeiro
+   borrão achando que tinha chegado ao fim da nitidez. O nível diz em que
+   degrau da escada o desenho está — e quantos degraus ela tem. */
+function visorRotularZoom() {
+  const V = VISOR;
+  if (!V.elZoom || !V.fit) return;
+  const pct = Math.round(V.s / V.fit * 100) + '%';
+  const rot = V.niveis.length > 1
+    ? pct + ' <span class="proj-nivel">· nível ' + (V.nivelAtual + 1) + ' de ' + V.niveis.length + '</span>'
+    : pct;
+  if (V.elZoom.innerHTML !== rot) V.elZoom.innerHTML = rot;
+}
+
 function visorAplicar() {
   const V = VISOR;
   if (!V.folha) return;
@@ -7567,8 +7640,7 @@ function visorAplicar() {
   // Isto roda a cada quadro de um arrasto. Nada de `getElementById` nem de
   // objeto novo aqui dentro: é o caminho quente, e o que o app economiza aqui
   // é o que sobra para o navegador compor os 60 quadros por segundo.
-  const pct = Math.round(V.s / V.fit * 100) + '%';
-  if (V.elZoom && V.elZoom.textContent !== pct) V.elZoom.textContent = pct;
+  visorRotularZoom();
   const mem = PROJ.mem;
   mem.base = V.base; mem.s = V.s; mem.tx = V.tx; mem.ty = V.ty;
   mem.rot = V.rot; mem.giroManual = V.giroManual;
@@ -7611,6 +7683,8 @@ function visorQuadrados() {
   let n = Math.ceil(Math.log(alvo / V.niveis[0].res) / Math.LN2 - 0.15);
   n = Math.max(0, Math.min(V.niveis.length - 1, n));
   const fundo = Math.min(2, V.niveis.length - 1);
+  // o rótulo do zoom mostra em que degrau da pirâmide o desenho está
+  if (V.nivelAtual !== n) { V.nivelAtual = n; visorRotularZoom(); }
 
   // Durante um gesto, um nível NOVO só entra a cada 350 ms. Uma pinça rápida
   // atravessa três níveis em meio segundo; sem isto, cada um deles baixaria
@@ -11031,6 +11105,19 @@ function renderPlantaAvanco() {
 // ====================================================================
 // VIEW: AVANÇO FÍSICO
 // ====================================================================
+/* O avanço da frente na MESMA régua do Painel: dias-equivalentes, não média
+   de percentuais. Somar os pct dos pacotes daria o mesmo peso a um serviço
+   de 3 dias e a um de 300. */
+function pctPondDaFrente(lista) {
+  let estim = 0, exec = 0;
+  lista.forEach(a => {
+    const dias = diasEquivalentes(a.qtdEstimada, getCSVField(a.pacote, 'ID'));
+    estim += dias;
+    exec += a.pct * dias;
+  });
+  return estim > 0 ? exec / estim : 0;
+}
+
 function renderAvancoFisico() {
   const av = calcularAvancoPorPacote();
   const pacotes = Object.values(av).filter(a => a.pacote);
@@ -11084,7 +11171,13 @@ function renderAvancoFisico() {
           </thead>
           <tbody>
             ${Object.entries(porFrente).map(([f, lista]) => `
-              <tr class="summary"><td colspan="7">${escHtml(f)} — ${lista.length} pacote${lista.length>1?'s':''}</td></tr>
+              <!-- A linha da frente contava PACOTES ("Drenagem — 8 pacotes"),
+                   que não diz nada sobre o andamento: oito pacotes podem ser
+                   5% ou 95% da frente. Entra o avanço ponderado, a mesma
+                   régua de dias-equivalentes do Painel. -->
+              <tr class="summary"><td colspan="7">${escHtml(f)} — ${lista.length} pacote${lista.length>1?'s':''}
+                <span class="summary-pct">${fmtPct(pctPondDaFrente(lista))} da frente</span>
+                <span class="summary-nota">avanço ponderado, em dias-equivalentes</span></td></tr>
               ${lista.map(a => `
                 <tr>
                   <td><strong>${escHtml(getCSVField(a.pacote, 'Pacote')||'')}</strong></td>
