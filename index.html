@@ -643,6 +643,10 @@ html,body{
 .btn .ic,.pill .ic,.nav-item .ic,td .ic,th .ic{vertical-align:-0.16em}
 /* ícone sozinho no botão (sem rótulo) fica centralizado */
 .btn-icone{padding-left:10px;padding-right:10px}
+/* O único indicador permanente de sincronização fica no rodapé da barra
+   lateral, e no celular a gaveta está fechada. Quando a carga falha, o botão
+   de atualizar do topo — sempre à vista — assume o aviso. */
+.btn-icone.erro{border-color:var(--red);color:var(--red)}
 .ic-gira{animation:spin 1s linear infinite}
 
 #root{height:100%;display:flex;flex-direction:column}
@@ -990,6 +994,29 @@ body.proj-cheia-ativa{overflow:hidden}
   font-size:var(--fs-sm);line-height:1.5;color:var(--muted);
 }
 .login-nota .ic{width:14px;height:14px;vertical-align:0;margin-top:2px;flex-shrink:0}
+/* Fileira de nomes no lugar da roleta: um toque para dizer quem você é. */
+.login-chips{display:flex;flex-wrap:wrap;gap:8px}
+.login-chips .chip{padding:9px 14px;font-size:var(--fs-lg)}
+/* Campo de senha com o botão do olho DENTRO dele. */
+.campo-senha{position:relative;display:block}
+.campo-senha input{padding-right:44px}
+.senha-olho{
+  position:absolute;right:4px;top:50%;transform:translateY(-50%);
+  width:38px;height:38px;display:flex;align-items:center;justify-content:center;
+  background:none;border:none;border-radius:7px;cursor:pointer;color:var(--muted);
+}
+.senha-olho:hover{color:var(--acc);background:var(--surface-2)}
+.senha-olho[aria-pressed="true"]{color:var(--acc-d)}
+.senha-olho .ic{width:18px;height:18px;vertical-align:0}
+/* A linha de offline só aparece onde o painel da direita não cabe. */
+.login-offline{
+  display:flex;align-items:flex-start;gap:8px;margin-bottom:14px;
+  padding:10px 12px;border-radius:var(--r-sm);
+  background:var(--surface-2);border:1px solid var(--border);
+  font-size:var(--fs-sm);line-height:1.5;color:var(--text);
+}
+.login-offline .ic{width:15px;height:15px;vertical-align:0;margin-top:2px;flex-shrink:0;color:var(--acc-d)}
+@media (min-width:960px){ .login-offline{display:none} }
 
 .mobile-menu-btn{display:none}
 .sidebar-overlay{display:none}
@@ -1149,11 +1176,17 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   animation:cellPop calc(.3s * var(--anim-speed)) cubic-bezier(.2,0,0,1) both;
 }
 .hm-cell:hover{transform:scale(1.2);z-index:2;box-shadow:var(--sh-md)}
+/* O rótulo da linha ACOMPANHA a rolagem horizontal: com 30+ colunas o grid
+   passa da largura do cartão, e rolar de lado deixava só faixas de cor sem
+   dizer de que pacote são. */
 .hm-row-label{
   font-size:var(--fs-2xs);font-weight:600;color:var(--muted);
   padding:0 8px 0 4px;display:flex;align-items:center;justify-content:flex-end;
-  white-space:nowrap;
+  white-space:nowrap;overflow:hidden;
+  position:sticky;left:0;z-index:2;background:var(--surface);
 }
+/* a faixa de valor daquela linha — cada linha tem escala própria */
+.hm-row-label small{font-weight:400;opacity:.75;margin-left:6px;flex-shrink:0}
 .hm-col-label{
   font-size:var(--fs-2xs);color:var(--muted);font-family:'JetBrains Mono',monospace;
   text-align:center;padding:2px 0;
@@ -1197,7 +1230,10 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:700px){.form-grid{grid-template-columns:1fr}}
 .field{display:flex;flex-direction:column;gap:6px}
-.field label{font-size:var(--fs-xs);font-weight:600;letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+/* Rótulo em caixa alta de 10 px era o menor texto da tela justamente onde
+   se lê no sol, de luva: a caixa alta tira a silhueta da palavra, que é o
+   que se reconhece sem soletrar. Caixa normal, 13 px, peso 600. */
+.field label{font-size:var(--fs-md);font-weight:600;color:var(--muted)}
 .field input,.field select,.field textarea{
   padding:9px 12px;border:1px solid var(--border);border-radius:7px;
   font-size:var(--fs-lg);background:var(--surface);font-family:inherit;color:var(--text);
@@ -1217,7 +1253,14 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   border-right:1px solid var(--border);transition:.15s;
 }
 .btn-toggle:last-child{border-right:none}
-.btn-toggle.active{background:var(--pri);color:#fff;font-weight:600}
+/* Aba ativa não é botão de ação: azul cheio é a cor de "clique aqui para
+   fazer", e usá-la para "você está aqui" faz a aba selecionada parecer a
+   única clicável. Marca como a barra inferior do celular marca a tela
+   ativa — fundo neutro, texto forte, traço de 2 px embaixo. */
+.btn-toggle.active{
+  background:var(--surface-2);color:var(--text);font-weight:600;
+  box-shadow:inset 0 -2px 0 var(--acc);
+}
 .btn-toggle:hover:not(.active){background:var(--bg);color:var(--text)}
 
 .servico-row{
@@ -1498,10 +1541,13 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .pv-titulo .pv-metros{text-transform:none;font-weight:400}
 .pv-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .pv-grade{display:grid;grid-template-columns:132px 1fr;gap:5px 10px;align-items:center;min-width:520px}
+/* Com 43 estacas a grade passa de 1.400 px dentro de um cartão de 1.100:
+   rolar de lado levava embora o nome da frente e sobravam faixas de cor. */
 .pv-rotulo{
   font-size:var(--fs-2xs);font-weight:600;color:var(--text);
   display:flex;align-items:center;gap:6px;justify-content:flex-end;
   text-align:right;white-space:nowrap;overflow:hidden;
+  position:sticky;left:0;z-index:2;background:var(--surface);
 }
 .pv-rotulo .ic{width:13px;height:13px;flex-shrink:0;color:var(--muted)}
 .pv-rotulo.via{color:var(--muted);font-size:var(--fs-2xs);letter-spacing:.06em;text-transform:uppercase}
@@ -1532,6 +1578,18 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   font-family:'JetBrains Mono',monospace;font-size:var(--fs-2xs);color:var(--muted);
   white-space:nowrap;line-height:1;
 }
+/* Atalho por número — o mesmo detalhe que o toque na célula abre. */
+.pv-ir{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px}
+.pv-ir label{font-size:var(--fs-md);font-weight:600;color:var(--muted)}
+.pv-ir input{
+  width:110px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;
+  font-size:var(--fs-lg);background:var(--surface);font-family:inherit;color:var(--text);
+}
+.pv-ir select{
+  padding:9px 10px;border:1px solid var(--border);border-radius:7px;
+  font-size:var(--fs-md);background:var(--surface);font-family:inherit;color:var(--text);
+}
+.pv-ir input:focus,.pv-ir select:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-l)}
 .pv-legenda{
   display:flex;align-items:flex-start;gap:8px;
   padding:10px 12px;border-radius:var(--r-sm);
@@ -1787,8 +1845,8 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   min-width: 130px;
 }
 .hero-gap-title {
-  font-size:var(--fs-2xs); font-weight: 700; letter-spacing: 0.14em;
-  text-transform: uppercase; color: rgba(255,255,255,0.4);
+  font-size:var(--fs-xs); font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: rgba(255,255,255,0.62);
   margin-bottom:4px;
 }
 .hero-gap-num {
@@ -1811,9 +1869,9 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .hero-gap-direction.ahead   { color: oklch(0.82 0.16 150); }
 .hero-gap-direction.ontrack { color: rgba(255,255,255,0.65); }
 .hero-gap-lbl {
-  font-size:var(--fs-2xs);
+  font-size:var(--fs-xs);
   font-weight: 500;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255,255,255,0.62);
   letter-spacing: 0;
   margin-top:4px;
   line-height: 1.3;
@@ -1840,7 +1898,7 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 }
 .hero-delta-arr { font-family: 'JetBrains Mono', monospace; font-size:var(--fs-md); font-weight: 700; line-height: 1; }
 .hero-delta-num { font-family: 'JetBrains Mono', monospace; font-size:var(--fs-lg); font-weight: 700; font-variant-numeric: tabular-nums; }
-.hero-delta-lbl { font-family: 'Space Grotesk', sans-serif; font-size:var(--fs-xs); font-weight: 500; color: rgba(255,255,255,0.5); letter-spacing: 0; text-transform: none; margin-left:4px; }
+.hero-delta-lbl { font-family: 'Space Grotesk', sans-serif; font-size:var(--fs-xs); font-weight: 500; color: rgba(255,255,255,0.62); letter-spacing: 0; text-transform: none; margin-left:4px; }
 .hero-delta.up { color: oklch(0.78 0.16 150); }
 .hero-delta.warn { color: oklch(0.84 0.16 85); }
 .hero-delta.down { color: oklch(0.72 0.18 25); }
@@ -1853,8 +1911,8 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 }
 .hero-spark-label {
   position: absolute; top: 12px; left: 0;
-  font-size:var(--fs-2xs); font-weight: 700; letter-spacing: 0.12em;
-  text-transform: uppercase; color: rgba(255,255,255,0.3);
+  font-size:var(--fs-xs); font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: rgba(255,255,255,0.62);
 }
 .hero-spark canvas { display: block; }
 
@@ -1927,8 +1985,8 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 }
 .hero-stat-num .small { font-size:var(--fs-lg); color: rgba(255,255,255,0.4); font-weight: 500; letter-spacing: 0; }
 .hero-stat-lbl {
-  font-size:var(--fs-2xs); letter-spacing: 0.06em;
-  text-transform: uppercase; color: rgba(255,255,255,0.5);
+  font-size:var(--fs-xs); letter-spacing: 0.06em;
+  text-transform: uppercase; color: rgba(255,255,255,0.62);
   margin-top:6px; line-height: 1.4;
 }
 .hero-ritmo-ctrl { display: flex; align-items: center; gap:6px; flex-wrap: wrap; margin-top:16px; }
@@ -2247,8 +2305,15 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .topbar > div:last-child { gap:4px; }
   .btn-presentation { padding: 6px 10px; font-size:var(--fs-xs); }
 }
-@media (max-width: 560px) {
+/* O subtítulo do topo diz ONDE o que se preenche vai gravar ("Registra
+   serviços executados · grava em RDO_Avanco"). Ele sumia já em 560px porque
+   quatro botões deixavam ~70px para o bloco do título; com "+ Novo Serviço"
+   fora da própria tela de lançamento sobram ~230px em 390px, e ele volta.
+   Abaixo de 380px a conta não fecha e ele cede de novo. */
+@media (max-width: 380px) {
   .topbar-sub { display: none; }
+}
+@media (max-width: 560px) {
   .topbar-title { font-size:var(--fs-md); font-weight: 700; }
   /* No mobile pequeno: só ícones nos botões do topo */
   #topbarActions .btn { padding: 7px 10px; font-size:var(--fs-sm); }
@@ -2351,7 +2416,8 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .hero-spark { height: 50px; padding-top:8px; }
   .hero-stats { gap:12px; padding-top:14px; margin-top:12px; }
   .hero-stat-num { font-size:var(--fs-2xl); }
-  .hero-stat-lbl { font-size:var(--fs-2xs); }
+  /* o rótulo do hero NÃO volta a 10px: é a legenda do número que
+     a fiscalização lê no projetor e o encarregado lê no sol */
   .hero-ia { padding: 10px 12px; font-size:var(--fs-sm); }
   .hero-ia-text { font-size:var(--fs-sm); }
   .narrative-text { font-size:var(--fs-md); }
@@ -2474,7 +2540,7 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 /* ===== Forms mobile (RDO, RDO Diário etc) ===== */
 @media (max-width: 768px) {
   .form-grid { grid-template-columns: 1fr; gap:12px; }
-  .field label { font-size:var(--fs-2xs); }
+  /* o rótulo NÃO encolhe no celular: é lá que se lê no sol e de luva */
   .field input, .field select, .field textarea {
     padding: 12px 14px;
     border-radius: 8px;
@@ -3098,6 +3164,7 @@ function trocarObra(id, opcoes) {
   STATE.cronograma = []; STATE.pacotes = []; STATE.coeficientes = [];
   STATE.rdoavanco = []; STATE.rdodiario = [];
   STATE.loaded = false;
+  STATE.cargaFalhou = false;
   STATE.filtros = { mes: '', frente: '' };
   STATE.dashData = null;
   // Equipamentos tem motor próprio (js/equip) e backend POR OBRA: o cache que
@@ -4514,6 +4581,9 @@ function navigate(page) {
   // a barra inferior do celular acompanha a mesma navegação
   const barra = document.querySelector('.bottom-nav-mobile');
   if (barra) barra.outerHTML = barraInferior();
+  // "Novo Serviço" some na própria tela de lançamento: os botões do topo
+  // dependem da página, não só de quem entrou.
+  if (typeof atualizarBotoesTopo === 'function') atualizarBotoesTopo();
   toggleSidebar(false);
   transitionTo(render);
 }
@@ -4620,13 +4690,105 @@ async function carregarUsuariosNomes(forcar) {
   } catch (e) {}
 }
 
+/* ------------------------------------------------------------------
+   QUEM ESTÁ ENTRANDO
+   ------------------------------------------------------------------
+   Com meia dúzia de nomes, o <select> cobra três toques (abrir a roleta,
+   rolar, confirmar) para dizer algo que quase nunca muda: quem você é.
+   Uma fileira de chips cobra um — e o app já guarda o último usuário em
+   `teotonio_user`, então na maioria das vezes cobra zero.
+   Acima de seis nomes a fileira vira parede e a roleta volta a ganhar.
+   ------------------------------------------------------------------ */
+const LOGIN_MAX_CHIPS = 6;
+
+function seletorUsuarioLogin() {
+  const ultimo = localStorage.getItem('teotonio_user') || '';
+  const pre = USUARIOS_UI.includes(ultimo) ? ultimo : '';
+  if (USUARIOS_UI.length <= LOGIN_MAX_CHIPS) {
+    return `<input type="hidden" id="loginUser" name="username" autocomplete="username" value="${escHtml(pre)}">
+      <div class="login-chips" id="loginChips" role="radiogroup" aria-label="Usuário / Apontador">
+        ${USUARIOS_UI.map(u => `<button type="button" class="chip ${u === pre ? 'on' : ''}"
+          role="radio" aria-checked="${u === pre}" data-user="${escHtml(u)}"
+          onclick="escolherUsuarioLogin(this)">${escHtml(u)}</button>`).join('')}
+      </div>`;
+  }
+  return `<select id="loginUserSelect" name="username" autocomplete="username">
+      <option value="">— selecione —</option>
+      ${USUARIOS_UI.map(u => `<option value="${escHtml(u)}" ${u === pre ? 'selected' : ''}>${escHtml(u)}</option>`).join('')}
+    </select>`;
+}
+
+window.escolherUsuarioLogin = function(btn) {
+  const campo = document.getElementById('loginUser');
+  if (!campo) return;
+  campo.value = btn.dataset.user || '';
+  const grupo = document.getElementById('loginChips');
+  if (grupo) grupo.querySelectorAll('.chip').forEach(c => {
+    const on = c === btn;
+    c.classList.toggle('on', on);
+    c.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+  limparErroLogin();
+  const s = document.getElementById('loginPass');
+  if (s) s.focus();
+};
+
+/* A lista de nomes chega do servidor depois que a tela já está pintada:
+   redesenha o seletor inteiro (chips ou roleta) preservando a escolha. */
 function atualizarSelectLogin() {
+  const wrap = document.getElementById('loginUserWrap');
+  if (wrap) {
+    const atual = (document.getElementById('loginUserSelect') || document.getElementById('loginUser') || {}).value || '';
+    wrap.innerHTML = seletorUsuarioLogin();
+    if (atual) {
+      const campo = document.getElementById('loginUser');
+      if (campo) {
+        campo.value = atual;
+        const c = wrap.querySelector(`.chip[data-user="${CSS.escape(atual)}"]`);
+        if (c) { c.classList.add('on'); c.setAttribute('aria-checked', 'true'); }
+      }
+      const sel = document.getElementById('loginUserSelect');
+      if (sel) sel.value = atual;
+    }
+    return;
+  }
   const sel = document.getElementById('loginUserSelect') || document.getElementById('loginUser');
-  if (!sel) return;
+  if (!sel || sel.tagName !== 'SELECT') return;
   const valAtual = sel.value;
   sel.innerHTML = `<option value="">— selecione —</option>` +
     USUARIOS_UI.map(u => `<option value="${escHtml(u)}" ${u === valAtual ? 'selected' : ''}>${escHtml(u)}</option>`).join('');
 }
+
+/* Senha errada só aparecia no toast, que passa em 6 s e some enquanto a
+   pessoa ainda olha para o campo. O CSS já tinha o que falta usar. */
+window.mostrarErroLogin = function(msg) {
+  const e = document.getElementById('loginErro');
+  const p = document.getElementById('loginPass');
+  if (e) { e.textContent = msg; e.style.display = ''; }
+  if (p) { p.classList.add('invalid'); p.focus(); p.select(); }
+};
+window.limparErroLogin = function() {
+  const e = document.getElementById('loginErro');
+  const p = document.getElementById('loginPass');
+  if (e) { e.textContent = ''; e.style.display = 'none'; }
+  if (p) p.classList.remove('invalid');
+};
+
+/* Digitar a senha às cegas, de luva e no sol, é onde o erro nasce — e o
+   servidor tranca a conta por 15 min depois de 5 erros. Ver o que se
+   digitou é o que evita a trava. */
+window.alternarVerSenha = function() {
+  const inp = document.getElementById('loginPass');
+  const btn = document.getElementById('loginPassOlho');
+  if (!inp || !btn) return;
+  const mostrando = inp.type === 'text';
+  inp.type = mostrando ? 'password' : 'text';
+  btn.setAttribute('aria-pressed', mostrando ? 'false' : 'true');
+  const rot = mostrando ? 'Mostrar a senha' : 'Ocultar a senha';
+  btn.setAttribute('aria-label', rot);
+  btn.title = rot;
+  inp.focus();
+};
 
 /* ============================================================
    PERFIS DE ACESSO — mesma régua do "Gestor — Controle de Obras",
@@ -4776,18 +4938,31 @@ function renderLogin() {
         </div>
       </div>
       <div class="card-body">
-        <div class="field" style="margin-bottom: 14px;">
-          <label>Usuário / Apontador</label>
-          <select id="loginUserSelect">
-            <option value="">— selecione —</option>
-            ${USUARIOS_UI.map(u => `<option value="${escHtml(u)}">${escHtml(u)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field" style="margin-bottom: 18px;">
-          <label>Senha</label>
-          <input type="password" id="loginPass" placeholder="••••••••" onkeyup="if(event.key==='Enter') fazerLogin()">
-        </div>
-        <button id="loginBtn" class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">${ic('entrar')} Entrar</button>
+        <!-- Formulário de verdade (com name e autocomplete) para o gerenciador
+             de senhas do aparelho se oferecer a guardar e a preencher: metade
+             do problema de digitar escondido some quando o telefone digita. -->
+        <form id="loginForm" onsubmit="return false">
+          <div class="field" style="margin-bottom: 14px;">
+            <label>Usuário / Apontador</label>
+            <div id="loginUserWrap">${seletorUsuarioLogin()}</div>
+          </div>
+          <div class="field" style="margin-bottom: 18px;">
+            <label for="loginPass">Senha</label>
+            <div class="campo-senha">
+              <input type="password" id="loginPass" name="password" autocomplete="current-password"
+                placeholder="••••••••" oninput="limparErroLogin()"
+                onkeyup="if(event.key==='Enter') fazerLogin()">
+              <button type="button" class="senha-olho" id="loginPassOlho" aria-pressed="false"
+                aria-label="Mostrar a senha" title="Mostrar a senha"
+                onclick="alternarVerSenha()">${ic('olho')}</button>
+            </div>
+            <div class="field-error" id="loginErro" style="display:none"></div>
+          </div>
+          <!-- A promessa de offline vive no painel da direita, que some abaixo
+               de 960 px — e quem entra pelo celular é justamente o apontador. -->
+          <div class="login-offline">${ic('antena')} O lançamento fica na fila do aparelho e sobe sozinho quando a internet volta.</div>
+          <button id="loginBtn" type="submit" class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">${ic('entrar')} Entrar</button>
+        </form>
         <div class="login-nota">${ic('info')} Sem entrar, o sistema segue aberto para consulta: painel, avanço, cronograma e histórico.</div>
       </div>
     </div>
@@ -4848,6 +5023,7 @@ window.fazerLogin = async function() {
   const u = sel ? sel.value : '';
   const p = document.getElementById('loginPass').value;
   if (!u) { toast('Selecione um usuário', 'error'); return; }
+  limparErroLogin();
   loginOcupado(true);
 
   // 1) Valida no servidor — a senha correta vive nas Propriedades do Apps Script.
@@ -4859,8 +5035,9 @@ window.fazerLogin = async function() {
       concluirLogin(u, r.perfil);
       return;
     }
-    if (r.error === 'CREDENCIAIS_INVALIDAS') { toast(erroLegivel(r.error), 'error'); return; }
-    if (r.error === 'MUITAS_TENTATIVAS') { toast(r.mensagem || erroLegivel(r.error), 'error', 0); return; }
+    // O erro fica NO CAMPO, não só no toast que passa em 6 s.
+    if (r.error === 'CREDENCIAIS_INVALIDAS') { mostrarErroLogin(erroLegivel(r.error)); toast(erroLegivel(r.error), 'error'); return; }
+    if (r.error === 'MUITAS_TENTATIVAS') { const m = r.mensagem || erroLegivel(r.error); mostrarErroLogin(m); toast(m, 'error', 0); return; }
     if (r.error === 'LOGIN_NAO_CONFIGURADO') { toast('Login não configurado no servidor: defina a propriedade USUARIOS no Apps Script.', 'error', 0); return; }
     // Backend antigo (sem action=login): sem senha local — oriente a republicar.
     toast('Backend desatualizado — republique o Code.gs (com action=login) no Apps Script.', 'error', 0);
@@ -4946,13 +5123,25 @@ window.atualizarBotoesTopo = function() {
   const acesso = STATE.usuarioLogado
     ? `<button class="btn btn-ghost btn-sm" onclick="fazerLogout()" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">${ic('sair')} <span class="topbar-acesso-txt">Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</span></button>`
     : `<button class="btn btn-outline btn-sm" onclick="irParaLogin()" title="Entrar para lançar serviços e RDOs">${ic('entrar')} <span class="topbar-acesso-txt">Entrar</span></button>`;
-  const novo = pode('lancarServico')
+  /* "Novo Serviço" não aparece na PRÓPRIA tela de lançamento: ali ele é um
+     botão que não leva a lugar nenhum, e o preço é caro — em 390 px os quatro
+     botões deixavam ~70 px para o bloco do título, e é o subtítulo que diz
+     onde o lançamento grava. Um botão a menos devolve a linha ao título. */
+  const novo = (pode('lancarServico') && STATE.currentPage !== 'rdo')
     ? `<button class="btn btn-primary btn-sm" onclick="navigate('rdo')">${ic('mais')} Novo Serviço</button>`
     : '';
   tb.innerHTML = acesso +
     '<button class="btn btn-outline btn-sm btn-icone" onclick="buscaAbrir()" title="Buscar estaca, pacote, lançamento ou RDO (Ctrl+K)" aria-label="Buscar">' + ic('lupa') + '</button>' +
-    '<button class="btn btn-outline btn-sm btn-icone" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">' + ic('atualizar') + '</button>' +
+    // Único lugar de atualizar no app (o rodapé do menu lateral tinha o
+    // segundo). É também o portador do estado de erro — ver setSyncStatus.
+    '<button id="btnAtualizarTopo" class="btn btn-outline btn-sm btn-icone" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">' + ic('atualizar') + '</button>' +
     novo;
+  // O botão nasce a cada render; o estado de erro tem de ser reaplicado.
+  const bt = document.getElementById('btnAtualizarTopo');
+  if (bt && STATE.cargaFalhou) {
+    bt.classList.add('erro');
+    bt.title = 'Falha ao carregar os dados da obra — toque para tentar de novo';
+  }
 };
 
 // ====================================================================
@@ -5930,6 +6119,7 @@ async function carregarTudo(opts = {}) {
     STATE.rdodiario = soDaObraAtiva(d || []);
     atualizarPrazoDoCronograma(); // baseline acompanha o Project publicado na aba
     STATE.loaded = true;
+    STATE.cargaFalhou = false;
     STATE.lastSync = new Date();
     const hm = STATE.lastSync.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
     setSyncStatus('ok', `Sincronizado às ${hm} · ${STATE.pacotes.length} pacotes, ${STATE.rdoavanco.length} serviços`);
@@ -5960,8 +6150,15 @@ async function carregarTudo(opts = {}) {
     // Mantém STATE.loaded como está: se já houve uma carga boa, os dados velhos
     // continuam navegáveis (antes, uma falha de fundo deixava toda navegação em
     // branco até a próxima sincronização bem-sucedida).
+    STATE.cargaFalhou = true;
     setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar novamente</span>');
-    if (!fundo) toast('Sem conexão com Google Sheets. Verifique sua internet.', 'error', 6000);
+    // Sem nenhuma carga boa antes, a tela é a mensagem: `render()` pinta a
+    // falha em vez de sair sem desenhar nada.
+    render();
+    // Com dado velho na tela o toast passa em 6 s e não atrapalha. Sem dado
+    // nenhum ele é a rede de segurança da mensagem — fica até ser fechado.
+    if (!STATE.loaded) toast('Sem conexão com Google Sheets. O lançamento continua funcionando: entra na fila do aparelho.', 'error', 0);
+    else if (!fundo) toast('Sem conexão com Google Sheets. Verifique sua internet.', 'error', 6000);
   }
 }
 
@@ -5971,6 +6168,56 @@ function setSyncStatus(state, text) {
   if (!dot || !txt) return;
   dot.className = 'sync-dot ' + state;
   txt.innerHTML = text;
+  // O indicador permanente mora no rodapé da barra lateral, que no celular
+  // está fechada — quem trabalha no aparelho nunca via que a carga falhou.
+  // O botão de atualizar do topo, esse está sempre à vista: ele vira o aviso.
+  const bt = document.getElementById('btnAtualizarTopo');
+  if (bt) {
+    bt.classList.toggle('erro', state === 'error');
+    bt.title = state === 'error'
+      ? 'Falha ao carregar os dados da obra — toque para tentar de novo'
+      : 'Atualizar dados';
+  }
+}
+
+/* ------------------------------------------------------------------
+   QUANDO A PRIMEIRA CARGA FALHA
+   ------------------------------------------------------------------
+   `render()` saía sem pintar nada enquanto `STATE.loaded` fosse falso.
+   Sem uma carga boa antes — que é o caso de quem abre o app pela
+   primeira vez sem sinal — sobrava o cabeçalho e o vazio. O app inteiro
+   é construído em cima de "funciona sem sinal", e este é justamente o
+   momento em que ele parece quebrado.
+   ------------------------------------------------------------------ */
+function telaFalhaCarga() {
+  return `
+    <div class="empty">
+      <div class="empty-icon" style="color:var(--red)">${ic('antena')}</div>
+      <div class="empty-title">Não foi possível carregar os dados da obra</div>
+      <div class="empty-sub">
+        O aparelho não conseguiu falar com a planilha publicada. Pode ser a
+        internet do canteiro, ou a planilha fora do ar por alguns minutos.
+      </div>
+      <div class="empty-sub" style="margin-top:14px;color:var(--text)">
+        <b>Lançar serviço e RDO continua funcionando:</b> o que você gravar
+        entra na fila do aparelho e sobe sozinho quando a internet voltar.
+      </div>
+      <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="carregarTudo()">${ic('atualizar')} Tentar novamente</button>
+        <button class="btn btn-outline" onclick="navigate('rdo')">${ic('lancar')} Lançar assim mesmo</button>
+      </div>
+    </div>`;
+}
+
+/* Enquanto a primeira carga está em voo não é falha — é espera. Dizer isso
+   custa uma linha e evita o mesmo vazio da tela quebrada. */
+function telaCarregando() {
+  return `
+    <div class="empty">
+      <div class="empty-icon">${ic('ampulheta')}</div>
+      <div class="empty-title">Carregando os dados da obra…</div>
+      <div class="empty-sub">Buscando pacotes, lançamentos e cronograma na planilha publicada.</div>
+    </div>`;
 }
 
 // ====================================================================
@@ -6592,7 +6839,10 @@ function renderShell() {
             <div class="sync-dot loading" id="syncDot"></div>
             <div class="sync-text" id="syncText">Carregando…</div>
           </div>
-          <button class="btn-refresh" onclick="carregarTudo()">${ic('atualizar')} ATUALIZAR</button>
+          <!-- Atualizar mora SÓ no topo (btnAtualizarTopo): dois caminhos para
+               a mesma ação obrigam a escolher, e o de cá é o que o celular não
+               mostra — a gaveta está fechada. Quando a carga falha, a própria
+               linha de status acima traz o "Tentar novamente". -->
           ${podeVer('executivo') ? `<button class="btn-refresh btn-apresentar" onclick="abrirApresentacao()"
             title="Mostrar a obra em tela cheia (ESC sai)">${ic('apresentar')} APRESENTAR</button>` : ''}
           ${seletorTema()}
@@ -6751,7 +7001,14 @@ window.irParaLogin = function() {
   toggleSidebar(false);
   if (STATE.currentPage === 'rdo') transitionTo(render);
   else navigate('rdo');
-  setTimeout(() => { const s = document.getElementById('loginUserSelect') || document.getElementById('loginUser'); if (s) s.focus(); }, 300);
+  // Com o usuário já escolhido (chips pré-selecionam o último), o campo que
+  // falta é a senha; sem escolha, a roleta.
+  setTimeout(() => {
+    const campo = document.getElementById('loginUserSelect') || document.getElementById('loginUser');
+    if (campo && !campo.value && campo.tagName === 'SELECT') { campo.focus(); return; }
+    const senha = document.getElementById('loginPass');
+    if (senha) senha.focus();
+  }, 300);
 };
 
 function toggleSidebar(open) {
@@ -6764,7 +7021,14 @@ function toggleSidebar(open) {
 }
 
 function render() {
-  if (!STATE.loaded) return;
+  // Sem dados ainda: a página DIZ o que está acontecendo. Sair daqui sem
+  // pintar deixava o app com o cabeçalho e o corpo em branco — a falha de
+  // carga era indistinguível de um app quebrado (ver telaFalhaCarga).
+  if (!STATE.loaded) {
+    const pg = document.getElementById('page');
+    if (pg) pg.innerHTML = STATE.cargaFalhou ? telaFalhaCarga() : telaCarregando();
+    return;
+  }
 
   // Saindo da tela de Projetos, o visor da prancha tem de ser desmontado: ele
   // deixa ouvintes no `window` (girar o aparelho remede a caixa) que a troca
@@ -10428,6 +10692,31 @@ function pvMetrosPorEstaca() {
 /* Estado da tela: a estaca aberta no painel de detalhe. */
 const PV = { sel: null };
 
+/* Largura mínima da célula de estaca, em px. Abaixo disso o toque erra. */
+const PV_CEL_MIN = 14;
+
+/* Ir direto à estaca pelo número: no celular, achar a E118 numa faixa de
+   43 células rolando de lado é mais trabalho do que digitar 118. Abre o
+   MESMO detalhe do clique na célula. */
+window.pvIrParaEstaca = function(eixoId) {
+  const inp = document.getElementById('pvIrNum');
+  if (!inp) return;
+  const bruto = String(inp.value || '').replace(/[^\d]/g, '');
+  const erro = document.getElementById('pvIrErro');
+  const dizer = m => { if (erro) { erro.textContent = m; erro.style.display = m ? '' : 'none'; } };
+  if (!bruto) { dizer('Digite o número da estaca.'); return; }
+  const n = parseInt(bruto, 10);
+  const sel = document.getElementById('pvIrEixo');
+  const id = (sel && sel.value) || eixoId;
+  const eixo = eixoPorId(id);
+  if (eixo && (n < eixo.ini || n > eixo.fim)) {
+    dizer('A ' + eixo.label + ' vai da E' + eixo.ini + ' à E' + eixo.fim + '.');
+    return;
+  }
+  dizer('');
+  pvSelecionar(id, n);
+};
+
 window.pvSelecionar = function (eixo, num) {
   var igual = PV.sel && PV.sel.eixo === eixo && PV.sel.num === num;
   PV.sel = igual ? null : { eixo: eixo, num: num };   // clicar de novo fecha
@@ -10536,7 +10825,13 @@ function renderPlantaAvanco() {
       '<div class="pv-titulo">' + escHtml(x.label) + ' · E' + x.ini + '–E' + x.fim +
         '<span class="pv-metros"> — ' + fmtNum((n - 1) * passo, 0) + ' m · ' +
         tocadas + ' de ' + n + ' estacas com produção</span></div>' +
-      '<div class="pv-scroll"><div class="pv-grade">' +
+      /* PV_CEL_MIN por estaca é o piso do alvo de toque: em 390 px, 43
+         estacas davam ~7 px de largura de célula, e a célula é o ÚNICO
+         caminho para ver os lançamentos da estaca. A grade ganha a largura
+         mínima do eixo mais longo e rola dentro do .pv-scroll; como todas
+         as faixas continuam medidas em % da mesma grade, a proporção real
+         entre os trechos não muda. */
+      '<div class="pv-scroll"><div class="pv-grade" style="min-width:calc(142px + ' + (maxCasas * PV_CEL_MIN) + 'px)">' +
         '<div class="pv-rotulo via">Via</div>' +
         '<div class="pv-fx via" style="width:' + larg + ';' + colunas + '">' + celulasVia +
           '<div class="pv-eixo-via"></div></div>' +
@@ -10583,7 +10878,23 @@ function renderPlantaAvanco() {
       '<div class="empty-sub">A planta se pinta a partir da estaca preenchida em cada lançamento. ' +
       'Lance serviços com o campo de estaca para ver a via se construir aqui.</div></div>';
   } else {
-    corpo = eixos.map(blocoEixo).join('') +
+    // Caminho por NÚMERO, ao lado do caminho por toque: no celular, achar a
+    // E118 rolando uma faixa de 43 células é mais trabalho do que digitar.
+    var irPara =
+      '<div class="pv-ir">' +
+        '<label for="pvIrNum">Ir para a estaca</label>' +
+        (eixos.length > 1
+          ? '<select id="pvIrEixo" aria-label="Eixo">' +
+              eixos.map(function (x) { return '<option value="' + escHtml(x.id) + '">' + escHtml(x.label) + '</option>'; }).join('') +
+            '</select>'
+          : '') +
+        '<input id="pvIrNum" type="text" inputmode="numeric" placeholder="' + eixos[0].ini + '–' + eixos[0].fim + '" ' +
+          'onkeyup="if(event.key===\'Enter\') pvIrParaEstaca(\'' + escHtml(eixos[0].id) + '\')">' +
+        '<button type="button" class="btn btn-outline btn-sm" onclick="pvIrParaEstaca(\'' + escHtml(eixos[0].id) + '\')">' +
+          ic('lupa') + ' Ver</button>' +
+        '<div class="field-error" id="pvIrErro" style="display:none;flex-basis:100%"></div>' +
+      '</div>';
+    corpo = irPara + eixos.map(blocoEixo).join('') +
       '<div class="pv-legenda">' + ic('info') +
         '<span>O desenho está na escala do projeto: 1 célula = 1 estaca = ' + passo + ' m, ' +
         'e os trechos são proporcionais entre si. A faixa <b>Via</b> escurece onde mais se trabalhou; ' +
@@ -10629,6 +10940,11 @@ function renderAvancoFisico() {
       </div>
       <div class="card-body">
         ${renderHeatmap(av)}
+        <div class="pv-legenda" style="margin-top:12px">${ic('info')}
+          <span>A intensidade é <b>relativa a cada pacote</b>, não ao mapa inteiro: o tom mais
+          escuro de uma linha é o maior valor <b>daquela</b> linha — a faixa vem escrita ao lado
+          do nome. Linhas de pacotes diferentes medem unidades diferentes (m², m³, ML) e por isso
+          <b>não se comparam entre si</b>.</span></div>
       </div>
     </div>
 
@@ -10841,8 +11157,13 @@ function renderHeatmap(av) {
           ${lista.map(e => `<div class="hm-col-label">${escHtml(e.rot)}</div>`).join('')}
           ${doEixo.map(a => {
             const max = maxPorPac[getCSVField(a.pacote, 'ID')] || 1;
+            /* CADA LINHA TEM ESCALA PRÓPRIA (maxPorPac). Sem dizer isso, o
+               mapa convida a comparar uma linha com a outra — e o mesmo tom
+               de laranja pode ser 12 m² numa e 240 m³ na de baixo. A faixa
+               ao lado do nome é o que torna a leitura possível. */
+            const un = getCSVField(a.pacote, 'Unidade Física') || '';
             return `
-              <div class="hm-row-label">${escHtml(getCSVField(a.pacote, 'Pacote'))}</div>
+              <div class="hm-row-label" title="Nesta linha, o tom mais escuro vale ${fmtNum(max, 1)} ${escHtml(un)} numa estaca">${escHtml(getCSVField(a.pacote, 'Pacote'))}<small>0–${fmtNum(max, 0)} ${escHtml(un)}</small></div>
               ${lista.map(e => {
                 const v = a.porEstaca[e.id] || 0;
                 const intensity = max > 0 ? Math.min(v / max, 1) : 0;

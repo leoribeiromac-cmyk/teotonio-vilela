@@ -51,7 +51,7 @@ const KB = (n) => 'data:image/jpeg;base64,' + 'A'.repeat(Math.round(n * 1024 * 4
   await p.evaluate(() => navigate('rdo'));
   await p.waitForSelector('#loginBtn', { timeout: 5000 });
   await p.evaluate(async () => {
-    document.getElementById('loginUserSelect').value = 'Leonardo';
+    (document.getElementById('loginUser') || document.getElementById('loginUserSelect')).value = 'Leonardo';
     document.getElementById('loginPass').value = 'x';
     await fazerLogin();
   });

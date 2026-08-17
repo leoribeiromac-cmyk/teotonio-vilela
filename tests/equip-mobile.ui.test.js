@@ -63,7 +63,7 @@ async function abrirTela(navegador, largura, altura) {
   await p.evaluate(() => navigate('rdo'));
   await p.waitForSelector('#loginBtn', { timeout: 10000 });
   await p.evaluate(async () => {
-    document.getElementById('loginUserSelect').value = 'Leonardo';
+    (document.getElementById('loginUser') || document.getElementById('loginUserSelect')).value = 'Leonardo';
     document.getElementById('loginPass').value = 'x';
     await fazerLogin();
   });

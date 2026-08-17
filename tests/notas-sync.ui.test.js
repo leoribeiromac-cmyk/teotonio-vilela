@@ -63,7 +63,7 @@ const nota = (num, obra) => ({
   await p.evaluate(() => navigate('rdo'));
   await p.waitForSelector('#loginBtn', { timeout: 5000 });
   await p.evaluate(async () => {
-    document.getElementById('loginUserSelect').value = 'Leonardo';
+    (document.getElementById('loginUser') || document.getElementById('loginUserSelect')).value = 'Leonardo';
     document.getElementById('loginPass').value = 'x';
     await fazerLogin();
   });
