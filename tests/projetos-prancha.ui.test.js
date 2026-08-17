@@ -188,7 +188,11 @@ async function pincar(p, alvo, de, para) {
   const ajustado = await p.evaluate(() => ({ s: VISOR.s, fit: VISOR.fit, rotulo: document.getElementById('projZoom').textContent }));
   ok('"Ajustar" volta a enquadrar a folha', Math.abs(ajustado.s - ajustado.fit) < ajustado.fit * 0.02,
     ajustado.s + ' vs ' + ajustado.fit);
-  ok('e o rótulo mostra 100%', ajustado.rotulo === '100%', ajustado.rotulo);
+  ok('e o rótulo mostra 100%', /^100%/.test(ajustado.rotulo), ajustado.rotulo);
+  // O percentual sozinho não diz quanto AINDA cabe de zoom: a pirâmide vai
+  // até 12px por ponto do PDF, e quem para no primeiro borrão acha que
+  // chegou ao fim da nitidez.
+  ok('e diz em que degrau da pirâmide está', /nível \d+ de \d+/.test(ajustado.rotulo), ajustado.rotulo);
 
   // Folha 3,3× mais larga que alta numa caixa em pé: deitada, "cabe na
   // largura" vira "cabe na altura" e a prancha cresce ~1,6× (mais ainda em

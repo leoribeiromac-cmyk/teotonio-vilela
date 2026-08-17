@@ -1007,7 +1007,7 @@ function nfAbrirNova() {
         O sistema lê o código de barras, a chave de acesso e o restante dos dados sozinho.<br>
         <b>Nota de duas folhas?</b> Fotografe as duas — dá para escolher mais de um arquivo.</div>
       </div>
-      <label class="btn btn-pri" style="width:100%;justify-content:center;margin-bottom:9px;cursor:pointer">${ic('camera')} Fotografar a nota
+      <label class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:9px;cursor:pointer">${ic('camera')} Fotografar a nota
         <input type="file" accept="image/*" capture="environment" multiple onchange="nfArquivoSelecionado(this)" style="display:none"></label>
       <label class="btn" style="width:100%;justify-content:center;margin-bottom:4px;cursor:pointer">${ic('arquivo')} Escolher arquivo (PDF ou imagem)
         <input type="file" accept="image/*,application/pdf,.pdf" multiple onchange="nfArquivoSelecionado(this)" style="display:none"></label>
@@ -1019,6 +1019,13 @@ function nfAbrirNova() {
           <button class="btn" onclick="nfUsarChaveDigitada()">Usar chave</button></div>
         <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px" onclick="_nfModoSimples=true;nfConferir()">Preencher à mão</button>
       </div></div>
+      <!-- O diagnóstico mora onde a dúvida nasce: aqui, quando a leitura
+           não vai. Antes ficava na barra do topo, ao lado do botão de todo
+           dia e do mesmo tamanho dele. -->
+      <div class="kpi-s" style="text-align:center;margin-top:12px">
+        A leitura não está funcionando?
+        <button class="btn btn-ghost btn-sm nf-teste" onclick="nfTestarLeitura()">${ic('lupa')} Testar leitura</button>
+      </div>
     </div>`, 620);
 }
 
@@ -1400,7 +1407,7 @@ async function nfTestarLeitura() {
        3. Aceite a autorização que o Google pedir<br>
        4. Volte aqui e teste de novo
        <div class="kpi-s" style="margin-top:8px">Essa função existe só para o Google perguntar. Rodar o <b>nfDiag</b> não serve: sem a chave cadastrada ele volta antes de tocar na internet e o Google não pergunta nada.</div>
-       ${r.autorizacaoUrl ? `<a class="btn btn-pri" style="width:100%;justify-content:center;margin-top:10px" href="${esc(r.autorizacaoUrl)}" target="_blank" rel="noopener">Autorizar agora</a>` : ''}`;
+       ${r.autorizacaoUrl ? `<a class="btn btn-primary" style="width:100%;justify-content:center;margin-top:10px" href="${esc(r.autorizacaoUrl)}" target="_blank" rel="noopener">Autorizar agora</a>` : ''}`;
   } else if (r.chaveConfigurada === false) {
     extra = `<b>Como resolver:</b><br>
        1. Pegue a chave em <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a><br>
@@ -1534,7 +1541,7 @@ function nfConferir() {
 
     <div style="display:flex;gap:9px">
       <button class="btn" style="flex:1;justify-content:center" onclick="fecharModal()">Cancelar</button>
-      <button class="btn btn-pri" style="flex:2;justify-content:center" onclick="nfSalvarForm()">Salvar nota</button></div>
+      <button class="btn btn-primary" style="flex:2;justify-content:center" onclick="nfSalvarForm()">Salvar nota</button></div>
     ${(n.historico || []).length ? `<button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;margin-top:10px" onclick="nfVerHistorico('${n.id}')">${ic('relogio')} Histórico de alterações (${n.historico.length})</button>` : ''}
   `, 680);
   nfRenderItens();
@@ -2040,10 +2047,17 @@ function viewNotas(o) {
   const abas = [['notas', 'notas', 'Notas'], ['estoque', 'caixa', 'Estoque'], ['precos', 'dinheiro', 'Preços'], ['painel', 'grafico', 'Painel']];
   // 'pedidos' era uma aba: quem tinha ela guardada no aparelho cai na lista de notas
   const tab = abas.some(a => a[0] === estado.nfTab) ? estado.nfTab : 'notas';
+  /* As quatro telas do módulo eram .chip — o componente que o app inteiro
+     usa para FILTRO selecionado. Quem chegava lia "Notas, Estoque, Preços,
+     Painel" como quatro recortes da mesma lista, não como quatro telas.
+     Passam a ser .btn-toggle-group, o mesmo componente de abas do Histórico.
+
+     "Testar leitura" saiu daqui: é diagnóstico, e ficava do tamanho e ao
+     lado do botão de todo dia. Foi para dentro do fluxo de nova nota, que é
+     onde a leitura falha e a pergunta nasce. */
   const topo = `<div class="row nf-topo" style="align-items:center;margin-bottom:16px;gap:9px">
-    <div style="display:flex;gap:7px;flex-wrap:wrap">${abas.map(a => `<button class="chip ${tab === a[0] ? 'on' : ''}" onclick="nfTab('${a[0]}')">${ic(a[1])} ${a[2]}</button>`).join('')}</div>
-    <button class="btn btn-ghost btn-sm nf-teste" style="margin-left:auto" onclick="nfTestarLeitura()" title="Conferir se a leitura automática está no ar">${ic('lupa')} Testar leitura</button>
-    ${pode('lancarNota')?`<button class="btn btn-pri nf-nova" onclick="nfAbrirNova()">${ic('camera')} Nova nota fiscal</button>`:''}</div>`;
+    <div class="btn-toggle-group" role="tablist">${abas.map(a => `<button class="btn-toggle ${tab === a[0] ? 'active' : ''}" role="tab" aria-selected="${tab === a[0]}" onclick="nfTab('${a[0]}')">${ic(a[1])} ${a[2]}</button>`).join('')}</div>
+    ${pode('lancarNota')?`<button class="btn btn-primary nf-nova" style="margin-left:auto" onclick="nfAbrirNova()">${ic('camera')} Nova nota fiscal</button>`:''}</div>`;
   const corpo = tab === 'estoque' ? nfViewEstoque(o) : tab === 'precos' ? nfViewPrecos(o) : tab === 'painel' ? nfViewPainel(o) : nfViewLista(o);
   return topo + corpo;
 }
@@ -2287,7 +2301,7 @@ function nfSaidaModal(materialId) {
     <div id="sa_erro" class="kpi-s" style="color:var(--vermelho);min-height:16px;margin:-4px 0 10px"></div>
     <div style="display:flex;gap:9px">
       <button class="btn" style="flex:1;justify-content:center" onclick="fecharModal()">Cancelar</button>
-      <button class="btn btn-pri" style="flex:2;justify-content:center" onclick="nfSaidaSalvar()">Registrar saída</button></div>`, 580);
+      <button class="btn btn-primary" style="flex:2;justify-content:center" onclick="nfSaidaSalvar()">Registrar saída</button></div>`, 580);
   nfSaidaSaldo();
 }
 /* mostra o saldo que sobra enquanto a pessoa digita */

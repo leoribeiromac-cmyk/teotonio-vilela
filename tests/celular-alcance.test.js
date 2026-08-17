@@ -34,7 +34,11 @@ const ok = (nome, cond, extra) => {
   for (const largura of [320, 360, 390, 430]) {
     const s = await H.abrir({ mobile: true, viewport: { width: largura, height: 844 },
                               logar: { usuario: 'Leonardo', perfil: 'admin' } });
-    await s.ir('rdo');
+    // Fora da tela de lançamento: é lá que "+ Novo Serviço" leva a algum
+    // lugar. NA tela de lançamento ele não é renderizado de propósito —
+    // quatro botões deixavam ~70px para o bloco do título, e é o subtítulo
+    // que diz onde o lançamento grava (conferido logo abaixo).
+    await s.ir('historico');
     await s.p.waitForTimeout(400);
     const r = await s.p.evaluate(() => {
       const tb = document.querySelector('.topbar');
@@ -56,6 +60,32 @@ const ok = (nome, cond, extra) => {
     ok(`${largura}px · todo botão do topo tem alvo de 44px`,
        r.botoes.every(b => b.w >= 44 && b.h >= 44),
        JSON.stringify(r.botoes.filter(b => b.w < 44 || b.h < 44)));
+
+    // ...e na PRÓPRIA tela de lançamento o botão sai de cena e a linha
+    // volta para o título e o subtítulo.
+    await s.ir('rdo');
+    await s.p.waitForTimeout(400);
+    const noRdo = await s.p.evaluate(() => {
+      const acts = document.getElementById('topbarActions');
+      const bloco = document.querySelector('.topbar > div:first-child');
+      const sub = document.getElementById('pageSubtitle');
+      const c = bloco ? bloco.getBoundingClientRect() : null;
+      return {
+        temNovoServico: !!acts && /Novo Serviço/.test(acts.textContent),
+        larguraTitulo: c ? Math.round(c.width) : 0,
+        subVisivel: !!sub && getComputedStyle(sub).display !== 'none',
+      };
+    });
+    ok(`${largura}px · na tela de lançamento, "+ Novo Serviço" não se repete`,
+       !noRdo.temNovoServico);
+    // Com quatro botões sobravam ~70px para o bloco do título; com três,
+    // o título e o subtítulo cabem.
+    ok(`${largura}px · o bloco do título fica com espaço de verdade (≥ 130px)`,
+       noRdo.larguraTitulo >= 130, noRdo.larguraTitulo + 'px');
+    if (largura >= 390) {
+      ok(`${largura}px · e o subtítulo (onde o lançamento grava) volta a aparecer`,
+         noRdo.subVisivel);
+    }
     await s.fechar();
   }
 
@@ -130,7 +160,7 @@ const ok = (nome, cond, extra) => {
   await s3.p.waitForTimeout(300);
   const rodape = await s3.p.evaluate(() => {
     const sair = [...document.querySelectorAll('.sync-block button')]
-      .find(b => /SAIR|ATUALIZAR/i.test(b.textContent));
+      .find(b => /SAIR|ENTRAR|APRESENTAR/i.test(b.textContent));
     if (!sair) return { achou: false };
     const c = sair.getBoundingClientRect();
     return { achou: true, naTela: c.top >= 0 && c.bottom <= window.innerHeight };

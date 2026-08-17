@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=48"></script>
-<script src="dados/ruas-de-terra.js?v=48"></script>
+<script src="dados/ranario.js?v=49"></script>
+<script src="dados/ruas-de-terra.js?v=49"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=48"></script>
+<script src="dados/teotonio-muros.js?v=49"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=48"></script>
-<script src="js/nf/adaptador.js?v=48"></script>
-<script src="js/nf/notas.js?v=48"></script>
-<script src="js/equip/equipamentos.js?v=48"></script>
+<script src="js/ui/icones.js?v=49"></script>
+<script src="js/nf/adaptador.js?v=49"></script>
+<script src="js/nf/notas.js?v=49"></script>
+<script src="js/equip/equipamentos.js?v=49"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -309,6 +309,11 @@
 .grid{display:grid;gap:14px}
 .grid.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 .grid.g4{grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+/* .btn-pri é o "primário" terracota que veio do Gestor. O app tem UM
+   primário — .btn-primary, azul --pri —, e dois primários convivendo fazem
+   a tela ter duas respostas para "qual é a ação principal aqui". A regra
+   fica de pé para não quebrar HTML antigo guardado em cache, mas nenhum
+   botão novo deve usá-la. */
 .btn-pri{background:var(--acc);color:#fff;border-color:var(--acc)}
 .btn-pri:hover{filter:brightness(1.06)}
 .chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid var(--border-strong);
@@ -643,6 +648,10 @@ html,body{
 .btn .ic,.pill .ic,.nav-item .ic,td .ic,th .ic{vertical-align:-0.16em}
 /* ícone sozinho no botão (sem rótulo) fica centralizado */
 .btn-icone{padding-left:10px;padding-right:10px}
+/* O único indicador permanente de sincronização fica no rodapé da barra
+   lateral, e no celular a gaveta está fechada. Quando a carga falha, o botão
+   de atualizar do topo — sempre à vista — assume o aviso. */
+.btn-icone.erro{border-color:var(--red);color:var(--red)}
 .ic-gira{animation:spin 1s linear infinite}
 
 #root{height:100%;display:flex;flex-direction:column}
@@ -673,6 +682,16 @@ html,body{
   font-size:var(--fs-2xs);font-weight:700;letter-spacing:.12em;
   color:var(--sidebar-text);opacity:.45;padding:0 20px 6px;text-transform:uppercase;
 }
+/* Grupo dobrável (Conferência): o cabeçalho vira o botão de abrir. */
+.nav-group-dobra > summary{
+  cursor:pointer;list-style:none;display:flex;align-items:center;
+  justify-content:space-between;gap:8px;min-height:32px;
+}
+.nav-group-dobra > summary::-webkit-details-marker{display:none}
+.nav-group-dobra > summary:hover{opacity:.8}
+.nav-chevron{display:flex;align-items:center;transition:transform .18s}
+.nav-chevron .ic{width:14px;height:14px;vertical-align:0}
+.nav-group-dobra[open] > summary .nav-chevron{transform:rotate(180deg)}
 .nav-item{
   display:flex;align-items:center;gap:12px;
   padding:9px 14px;margin:1px 12px;
@@ -762,12 +781,21 @@ html,body{
 .proj-item.ativo .proj-item-sub{color:var(--acc-d);opacity:.8}
 .proj-item-cod{font:500 var(--fs-2xs) 'JetBrains Mono',ui-monospace,monospace;color:var(--muted)}
 .proj-header{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
-.proj-acoes{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.proj-acoes{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-left:auto}
 .proj-acoes .ic{width:14px;height:14px;vertical-align:-2px}
+/* Zoom · vista · arquivo. O traço à esquerda separa as famílias — nove
+   botões idênticos em fila não dizem que fazem coisas diferentes. */
+.proj-grupo-acao{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.proj-grupo-acao + .proj-grupo-acao{border-left:1px solid var(--border);padding-left:12px}
 .proj-zoom{
   min-width:46px;text-align:center;font:600 var(--fs-sm) 'JetBrains Mono',ui-monospace,monospace;
-  color:var(--text-2);
+  color:var(--text-2);white-space:nowrap;
 }
+/* O nível diz quanto AINDA CABE de zoom: a pirâmide vai até 12px por ponto
+   do PDF, e quem não leu o README parava no primeiro borrão achando que
+   tinha chegado ao fim. */
+.proj-zoom .proj-nivel{font-weight:500;color:var(--muted)}
+@media(max-width:560px){ .proj-zoom .proj-nivel{display:none} }
 
 /* ---- visor de quadrados (a prancha grande) ----
    `touch-action:none` é o que faz a pinça do celular chegar até aqui em vez
@@ -990,6 +1018,29 @@ body.proj-cheia-ativa{overflow:hidden}
   font-size:var(--fs-sm);line-height:1.5;color:var(--muted);
 }
 .login-nota .ic{width:14px;height:14px;vertical-align:0;margin-top:2px;flex-shrink:0}
+/* Fileira de nomes no lugar da roleta: um toque para dizer quem você é. */
+.login-chips{display:flex;flex-wrap:wrap;gap:8px}
+.login-chips .chip{padding:9px 14px;font-size:var(--fs-lg)}
+/* Campo de senha com o botão do olho DENTRO dele. */
+.campo-senha{position:relative;display:block}
+.campo-senha input{padding-right:44px}
+.senha-olho{
+  position:absolute;right:4px;top:50%;transform:translateY(-50%);
+  width:38px;height:38px;display:flex;align-items:center;justify-content:center;
+  background:none;border:none;border-radius:7px;cursor:pointer;color:var(--muted);
+}
+.senha-olho:hover{color:var(--acc);background:var(--surface-2)}
+.senha-olho[aria-pressed="true"]{color:var(--acc-d)}
+.senha-olho .ic{width:18px;height:18px;vertical-align:0}
+/* A linha de offline só aparece onde o painel da direita não cabe. */
+.login-offline{
+  display:flex;align-items:flex-start;gap:8px;margin-bottom:14px;
+  padding:10px 12px;border-radius:var(--r-sm);
+  background:var(--surface-2);border:1px solid var(--border);
+  font-size:var(--fs-sm);line-height:1.5;color:var(--text);
+}
+.login-offline .ic{width:15px;height:15px;vertical-align:0;margin-top:2px;flex-shrink:0;color:var(--acc-d)}
+@media (min-width:960px){ .login-offline{display:none} }
 
 .mobile-menu-btn{display:none}
 .sidebar-overlay{display:none}
@@ -1109,6 +1160,9 @@ table.t td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:var
 table.t tr:last-child td{border-bottom:none}
 table.t tr:hover td{background:var(--bg)}
 table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.04em;padding:8px 14px}
+/* o avanço da frente, na mesma régua do Painel */
+table.t tr.summary .summary-pct{margin-left:10px;font-family:'JetBrains Mono',monospace;font-weight:700}
+table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:none;letter-spacing:0;opacity:.75}
 .t-num{font-variant-numeric:tabular-nums;text-align:right;font-family:'JetBrains Mono',monospace;font-size:var(--fs-sm)}
 .t-mono{font-family:'JetBrains Mono',monospace;font-size:var(--fs-xs);color:var(--muted)}
 
@@ -1149,11 +1203,17 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   animation:cellPop calc(.3s * var(--anim-speed)) cubic-bezier(.2,0,0,1) both;
 }
 .hm-cell:hover{transform:scale(1.2);z-index:2;box-shadow:var(--sh-md)}
+/* O rótulo da linha ACOMPANHA a rolagem horizontal: com 30+ colunas o grid
+   passa da largura do cartão, e rolar de lado deixava só faixas de cor sem
+   dizer de que pacote são. */
 .hm-row-label{
   font-size:var(--fs-2xs);font-weight:600;color:var(--muted);
   padding:0 8px 0 4px;display:flex;align-items:center;justify-content:flex-end;
-  white-space:nowrap;
+  white-space:nowrap;overflow:hidden;
+  position:sticky;left:0;z-index:2;background:var(--surface);
 }
+/* a faixa de valor daquela linha — cada linha tem escala própria */
+.hm-row-label small{font-weight:400;opacity:.75;margin-left:6px;flex-shrink:0}
 .hm-col-label{
   font-size:var(--fs-2xs);color:var(--muted);font-family:'JetBrains Mono',monospace;
   text-align:center;padding:2px 0;
@@ -1197,7 +1257,10 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 @media(max-width:700px){.form-grid{grid-template-columns:1fr}}
 .field{display:flex;flex-direction:column;gap:6px}
-.field label{font-size:var(--fs-xs);font-weight:600;letter-spacing:.04em;color:var(--muted);text-transform:uppercase}
+/* Rótulo em caixa alta de 10 px era o menor texto da tela justamente onde
+   se lê no sol, de luva: a caixa alta tira a silhueta da palavra, que é o
+   que se reconhece sem soletrar. Caixa normal, 13 px, peso 600. */
+.field label{font-size:var(--fs-md);font-weight:600;color:var(--muted)}
 .field input,.field select,.field textarea{
   padding:9px 12px;border:1px solid var(--border);border-radius:7px;
   font-size:var(--fs-lg);background:var(--surface);font-family:inherit;color:var(--text);
@@ -1217,8 +1280,45 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   border-right:1px solid var(--border);transition:.15s;
 }
 .btn-toggle:last-child{border-right:none}
-.btn-toggle.active{background:var(--pri);color:#fff;font-weight:600}
+/* Aba ativa não é botão de ação: azul cheio é a cor de "clique aqui para
+   fazer", e usá-la para "você está aqui" faz a aba selecionada parecer a
+   única clicável. Marca como a barra inferior do celular marca a tela
+   ativa — fundo neutro, texto forte, traço de 2 px embaixo. */
+.btn-toggle.active{
+  background:var(--surface-2);color:var(--text);font-weight:600;
+  box-shadow:inset 0 -2px 0 var(--acc);
+}
 .btn-toggle:hover:not(.active){background:var(--bg);color:var(--text)}
+
+/* ===== LANÇAR SERVIÇO =====
+   O formulário inteiro dentro de .rdo-form: é ele que dá altura ao sticky
+   da faixa de ações, do mesmo jeito que o cartão do apontamento faz em
+   Equipamentos. */
+.rdo-form{display:block}
+.rdo-enviar{
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
+  padding:14px 18px;
+}
+.rdo-enviar-nota{font-size:var(--fs-sm);color:var(--muted);max-width:520px}
+.rdo-enviar-acoes{display:flex;gap:10px;flex-wrap:wrap}
+/* Rascunho: o de hoje avisa e sai da frente; o de outro dia PERGUNTA. */
+.rdo-rascunho{
+  background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);
+  padding:11px 14px;display:flex;justify-content:space-between;align-items:center;
+  flex-wrap:wrap;gap:10px;margin-bottom:14px;
+}
+.rdo-rascunho-txt{
+  font-size:var(--fs-md);color:var(--ylw-d);display:flex;align-items:flex-start;gap:6px;
+  line-height:1.45;max-width:640px;
+}
+.rdo-rascunho-txt .ic{flex-shrink:0;margin-top:2px}
+.rdo-rascunho-acoes{display:flex;gap:8px;flex-wrap:wrap}
+.rdo-rascunho.antigo{background:var(--red-l);border-color:var(--red)}
+.rdo-rascunho.antigo .rdo-rascunho-txt{color:var(--red)}
+/* Os pacotes de todo dia, a um toque — antes do <select> de pacote. */
+.svc-frequentes{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:6px}
+.svc-frequentes span{font-size:var(--fs-xs);color:var(--muted)}
 
 .servico-row{
   background:var(--surface-2);border:1px solid var(--border);
@@ -1498,10 +1598,13 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .pv-titulo .pv-metros{text-transform:none;font-weight:400}
 .pv-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
 .pv-grade{display:grid;grid-template-columns:132px 1fr;gap:5px 10px;align-items:center;min-width:520px}
+/* Com 43 estacas a grade passa de 1.400 px dentro de um cartão de 1.100:
+   rolar de lado levava embora o nome da frente e sobravam faixas de cor. */
 .pv-rotulo{
   font-size:var(--fs-2xs);font-weight:600;color:var(--text);
   display:flex;align-items:center;gap:6px;justify-content:flex-end;
   text-align:right;white-space:nowrap;overflow:hidden;
+  position:sticky;left:0;z-index:2;background:var(--surface);
 }
 .pv-rotulo .ic{width:13px;height:13px;flex-shrink:0;color:var(--muted)}
 .pv-rotulo.via{color:var(--muted);font-size:var(--fs-2xs);letter-spacing:.06em;text-transform:uppercase}
@@ -1532,6 +1635,18 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   font-family:'JetBrains Mono',monospace;font-size:var(--fs-2xs);color:var(--muted);
   white-space:nowrap;line-height:1;
 }
+/* Atalho por número — o mesmo detalhe que o toque na célula abre. */
+.pv-ir{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:14px}
+.pv-ir label{font-size:var(--fs-md);font-weight:600;color:var(--muted)}
+.pv-ir input{
+  width:110px;padding:9px 12px;border:1px solid var(--border);border-radius:7px;
+  font-size:var(--fs-lg);background:var(--surface);font-family:inherit;color:var(--text);
+}
+.pv-ir select{
+  padding:9px 10px;border:1px solid var(--border);border-radius:7px;
+  font-size:var(--fs-md);background:var(--surface);font-family:inherit;color:var(--text);
+}
+.pv-ir input:focus,.pv-ir select:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-l)}
 .pv-legenda{
   display:flex;align-items:flex-start;gap:8px;
   padding:10px 12px;border-radius:var(--r-sm);
@@ -1665,6 +1780,37 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .btn-turno-status{font-size:var(--fs-xs);color:var(--muted);margin-top:6px}
 .btn-turno-status.preenchido{color:var(--grn);font-weight:600}
 .btn-turno-grande.preenchido{border-color:var(--grn);background:linear-gradient(180deg, var(--grn-l) 0%, var(--surface) 50%)}
+/* Turno já enviado deixa de ser um botão inteiro: o cartão informa, e o
+   caminho para mexer no que a fiscalização pode já ter recebido é um botão
+   pequeno, com confirmação. */
+.btn-turno-grande.turno-enviado{cursor:default}
+.btn-turno-grande.turno-enviado:hover{border-color:var(--grn);transform:none;box-shadow:none}
+.btn-turno-editar{margin-top:10px}
+/* A data é pedida uma vez: a lista dos 14 dias é o caminho, e este é o
+   atalho para o passado distante. */
+.rdo-outra-data{margin-top:16px;border-top:1px solid var(--border);padding-top:12px}
+.rdo-outra-data summary{
+  cursor:pointer;font-size:var(--fs-md);color:var(--muted);
+  display:flex;align-items:center;gap:6px;list-style:none;
+}
+.rdo-outra-data summary::-webkit-details-marker{display:none}
+.rdo-outra-data summary:hover{color:var(--acc)}
+.rdo-outra-data summary .ic{width:15px;height:15px;vertical-align:0}
+/* Manutenção do histórico: apagar linha de planilha não divide fileira com
+   baixar CSV. Fica no pé da tabela, fechado por padrão. */
+.hist-manutencao{margin:14px 18px 4px;border-top:1px solid var(--border);padding-top:12px}
+.hist-manutencao summary{
+  cursor:pointer;font-size:var(--fs-md);color:var(--muted);
+  display:flex;align-items:center;gap:6px;list-style:none;
+}
+.hist-manutencao summary::-webkit-details-marker{display:none}
+.hist-manutencao summary:hover{color:var(--acc)}
+.hist-manutencao summary .ic{width:15px;height:15px;vertical-align:0}
+.hist-manutencao-corpo{
+  display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+  margin-top:10px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r-sm);
+}
+.hist-manutencao-corpo p{font-size:var(--fs-sm);color:var(--muted);margin-top:4px;max-width:520px;line-height:1.5}
 .btn-turno-diurno:hover{border-color:#d4a810;background:#fff8e1}
 .btn-turno-noturno:hover{border-color:#326496;background:#e8f0f8}
 
@@ -1787,8 +1933,8 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
   min-width: 130px;
 }
 .hero-gap-title {
-  font-size:var(--fs-2xs); font-weight: 700; letter-spacing: 0.14em;
-  text-transform: uppercase; color: rgba(255,255,255,0.4);
+  font-size:var(--fs-xs); font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: rgba(255,255,255,0.62);
   margin-bottom:4px;
 }
 .hero-gap-num {
@@ -1811,9 +1957,9 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 .hero-gap-direction.ahead   { color: oklch(0.82 0.16 150); }
 .hero-gap-direction.ontrack { color: rgba(255,255,255,0.65); }
 .hero-gap-lbl {
-  font-size:var(--fs-2xs);
+  font-size:var(--fs-xs);
   font-weight: 500;
-  color: rgba(255,255,255,0.5);
+  color: rgba(255,255,255,0.62);
   letter-spacing: 0;
   margin-top:4px;
   line-height: 1.3;
@@ -1840,7 +1986,7 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 }
 .hero-delta-arr { font-family: 'JetBrains Mono', monospace; font-size:var(--fs-md); font-weight: 700; line-height: 1; }
 .hero-delta-num { font-family: 'JetBrains Mono', monospace; font-size:var(--fs-lg); font-weight: 700; font-variant-numeric: tabular-nums; }
-.hero-delta-lbl { font-family: 'Space Grotesk', sans-serif; font-size:var(--fs-xs); font-weight: 500; color: rgba(255,255,255,0.5); letter-spacing: 0; text-transform: none; margin-left:4px; }
+.hero-delta-lbl { font-family: 'Space Grotesk', sans-serif; font-size:var(--fs-xs); font-weight: 500; color: rgba(255,255,255,0.62); letter-spacing: 0; text-transform: none; margin-left:4px; }
 .hero-delta.up { color: oklch(0.78 0.16 150); }
 .hero-delta.warn { color: oklch(0.84 0.16 85); }
 .hero-delta.down { color: oklch(0.72 0.18 25); }
@@ -1853,8 +1999,8 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 }
 .hero-spark-label {
   position: absolute; top: 12px; left: 0;
-  font-size:var(--fs-2xs); font-weight: 700; letter-spacing: 0.12em;
-  text-transform: uppercase; color: rgba(255,255,255,0.3);
+  font-size:var(--fs-xs); font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: rgba(255,255,255,0.62);
 }
 .hero-spark canvas { display: block; }
 
@@ -1927,10 +2073,18 @@ table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);f
 }
 .hero-stat-num .small { font-size:var(--fs-lg); color: rgba(255,255,255,0.4); font-weight: 500; letter-spacing: 0; }
 .hero-stat-lbl {
-  font-size:var(--fs-2xs); letter-spacing: 0.06em;
-  text-transform: uppercase; color: rgba(255,255,255,0.5);
+  font-size:var(--fs-xs); letter-spacing: 0.06em;
+  text-transform: uppercase; color: rgba(255,255,255,0.62);
   margin-top:6px; line-height: 1.4;
 }
+/* Rodapé do cartão do hero: é onde a CONFIGURAÇÃO mora, separada por um
+   traço dos números que ela ajusta. */
+.hero-rodape {
+  grid-column: 1 / -1; position: relative; z-index: 1;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  padding-top:14px; margin-top:6px;
+}
+.hero-rodape .hero-ritmo-ctrl { margin-top: 0; }
 .hero-ritmo-ctrl { display: flex; align-items: center; gap:6px; flex-wrap: wrap; margin-top:16px; }
 .hero-ritmo-lbl { font-size:var(--fs-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin-right:2px; }
 .hero-ritmo-btn { cursor: pointer; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: rgba(255,255,255,0.85); font-family: 'JetBrains Mono', monospace; font-size:var(--fs-xs); font-weight: 700; padding: 3px 9px; border-radius: 6px; transition: all .15s; }
@@ -2247,8 +2401,15 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .topbar > div:last-child { gap:4px; }
   .btn-presentation { padding: 6px 10px; font-size:var(--fs-xs); }
 }
-@media (max-width: 560px) {
+/* O subtítulo do topo diz ONDE o que se preenche vai gravar ("Registra
+   serviços executados · grava em RDO_Avanco"). Ele sumia já em 560px porque
+   quatro botões deixavam ~70px para o bloco do título; com "+ Novo Serviço"
+   fora da própria tela de lançamento sobram ~230px em 390px, e ele volta.
+   Abaixo de 380px a conta não fecha e ele cede de novo. */
+@media (max-width: 380px) {
   .topbar-sub { display: none; }
+}
+@media (max-width: 560px) {
   .topbar-title { font-size:var(--fs-md); font-weight: 700; }
   /* No mobile pequeno: só ícones nos botões do topo */
   #topbarActions .btn { padding: 7px 10px; font-size:var(--fs-sm); }
@@ -2351,7 +2512,8 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .hero-spark { height: 50px; padding-top:8px; }
   .hero-stats { gap:12px; padding-top:14px; margin-top:12px; }
   .hero-stat-num { font-size:var(--fs-2xl); }
-  .hero-stat-lbl { font-size:var(--fs-2xs); }
+  /* o rótulo do hero NÃO volta a 10px: é a legenda do número que
+     a fiscalização lê no projetor e o encarregado lê no sol */
   .hero-ia { padding: 10px 12px; font-size:var(--fs-sm); }
   .hero-ia-text { font-size:var(--fs-sm); }
   .narrative-text { font-size:var(--fs-md); }
@@ -2474,13 +2636,31 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 /* ===== Forms mobile (RDO, RDO Diário etc) ===== */
 @media (max-width: 768px) {
   .form-grid { grid-template-columns: 1fr; gap:12px; }
-  .field label { font-size:var(--fs-2xs); }
+  /* o rótulo NÃO encolhe no celular: é lá que se lê no sol e de luva */
   .field input, .field select, .field textarea {
     padding: 12px 14px;
     border-radius: 8px;
   }
   .btn-toggle-group { width: 100%; }
   .btn-toggle { flex: 1; text-align: center; padding: 12px 8px; font-size:var(--fs-md); }
+  /* SALVAR não pode morar no fim de ~2.100px de formulário. Mesmo padrão
+     de .eq-enviar: 58px é a barra de navegação de baixo, e a faixa encosta
+     nela para não sobrar uma fresta com meia linha do formulário atrás. */
+  .rdo-enviar{
+    position:sticky;bottom:calc(58px + var(--sab));z-index:4;
+    padding:12px 14px;margin-top:10px;background:var(--surface);
+  }
+  .rdo-enviar-acoes{width:100%}
+  .rdo-enviar-acoes .btn{flex:1;justify-content:center}
+  /* sem isto o campo que passa por trás da faixa sai cortado ao meio */
+  .rdo-enviar::before{
+    content:'';position:absolute;left:0;right:0;bottom:100%;height:24px;
+    background:linear-gradient(to top,var(--surface),transparent);pointer-events:none;
+  }
+  /* a nota explicativa cede: quem rola já sabe o que o botão faz */
+  .rdo-enviar-nota{display:none}
+  .rdo-rascunho-acoes{width:100%}
+  .rdo-rascunho-acoes .btn{flex:1;justify-content:center}
   /* Botões grandes turno */
   .btn-turno-grande { padding: 18px 12px; min-height: 110px; }
   .btn-turno-icon { font-size: 36px; }
@@ -2572,8 +2752,21 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 .eq-med-linha > .field{min-width:0}
 .eq-barra-item{padding:7px 0}
 .eq-vazio{font-size:var(--fs-md);color:var(--muted);text-align:center;padding:12px 0}
-.eq-assinatura{width:100%;height:160px;border:1px dashed var(--border-strong,var(--border));border-radius:var(--r-md,10px);
+/* O canvas vive no modal de tela cheia (eq-assinatura), onde arrastar o
+   dedo só pode significar assinar. Embutido no formulário, o
+   touch-action:none engolia a rolagem da página numa faixa de 160px. */
+.eq-assinatura{width:100%;height:200px;border:1px dashed var(--border-strong,var(--border));border-radius:var(--r-md,10px);
   background:var(--surface);touch-action:none;display:block}
+.eq-assin-acoes{display:flex;gap:8px;flex-wrap:wrap}
+.eq-assin-estado{font-size:var(--fs-md);color:var(--muted);padding:8px 0}
+.eq-assin-prev{
+  max-width:100%;height:auto;max-height:120px;display:block;
+  border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);
+}
+@media(max-width:768px){
+  /* no celular ele toma a altura que a caixa de tela cheia oferece */
+  .eq-assinatura{height:min(46vh,300px)}
+}
 /* Acima da barra de navegação do celular (999): a barra ficava POR CIMA do
    modal e comia o pé de Cadastros e do Painel. Abaixo do toast (1100) e das
    confirmações do app (9999), que precisam aparecer sobre ele. */
@@ -3098,6 +3291,7 @@ function trocarObra(id, opcoes) {
   STATE.cronograma = []; STATE.pacotes = []; STATE.coeficientes = [];
   STATE.rdoavanco = []; STATE.rdodiario = [];
   STATE.loaded = false;
+  STATE.cargaFalhou = false;
   STATE.filtros = { mes: '', frente: '' };
   STATE.dashData = null;
   // Equipamentos tem motor próprio (js/equip) e backend POR OBRA: o cache que
@@ -4514,6 +4708,9 @@ function navigate(page) {
   // a barra inferior do celular acompanha a mesma navegação
   const barra = document.querySelector('.bottom-nav-mobile');
   if (barra) barra.outerHTML = barraInferior();
+  // "Novo Serviço" some na própria tela de lançamento: os botões do topo
+  // dependem da página, não só de quem entrou.
+  if (typeof atualizarBotoesTopo === 'function') atualizarBotoesTopo();
   toggleSidebar(false);
   transitionTo(render);
 }
@@ -4620,13 +4817,105 @@ async function carregarUsuariosNomes(forcar) {
   } catch (e) {}
 }
 
+/* ------------------------------------------------------------------
+   QUEM ESTÁ ENTRANDO
+   ------------------------------------------------------------------
+   Com meia dúzia de nomes, o <select> cobra três toques (abrir a roleta,
+   rolar, confirmar) para dizer algo que quase nunca muda: quem você é.
+   Uma fileira de chips cobra um — e o app já guarda o último usuário em
+   `teotonio_user`, então na maioria das vezes cobra zero.
+   Acima de seis nomes a fileira vira parede e a roleta volta a ganhar.
+   ------------------------------------------------------------------ */
+const LOGIN_MAX_CHIPS = 6;
+
+function seletorUsuarioLogin() {
+  const ultimo = localStorage.getItem('teotonio_user') || '';
+  const pre = USUARIOS_UI.includes(ultimo) ? ultimo : '';
+  if (USUARIOS_UI.length <= LOGIN_MAX_CHIPS) {
+    return `<input type="hidden" id="loginUser" name="username" autocomplete="username" value="${escHtml(pre)}">
+      <div class="login-chips" id="loginChips" role="radiogroup" aria-label="Usuário / Apontador">
+        ${USUARIOS_UI.map(u => `<button type="button" class="chip ${u === pre ? 'on' : ''}"
+          role="radio" aria-checked="${u === pre}" data-user="${escHtml(u)}"
+          onclick="escolherUsuarioLogin(this)">${escHtml(u)}</button>`).join('')}
+      </div>`;
+  }
+  return `<select id="loginUserSelect" name="username" autocomplete="username">
+      <option value="">— selecione —</option>
+      ${USUARIOS_UI.map(u => `<option value="${escHtml(u)}" ${u === pre ? 'selected' : ''}>${escHtml(u)}</option>`).join('')}
+    </select>`;
+}
+
+window.escolherUsuarioLogin = function(btn) {
+  const campo = document.getElementById('loginUser');
+  if (!campo) return;
+  campo.value = btn.dataset.user || '';
+  const grupo = document.getElementById('loginChips');
+  if (grupo) grupo.querySelectorAll('.chip').forEach(c => {
+    const on = c === btn;
+    c.classList.toggle('on', on);
+    c.setAttribute('aria-checked', on ? 'true' : 'false');
+  });
+  limparErroLogin();
+  const s = document.getElementById('loginPass');
+  if (s) s.focus();
+};
+
+/* A lista de nomes chega do servidor depois que a tela já está pintada:
+   redesenha o seletor inteiro (chips ou roleta) preservando a escolha. */
 function atualizarSelectLogin() {
+  const wrap = document.getElementById('loginUserWrap');
+  if (wrap) {
+    const atual = (document.getElementById('loginUserSelect') || document.getElementById('loginUser') || {}).value || '';
+    wrap.innerHTML = seletorUsuarioLogin();
+    if (atual) {
+      const campo = document.getElementById('loginUser');
+      if (campo) {
+        campo.value = atual;
+        const c = wrap.querySelector(`.chip[data-user="${CSS.escape(atual)}"]`);
+        if (c) { c.classList.add('on'); c.setAttribute('aria-checked', 'true'); }
+      }
+      const sel = document.getElementById('loginUserSelect');
+      if (sel) sel.value = atual;
+    }
+    return;
+  }
   const sel = document.getElementById('loginUserSelect') || document.getElementById('loginUser');
-  if (!sel) return;
+  if (!sel || sel.tagName !== 'SELECT') return;
   const valAtual = sel.value;
   sel.innerHTML = `<option value="">— selecione —</option>` +
     USUARIOS_UI.map(u => `<option value="${escHtml(u)}" ${u === valAtual ? 'selected' : ''}>${escHtml(u)}</option>`).join('');
 }
+
+/* Senha errada só aparecia no toast, que passa em 6 s e some enquanto a
+   pessoa ainda olha para o campo. O CSS já tinha o que falta usar. */
+window.mostrarErroLogin = function(msg) {
+  const e = document.getElementById('loginErro');
+  const p = document.getElementById('loginPass');
+  if (e) { e.textContent = msg; e.style.display = ''; }
+  if (p) { p.classList.add('invalid'); p.focus(); p.select(); }
+};
+window.limparErroLogin = function() {
+  const e = document.getElementById('loginErro');
+  const p = document.getElementById('loginPass');
+  if (e) { e.textContent = ''; e.style.display = 'none'; }
+  if (p) p.classList.remove('invalid');
+};
+
+/* Digitar a senha às cegas, de luva e no sol, é onde o erro nasce — e o
+   servidor tranca a conta por 15 min depois de 5 erros. Ver o que se
+   digitou é o que evita a trava. */
+window.alternarVerSenha = function() {
+  const inp = document.getElementById('loginPass');
+  const btn = document.getElementById('loginPassOlho');
+  if (!inp || !btn) return;
+  const mostrando = inp.type === 'text';
+  inp.type = mostrando ? 'password' : 'text';
+  btn.setAttribute('aria-pressed', mostrando ? 'false' : 'true');
+  const rot = mostrando ? 'Mostrar a senha' : 'Ocultar a senha';
+  btn.setAttribute('aria-label', rot);
+  btn.title = rot;
+  inp.focus();
+};
 
 /* ============================================================
    PERFIS DE ACESSO — mesma régua do "Gestor — Controle de Obras",
@@ -4776,18 +5065,31 @@ function renderLogin() {
         </div>
       </div>
       <div class="card-body">
-        <div class="field" style="margin-bottom: 14px;">
-          <label>Usuário / Apontador</label>
-          <select id="loginUserSelect">
-            <option value="">— selecione —</option>
-            ${USUARIOS_UI.map(u => `<option value="${escHtml(u)}">${escHtml(u)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field" style="margin-bottom: 18px;">
-          <label>Senha</label>
-          <input type="password" id="loginPass" placeholder="••••••••" onkeyup="if(event.key==='Enter') fazerLogin()">
-        </div>
-        <button id="loginBtn" class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">${ic('entrar')} Entrar</button>
+        <!-- Formulário de verdade (com name e autocomplete) para o gerenciador
+             de senhas do aparelho se oferecer a guardar e a preencher: metade
+             do problema de digitar escondido some quando o telefone digita. -->
+        <form id="loginForm" onsubmit="return false">
+          <div class="field" style="margin-bottom: 14px;">
+            <label>Usuário / Apontador</label>
+            <div id="loginUserWrap">${seletorUsuarioLogin()}</div>
+          </div>
+          <div class="field" style="margin-bottom: 18px;">
+            <label for="loginPass">Senha</label>
+            <div class="campo-senha">
+              <input type="password" id="loginPass" name="password" autocomplete="current-password"
+                placeholder="••••••••" oninput="limparErroLogin()"
+                onkeyup="if(event.key==='Enter') fazerLogin()">
+              <button type="button" class="senha-olho" id="loginPassOlho" aria-pressed="false"
+                aria-label="Mostrar a senha" title="Mostrar a senha"
+                onclick="alternarVerSenha()">${ic('olho')}</button>
+            </div>
+            <div class="field-error" id="loginErro" style="display:none"></div>
+          </div>
+          <!-- A promessa de offline vive no painel da direita, que some abaixo
+               de 960 px — e quem entra pelo celular é justamente o apontador. -->
+          <div class="login-offline">${ic('antena')} O lançamento fica na fila do aparelho e sobe sozinho quando a internet volta.</div>
+          <button id="loginBtn" type="submit" class="btn btn-primary btn-lg" style="width: 100%; justify-content: center;" onclick="fazerLogin()">${ic('entrar')} Entrar</button>
+        </form>
         <div class="login-nota">${ic('info')} Sem entrar, o sistema segue aberto para consulta: painel, avanço, cronograma e histórico.</div>
       </div>
     </div>
@@ -4848,6 +5150,7 @@ window.fazerLogin = async function() {
   const u = sel ? sel.value : '';
   const p = document.getElementById('loginPass').value;
   if (!u) { toast('Selecione um usuário', 'error'); return; }
+  limparErroLogin();
   loginOcupado(true);
 
   // 1) Valida no servidor — a senha correta vive nas Propriedades do Apps Script.
@@ -4859,8 +5162,9 @@ window.fazerLogin = async function() {
       concluirLogin(u, r.perfil);
       return;
     }
-    if (r.error === 'CREDENCIAIS_INVALIDAS') { toast(erroLegivel(r.error), 'error'); return; }
-    if (r.error === 'MUITAS_TENTATIVAS') { toast(r.mensagem || erroLegivel(r.error), 'error', 0); return; }
+    // O erro fica NO CAMPO, não só no toast que passa em 6 s.
+    if (r.error === 'CREDENCIAIS_INVALIDAS') { mostrarErroLogin(erroLegivel(r.error)); toast(erroLegivel(r.error), 'error'); return; }
+    if (r.error === 'MUITAS_TENTATIVAS') { const m = r.mensagem || erroLegivel(r.error); mostrarErroLogin(m); toast(m, 'error', 0); return; }
     if (r.error === 'LOGIN_NAO_CONFIGURADO') { toast('Login não configurado no servidor: defina a propriedade USUARIOS no Apps Script.', 'error', 0); return; }
     // Backend antigo (sem action=login): sem senha local — oriente a republicar.
     toast('Backend desatualizado — republique o Code.gs (com action=login) no Apps Script.', 'error', 0);
@@ -4946,13 +5250,25 @@ window.atualizarBotoesTopo = function() {
   const acesso = STATE.usuarioLogado
     ? `<button class="btn btn-ghost btn-sm" onclick="fazerLogout()" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">${ic('sair')} <span class="topbar-acesso-txt">Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</span></button>`
     : `<button class="btn btn-outline btn-sm" onclick="irParaLogin()" title="Entrar para lançar serviços e RDOs">${ic('entrar')} <span class="topbar-acesso-txt">Entrar</span></button>`;
-  const novo = pode('lancarServico')
+  /* "Novo Serviço" não aparece na PRÓPRIA tela de lançamento: ali ele é um
+     botão que não leva a lugar nenhum, e o preço é caro — em 390 px os quatro
+     botões deixavam ~70 px para o bloco do título, e é o subtítulo que diz
+     onde o lançamento grava. Um botão a menos devolve a linha ao título. */
+  const novo = (pode('lancarServico') && STATE.currentPage !== 'rdo')
     ? `<button class="btn btn-primary btn-sm" onclick="navigate('rdo')">${ic('mais')} Novo Serviço</button>`
     : '';
   tb.innerHTML = acesso +
     '<button class="btn btn-outline btn-sm btn-icone" onclick="buscaAbrir()" title="Buscar estaca, pacote, lançamento ou RDO (Ctrl+K)" aria-label="Buscar">' + ic('lupa') + '</button>' +
-    '<button class="btn btn-outline btn-sm btn-icone" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">' + ic('atualizar') + '</button>' +
+    // Único lugar de atualizar no app (o rodapé do menu lateral tinha o
+    // segundo). É também o portador do estado de erro — ver setSyncStatus.
+    '<button id="btnAtualizarTopo" class="btn btn-outline btn-sm btn-icone" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">' + ic('atualizar') + '</button>' +
     novo;
+  // O botão nasce a cada render; o estado de erro tem de ser reaplicado.
+  const bt = document.getElementById('btnAtualizarTopo');
+  if (bt && STATE.cargaFalhou) {
+    bt.classList.add('erro');
+    bt.title = 'Falha ao carregar os dados da obra — toque para tentar de novo';
+  }
 };
 
 // ====================================================================
@@ -5930,6 +6246,7 @@ async function carregarTudo(opts = {}) {
     STATE.rdodiario = soDaObraAtiva(d || []);
     atualizarPrazoDoCronograma(); // baseline acompanha o Project publicado na aba
     STATE.loaded = true;
+    STATE.cargaFalhou = false;
     STATE.lastSync = new Date();
     const hm = STATE.lastSync.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
     setSyncStatus('ok', `Sincronizado às ${hm} · ${STATE.pacotes.length} pacotes, ${STATE.rdoavanco.length} serviços`);
@@ -5960,8 +6277,15 @@ async function carregarTudo(opts = {}) {
     // Mantém STATE.loaded como está: se já houve uma carga boa, os dados velhos
     // continuam navegáveis (antes, uma falha de fundo deixava toda navegação em
     // branco até a próxima sincronização bem-sucedida).
+    STATE.cargaFalhou = true;
     setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar novamente</span>');
-    if (!fundo) toast('Sem conexão com Google Sheets. Verifique sua internet.', 'error', 6000);
+    // Sem nenhuma carga boa antes, a tela é a mensagem: `render()` pinta a
+    // falha em vez de sair sem desenhar nada.
+    render();
+    // Com dado velho na tela o toast passa em 6 s e não atrapalha. Sem dado
+    // nenhum ele é a rede de segurança da mensagem — fica até ser fechado.
+    if (!STATE.loaded) toast('Sem conexão com Google Sheets. O lançamento continua funcionando: entra na fila do aparelho.', 'error', 0);
+    else if (!fundo) toast('Sem conexão com Google Sheets. Verifique sua internet.', 'error', 6000);
   }
 }
 
@@ -5971,6 +6295,56 @@ function setSyncStatus(state, text) {
   if (!dot || !txt) return;
   dot.className = 'sync-dot ' + state;
   txt.innerHTML = text;
+  // O indicador permanente mora no rodapé da barra lateral, que no celular
+  // está fechada — quem trabalha no aparelho nunca via que a carga falhou.
+  // O botão de atualizar do topo, esse está sempre à vista: ele vira o aviso.
+  const bt = document.getElementById('btnAtualizarTopo');
+  if (bt) {
+    bt.classList.toggle('erro', state === 'error');
+    bt.title = state === 'error'
+      ? 'Falha ao carregar os dados da obra — toque para tentar de novo'
+      : 'Atualizar dados';
+  }
+}
+
+/* ------------------------------------------------------------------
+   QUANDO A PRIMEIRA CARGA FALHA
+   ------------------------------------------------------------------
+   `render()` saía sem pintar nada enquanto `STATE.loaded` fosse falso.
+   Sem uma carga boa antes — que é o caso de quem abre o app pela
+   primeira vez sem sinal — sobrava o cabeçalho e o vazio. O app inteiro
+   é construído em cima de "funciona sem sinal", e este é justamente o
+   momento em que ele parece quebrado.
+   ------------------------------------------------------------------ */
+function telaFalhaCarga() {
+  return `
+    <div class="empty">
+      <div class="empty-icon" style="color:var(--red)">${ic('antena')}</div>
+      <div class="empty-title">Não foi possível carregar os dados da obra</div>
+      <div class="empty-sub">
+        O aparelho não conseguiu falar com a planilha publicada. Pode ser a
+        internet do canteiro, ou a planilha fora do ar por alguns minutos.
+      </div>
+      <div class="empty-sub" style="margin-top:14px;color:var(--text)">
+        <b>Lançar serviço e RDO continua funcionando:</b> o que você gravar
+        entra na fila do aparelho e sobe sozinho quando a internet voltar.
+      </div>
+      <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="carregarTudo()">${ic('atualizar')} Tentar novamente</button>
+        <button class="btn btn-outline" onclick="navigate('rdo')">${ic('lancar')} Lançar assim mesmo</button>
+      </div>
+    </div>`;
+}
+
+/* Enquanto a primeira carga está em voo não é falha — é espera. Dizer isso
+   custa uma linha e evita o mesmo vazio da tela quebrada. */
+function telaCarregando() {
+  return `
+    <div class="empty">
+      <div class="empty-icon">${ic('ampulheta')}</div>
+      <div class="empty-title">Carregando os dados da obra…</div>
+      <div class="empty-sub">Buscando pacotes, lançamentos e cronograma na planilha publicada.</div>
+    </div>`;
 }
 
 // ====================================================================
@@ -6231,18 +6605,34 @@ function consumoComSaldo(mes) {
 /* Um grupo do menu lateral. Item que o perfil não enxerga não é renderizado —
    e grupo que ficou sem nenhum item some junto com o seu divisor, para não
    deixar título órfão na barra. */
-function grupoNav(titulo, itens) {
-  const vis = itens.filter(it => podeVer(it.id));
-  if (!vis.length) return '';
-  const divisor = titulo === 'Análise' ? '' : '<hr class="nav-divider">';
-  return `${divisor}
-        <div class="nav-group">
-          <div class="nav-label">${titulo}</div>
-          ${vis.map(it => `<div class="nav-item ${STATE.currentPage === it.id ? 'active' : ''}" data-page="${it.id}" onclick="navigate('${it.id}')">
+function itemNav(it) {
+  return `<div class="nav-item ${STATE.currentPage === it.id ? 'active' : ''}" data-page="${it.id}" onclick="navigate('${it.id}')">
             <span class="nav-icon">${ic(it.icone)}</span>
             <span>${it.texto}</span>
             ${it.contador ? `<span class="nav-counter" id="${it.contador}">0</span>` : ''}
-          </div>`).join('')}
+          </div>`;
+}
+
+/* Quinze telas em fila, todas com o mesmo peso, é uma lista para procurar,
+   não um menu para navegar. `dobravel` recolhe as telas de CONFERÊNCIA — as
+   que se abrem quando um número não bate, não todo dia. Fechadas por
+   padrão; abrir uma delas mantém o grupo aberto. */
+function grupoNav(titulo, itens, dobravel) {
+  const vis = itens.filter(it => podeVer(it.id));
+  if (!vis.length) return '';
+  const divisor = titulo === 'Análise' ? '' : '<hr class="nav-divider">';
+  if (dobravel) {
+    const aberto = vis.some(it => it.id === STATE.currentPage);
+    return `${divisor}
+        <details class="nav-group nav-group-dobra"${aberto ? ' open' : ''}>
+          <summary class="nav-label">${titulo}<span class="nav-chevron">${ic('chevronBaixo')}</span></summary>
+          ${vis.map(itemNav).join('')}
+        </details>`;
+  }
+  return `${divisor}
+        <div class="nav-group">
+          <div class="nav-label">${titulo}</div>
+          ${vis.map(itemNav).join('')}
         </div>`;
 }
 
@@ -6562,10 +6952,16 @@ function renderShell() {
           { id: 'avancofisico', icone: 'avanco',     texto: 'Avanço Físico' },
           { id: 'cronograma',   icone: 'cronograma', texto: 'Cronograma' },
           { id: 'medicao',      icone: 'medicao',    texto: 'Apoio Medição' },
-          { id: 'improdutivos', icone: 'nuvem',      texto: 'Dias Improdutivos' },
-          { id: 'teoricoreal',  icone: 'balanca',    texto: 'Teórico × Real' },
           { id: 'analista',     icone: 'ia',         texto: 'Analista IA' },
         ])}
+
+        <!-- CONFERÊNCIA: as telas que se abrem quando um número não bate, e
+             não todo dia. Dobradas, devolvem duas linhas de altura à gaveta
+             do celular — onde metade do menu já ficava fora da tela. -->
+        ${grupoNav('Conferência', [
+          { id: 'improdutivos', icone: 'nuvem',      texto: 'Dias Improdutivos' },
+          { id: 'teoricoreal',  icone: 'balanca',    texto: 'Teórico × Real' },
+        ], true)}
 
         ${grupoNav('Operação', [
           { id: 'rdo',       icone: 'lancar',       texto: 'Lançar Serviço', contador: 'rdoCount' },
@@ -6592,7 +6988,10 @@ function renderShell() {
             <div class="sync-dot loading" id="syncDot"></div>
             <div class="sync-text" id="syncText">Carregando…</div>
           </div>
-          <button class="btn-refresh" onclick="carregarTudo()">${ic('atualizar')} ATUALIZAR</button>
+          <!-- Atualizar mora SÓ no topo (btnAtualizarTopo): dois caminhos para
+               a mesma ação obrigam a escolher, e o de cá é o que o celular não
+               mostra — a gaveta está fechada. Quando a carga falha, a própria
+               linha de status acima traz o "Tentar novamente". -->
           ${podeVer('executivo') ? `<button class="btn-refresh btn-apresentar" onclick="abrirApresentacao()"
             title="Mostrar a obra em tela cheia (ESC sai)">${ic('apresentar')} APRESENTAR</button>` : ''}
           ${seletorTema()}
@@ -6751,7 +7150,14 @@ window.irParaLogin = function() {
   toggleSidebar(false);
   if (STATE.currentPage === 'rdo') transitionTo(render);
   else navigate('rdo');
-  setTimeout(() => { const s = document.getElementById('loginUserSelect') || document.getElementById('loginUser'); if (s) s.focus(); }, 300);
+  // Com o usuário já escolhido (chips pré-selecionam o último), o campo que
+  // falta é a senha; sem escolha, a roleta.
+  setTimeout(() => {
+    const campo = document.getElementById('loginUserSelect') || document.getElementById('loginUser');
+    if (campo && !campo.value && campo.tagName === 'SELECT') { campo.focus(); return; }
+    const senha = document.getElementById('loginPass');
+    if (senha) senha.focus();
+  }, 300);
 };
 
 function toggleSidebar(open) {
@@ -6764,7 +7170,14 @@ function toggleSidebar(open) {
 }
 
 function render() {
-  if (!STATE.loaded) return;
+  // Sem dados ainda: a página DIZ o que está acontecendo. Sair daqui sem
+  // pintar deixava o app com o cabeçalho e o corpo em branco — a falha de
+  // carga era indistinguível de um app quebrado (ver telaFalhaCarga).
+  if (!STATE.loaded) {
+    const pg = document.getElementById('page');
+    if (pg) pg.innerHTML = STATE.cargaFalhou ? telaFalhaCarga() : telaCarregando();
+    return;
+  }
 
   // Saindo da tela de Projetos, o visor da prancha tem de ser desmontado: ele
   // deixa ouvintes no `window` (girar o aparelho remede a caixa) que a troca
@@ -6988,18 +7401,28 @@ function renderProjetos() {
             <div class="card-title-sub">${[sel.ref, sel.cod, sel.escala ? 'Escala ' + sel.escala : '']
               .filter(Boolean).map(escHtml).join(' · ')}</div>
           </div>
+          <!-- Nove controles do mesmo tamanho na mesma fileira eram quatro
+               famílias com a mesma aparência — e a única em azul era a que
+               TIRA o desenho do sistema (Baixar). Vão para três blocos
+               separados por um traço: zoom · vista · arquivo. -->
           <div class="proj-acoes">
-            <button type="button" class="btn btn-sm" onclick="prachaZoom(-1)" title="Reduzir" aria-label="Reduzir">${ic('menos')}</button>
-            <span class="proj-zoom" id="projZoom">100%</span>
-            <button type="button" class="btn btn-sm" onclick="prachaZoom(1)" title="Ampliar" aria-label="Ampliar">${ic('mais')}</button>
-            <button type="button" class="btn btn-sm" onclick="prachaAjustar()" title="Enquadrar a folha inteira">Ajustar</button>
+            <div class="proj-grupo-acao">
+              <button type="button" class="btn btn-sm" onclick="prachaZoom(-1)" title="Reduzir" aria-label="Reduzir">${ic('menos')}</button>
+              <span class="proj-zoom" id="projZoom">100%</span>
+              <button type="button" class="btn btn-sm" onclick="prachaZoom(1)" title="Ampliar" aria-label="Ampliar">${ic('mais')}</button>
+              <button type="button" class="btn btn-sm" onclick="prachaAjustar()" title="Enquadrar a folha inteira">Ajustar</button>
+            </div>
             ${emQuadrados ? `
-            <button type="button" class="btn btn-sm" onclick="prachaGirar()" title="Girar 90°">Girar</button>
-            <button type="button" class="btn btn-sm" id="projBtnCheia" onclick="prachaTelaCheia()">Tela cheia</button>
-            <button type="button" class="btn btn-sm" id="projBtnGuardar" onclick="prachaGuardar()"
+            <div class="proj-grupo-acao">
+              <button type="button" class="btn btn-sm" onclick="prachaGirar()" title="Girar 90°">Girar</button>
+              <button type="button" class="btn btn-sm" id="projBtnCheia" onclick="prachaTelaCheia()">Tela cheia</button>
+            </div>` : ''}
+            <div class="proj-grupo-acao">
+              ${emQuadrados ? `<button type="button" class="btn btn-sm" id="projBtnGuardar" onclick="prachaGuardar()"
                     title="Baixar a prancha inteira para abrir sem sinal">${ic('nuvem')} Offline</button>` : ''}
-            <a class="btn btn-sm" href="${escHtml(sel.arquivo)}" target="_blank" rel="noopener">${ic('enviar')} Abrir</a>
-            <a class="btn btn-sm btn-primary" href="${escHtml(sel.arquivo)}" download>${ic('baixar')} Baixar</a>
+              <a class="btn btn-sm" href="${escHtml(sel.arquivo)}" target="_blank" rel="noopener">${ic('enviar')} Abrir</a>
+              <a class="btn btn-sm" href="${escHtml(sel.arquivo)}" download>${ic('baixar')} Baixar</a>
+            </div>
           </div>
         </div>
         <div id="projVisor" class="${emQuadrados ? 'proj-mapa' : 'proj-canvas'}">
@@ -7050,7 +7473,7 @@ const VISOR = {
   el: null, folha: null, man: null, base: '', niveis: [],
   s: 1, tx: 0, ty: 0, rot: 0, fit: 1, min: 1, max: 8,
   cx: 0, cy: 0, rect: null, giroManual: false,
-  raf: 0, animId: 0, inerciaId: 0, ouvintes: [], gesto: 0, tNivel: 0, elZoom: null,
+  raf: 0, animId: 0, inerciaId: 0, ouvintes: [], gesto: 0, tNivel: 0, elZoom: null, nivelAtual: 0,
 };
 
 /* base64 -> bytes. O manifesto guarda "quais quadrados existem" como bitmap:
@@ -7128,7 +7551,7 @@ function visorFechar() {
   const cartao = document.querySelector('.proj-visor.cheia');
   if (cartao) cartao.classList.remove('cheia');
   document.body.classList.remove('proj-cheia-ativa');
-  V.el = null; V.folha = null; V.man = null; V.niveis = [];
+  V.el = null; V.folha = null; V.man = null; V.niveis = []; V.nivelAtual = 0;
 }
 
 function _visorEscutar(alvo, tipo, fn, op) {
@@ -7194,6 +7617,20 @@ function visorLimitar() {
   V.ty = at <= V.cy ? (V.cy - at) / 2 - y0 : Math.min(-y0, Math.max(V.cy - y1, V.ty));
 }
 
+/* O percentual sozinho não dizia quanto AINDA CABE de zoom: a pirâmide vai
+   até 12 px por ponto do PDF, e quem não leu o README parava no primeiro
+   borrão achando que tinha chegado ao fim da nitidez. O nível diz em que
+   degrau da escada o desenho está — e quantos degraus ela tem. */
+function visorRotularZoom() {
+  const V = VISOR;
+  if (!V.elZoom || !V.fit) return;
+  const pct = Math.round(V.s / V.fit * 100) + '%';
+  const rot = V.niveis.length > 1
+    ? pct + ' <span class="proj-nivel">· nível ' + (V.nivelAtual + 1) + ' de ' + V.niveis.length + '</span>'
+    : pct;
+  if (V.elZoom.innerHTML !== rot) V.elZoom.innerHTML = rot;
+}
+
 function visorAplicar() {
   const V = VISOR;
   if (!V.folha) return;
@@ -7203,8 +7640,7 @@ function visorAplicar() {
   // Isto roda a cada quadro de um arrasto. Nada de `getElementById` nem de
   // objeto novo aqui dentro: é o caminho quente, e o que o app economiza aqui
   // é o que sobra para o navegador compor os 60 quadros por segundo.
-  const pct = Math.round(V.s / V.fit * 100) + '%';
-  if (V.elZoom && V.elZoom.textContent !== pct) V.elZoom.textContent = pct;
+  visorRotularZoom();
   const mem = PROJ.mem;
   mem.base = V.base; mem.s = V.s; mem.tx = V.tx; mem.ty = V.ty;
   mem.rot = V.rot; mem.giroManual = V.giroManual;
@@ -7247,6 +7683,8 @@ function visorQuadrados() {
   let n = Math.ceil(Math.log(alvo / V.niveis[0].res) / Math.LN2 - 0.15);
   n = Math.max(0, Math.min(V.niveis.length - 1, n));
   const fundo = Math.min(2, V.niveis.length - 1);
+  // o rótulo do zoom mostra em que degrau da pirâmide o desenho está
+  if (V.nivelAtual !== n) { V.nivelAtual = n; visorRotularZoom(); }
 
   // Durante um gesto, um nível NOVO só entra a cada 350 ms. Uma pinça rápida
   // atravessa três níveis em meio segundo; sem isto, cada um deles baixaria
@@ -9288,7 +9726,12 @@ function renderExecutivo() {
       <button type="button" class="btn btn-primary btn-sm filtro-pdf" style="margin-left:auto" onclick="exportarRelatorioExecutivoPDF()" title="Exportar Relatório Executivo da Obra em PDF">${ic('baixar')} <span class="filtro-pdf-txt">Exportar PDF</span></button>
     </div>
 
-    ${renderCentralCampo()}
+    <!-- A Central de Campo vinha ANTES do número da obra. Quem abre esta tela
+         é escritório e diretoria: em 1366×768 o avanço ponderado nascia
+         cortado, atrás de uma lista de atalhos de canteiro. Quem vem para o
+         canteiro (perfil que lança RDO e não vê o executivo) recebe a Central
+         primeiro — para esse, ela É a tela. -->
+    ${(podeVer('rdo') && !podeVer('executivo')) ? renderCentralCampo() : ''}
 
     <!-- Pacote sem produtividade pesa ZERO e some do avanço. Enquanto isso não
          aparecia na tela, o apontador lançava e o número da diretoria não se
@@ -9357,11 +9800,6 @@ function renderExecutivo() {
           <button class="hero-ia-refresh" onclick="abrirConfigIA()" title="Configurar chave da IA" aria-label="Configurar chave da IA" style="margin-right:4px;">${ic('engrenagem')}</button>
           <button class="hero-ia-refresh" onclick="refreshIA()" title="Gerar nova recomendação" aria-label="Gerar nova recomendação">${ic('atualizar')}</button>
         </div>
-        <div class="hero-ritmo-ctrl">
-          <span class="hero-ritmo-lbl">Base do ritmo</span>
-          ${[7,14,30].map(n => `<button type="button" class="hero-ritmo-btn${STATE.execRitmo.janela===n?' on':''}" onclick="setExecRitmoJanela(${n})">${n}d</button>`).join('')}
-          <button type="button" class="hero-ritmo-btn${STATE.execRitmo.diasUteis?' on':''}" onclick="toggleExecDiasUteis()" title="Considerar apenas dias úteis (exclui domingos)">${ic(STATE.execRitmo.diasUteis?'caixaMarcada':'caixaVazia')} dias úteis</button>
-        </div>
         <div class="hero-stats">
           <div>
             <div class="hero-stat-num">${(metrics.velocity*100).toFixed(2).replace('.', ',')}<span class="small"> p.p./dia${metrics.diasUteis?' útil':''}</span></div>
@@ -9374,7 +9812,19 @@ function renderExecutivo() {
           </div>
         </div>
       </div>
+      <!-- "Base do ritmo" é AJUSTE, não indicador: ficava entre a
+           recomendação e os números do ritmo, com o mesmo peso visual deles.
+           Desce para o rodapé do cartão, onde configuração mora. -->
+      <div class="hero-rodape">
+        <div class="hero-ritmo-ctrl">
+          <span class="hero-ritmo-lbl">Base do ritmo</span>
+          ${[7,14,30].map(n => `<button type="button" class="hero-ritmo-btn${STATE.execRitmo.janela===n?' on':''}" onclick="setExecRitmoJanela(${n})">${n}d</button>`).join('')}
+          <button type="button" class="hero-ritmo-btn${STATE.execRitmo.diasUteis?' on':''}" onclick="toggleExecDiasUteis()" title="Considerar apenas dias úteis (exclui domingos)">${ic(STATE.execRitmo.diasUteis?'caixaMarcada':'caixaVazia')} dias úteis</button>
+        </div>
+      </div>
     </div>
+
+    ${(podeVer('rdo') && !podeVer('executivo')) ? '' : renderCentralCampo()}
 
     <!-- ============ KPIs SECUNDÁRIOS ============ -->
     <div class="exec-kpi-grid">
@@ -9389,9 +9839,12 @@ function renderExecutivo() {
         <div class="exec-kpi-sub"><strong>${metrics.rdos7d}</strong> nos últimos 7 dias · <strong>${metrics.rdos30d}</strong> em 30 dias</div>
       </div>
       <div class="exec-kpi stagger-item" style="animation-delay:.16s">
-        <div class="exec-kpi-lbl">Frentes em risco ${frentesParadas > 0 ? '<span class="badge-mini">'+frentesParadas+'</span>' : ''}</div>
+        <!-- "Frentes em risco: 2" era lido em voz alta na reunião sem o
+             critério junto, e "risco" cada um entende de um jeito. O rótulo
+             passa a SER o critério; a linha de apoio fica para o detalhe. -->
+        <div class="exec-kpi-lbl">Frentes sem lançamento há 7+ dias ${frentesParadas > 0 ? '<span class="badge-mini">'+frentesParadas+'</span>' : ''}</div>
         <div class="exec-kpi-val">${frentesParadas}<span class="unit">de ${totalFrentesNoFiltro}</span></div>
-        <div class="exec-kpi-sub">${frentesParadas === 0 ? 'Todas as frentes com lançamentos recentes' : 'Sem RDOs há mais de 7 dias'}</div>
+        <div class="exec-kpi-sub">${frentesParadas === 0 ? 'Todas as frentes lançaram nos últimos 7 dias' : 'Contadas as frentes do filtro atual, pela data do último RDO'}</div>
       </div>
       <div class="exec-kpi stagger-item" style="animation-delay:.20s">
         <div class="exec-kpi-lbl">Último lançamento</div>
@@ -10428,6 +10881,31 @@ function pvMetrosPorEstaca() {
 /* Estado da tela: a estaca aberta no painel de detalhe. */
 const PV = { sel: null };
 
+/* Largura mínima da célula de estaca, em px. Abaixo disso o toque erra. */
+const PV_CEL_MIN = 14;
+
+/* Ir direto à estaca pelo número: no celular, achar a E118 numa faixa de
+   43 células rolando de lado é mais trabalho do que digitar 118. Abre o
+   MESMO detalhe do clique na célula. */
+window.pvIrParaEstaca = function(eixoId) {
+  const inp = document.getElementById('pvIrNum');
+  if (!inp) return;
+  const bruto = String(inp.value || '').replace(/[^\d]/g, '');
+  const erro = document.getElementById('pvIrErro');
+  const dizer = m => { if (erro) { erro.textContent = m; erro.style.display = m ? '' : 'none'; } };
+  if (!bruto) { dizer('Digite o número da estaca.'); return; }
+  const n = parseInt(bruto, 10);
+  const sel = document.getElementById('pvIrEixo');
+  const id = (sel && sel.value) || eixoId;
+  const eixo = eixoPorId(id);
+  if (eixo && (n < eixo.ini || n > eixo.fim)) {
+    dizer('A ' + eixo.label + ' vai da E' + eixo.ini + ' à E' + eixo.fim + '.');
+    return;
+  }
+  dizer('');
+  pvSelecionar(id, n);
+};
+
 window.pvSelecionar = function (eixo, num) {
   var igual = PV.sel && PV.sel.eixo === eixo && PV.sel.num === num;
   PV.sel = igual ? null : { eixo: eixo, num: num };   // clicar de novo fecha
@@ -10536,7 +11014,13 @@ function renderPlantaAvanco() {
       '<div class="pv-titulo">' + escHtml(x.label) + ' · E' + x.ini + '–E' + x.fim +
         '<span class="pv-metros"> — ' + fmtNum((n - 1) * passo, 0) + ' m · ' +
         tocadas + ' de ' + n + ' estacas com produção</span></div>' +
-      '<div class="pv-scroll"><div class="pv-grade">' +
+      /* PV_CEL_MIN por estaca é o piso do alvo de toque: em 390 px, 43
+         estacas davam ~7 px de largura de célula, e a célula é o ÚNICO
+         caminho para ver os lançamentos da estaca. A grade ganha a largura
+         mínima do eixo mais longo e rola dentro do .pv-scroll; como todas
+         as faixas continuam medidas em % da mesma grade, a proporção real
+         entre os trechos não muda. */
+      '<div class="pv-scroll"><div class="pv-grade" style="min-width:calc(142px + ' + (maxCasas * PV_CEL_MIN) + 'px)">' +
         '<div class="pv-rotulo via">Via</div>' +
         '<div class="pv-fx via" style="width:' + larg + ';' + colunas + '">' + celulasVia +
           '<div class="pv-eixo-via"></div></div>' +
@@ -10583,7 +11067,23 @@ function renderPlantaAvanco() {
       '<div class="empty-sub">A planta se pinta a partir da estaca preenchida em cada lançamento. ' +
       'Lance serviços com o campo de estaca para ver a via se construir aqui.</div></div>';
   } else {
-    corpo = eixos.map(blocoEixo).join('') +
+    // Caminho por NÚMERO, ao lado do caminho por toque: no celular, achar a
+    // E118 rolando uma faixa de 43 células é mais trabalho do que digitar.
+    var irPara =
+      '<div class="pv-ir">' +
+        '<label for="pvIrNum">Ir para a estaca</label>' +
+        (eixos.length > 1
+          ? '<select id="pvIrEixo" aria-label="Eixo">' +
+              eixos.map(function (x) { return '<option value="' + escHtml(x.id) + '">' + escHtml(x.label) + '</option>'; }).join('') +
+            '</select>'
+          : '') +
+        '<input id="pvIrNum" type="text" inputmode="numeric" placeholder="' + eixos[0].ini + '–' + eixos[0].fim + '" ' +
+          'onkeyup="if(event.key===\'Enter\') pvIrParaEstaca(\'' + escHtml(eixos[0].id) + '\')">' +
+        '<button type="button" class="btn btn-outline btn-sm" onclick="pvIrParaEstaca(\'' + escHtml(eixos[0].id) + '\')">' +
+          ic('lupa') + ' Ver</button>' +
+        '<div class="field-error" id="pvIrErro" style="display:none;flex-basis:100%"></div>' +
+      '</div>';
+    corpo = irPara + eixos.map(blocoEixo).join('') +
       '<div class="pv-legenda">' + ic('info') +
         '<span>O desenho está na escala do projeto: 1 célula = 1 estaca = ' + passo + ' m, ' +
         'e os trechos são proporcionais entre si. A faixa <b>Via</b> escurece onde mais se trabalhou; ' +
@@ -10605,6 +11105,19 @@ function renderPlantaAvanco() {
 // ====================================================================
 // VIEW: AVANÇO FÍSICO
 // ====================================================================
+/* O avanço da frente na MESMA régua do Painel: dias-equivalentes, não média
+   de percentuais. Somar os pct dos pacotes daria o mesmo peso a um serviço
+   de 3 dias e a um de 300. */
+function pctPondDaFrente(lista) {
+  let estim = 0, exec = 0;
+  lista.forEach(a => {
+    const dias = diasEquivalentes(a.qtdEstimada, getCSVField(a.pacote, 'ID'));
+    estim += dias;
+    exec += a.pct * dias;
+  });
+  return estim > 0 ? exec / estim : 0;
+}
+
 function renderAvancoFisico() {
   const av = calcularAvancoPorPacote();
   const pacotes = Object.values(av).filter(a => a.pacote);
@@ -10629,6 +11142,11 @@ function renderAvancoFisico() {
       </div>
       <div class="card-body">
         ${renderHeatmap(av)}
+        <div class="pv-legenda" style="margin-top:12px">${ic('info')}
+          <span>A intensidade é <b>relativa a cada pacote</b>, não ao mapa inteiro: o tom mais
+          escuro de uma linha é o maior valor <b>daquela</b> linha — a faixa vem escrita ao lado
+          do nome. Linhas de pacotes diferentes medem unidades diferentes (m², m³, ML) e por isso
+          <b>não se comparam entre si</b>.</span></div>
       </div>
     </div>
 
@@ -10653,7 +11171,13 @@ function renderAvancoFisico() {
           </thead>
           <tbody>
             ${Object.entries(porFrente).map(([f, lista]) => `
-              <tr class="summary"><td colspan="7">${escHtml(f)} — ${lista.length} pacote${lista.length>1?'s':''}</td></tr>
+              <!-- A linha da frente contava PACOTES ("Drenagem — 8 pacotes"),
+                   que não diz nada sobre o andamento: oito pacotes podem ser
+                   5% ou 95% da frente. Entra o avanço ponderado, a mesma
+                   régua de dias-equivalentes do Painel. -->
+              <tr class="summary"><td colspan="7">${escHtml(f)} — ${lista.length} pacote${lista.length>1?'s':''}
+                <span class="summary-pct">${fmtPct(pctPondDaFrente(lista))} da frente</span>
+                <span class="summary-nota">avanço ponderado, em dias-equivalentes</span></td></tr>
               ${lista.map(a => `
                 <tr>
                   <td><strong>${escHtml(getCSVField(a.pacote, 'Pacote')||'')}</strong></td>
@@ -10841,8 +11365,13 @@ function renderHeatmap(av) {
           ${lista.map(e => `<div class="hm-col-label">${escHtml(e.rot)}</div>`).join('')}
           ${doEixo.map(a => {
             const max = maxPorPac[getCSVField(a.pacote, 'ID')] || 1;
+            /* CADA LINHA TEM ESCALA PRÓPRIA (maxPorPac). Sem dizer isso, o
+               mapa convida a comparar uma linha com a outra — e o mesmo tom
+               de laranja pode ser 12 m² numa e 240 m³ na de baixo. A faixa
+               ao lado do nome é o que torna a leitura possível. */
+            const un = getCSVField(a.pacote, 'Unidade Física') || '';
             return `
-              <div class="hm-row-label">${escHtml(getCSVField(a.pacote, 'Pacote'))}</div>
+              <div class="hm-row-label" title="Nesta linha, o tom mais escuro vale ${fmtNum(max, 1)} ${escHtml(un)} numa estaca">${escHtml(getCSVField(a.pacote, 'Pacote'))}<small>0–${fmtNum(max, 0)} ${escHtml(un)}</small></div>
               ${lista.map(e => {
                 const v = a.porEstaca[e.id] || 0;
                 const intensity = max > 0 ? Math.min(v / max, 1) : 0;
@@ -12268,6 +12797,9 @@ window.limparHistDiarioFiltro = function() {
 
 function renderHistoricoServicos() {
   const rdos = [...STATE.rdoavanco].reverse();
+  // Quantas linhas a manutenção apagaria — o número entra no rótulo do
+  // botão, para ninguém descobrir o tamanho do estrago só no confirm().
+  const dupsAgora = ehAdmin() ? contarDuplicatasRDO() : 0;
 
   // Opções dos filtros derivadas dos próprios dados.
   const mesesSet = new Set(), apontSet = new Set();
@@ -12328,6 +12860,14 @@ function renderHistoricoServicos() {
 
   const filtroBar = rdos.length === 0 ? '' : `
     <div class="filter-bar" style="margin:0 0 12px">
+      <!-- A BUSCA VEM PRIMEIRO. Quem procura um lançamento procura pela
+           estaca ("E118"), pelo pacote ou por um trecho da observação — quase
+           nunca pela data; o próprio comentário do filtro logo acima diz
+           isso. Ela estava em último, depois de três roletas e de um campo
+           de data. -->
+      <input type="search" id="histBusca" value="${escHtml(HIST_FILTRO.busca)}" oninput="setHistBusca(this.value)"
+             placeholder="Buscar estaca, pacote, observação…" autocomplete="off"
+             style="padding:6px 9px;font-size:var(--fs-md);border:1px solid var(--border-strong);border-radius:6px;min-width:240px;flex:2">
       <span style="font-size:var(--fs-sm);font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Filtros:</span>
       <select onchange="setHistFiltro('mes', this.value)">
         <option value="">Todos os meses</option>
@@ -12343,9 +12883,6 @@ function renderHistoricoServicos() {
       </select>
       <input type="date" value="${escHtml(HIST_FILTRO.data)}" onchange="setHistFiltro('data', this.value)"
              title="Um dia exato" style="padding:6px 9px;font-size:var(--fs-md);border:1px solid var(--border-strong);border-radius:6px">
-      <input type="search" id="histBusca" value="${escHtml(HIST_FILTRO.busca)}" oninput="setHistBusca(this.value)"
-             placeholder="Buscar estaca, pacote, observação…" autocomplete="off"
-             style="padding:6px 9px;font-size:var(--fs-md);border:1px solid var(--border-strong);border-radius:6px;min-width:190px;flex:1">
       ${filtroAtivo ? `<div class="filter-clear" onclick="limparHistFiltro()">Limpar ${ic('fechar')}</div><span style="font-size:var(--fs-xs);color:var(--muted)">${visiveis.length} de ${rdos.length}</span>` : ''}
     </div>`;
 
@@ -12447,14 +12984,32 @@ function renderHistoricoServicos() {
           <div class="card-title">Serviços lançados</div>
           <div class="card-title-sub">Cada linha = 1 pacote executado · alimenta avanço físico e medição</div>
         </div>
+        <!-- "Apagar duplicatas" saiu daqui: ficava a 6px do "CSV", mesmo
+             tamanho, mesma fileira — um baixa um arquivo, o outro apaga
+             linhas da planilha da obra. Foi para o pé da tabela, atrás de
+             "Manutenção". -->
         <div class="hist-acoes" style="display:flex;gap:6px;flex-wrap:wrap">
           ${rdos.length > 0 ? `<button class="btn btn-outline btn-sm" onclick="exportarHistoricoCSV()">${ic('baixar')} CSV</button>` : ''}
-          ${ehAdmin() && rdos.length > 0 ? `<button class="btn btn-sm" style="background:var(--err,#e53e3e);color:#fff;border:none;padding:5px 12px;border-radius:var(--r);cursor:pointer;font-size:var(--fs-sm);font-weight:600" onclick="apagarDuplicatasRDO()">${ic('lixeira')} Apagar duplicatas</button>` : ''}
         </div>
       </div>
       <div class="card-body flush">
         ${filtroBar}
         ${bodyContent}
+        ${(ehAdmin() && rdos.length > 0) ? `
+        <details class="hist-manutencao">
+          <summary>${ic('ajustes')} Manutenção do histórico</summary>
+          <div class="hist-manutencao-corpo">
+            <div>
+              <b>Apagar linhas duplicadas</b>
+              <p>${dupsAgora === 0
+                    ? 'Nenhuma duplicata no histórico atual.'
+                    : `Encontrei <b>${dupsAgora}</b> linha${dupsAgora > 1 ? 's' : ''} repetida${dupsAgora > 1 ? 's' : ''} (mesma data, turno, pacote, quantidade, apontador e estaca). A limpeza roda no servidor, com backup automático antes.`}</p>
+            </div>
+            <button class="btn btn-sm" ${dupsAgora === 0 ? 'disabled' : ''}
+              style="background:var(--err,#e53e3e);color:#fff;border:none;padding:5px 12px;border-radius:var(--r);cursor:pointer;font-size:var(--fs-sm);font-weight:600${dupsAgora === 0 ? ';opacity:.5;cursor:default' : ''}"
+              onclick="apagarDuplicatasRDO()">${ic('lixeira')} Apagar ${dupsAgora} duplicata${dupsAgora !== 1 ? 's' : ''}</button>
+          </div>
+        </details>` : ''}
       </div>
     </div>
   `;
@@ -12839,12 +13394,12 @@ async function verificarBackendNaoCriou(antes, esperadoRemovido, contexto) {
   return true;
 }
 
-window.apagarDuplicatasRDO = async function() {
-  // Conta as duplicatas localmente só para avisar o usuário do volume.
-  const rdos = [...STATE.rdoavanco];
+/* Quantas linhas a limpeza apagaria AGORA. Uma função só, lida pela tela
+   (que diz o número antes de o dedo chegar no botão) e pela confirmação. */
+function contarDuplicatasRDO() {
   const vistas = new Set();
-  let qtdDup = 0;
-  rdos.forEach(r => {
+  let qtd = 0;
+  (STATE.rdoavanco || []).forEach(r => {
     const chave = [
       String(getCSVField(r,'Data')        || '').trim(),
       String(getCSVField(r,'Turno')       || '').trim().toLowerCase(),
@@ -12853,8 +13408,13 @@ window.apagarDuplicatasRDO = async function() {
       String(getCSVField(r,'Apontador')   || '').trim().toLowerCase(),
       String(getCSVField(r,'Local_Estaca')|| '').trim().toLowerCase(),
     ].join('|');
-    if (vistas.has(chave)) qtdDup++; else vistas.add(chave);
+    if (vistas.has(chave)) qtd++; else vistas.add(chave);
   });
+  return qtd;
+}
+
+window.apagarDuplicatasRDO = async function() {
+  const qtdDup = contarDuplicatasRDO();
 
   // Se há fila pendente, ela está reenviando e RECRIANDO duplicatas.
   // Não adianta limpar sem antes esvaziar a fila.
@@ -12873,7 +13433,7 @@ window.apagarDuplicatasRDO = async function() {
     return;
   }
 
-  if (!confirm(`Foram encontradas ~${qtdDup} linha(s) duplicada(s).\n\nA limpeza roda no servidor (faz backup automático antes) e apaga todas de uma vez.\n\nApagar agora?`)) return;
+  if (!confirm(`APAGAR ${qtdDup} LINHA(S) DO HISTÓRICO DA OBRA\n\nSão ${qtdDup} linha(s) repetida(s) — mesma data, turno, pacote, quantidade, apontador e estaca. De cada repetição fica UMA.\n\nA limpeza roda no servidor e faz backup automático antes.\n\nApagar as ${qtdDup} agora?`)) return;
 
   const btn = document.querySelector('[onclick="apagarDuplicatasRDO()"]');
   if (btn) { btn.disabled = true; btn.innerHTML = ic('ampulheta', 0, 'ic-gira') + ' Limpando no servidor…'; }
@@ -12892,6 +13452,8 @@ window.apagarDuplicatasRDO = async function() {
     toast('Falha ao limpar: ' + e.message + extra, 'error', 0);
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = ic('lixeira') + ' Apagar duplicatas'; }
+    // o número no rótulo tem de refletir o que sobrou
+    if (STATE.currentPage === 'historico') render();
   }
 };
 
@@ -13871,6 +14433,56 @@ function defaultDraft() {
   };
 }
 
+/* ------------------------------------------------------------------
+   O RASCUNHO TEM DE DIZER DE QUE DIA É
+   ------------------------------------------------------------------
+   O aviso dizia a HORA ("salvo às 07:41") e nunca a data — e o rascunho
+   volta preenchido antes de qualquer leitura. Quem parou no meio do
+   lançamento de ontem abria o app hoje com a data de ontem no campo, os
+   pacotes de ontem nas linhas, e lançava a produção de hoje em cima.
+   Rascunho de hoje é continuidade e restaura calado. Rascunho de outro
+   dia PERGUNTA, e a data vem escrita.
+   ------------------------------------------------------------------ */
+function rascunhoEDeHoje(draft) {
+  return !!draft && String(draft.data || '') === getLocalISODate(new Date());
+}
+
+function bannerRascunho(draft, hora) {
+  if (!draft) return '';
+  const dia = fmtData(draft.data) || 'outro dia';
+  if (rascunhoEDeHoje(draft) || draft._continuar) {
+    const quando = rascunhoEDeHoje(draft) ? 'de hoje' : `de ${escHtml(dia)}`;
+    return `
+      <div class="rdo-rascunho">
+        <div class="rdo-rascunho-txt">${ic('rascunho')} Rascunho ${quando}${hora ? `, salvo às ${hora}` : ''}, restaurado.</div>
+        <button class="btn btn-sm btn-outline" onclick="resetDraft()">Limpar e começar novo</button>
+      </div>`;
+  }
+  const nServ = (draft.servicos || []).filter(s => s && s.pacoteId).length;
+  return `
+    <div class="rdo-rascunho antigo">
+      <div class="rdo-rascunho-txt">${ic('alerta')}
+        <span><strong>Este rascunho é de ${escHtml(dia)}${hora ? `, salvo às ${hora}` : ''}</strong> — não de hoje.
+        ${nServ ? `Ele traz ${nServ} serviço${nServ > 1 ? 's' : ''} com pacote preenchido.` : ''}
+        Continuar mantém a data de ${escHtml(dia)} no lançamento.</span>
+      </div>
+      <div class="rdo-rascunho-acoes">
+        <button class="btn btn-sm btn-outline" onclick="continuarRascunho()">Continuar de ${escHtml(dia)}</button>
+        <button class="btn btn-sm btn-primary" onclick="resetDraft()">Começar novo de hoje</button>
+      </div>
+    </div>`;
+}
+
+/* "Continuar" não muda nada no rascunho — só tira o aviso do caminho,
+   para o apontador que decidiu terminar ontem não relê o alerta a cada
+   campo que preenche. */
+window.continuarRascunho = function() {
+  if (!STATE.draft) STATE.draft = loadDraft() || defaultDraft();
+  STATE.draft._continuar = true;
+  saveDraft(STATE.draft);
+  transitionTo(render);
+};
+
 function renderRDO() {
   if (!STATE.draft) STATE.draft = loadDraft() || defaultDraft();
   const d = STATE.draft;
@@ -13880,7 +14492,6 @@ function renderRDO() {
     .map(p => getCSVField(p, 'Frente')))].sort();
   
   const draftSalvo = loadDraft();
-  const temRascunho = !!draftSalvo;
   const draftHora = draftSalvo && draftSalvo._savedAt
     ? new Date(draftSalvo._savedAt).toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})
     : null;
@@ -13911,14 +14522,10 @@ function renderRDO() {
   }
 
   return `
-    ${temRascunho ? `
-      <div style="background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:11px 14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
-        <div style="font-size:var(--fs-md);color:var(--ylw-d);display:flex;align-items:center;gap:6px">${ic('rascunho')} Rascunho salvo${draftHora ? ` às ${draftHora}` : ' na última sessão'} restaurado.</div>
-        <button class="btn btn-sm btn-outline" onclick="resetDraft()">Limpar e começar novo</button>
-      </div>
-    ` : ''}
+    <div class="rdo-form">
+    ${bannerRascunho(draftSalvo, draftHora)}
     ${bannerHoje}
-    
+
     <div class="card stagger-item">
       <div class="card-header">
         <div>
@@ -13969,10 +14576,13 @@ function renderRDO() {
         <div id="servicosList">
           ${d.servicos.map((s, i) => renderServicoRow(s, i, frentes)).join('')}
         </div>
-        <button class="btn-add-servico" onclick="adicionarServico()">+ Adicionar outro serviço</button>
+        <!-- O rótulo diz em qual cartão o botão acrescenta: dois "+ Adicionar
+             outro serviço" idênticos, um por cartão, obrigavam a conferir a
+             posição na tela para saber qual é qual. -->
+        <button class="btn-add-servico" onclick="adicionarServico()">+ Adicionar pacote</button>
       </div>
     </div>
-    
+
     <div class="card stagger-item" style="animation-delay:.15s">
       <div class="card-header">
         <div>
@@ -13985,18 +14595,24 @@ function renderRDO() {
         <div id="outrosServicosList">
           ${(d.outrosServicos||[]).map((o, i) => renderOutroServicoRow(o, i)).join('')}
         </div>
-        <button class="btn-add-servico" onclick="adicionarOutroServico()">+ Adicionar outro serviço</button>
+        <button class="btn-add-servico" onclick="adicionarOutroServico()">+ Adicionar serviço avulso</button>
       </div>
     </div>
 
-    <div class="stagger-item" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;animation-delay:.2s">
-      <div style="font-size:var(--fs-sm);color:var(--muted);max-width:520px">
+    <!-- SALVAR NÃO MORA NO FIM DE 2.100px DE FORMULÁRIO.
+         Mesmo padrão de Equipamentos (.eq-enviar): no celular a faixa de
+         ações fica presa acima da barra de navegação enquanto o formulário
+         rola por baixo. Por isso o formulário inteiro vai dentro de
+         .rdo-form — é ele que dá altura ao sticky. -->
+    <div class="rdo-enviar stagger-item" style="animation-delay:.2s">
+      <div class="rdo-enviar-nota">
         ${ic('info')} Cada serviço vira 1 linha em <strong>RDO_Avanco</strong>. O dashboard atualiza em até 5 min.
       </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div class="rdo-enviar-acoes">
         <button class="btn btn-outline" onclick="resetDraft()">Limpar</button>
         <button class="btn btn-primary btn-lg" id="btnSalvarRDO" onclick="salvarRDO()">${ic('salvar')} Salvar Serviços</button>
       </div>
+    </div>
     </div>
   `;
 }
@@ -14078,6 +14694,45 @@ function nomeCurtoDoPacote(p, eixo) {
   return nome.endsWith(sufixo) ? nome.slice(0, -sufixo.length) : nome;
 }
 
+/* ------------------------------------------------------------------
+   OS PACOTES DE TODO DIA, A UM TOQUE
+   ------------------------------------------------------------------
+   O lançamento mais comum custava cinco roletas (rua, frente, pacote,
+   estaca início, estaca fim) antes de chegar ao número — e a obra passa
+   semanas lançando os mesmos três ou quatro pacotes. A fileira traz os
+   mais lançados nos últimos 30 dias; um toque preenche frente e pacote
+   (e a rua, quando o pacote a declara).
+   ------------------------------------------------------------------ */
+function pacotesMaisLancados(n = 3) {
+  const corte = Date.now() - 30 * 86400000;
+  const conta = {};
+  (STATE.rdoavanco || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (!d || d.getTime() < corte) return;
+    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    if (pid) conta[pid] = (conta[pid] || 0) + 1;
+  });
+  return Object.keys(conta)
+    .sort((a, b) => conta[b] - conta[a])
+    .map(pid => STATE.pacotes.find(p => getCSVField(p, 'ID') === pid))
+    .filter(p => p && getCSVField(p, 'Status') !== 'Histórico' && getCSVField(p, 'Frente'))
+    .slice(0, n);
+}
+
+window.usarPacoteFrequente = function(idx, pacoteId) {
+  const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pacoteId);
+  if (!p) return;
+  const s = STATE.draft.servicos[idx];
+  const eixo = eixoDoPacote(p);
+  // Trocar de rua invalida a estaca escolhida: a numeração de uma não
+  // vale na outra (mesma regra do seletor de rua).
+  if (eixo && eixo !== s.sentido) { s.sentido = eixo; s.estacaIni = ''; s.estacaFim = ''; }
+  s.frente = getCSVField(p, 'Frente');
+  s.pacoteId = pacoteId;
+  saveDraft(STATE.draft);
+  rerenderServicoRow(idx);
+};
+
 function renderServicoRow(s, idx, frentes) {
   const eixos = eixosDaObraAtiva();
   const sentido = eixoDoServico(s);
@@ -14108,21 +14763,39 @@ function renderServicoRow(s, idx, frentes) {
           </select>
         </div>`;
 
-  const camposEstaca = !eixos.length ? '' : `
+  /* ESTACA SE DIGITA, NÃO SE ROLA.
+     Eram dois <select> de 43 opções cada. De pé, com uma mão, achar a E118
+     numa roleta é mais lento e menos preciso do que teclar 118 — e o erro
+     de rolagem é silencioso: sai E117 e ninguém percebe. Vira campo de
+     texto com teclado numérico e a lista do eixo em <datalist>, com a
+     faixa validada em .field-error. O valor continua saindo "E118": quem
+     lê o rascunho, a validação e a gravação não mudam. */
+  const listaId = 'estacas-' + idx;
+  const erroEstaca = (v, rot) => {
+    const t = String(v == null ? '' : v).trim();
+    if (!t) return '';
+    const n = parseInt(t.replace(/^E/i, ''), 10);
+    if (!isFinite(n)) return rot + ': digite só o número da estaca.';
+    if (!faixa) return '';
+    if (n < faixa.ini || n > faixa.fim) return `${rot}: ${faixa.label} vai da E${faixa.ini} à E${faixa.fim}.`;
+    return '';
+  };
+  const campoEstaca = (campo, rot, dica) => {
+    const err = erroEstaca(s[campo], rot);
+    return `
         <div class="field">
-          <label>Estaca início</label>
-          <select data-svc="${idx}" data-field="estacaIni">
-            <option value="">— início —</option>
-            ${estacasUsar.map(e => `<option ${s.estacaIni===e?'selected':''}>${e}</option>`).join('')}
-          </select>
-        </div>
-        <div class="field">
-          <label>Estaca fim</label>
-          <select data-svc="${idx}" data-field="estacaFim">
-            <option value="">— fim —</option>
-            ${estacasUsar.map(e => `<option ${s.estacaFim===e?'selected':''}>${e}</option>`).join('')}
-          </select>
+          <label>${rot}</label>
+          <input type="text" inputmode="numeric" list="${listaId}" autocomplete="off"
+                 class="${err ? 'invalid' : ''}" data-svc="${idx}" data-field="${campo}"
+                 value="${escHtml(String(s[campo] == null ? '' : s[campo]))}"
+                 placeholder="${dica}">
+          ${err ? `<div class="field-error">${escHtml(err)}</div>` : ''}
         </div>`;
+  };
+  const camposEstaca = !eixos.length ? '' : `
+        <datalist id="${listaId}">${estacasUsar.map(e => `<option value="${e}"></option>`).join('')}</datalist>
+        ${campoEstaca('estacaIni', 'Estaca início', faixa ? 'ex: ' + faixa.ini : 'ex: 100')}
+        ${campoEstaca('estacaFim', 'Estaca fim', faixa ? 'ex: ' + faixa.fim : 'ex: 120')}`;
 
   /* Meia pista é meio serviço: a guia da E4 à E7 pode ser 60 m ou 120 m
      conforme o lado, e sem isso a medição não separa o que já foi medido
@@ -14222,6 +14895,21 @@ function renderServicoRow(s, idx, frentes) {
         </div>
         <div class="field" style="grid-column:1/-1">
           <label>Pacote / Serviço</label>
+          ${(() => {
+            const freq = pacotesMaisLancados(3);
+            if (!freq.length) return '';
+            return `<div class="svc-frequentes">
+              <span>Mais lançados:</span>
+              ${freq.map(p => {
+                const pid = getCSVField(p, 'ID');
+                const rua = eixoPorId(eixoDoPacote(p));
+                return `<button type="button" class="chip ${s.pacoteId === pid ? 'on' : ''}"
+                  title="${escHtml(getCSVField(p, 'Frente'))}${rua ? ' · ' + escHtml(rua.label) : ''}"
+                  onclick="usarPacoteFrequente(${idx}, '${escHtml(pid)}')"
+                  >${escHtml(nomeCurtoDoPacote(p, rua))}</button>`;
+              }).join('')}
+            </div>`;
+          })()}
           <select data-svc="${idx}" data-field="pacoteId" ${!s.frente ? 'disabled' : ''}>
             <option value="">${s.frente ? '— escolher pacote —' : '↑ escolha a frente primeiro'}</option>
             ${pacotesDaFrente.map(p => `<option value="${escHtml(getCSVField(p, 'ID'))}" ${s.pacoteId===getCSVField(p, 'ID')?'selected':''}>${escHtml(nomeCurtoDoPacote(p, porRua ? faixa : null))} (${escHtml(getCSVField(p, 'Unidade Física')||'')})</option>`).join('')}
@@ -14316,13 +15004,47 @@ function attachRDOForm() {
   Object.keys(_fotosPorServico).forEach(idx => renderFotosPrev(idx));
 }
 
+/* A estaca é digitada ("118") e guardada como o app sempre a guardou
+   ("E118"): o rascunho, a validação, o Local_Estaca e o Histórico não
+   mudam de formato. Sem prefixo válido a string fica como veio, para o
+   campo poder dizer o que está errado. */
+function normalizarEstaca(v) {
+  const t = String(v == null ? '' : v).trim();
+  if (!t) return '';
+  const m = /^[eE]?\s*(\d{1,4})$/.exec(t);
+  return m ? 'E' + parseInt(m[1], 10) : t;
+}
+
 function svcInputHandler(ev) {
   const el = ev.target;
   if (!el.dataset.svc) return;
   const idx = parseInt(el.dataset.svc);
   const field = el.dataset.field;
-  STATE.draft.servicos[idx][field] = el.value;
-  
+  STATE.draft.servicos[idx][field] =
+    (field === 'estacaIni' || field === 'estacaFim') ? normalizarEstaca(el.value) : el.value;
+
+  /* Sem re-render enquanto se digita a estaca — tirar o foco a cada tecla
+     é o que o campo de texto veio resolver. O aviso de faixa é escrito
+     na hora, embaixo do campo. */
+  if (field === 'estacaIni' || field === 'estacaFim') {
+    const svc = STATE.draft.servicos[idx];
+    const faixa = eixoPorId(eixoDoServico(svc));
+    const n = parseInt(String(svc[field]).replace(/^E/i, ''), 10);
+    const bruto = String(el.value || '').trim();
+    let msg = '';
+    if (bruto && !isFinite(n)) msg = 'Digite só o número da estaca.';
+    else if (bruto && faixa && (n < faixa.ini || n > faixa.fim)) {
+      msg = `${faixa.label} vai da E${faixa.ini} à E${faixa.fim}.`;
+    }
+    el.classList.toggle('invalid', !!msg);
+    let box = el.parentElement.querySelector('.field-error');
+    if (!box) { box = document.createElement('div'); box.className = 'field-error'; el.parentElement.appendChild(box); }
+    box.textContent = msg;
+    box.style.display = msg ? '' : 'none';
+    saveDraft(STATE.draft);
+    return;
+  }
+
   if (field === 'frente') {
     STATE.draft.servicos[idx].pacoteId = '';
     rerenderServicoRow(idx);
@@ -14509,6 +15231,21 @@ function validarRDO(d) {
         if (!s.estacaIni || !s.estacaFim) {
           erros.push(`Serviço ${i+1}: estaca início e fim obrigatórias`);
           break;
+        }
+        /* A estaca agora é digitada. O que a roleta garantia de graça —
+           existir dentro do eixo — passa a ser conferido aqui: E250 numa
+           rua que vai até a E120 vira lançamento fora do estaqueamento e
+           some da planta de avanço. */
+        const fx = eixoPorId(eixoDoServico(s));
+        if (fx) {
+          const fora = [['início', s.estacaIni], ['fim', s.estacaFim]].filter(([, v]) => {
+            const n = parseInt(String(v).replace(/^E/i, ''), 10);
+            return !isFinite(n) || n < fx.ini || n > fx.fim;
+          });
+          if (fora.length) {
+            erros.push(`Serviço ${i+1}: estaca ${fora.map(f => f[0]).join(' e ')} fora de ${fx.label} (E${fx.ini}–E${fx.fim})`);
+            break;
+          }
         }
         // Onde o lado é perguntado, ele é obrigatório: em branco, a
         // quantidade fica sem metade da informação que a define.
@@ -15319,10 +16056,33 @@ function renderSeletorTurno() {
     ? `<div style="max-width:680px;margin:0 auto 14px;background:var(--ylw-l);border:1px solid var(--ylw);border-radius:var(--r);padding:10px 14px;font-size:var(--fs-md);color:var(--ylw-d)">${ic('antena')} ${pendentesDiario} turno${pendentesDiario>1?'s':''} aguardando envio — vai enviar sozinho quando o sinal voltar.</div>`
     : '';
 
+  const algumPreenchido = d.diurno.preenchido || d.noturno.preenchido;
+
+  /* O cartão do turno vira um botão de EDITAR quando já foi enviado. Antes o
+     cartão inteiro era clicável e abria em edição direto — e o aviso que
+     explicava isso ficava ABAIXO dos botões: quem toca, toca antes de ler. */
+  const cartaoTurno = (t, rot, icone) => {
+    const td = d[t];
+    const cls = `btn-turno-grande btn-turno-${t} ${td.preenchido ? 'preenchido' : ''}`;
+    const miolo = `
+      <div class="btn-turno-icon">${ic(icone)}</div>
+      <div class="btn-turno-titulo">${rot}</div>
+      ${td.preenchido
+        ? `<div class="btn-turno-status preenchido">${ic('check')} Já enviado por ${escHtml(td.apontador || '—')}</div>`
+        : '<div class="btn-turno-status">Não preenchido</div>'}`;
+    if (!td.preenchido) {
+      return `<button onclick="selecionarTurnoV4('${t}')" class="${cls}">${miolo}</button>`;
+    }
+    // Turno enviado: o cartão informa, e só o botão pequeno edita.
+    return `<div class="${cls} turno-enviado">${miolo}
+      <button type="button" class="btn btn-sm btn-outline btn-turno-editar"
+        onclick="editarTurnoV4('${t}')">${ic('editar')} Editar</button>
+    </div>`;
+  };
+
   let botoesHtml = '';
-  if (d.diurno.preenchido || d.noturno.preenchido) {
-    botoesHtml += `<div style="margin-top:16px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--muted);display:flex;gap:8px;align-items:center">${ic('info')} Selecionar um turno já preenchido permite editar os dados.</div>`;
-    botoesHtml += `<div style="margin-top:14px;text-align:center"><button class="btn btn-outline" onclick="gerarPDFDiarioV4('${DIARIO_V4.data}')">${ic('pdf')} Gerar PDF Oficial Completo</button></div>`;
+  if (algumPreenchido) {
+    botoesHtml += `<div style="margin-top:16px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--muted);display:flex;gap:8px;align-items:center">${ic('info')} Turno já enviado abre em <b>Editar</b> — os dados existentes serão substituídos.</div>`;
   }
 
   return `
@@ -15331,40 +16091,34 @@ function renderSeletorTurno() {
     <div class="card stagger-item">
       <div class="card-header">
         <div>
-          <div class="card-title">RDO Diário</div>
-          <div class="card-title-sub">Selecione a data e o turno que você está preenchendo</div>
+          <div class="card-title">RDO Diário${algumPreenchido ? ` · ${fmtData(d.data)}` : ''}</div>
+          <div class="card-title-sub">Escolha o dia na lista ao lado e o turno que você está preenchendo</div>
         </div>
+        <!-- O PDF oficial é o ENTREGÁVEL que a fiscalização assina, e estava
+             no botão mais escondido da tela: rodapé, contorno, depois de dois
+             cartões. Sobe para o cabeçalho, ao lado do dia a que se refere. -->
+        ${algumPreenchido ? `<button class="btn btn-primary btn-sm" onclick="gerarPDFDiarioV4('${DIARIO_V4.data}')">${ic('pdf')} Gerar PDF Oficial</button>` : ''}
       </div>
       <div class="card-body">
-        <div class="form-grid" style="grid-template-columns:1fr;gap:14px">
-          <div class="field">
-            <label>Data do RDO</label>
-            <input type="date" data-diario4-data value="${d.data}">
-          </div>
-        </div>
-        
-        <div style="margin-top:18px">
-          <div style="font-size:var(--fs-xs);font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Qual turno você está preenchendo?</div>
-          
+        <div style="margin-top:0">
+          <div style="font-size:var(--fs-xs);font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Qual turno você está preenchendo em ${escHtml(fmtData(d.data))}?</div>
+
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-            <button onclick="selecionarTurnoV4('diurno')" class="btn-turno-grande btn-turno-diurno ${d.diurno.preenchido?'preenchido':''}">
-              <div class="btn-turno-icon">${ic('sol')}</div>
-              <div class="btn-turno-titulo">DIURNO</div>
-              ${d.diurno.preenchido 
-                ? `<div class="btn-turno-status preenchido">${ic('check')} Já preenchido por ${d.diurno.apontador}</div>` 
-                : '<div class="btn-turno-status">Não preenchido</div>'}
-            </button>
-            
-            <button onclick="selecionarTurnoV4('noturno')" class="btn-turno-grande btn-turno-noturno ${d.noturno.preenchido?'preenchido':''}">
-              <div class="btn-turno-icon">${ic('lua')}</div>
-              <div class="btn-turno-titulo">NOTURNO</div>
-              ${d.noturno.preenchido 
-                ? `<div class="btn-turno-status preenchido">${ic('check')} Já preenchido por ${d.noturno.apontador}</div>` 
-                : '<div class="btn-turno-status">Não preenchido</div>'}
-            </button>
+            ${cartaoTurno('diurno', 'DIURNO', 'sol')}
+            ${cartaoTurno('noturno', 'NOTURNO', 'lua')}
           </div>
         </div>
         ${botoesHtml}
+        <!-- A data é pedida UMA vez: a lista dos 14 dias ao lado é o caminho
+             normal (e diz quais turnos faltam). Este campo é a saída para o
+             passado distante, e por isso vem depois, discreto. -->
+        <details class="rdo-outra-data"${DIARIO_V4.data !== getLocalISODate(new Date()) ? ' open' : ''}>
+          <summary>${ic('calendario')} Outra data…</summary>
+          <div class="field" style="margin-top:10px">
+            <label>Data do RDO</label>
+            <input type="date" data-diario4-data value="${d.data}">
+          </div>
+        </details>
       </div>
     </div>
     ${renderDiasRecentesRDO()}
@@ -15727,6 +16481,15 @@ function selecionarTurnoV4(turno) {
   DIARIO_TURNO_ATIVO = turno;
   transitionTo(render);
 }
+
+/* Editar um turno JÁ ENVIADO pede confirmação: o que for gravado substitui
+   o que a fiscalização pode já ter recebido. */
+window.editarTurnoV4 = function(turno) {
+  const td = DIARIO_V4[turno];
+  const quem = td && td.apontador ? ` por ${td.apontador}` : '';
+  if (!confirm(`O turno ${turno.toUpperCase()} de ${fmtData(DIARIO_V4.data)} já foi enviado${quem}.\n\nEditar e enviar de novo substitui os dados gravados. Continuar?`)) return;
+  selecionarTurnoV4(turno);
+};
 
 function voltarSeletorTurnoV4() {
   DIARIO_TURNO_ATIVO = null;
