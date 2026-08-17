@@ -221,8 +221,10 @@
                 return;
             }
             // Sanidade do horímetro/km: o final não pode ser menor que o inicial
-            const hi = parseFloat(document.getElementById('horimInicial').value || '');
-            const hf = parseFloat(document.getElementById('horimFinal').value || '');
+            const brutoHi = document.getElementById('horimInicial').value;
+            const brutoHf = document.getElementById('horimFinal').value;
+            const hi = brutoHi.trim() ? num(brutoHi) : NaN;
+            const hf = brutoHf.trim() ? num(brutoHf) : NaN;
             if (!isNaN(hi) && !isNaN(hf) && hf < hi) {
                 showToast('Horímetro/km final está menor que o inicial. Revise as medições.', 'error');
                 return;
@@ -451,7 +453,7 @@
             const hi = g('horimInicial').value, hf = g('horimFinal').value;
             set('cfHorim', (hi || hf) ? ((hi || '—') + ' → ' + (hf || '—')) : '—');
             set('cfComb', g('combustivel').value ? (g('combustivel').value + ' L') : '—');
-            set('cfAssin', temAssinatura() ? '✔️ assinada' : '—');
+            set('cfAssin', document.getElementById('assinatura').value ? 'assinada' : '—');
             set('cfObs', g('observacoesUI').value.trim() || 'Sem detalhes adicionais.');
             EQ.abrir('confirmModal');
         }
@@ -462,7 +464,9 @@
             fecharConfirmacao();
             setLoading(true);
             try {
-                capturarAssinatura();
+                /* NÃO se captura o canvas aqui: o que vale é o que o operador
+                   CONFIRMOU no modal (hidden #assinatura). Traço deixado no
+                   canvas e abandonado pelo X não vira assinatura de ninguém. */
                 const be = backendEquip();
                 let fd;
                 if (be.legado) {
@@ -493,6 +497,19 @@
                     const extra = paramsPrincipal();
                     Object.keys(extra).forEach(k => fd.set(k, extra[k]));
                 }
+                /* Com o campo em type=text, o que sai daqui pode ser
+                   "1.250,5". O ida-e-volta do número tem de ser canônico:
+                   quem lê a aba (e o relatório) espera ponto decimal, e
+                   "1.250,5" lido como milhar viraria 12.505. Vazio continua
+                   vazio — 0 é uma medição, ausência não é. */
+                const canon = v => { const t = String(v == null ? '' : v).trim(); return t ? String(num(t)) : ''; };
+                const chaves = be.legado
+                    ? { hi: 'horimInicial', hf: 'horimFinal', cb: 'combustivel' }
+                    : { hi: 'horimIni', hf: 'horimFim', cb: 'combustivel' };
+                fd.set(chaves.hi, canon(document.getElementById('horimInicial').value));
+                fd.set(chaves.hf, canon(document.getElementById('horimFinal').value));
+                fd.set(chaves.cb, canon(document.getElementById('combustivel').value));
+
                 if (forcar) fd.append('forcar', 'true');
                 const resp = await fetch(be.url, { method: 'POST', body: fd });
                 const r = await resp.json();
@@ -566,10 +583,16 @@
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
             const ratio = window.devicePixelRatio || 1;
-            const w = canvas.clientWidth || 600, h = 160;
+            const w = canvas.clientWidth || 600, h = canvas.clientHeight || 160;
             canvas.width = w * ratio; canvas.height = h * ratio;
             ctx.scale(ratio, ratio);
             ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#e2e8f0';
+            /* Remedir é obrigatório a cada abertura (canvas escondido mede 0),
+               e mudar canvas.width já apaga o traço. Os OUVINTES, esses, só
+               entram uma vez: reatar a cada abertura empilhava um mousemove
+               por vez que o operador abriu o modal. */
+            if (canvas._ligado) { canvas._resetInk(); return; }
+            canvas._ligado = true;
             let drawing = false, last = null, hasInk = false;
             const posOf = e => { const r = canvas.getBoundingClientRect(); const t = (e.touches && e.touches[0]) ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; };
             const start = e => { drawing = true; last = posOf(e); e.preventDefault(); };
@@ -583,15 +606,48 @@
             canvas.addEventListener('touchend', end);
             canvas._hasInk = () => hasInk;
             canvas._clear = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); hasInk = false; };
+            canvas._resetInk = () => { hasInk = false; };
         }
         function temAssinatura() { const c = document.getElementById('assinaturaCanvas'); return !!(c && c._hasInk && c._hasInk()); }
-        function limparAssinatura() { const c = document.getElementById('assinaturaCanvas'); if (c && c._clear) c._clear(); const h = document.getElementById('assinatura'); if (h) h.value = ''; }
+        function limparAssinatura() {
+            const c = document.getElementById('assinaturaCanvas'); if (c && c._clear) c._clear();
+            const h = document.getElementById('assinatura'); if (h) h.value = '';
+            mostrarEstadoAssinatura();
+        }
         function capturarAssinatura() {
             const c = document.getElementById('assinaturaCanvas');
             const h = document.getElementById('assinatura');
             if (!h) return false;
             if (temAssinatura()) { h.value = c.toDataURL('image/png'); return true; }
             h.value = ''; return false;
+        }
+
+        /* O canvas mora num modal, e canvas escondido tem clientWidth 0: a
+           medição só vale depois de o modal estar visível. Por isso o init
+           acontece na ABERTURA, não no boot da tela. */
+        function abrirAssinatura() {
+            EQ.abrir('assinaturaModal');
+            initAssinatura();
+        }
+        function confirmarAssinatura() {
+            capturarAssinatura();
+            EQ.fechar('assinaturaModal');
+            mostrarEstadoAssinatura();
+        }
+        /* O formulário mostra o que foi assinado sem precisar reabrir nada:
+           o traço é a prova que viaja no apontamento. */
+        function mostrarEstadoAssinatura() {
+            const txt = document.getElementById('assinaturaEstado');
+            const img = document.getElementById('assinaturaPrev');
+            const h = document.getElementById('assinatura');
+            const assinado = !!(h && h.value);
+            if (txt) txt.textContent = assinado
+                ? 'Assinado. Toque em Assinar para refazer, ou Limpar para apagar.'
+                : 'Sem assinatura — o apontamento pode ser enviado assim.';
+            if (img) {
+                if (assinado) { img.src = h.value; img.style.display = ''; }
+                else { img.removeAttribute('src'); img.style.display = 'none'; }
+            }
         }
 
         /* ===================== PAINEL DE RELATÓRIOS (Etapa 4) ===================== */
@@ -1174,15 +1230,21 @@
           <p id="paradasVazio" class="eq-vazio">Nenhuma parada lançada. O turno conta integral.</p>
         </div>
 
+        <!-- type=text + inputmode=decimal, e NUNCA type=number: em teclado
+             pt-BR o operador digita "1.250,5" e o Chromium descarta o valor
+             inteiro em silêncio (o campo fica vazio ao ler .value). Horímetro
+             errado é hora de máquina errada, e hora de máquina é cobrança.
+             É a mesma decisão já tomada na quantidade do Lançar Serviço; o
+             valor é lido por num(), que entende vírgula e ponto. -->
         <div class="eq-duo">
           <div class="field"><label for="horimInicial">Horímetro / km inicial</label>
-            <input type="number" step="any" inputmode="decimal" id="horimInicial" name="horimInicial" placeholder="h ou km"></div>
+            <input type="text" inputmode="decimal" autocomplete="off" id="horimInicial" name="horimInicial" placeholder="h ou km"></div>
           <div class="field"><label for="horimFinal">Horímetro / km final</label>
-            <input type="number" step="any" inputmode="decimal" id="horimFinal" name="horimFinal" placeholder="h ou km"></div>
+            <input type="text" inputmode="decimal" autocomplete="off" id="horimFinal" name="horimFinal" placeholder="h ou km"></div>
         </div>
         <div class="form-grid" style="margin-top:14px">
           <div class="field"><label for="combustivel">Combustível (litros)</label>
-            <input type="number" step="any" inputmode="decimal" id="combustivel" name="combustivel" placeholder="litros"></div>
+            <input type="text" inputmode="decimal" autocomplete="off" id="combustivel" name="combustivel" placeholder="litros"></div>
           <div class="field"><label for="status">Situação ao fim do turno</label>
             <select id="status" name="status" required>
               ${OPS_STATUS.map(([v, t], i) => `<option value="${v}"${i === 0 ? ' selected' : ''}>${t}</option>`).join('')}
@@ -1192,15 +1254,25 @@
         <div class="field"><label for="observacoesUI">Observações (opcional)</label>
           <textarea id="observacoesUI" rows="3" placeholder="Ocorrências, frente atendida, avarias…"></textarea></div>
 
+        <!-- A ASSINATURA NÃO PODE SER UMA ARMADILHA DE ROLAGEM.
+             O canvas ficava embutido no meio de um formulário longo, com
+             touch-action:none numa faixa de 160px: quem arrastava o dedo ali
+             para ROLAR a página riscava a assinatura em vez de rolar, e a
+             página não saía do lugar. Agora o canvas mora num modal de tela
+             cheia — onde arrastar só pode significar assinar. -->
         <div class="eq-bloco">
           <div class="eq-bloco-topo">
             <div>
               <div class="card-title" style="font-size:13px">Assinatura do operador</div>
-              <div class="card-title-sub">Opcional — use o dedo no celular ou o mouse</div>
+              <div class="card-title-sub">Opcional — abre em tela cheia para assinar com o dedo</div>
             </div>
-            <button type="button" class="btn btn-sm btn-ghost" onclick="EQ.limparAssinatura()">Limpar</button>
+            <div class="eq-assin-acoes">
+              <button type="button" class="btn btn-sm btn-outline" onclick="EQ.abrirAssinatura()">${ic('assinatura')} Assinar</button>
+              <button type="button" class="btn btn-sm btn-ghost" onclick="EQ.limparAssinatura()">Limpar</button>
+            </div>
           </div>
-          <canvas id="assinaturaCanvas" class="eq-assinatura"></canvas>
+          <div id="assinaturaEstado" class="eq-assin-estado">Sem assinatura — o apontamento pode ser enviado assim.</div>
+          <img id="assinaturaPrev" class="eq-assin-prev" alt="Assinatura do operador" style="display:none">
         </div>
 
         <input type="hidden" id="horas" name="horas">
@@ -1216,6 +1288,13 @@
         </div>
       </div>
     </form>
+
+    ${modal('assinaturaModal', 'Assinatura do operador', 'Assine com o dedo. Confirmar guarda; descartar apaga o traço.', `
+      <canvas id="assinaturaCanvas" class="eq-assinatura"></canvas>
+      <div class="eq-modal-rodape">
+        <button type="button" class="btn btn-outline" onclick="EQ.limparAssinatura()">Limpar</button>
+        <button type="button" class="btn btn-primary" onclick="EQ.confirmarAssinatura()">${ic('check')} Confirmar assinatura</button>
+      </div>`, '640px')}
 
     ${modal('confirmModal', 'Confira antes de enviar', 'Depois de enviado, só o administrador apaga', `
       <div class="eq-conf">
@@ -1325,7 +1404,9 @@
     ligarFormApontamento();
     ligarFormLoc();
     ligarFormEquip();
-    initAssinatura();
+    // initAssinatura() roda ao ABRIR o modal — canvas escondido mede 0 de
+    // largura e sairia com a resolução errada (ver abrirAssinatura).
+    mostrarEstadoAssinatura();
     atualizarParadasVazio();
     toggleLocadora();
     trocarAba('equip');
@@ -1358,6 +1439,8 @@
     calcularHoras: calcularHoras,
     adicionarParada: adicionarParada,
     limparAssinatura: limparAssinatura,
+    abrirAssinatura: abrirAssinatura,
+    confirmarAssinatura: confirmarAssinatura,
     confirmarEnvio: confirmarEnvio,
     abrirCadastros: function () { abrir('cadastroModal'); },
     abrirUltimos: function () { abrir('ultimosModal'); carregarUltimos(); },
