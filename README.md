@@ -415,8 +415,8 @@ Utilitário: `criarRDOsVaziosDoMes()` preenche datas sem RDO de qualquer mês (e
 
 ## Notas Fiscais, estoque e preços
 
-Tela **Notas Fiscais** (abas Notas · Estoque · Preços · Painel). O caminho do
-apontador é **fotografar a nota e conferir**, não digitar:
+Tela **Notas Fiscais** (abas Notas · Consultas · Estoque · Preços · Painel). O
+caminho do apontador é **fotografar a nota e conferir**, não digitar:
 
 1. **Nova nota fiscal** → fotografar, ou escolher PDF/imagem.
 2. O app lê nesta ordem: **chave de acesso** (do texto do PDF ou do código de
@@ -432,6 +432,38 @@ catálogo de materiais aprendido das próprias notas, **estoque com lote**
 **saída de estoque** (saldo é *o que ainda tem*, não *o que chegou*),
 **histórico de preço** por material (menor, médio ponderado, maior, último e o
 fornecedor mais barato), apontamento de **divergências** e **auditoria**.
+
+### Filtrar e consultar
+
+O filtro é **um só** e vale para a lista, para as Consultas e para o Painel:
+pesquisa livre, situação, período (últimos 30/90 dias, este mês, mês passado,
+este ano ou mês a mês), **fornecedor**, **material**, **UF**, **quem lançou**,
+**faixa de valor**, **intervalo de datas** e a **data base** — recebimento na
+obra ou emissão da nota, que são perguntas diferentes e mudam o mês de quem
+cruza a virada. Somam-se os marcadores (*a conferir, com divergência,
+repetidas, sem produtos, sem imagem, sem chave, com frete*), que valem em
+conjunto: dois marcados são as duas condições na mesma nota. A lista sai
+ordenada como se pedir e aparece em **cartões ou em tabela** — a tabela mostra
+produtos, frete, ICMS e total lado a lado, com a soma do filtro inteiro no pé.
+
+A aba **Consultas** é uma tabela dinâmica pequena: escolha a **linha**
+(fornecedor, material, mês, situação, quem lançou, município/UF), a **coluna**
+(qualquer outra dimensão, ou nenhuma) e a **medida** (valor, nº de notas,
+linhas de produto, quantidade, frete, ICMS). Nove consultas prontas já vêm
+montadas (*gasto por fornecedor, material × fornecedor, fornecedor × mês,
+quanto entrou de cada material…*). Quando material entra na conta, a apuração
+desce para o **item da nota**; frete e ICMS, que são da nota inteira, não
+descem junto — ratear inventaria número que a nota não tem. Abaixo, a tabela
+**produto por produto** responde ao "o que entrou de tubo em julho, linha por
+linha". Tudo sai em CSV: notas, produtos e a própria consulta.
+
+O **Painel** consolida o mesmo recorte: valor, ticket médio, frete, ICMS,
+pendências, evolução mês a mês (com variação e acumulado), **concentração da
+compra** por fornecedor, **idade da conferência pendente** e quem lançou. O
+**Estoque** ganhou filtros, `% consumido`, **materiais parados** e o **consumo
+por frente e rua** (para onde o material foi). Os **Preços** ganharam filtros,
+a **diferença para o menor preço já pago** e o ranking de **quem cobra mais
+barato**, comparando cada compra com a média daquele material.
 
 > **Código-fonte compartilhado.** `js/nf/notas.js` e `js/ui/icones.js` são
 > **cópias sem alteração** do app "Gestor — Controle de Obras". Quem faz a ponte

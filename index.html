@@ -72,19 +72,19 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=49"></script>
-<script src="dados/ruas-de-terra.js?v=49"></script>
+<script src="dados/ranario.js?v=50"></script>
+<script src="dados/ruas-de-terra.js?v=50"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=49"></script>
+<script src="dados/teotonio-muros.js?v=50"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=49"></script>
-<script src="js/nf/adaptador.js?v=49"></script>
-<script src="js/nf/notas.js?v=49"></script>
-<script src="js/equip/equipamentos.js?v=49"></script>
+<script src="js/ui/icones.js?v=50"></script>
+<script src="js/nf/adaptador.js?v=50"></script>
+<script src="js/nf/notas.js?v=50"></script>
+<script src="js/equip/equipamentos.js?v=50"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -378,6 +378,34 @@
 .nf-passo{display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:var(--fs-md)}
 .nf-1linha{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .nf-simples .nf-extra{display:none!important}
+
+/* --- painel de notas: filtros, marcadores, consultas e tabelas ---
+   `.bar` é do módulo de notas (a barrinha de participação do painel) e nunca
+   existiu no CSS daqui: as barras saíam invisíveis, e a coluna parecia vazia. */
+.bar{height:6px;width:100%;border-radius:4px;background:var(--surface-2);border:1px solid var(--border);overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--acc);border-radius:4px}
+.nf-abas{flex-wrap:wrap}
+.nf-filtros-av{border-top:1px dashed var(--border);margin-top:12px;padding-top:12px;
+  display:flex;flex-direction:column;gap:10px}
+.nf-marcas{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;align-items:center}
+.nf-marcas .chip,.nf-prontas .chip{cursor:pointer;font-size:var(--fs-xs);padding:4px 10px}
+.nf-chip-limpar{margin-left:auto;border-style:dashed}
+.nf-chip-limpar .ic{width:13px;height:13px}
+.nf-acoes{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:14px}
+.nf-prontas{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.nf-btn-mais{white-space:nowrap}
+table.t.nf-tbl th,table.t.nf-tbl td{padding:8px 11px}
+table.t.nf-tbl td.num{white-space:nowrap}
+table.t.nf-tbl tfoot td{border-top:1px solid var(--border-strong);border-bottom:none;
+  background:var(--surface-2);font-size:var(--fs-sm)}
+table.t.nf-tbl tfoot tr:hover td{background:var(--surface-2)}
+.nf-tbl .bar{min-width:70px}
+@media(max-width:768px){
+  .nf-abas .btn-toggle{flex:1 1 30%}
+  .nf-acoes .field,.nf-acoes .btn{flex:1 1 46%}
+  .nf-acoes .btn-toggle-group{width:100%;margin-left:0!important}
+  .nf-chip-limpar{margin-left:0}
+}
 
 
 
