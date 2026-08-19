@@ -26,6 +26,7 @@ var ABA_AUDITORIA  = 'Auditoria';    // trilha de quem fez o quê (criada sozinh
 var ABA_EQUIP      = 'Equipamentos'; // frota da obra (própria e locada)
 var ABA_LOCADORA   = 'Locadoras';
 var ABA_APONT      = 'ApontEquip';   // apontamento diário de hora de máquina
+var ABA_BOTAFORA   = 'BotaFora';     // viagens de bota-fora / frete, com as provas
 var ABA_NF         = 'NotasFiscais';
 var ABA_SAIDA      = 'EstoqueSaidas';
 
@@ -55,6 +56,15 @@ var HEADERS = {
                    'nomeFantasia','municipio','uf','vProd','vFrete','vTotal','vBaseICMS','vICMS','itens','obs',
                    'responsavel','status','driveId','driveLink','paginas','leitura','historico','usuario','criadoEm','atualizadoEm'],
   'EstoqueSaidas':['id','obra','materialId','descricao','un','qtd','data','capid','rua','responsavel','obs','usuario','criadoEm'],
+  /* BOTA-FORA. Uma linha por viagem de caminhão que sai do canteiro. As três
+     provas (`fotoCarga`, `assinatura`, `fotoTicket`) guardam PONTEIRO do
+     Drive, nunca a imagem: base64 numa célula estoura o limite de 50 mil
+     caracteres da planilha e ainda torna a aba impossível de abrir. As
+     colunas saem na ordem da aba FRETE do fechamento, que é o formato em
+     que o escritório recebe. */
+  'BotaFora':     ['id','clientId','obra','data','fornecedor','placa','material','servico','projeto',
+                   'motorista','valor','origem','destino','obs','fotoCarga','assinatura','fotoTicket',
+                   'usuario','criadoEm'],
   /* MEDIÇÕES FECHADAS. `itens` guarda o snapshot do que foi APRESENTADO à
      fiscalização naquela competência, em JSON. Sem isso, um lançamento
      retroativo reescrevia em silêncio a prévia de um mês já medido e já
@@ -84,7 +94,8 @@ function rotear(e) {
                       'equipListar', 'equipCadastrar', 'equipDesativar', 'locadoraCadastrar',
                       'equipApontar', 'equipApagar', 'equipEditar', 'equipApontamentos', 'equipUltimos',
                       'nfListar', 'nfSalvar', 'nfExcluir', 'nfImagem', 'nfLerIA', 'nfDiag',
-                      'nfConsultarChave', 'saidaSalvar', 'saidaExcluir'];
+                      'nfConsultarChave', 'saidaSalvar', 'saidaExcluir',
+                      'bfListar', 'bfSalvar', 'bfExcluir'];
     if (PROTEGIDAS.indexOf(action) !== -1) {
       var falhaAuth = exigirTokenSeAtivo(p.token);
       if (falhaAuth) return responder(falhaAuth, p.callback);
@@ -99,7 +110,7 @@ function rotear(e) {
     // checagem fica aqui, no roteador, e não dentro de nfSalvar/saidaSalvar —
     // essas duas são do bloco compartilhado com o app "Gestor", que precisa
     // continuar idêntico dos dois lados.
-    var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar'];
+    var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar', 'bfSalvar'];
     if (POR_OBRA.indexOf(action) !== -1) {
       var sessObraR = sessaoDoToken(p.token);
       if (sessObraR && !sessaoPodeNaObra(sessObraR, p.obra)) {
@@ -122,7 +133,7 @@ function rotear(e) {
        sua — pegar de novo uma trava já tomada dentro da mesma execução é o
        tipo de coisa que só se descobre em produção. */
     var SEM_TRAVA_PROPRIA = ['deleteRDO', 'updateRDO', 'rdoFoto', 'equipApagar', 'equipEditar',
-                             'nfSalvar', 'nfExcluir', 'saidaSalvar', 'saidaExcluir'];
+                             'nfSalvar', 'nfExcluir', 'saidaSalvar', 'saidaExcluir', 'bfExcluir'];
     var travaRoteador = null;
     if (SEM_TRAVA_PROPRIA.indexOf(action) !== -1) {
       travaRoteador = LockService.getScriptLock();
@@ -170,6 +181,9 @@ function rotear(e) {
       case 'nfDiag':            resp = nfDiag(); break;
       case 'nfConsultarChave':  resp = nfConsultarChave(p); break;
       case 'saidaSalvar':       resp = saidaSalvar(p); break;
+      case 'bfListar':          resp = bfListar(p.obra, p.de, p.ate); break;
+      case 'bfSalvar':          resp = bfSalvar(p); break;
+      case 'bfExcluir':         resp = bfExcluir(p.obra, p.id, p.token); break;
       case 'saidaExcluir':      resp = saidaExcluir(p.obra, p.id, p.token); break;
       case 'clima':           resp = climaDoDia(p.data, p.obra); break;
       case 'rdoFoto':         resp = rdoFoto(p); break;
@@ -1599,6 +1613,117 @@ function equipEditar(p) {
     return { ok: true, editado: carimbo, campos: depois.length };
   }
   return { ok: false, error: 'Apontamento não encontrado' };
+}
+
+/* ==================================================================
+   BOTA-FORA — as viagens de caminhão que saem do canteiro
+   ------------------------------------------------------------------
+   Cada linha é uma viagem cobrada. O que a torna contestável é a PROVA:
+   foto da carga/placa, assinatura do motorista e foto do ticket do
+   aterro. As três chegam como data:image e vão para a pasta privada do
+   Drive; a planilha guarda o ponteiro.
+
+   A régua de obra é a de sempre — a coluna `obra` separa as linhas, e o
+   roteador já barra quem não tem acesso a ela (POR_OBRA).
+   ================================================================== */
+function bfPastaProvas() {
+  var nome = 'Bota-Fora Teotônio (Privado)';
+  var pastas = DriveApp.getFoldersByName(nome);
+  return pastas.hasNext() ? pastas.next() : DriveApp.createFolder(nome);
+}
+
+/* Mesma ideia de assinaturaParaDrive, com a pasta e o nome desta tela.
+   O que já é ponteiro (ou vazio) passa direto. */
+function bfProvaParaDrive(valor, id, qual) {
+  var v = String(valor == null ? '' : valor);
+  if (v.indexOf('data:image') !== 0) return v;
+  try {
+    var tipo = v.substring(5, v.indexOf(';'));
+    var ext = tipo.indexOf('png') !== -1 ? '.png' : '.jpg';
+    var blob = Utilities.newBlob(Utilities.base64Decode(v.split(',')[1]), tipo,
+      'botafora_' + id + '_' + qual + ext);
+    var arq = bfPastaProvas().createFile(blob);
+    arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    return 'drive_id:' + arq.getId();
+  } catch (e) { return ''; }
+}
+
+function bfListar(obra, de, ate) {
+  garantirColuna(getOrCreateAba(ABA_BOTAFORA), 'obra');
+  var arr = linhasObj(ABA_BOTAFORA, obra).map(function (x) {
+    var o = {};
+    Object.keys(x).forEach(function (k) { o[k] = x[k]; });
+    o.data = normData(x.data);
+    return o;
+  });
+  if (de)  arr = arr.filter(function (x) { return String(x.data) >= String(de); });
+  if (ate) arr = arr.filter(function (x) { return String(x.data) <= String(ate); });
+  // Mais recente primeiro na tela; a planilha reordena por data ao exportar.
+  arr.sort(function (x, y) { return String(y.data).localeCompare(String(x.data)) ||
+                                    String(y.criadoEm).localeCompare(String(x.criadoEm)); });
+  return { ok: true, viagens: arr };
+}
+
+function bfSalvar(p) {
+  var sessObra = sessaoDoToken(p.token);
+  if (sessObra && !sessaoPodeNaObra(sessObra, p.obra)) {
+    return negarPorObra(p.token, 'bfSalvar', p.obra);
+  }
+  var lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    garantirColuna(getOrCreateAba(ABA_BOTAFORA), 'obra');
+    /* Reenvio da fila offline não pode lançar a mesma viagem duas vezes —
+       e aqui isso seria uma viagem cobrada em duplicidade. */
+    if (p.clientId) {
+      var jaTem = linhasObj(ABA_BOTAFORA).some(function (x) {
+        return String(x.clientId).trim() === String(p.clientId).trim();
+      });
+      if (jaTem) return { ok: true, duplicate: true };
+    }
+    var id = p.id || gerarId(new Date(), 'bf');
+    var sess = sessaoDoToken(p.token) || { usuario: '', perfil: '' };
+    appendObj(ABA_BOTAFORA, {
+      id: id, clientId: p.clientId || '', obra: normObra(p.obra),
+      data: normData(p.data), fornecedor: p.fornecedor || '',
+      placa: String(p.placa || '').toUpperCase(), material: p.material || '',
+      servico: p.servico || 'FRETE', projeto: p.projeto || '',
+      motorista: p.motorista || '', valor: p.valor === '' || p.valor == null ? '' : Number(p.valor) || 0,
+      origem: p.origem || '', destino: p.destino || '', obs: p.obs || '',
+      fotoCarga: bfProvaParaDrive(p.fotoCarga, id, 'carga'),
+      assinatura: bfProvaParaDrive(p.assinatura, id, 'assinatura'),
+      fotoTicket: bfProvaParaDrive(p.fotoTicket, id, 'ticket'),
+      // O DONO vem do TOKEN, nunca do que o cliente declarou: é este campo
+      // que a regra "só admin ou quem lançou apaga" consulta.
+      usuario: sess.usuario, criadoEm: Date.now()
+    });
+    registrarAuditoria(sess.usuario, sess.perfil, 'bfRegistrar', normObra(p.obra), id, '',
+      String(p.placa || '') + ' · ' + (p.material || '') + ' · ' + (p.valor || '0') + ' em ' + (p.data || ''));
+    return { ok: true, id: id };
+  } finally { lock.releaseLock(); }
+}
+
+function bfExcluir(obra, id, token) {
+  if (!id) return { ok: false, error: 'ID não informado' };
+  var a = getOrCreateAba(ABA_BOTAFORA);
+  var dados = a.getDataRange().getValues();
+  if (dados.length < 2) return { ok: false, error: 'Viagem não encontrada' };
+  var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iId = idxColuna(cab, 'id'), iU = idxColuna(cab, 'usuario'), iO = idxColuna(cab, 'obra');
+  for (var i = 1; i < dados.length; i++) {
+    if (String(dados[i][iId]).trim() !== String(id).trim()) continue;
+    var obraDaLinha = iO !== -1 ? normObra(dados[i][iO]) : '';
+    var sessObra = sessaoDoToken(token);
+    if (sessObra && obraDaLinha && !sessaoPodeNaObra(sessObra, obraDaLinha)) {
+      return negarPorObra(token, 'bfExcluir', obraDaLinha);
+    }
+    var dono = iU !== -1 ? dados[i][iU] : '';
+    if (!podeApagarLinha(token, dono)) return negarPorPermissao(token, 'bfExcluir', id, dono);
+    a.deleteRow(i + 1);
+    registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'bfExcluir', obraDaLinha || OBRA_ID, id,
+      cab.map(function (c, k) { return c + '=' + dados[i][k]; }).join(' | '), '');
+    return { ok: true, removido: id };
+  }
+  return { ok: false, error: 'Viagem não encontrada' };
 }
 
 function equipApontamentos(mes, obra, de, ate) {

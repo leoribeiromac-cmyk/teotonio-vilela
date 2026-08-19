@@ -15,6 +15,13 @@ para a navegação, então a mudança chega sem precisar limpar cache.
 - `sw.js` — service worker (cache: rede-primeiro na navegação).
 - `js/ui/icones.js` — conjunto de ícones do app (SVG em traço, 24×24).
   Usar `ic('nome')`; nada de emoji na interface.
+- `js/equip/equipamentos.js` — tela de Equipamentos (hora de máquina). Fala com
+  DOIS backends: a Teotônio no Apps Script legado (campo `equipamentos` do
+  cadastro dela), as demais no `Code.gs`. `backendEquip()` decide a cada
+  chamada — mexer numa ação exige pensar nos dois dialetos.
+- `js/bf/bota-fora.js` — tela de Bota-Fora: a viagem de caminhão com foto da
+  carga/placa, assinatura do motorista e foto do ticket, e a exportação no
+  formato da aba FRETE do fechamento. Só fala com o `Code.gs`.
 - `vendor/` — bibliotecas servidas pelo próprio site (Chart.js, jsPDF +
   AutoTable, xlsx-js-style, PDF.js). **Não voltar a usar CDN**: o app precisa
   abrir offline no canteiro. Ao trocar uma versão, subir também o `VERSAO`

@@ -85,6 +85,9 @@
 <script src="js/nf/adaptador.js?v=51"></script>
 <script src="js/nf/notas.js?v=51"></script>
 <script src="js/equip/equipamentos.js?v=51"></script>
+<!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
+     provas que permitem conferir a fatura do transportador. -->
+<script src="js/bf/bota-fora.js?v=51"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -901,6 +904,41 @@ body.proj-cheia-ativa{overflow:hidden}
      a linha só roubaria altura do desenho. */
   .proj-dica{display:none}
 }
+/* ---------- BOTA-FORA (js/bf/bota-fora.js) ----------
+   A tela reaproveita o vocabulário visual de Equipamentos (eq-topo, eq-bloco,
+   eq-modal, eq-lista): são as duas telas de lançamento do mesmo apontador, e
+   duas linguagens para a mesma operação é o que faz alguém errar de campo. O
+   que é próprio daqui são as PROVAS. */
+.bf-prova{border:1px solid var(--border);border-radius:var(--r-sm);padding:11px 12px;margin-bottom:10px}
+.bf-prova:last-child{margin-bottom:0}
+.bf-prova-topo{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.bf-prova-prev:not(:empty){margin-top:10px}
+/* A miniatura é grande de propósito: quem confere quer LER a placa e o número
+   do ticket sem abrir nada. 74px, que é o tamanho da foto do serviço, não
+   serve — ali a foto é lembrete, aqui é a prova. */
+.bf-prova-thumb{position:relative;display:inline-block;max-width:100%}
+.bf-prova-thumb img{
+  max-width:100%;max-height:190px;display:block;object-fit:contain;
+  border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);
+}
+.bf-prova-assin img{background:#fff;padding:4px}
+.bf-prova-x{
+  position:absolute;top:-8px;right:-8px;width:22px;height:22px;padding:0;border:none;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;border-radius:50%;
+  background:var(--red);color:#fff;
+}
+/* Selos do que foi (ou não foi) anexado. Na lista de viagens, é o que diz numa
+   olhada qual linha da fatura tem como ser contestada. */
+.bf-selos{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.bf-selo{
+  display:inline-flex;align-items:center;gap:4px;padding:2px 7px;border-radius:999px;
+  font-size:var(--fs-2xs);font-weight:600;background:var(--grn-l);color:var(--grn);
+}
+.bf-selo-falta{background:var(--ylw-l);color:var(--ylw-d)}
+.bf-selo .ic{width:12px;height:12px;vertical-align:0}
+/* Falta de prova na conferência não pode passar como texto comum. */
+.bf-falta{color:var(--ylw-d);font-weight:700}
+
 /* ---- obras permitidas, no cadastro de usuário ---- */
 .usr-obras{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 12px;
   border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2)}
@@ -3880,6 +3918,7 @@ function descricaoDaFila(itens) {
     nfDel:   ['exclusão de nota', 'exclusões de nota'],
     saida:   ['saída de estoque', 'saídas de estoque'],
     equip:   ['apontamento de equipamento', 'apontamentos de equipamento'],
+    botafora:['viagem de bota-fora', 'viagens de bota-fora'],
   };
   const cont = {};
   (itens || []).forEach(it => {
@@ -4978,20 +5017,20 @@ const PERFIS = {
   campo: {
     nome: 'Campo',
     desc: 'Apontador — lança a produção do dia',
-    telas: ['rdo', 'rdodiario', 'historico', 'avancofisico', 'galeria', 'projetos', 'equip', 'notas'],
-    pode: ['lancarServico', 'lancarDiario', 'apontarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque']
+    telas: ['rdo', 'rdodiario', 'historico', 'avancofisico', 'galeria', 'projetos', 'equip', 'botafora', 'notas'],
+    pode: ['lancarServico', 'lancarDiario', 'apontarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque', 'botaFora']
   },
   administrativo: {
     nome: 'Administrativo',
     desc: 'Escritório — acompanha, confere e exporta',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
-    pode: ['exportar', 'relatorio', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'saidaEstoque']
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'historico', 'galeria', 'projetos', 'equip', 'botafora', 'notas'],
+    pode: ['exportar', 'relatorio', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'saidaEstoque', 'botaFora']
   },
   engenharia: {
     nome: 'Engenharia',
     desc: 'Engenheiro da obra — lança, confere e analisa',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'projetos', 'equip', 'notas'],
-    pode: ['lancarServico', 'lancarDiario', 'editar', 'exportar', 'relatorio', 'analiseIA', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque']
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'projetos', 'equip', 'botafora', 'notas'],
+    pode: ['lancarServico', 'lancarDiario', 'editar', 'exportar', 'relatorio', 'analiseIA', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque', 'botaFora']
   },
   diretoria: {
     nome: 'Diretoria',
@@ -5025,7 +5064,7 @@ function ehAdmin() { return perfilAtual() === 'admin'; }
    análise e barra as de lançamento (que já pediam login antes). */
 /* Telas que exigem login. A lista é a mesma consultada no render() — item de
    menu que só leva à tela de login é promessa que o app não cumpre. */
-const TELAS_COM_LOGIN = ['rdo', 'rdodiario', 'usuarios', 'equip', 'notas'];
+const TELAS_COM_LOGIN = ['rdo', 'rdodiario', 'usuarios', 'equip', 'notas', 'botafora'];
 
 function podeVer(tela) {
   if (!STATE.usuarioLogado) return !TELAS_COM_LOGIN.includes(tela);
@@ -5057,6 +5096,7 @@ function telaBloqueada(tela) {
     medicao: 'o Apoio à Medição', improdutivos: 'os Dias Improdutivos', teoricoreal: 'o Teórico × Real', analista: 'o Analista IA', rdo: 'o lançamento de serviços',
     rdodiario: 'o RDO Diário', historico: 'o Histórico', usuarios: 'a gestão de usuários',
     equip: 'os Equipamentos', galeria: 'a Galeria de Fotos', notas: 'as Notas Fiscais',
+    botafora: 'o Controle de Bota-Fora',
     projetos: 'os Projetos'
   };
   return `<div class="card" style="max-width:520px;margin:40px auto;border-top:4px solid var(--ylw)">
@@ -7012,6 +7052,7 @@ function renderShell() {
           { id: 'rdodiario', icone: 'diario',       texto: 'RDO Diário',     contador: 'diarioCount' },
           { id: 'historico', icone: 'historico',    texto: 'Histórico' },
           { id: 'equip',     icone: 'equipamentos', texto: 'Equipamentos' },
+          { id: 'botafora',  icone: 'saida',        texto: 'Bota-Fora' },
           { id: 'galeria',   icone: 'galeria',      texto: 'Galeria de Fotos' },
           { id: 'projetos',  icone: 'projetos',     texto: 'Projetos' },
         ])}
@@ -7242,6 +7283,7 @@ function render() {
     rdodiario: ['RDO Diário', 'Cabeçalho do dia · efetivo, equipamentos, clima'],
     historico: ['Histórico', 'Serviços e RDOs diários lançados'],
     equip: ['Equipamentos', 'Frota da obra · apontamento de hora de máquina'],
+    botafora: ['Bota-Fora', 'Viagem por viagem, com foto da carga, assinatura e ticket'],
     notas: ['Notas Fiscais', 'DANFE, estoque de material e histórico de preço'],
     galeria: ['Galeria de Fotos', 'Registro fotográfico dos serviços lançados'],
     projetos: ['Projetos', 'Prancha do executivo · amplia até a cota, e abre sem sinal'],
@@ -7281,6 +7323,7 @@ function render() {
   else if (STATE.currentPage === 'rdodiario') { pageEl.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
   else if (STATE.currentPage === 'historico') pageEl.innerHTML = renderHistorico();
   else if (STATE.currentPage === 'equip') { pageEl.innerHTML = EQ.render(); EQ.boot(); }
+  else if (STATE.currentPage === 'botafora') { pageEl.innerHTML = BF.render(); BF.boot(); }
   else if (STATE.currentPage === 'notas') {
     pageEl.innerHTML = faixaObraNotas() + viewNotas(obra());
     nfCarregar(obra().id);
