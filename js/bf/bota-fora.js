@@ -250,7 +250,16 @@
       e.preventDefault();
       if (!val('bfData')) { aviso('Informe a data da viagem.'); return; }
       if (!val('bfPlaca')) { aviso('A placa é o que liga a viagem ao caminhão — sem ela a fatura não se confere.'); return; }
-      if (!valorFrete() && valorFrete() !== 0) { aviso('Confira o valor do frete.'); return; }
+      /* Valor em branco vale 0 e passa — o apontador nem sempre sabe o preço
+         no momento em que o caminhão sai, e zero aparece na conferência.
+         O que não pode passar em silêncio é texto que NÃO é número: o
+         `num()` do app devolve 0 para qualquer lixo (nunca NaN), então uma
+         digitação errada viraria um frete de R$ 0,00 sem ninguém ver — e a
+         fatura fecharia a menos. A checagem é sobre o que foi digitado. */
+      const brutoValor = val('bfValor');
+      if (brutoValor && !/^[\d.,\s]+$/.test(brutoValor)) {
+        aviso('Confira o valor do frete — não consegui ler esse número.'); return;
+      }
       abrirConferencia();
     });
   }

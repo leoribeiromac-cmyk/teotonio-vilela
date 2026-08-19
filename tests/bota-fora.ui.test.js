@@ -190,6 +190,22 @@ function camposDoPost(corpo) {
   ok('o trajeto aparece na conferência', /Ijucapirama.*Itaquareia/.test(conf.trajeto), conf.trajeto);
   ok('e as três provas estão anunciadas', !/FALTA/.test(conf.provas), conf.provas);
 
+  // Antes de gravar de verdade: um valor que não é número não pode virar
+  // R$ 0,00 em silêncio — o `num()` do app devolve 0 para qualquer lixo.
+  await p.evaluate(() => {
+    BF.fechar('bfConfirmModal');
+    document.getElementById('bfValor').value = 'novecentos reais';
+    document.getElementById('bfForm').requestSubmit();
+  });
+  await p.waitForTimeout(400);
+  ok('valor que não é número é recusado, em vez de virar R$ 0,00',
+     await p.evaluate(() => getComputedStyle(document.getElementById('bfConfirmModal')).display === 'none'));
+  await p.evaluate(() => {
+    document.getElementById('bfValor').value = '1.250,50';
+    document.getElementById('bfForm').requestSubmit();
+  });
+  await p.waitForTimeout(400);
+
   chamadas.length = 0;
   await p.evaluate(() => bfConfirmar());
   await p.waitForTimeout(1200);
