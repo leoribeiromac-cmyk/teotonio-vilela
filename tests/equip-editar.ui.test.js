@@ -239,6 +239,31 @@ function camposDoPost(corpo) {
   ok('e o formulário fica limpo', depois.operador === '', JSON.stringify(depois.operador));
 
   // ------------------------------------------------------------------
+  console.log('\n"LIMPAR" APAGA A ASSINATURA DE VERDADE');
+  // O botão dizia "Limpar", esvaziava o campo na tela — e reenviava a
+  // assinatura do envio original assim mesmo. Um botão que não faz o que diz.
+  await p.evaluate(() => EQ.abrirUltimos());
+  await p.waitForTimeout(700);
+  await p.click('.btn-editar-apont');
+  await p.waitForTimeout(600);
+  await p.evaluate(() => EQ.limparAssinatura());
+  await p.waitForTimeout(200);
+  ok('o formulário para de dizer que a assinatura antiga foi mantida',
+     !/mantida/i.test(await p.evaluate(() => document.getElementById('assinaturaEstado').textContent)),
+     await p.evaluate(() => document.getElementById('assinaturaEstado').textContent));
+  posts.length = 0;
+  await p.evaluate(() => document.getElementById('apontamentoForm').requestSubmit());
+  await p.waitForTimeout(400);
+  ok('e a conferência avisa que ela SERÁ apagada',
+     /apagada/i.test(await p.evaluate(() => document.getElementById('cfAssin').textContent)),
+     await p.evaluate(() => document.getElementById('cfAssin').textContent));
+  await p.evaluate(() => EQ.confirmarEnvio());
+  await p.waitForTimeout(900);
+  const apagou = posts.find(x => x.acao === 'equipEditar');
+  ok('e o servidor recebe a ordem de limpar (campo vazio, não ausente)',
+     !!apagou && apagou.campos.assinatura === '', apagou && JSON.stringify(apagou.campos.assinatura));
+
+  // ------------------------------------------------------------------
   console.log('\nCANCELAR A CORREÇÃO');
   await p.evaluate(() => EQ.abrirUltimos());
   await p.waitForTimeout(700);

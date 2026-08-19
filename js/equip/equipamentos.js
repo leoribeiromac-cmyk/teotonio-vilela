@@ -459,7 +459,8 @@
             set('cfHorim', (hi || hf) ? ((hi || '—') + ' → ' + (hf || '—')) : '—');
             set('cfComb', g('combustivel').value ? (g('combustivel').value + ' L') : '—');
             set('cfAssin', document.getElementById('assinatura').value ? 'assinada'
-                 : (EDICAO && EDICAO.assinatura) ? 'assinada (a mesma de antes)' : '—');
+                 : (EDICAO && EDICAO.assinatura && !EDICAO.assinaturaRemovida) ? 'assinada (a mesma de antes)'
+                 : (EDICAO && EDICAO.assinaturaRemovida) ? 'a assinatura será APAGADA' : '—');
             set('cfObs', g('observacoesUI').value.trim() || 'Sem detalhes adicionais.');
             EQ.abrir('confirmModal');
         }
@@ -591,7 +592,7 @@
             /* Sem traço novo, a assinatura é a que já está no Drive: o que a
                planilha guarda é um ponteiro, e reenviá-lo não cria arquivo. */
             const assinNova = document.getElementById('assinatura').value;
-            const assinatura = assinNova || EDICAO.assinatura || '';
+            const assinatura = assinNova || (EDICAO.assinaturaRemovida ? '' : (EDICAO.assinatura || ''));
 
             if (!be.legado) {
                 fd.set('action', 'equipEditar');
@@ -600,7 +601,9 @@
                 // Campo ausente é campo que o servidor não toca. Sem assinatura
                 // nenhuma dos dois lados, melhor não mandar do que mandar vazio
                 // e apagar a que está lá.
-                if (assinatura) fd.set('assinatura', assinatura); else fd.delete('assinatura');
+                if (assinatura) fd.set('assinatura', assinatura);
+                else if (EDICAO.assinaturaRemovida) fd.set('assinatura', '');   // apagar é uma ordem
+                else fd.delete('assinatura');                                    // não reassinar não é
                 if (forcar) fd.set('forcar', 'true');
                 const resp = await fetch(be.url, { method: 'POST', body: fd });
                 const r = await resp.json();
@@ -843,6 +846,12 @@
         function limparAssinatura() {
             const c = document.getElementById('assinaturaCanvas'); if (c && c._clear) c._clear();
             const h = document.getElementById('assinatura'); if (h) h.value = '';
+            /* Numa CORREÇÃO, "Limpar" tem de apagar de verdade. Sem esta
+               marca, o campo ficava vazio na tela mas a assinatura do envio
+               original era reenviada no lugar — um botão que não faz o que
+               diz. A marca distingue "não reassinei" (mantém a que está lá)
+               de "apaguei" (manda vazio, e o servidor limpa a célula). */
+            if (EDICAO) EDICAO.assinaturaRemovida = true;
             mostrarEstadoAssinatura();
         }
         function capturarAssinatura() {
@@ -872,7 +881,7 @@
             const img = document.getElementById('assinaturaPrev');
             const h = document.getElementById('assinatura');
             const assinado = !!(h && h.value);
-            const herdada = !assinado && !!(EDICAO && EDICAO.assinatura);
+            const herdada = !assinado && !!(EDICAO && EDICAO.assinatura && !EDICAO.assinaturaRemovida);
             if (txt) txt.textContent = assinado
                 ? 'Assinado. Toque em Assinar para refazer, ou Limpar para apagar.'
                 : herdada
