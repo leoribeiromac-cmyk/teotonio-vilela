@@ -22,8 +22,12 @@
 //   (sobe o próprio servidor; não depende do 8099)
 const { chromium } = require('playwright');
 const { spawn } = require('child_process');
+const path = require('path');
 
-const RAIZ = '/home/user/teotonio-vilela';
+/* O repositório, a partir DESTE arquivo — nunca um caminho absoluto: na CI
+   ele não existe, e `spawn` com `cwd` inexistente devolve um ENOENT que
+   acusa o comando ("spawn python3 ENOENT") em vez da pasta. */
+const RAIZ = path.join(__dirname, '..');
 const PORTA = 8128;
 const BASE = 'http://localhost:' + PORTA;
 
