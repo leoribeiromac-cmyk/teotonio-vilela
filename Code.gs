@@ -26,6 +26,7 @@ var ABA_AUDITORIA  = 'Auditoria';    // trilha de quem fez o quê (criada sozinh
 var ABA_EQUIP      = 'Equipamentos'; // frota da obra (própria e locada)
 var ABA_LOCADORA   = 'Locadoras';
 var ABA_APONT      = 'ApontEquip';   // apontamento diário de hora de máquina
+var ABA_BOTAFORA   = 'BotaFora';     // viagens de bota-fora / frete, com as provas
 var ABA_NF         = 'NotasFiscais';
 var ABA_SAIDA      = 'EstoqueSaidas';
 
@@ -55,6 +56,15 @@ var HEADERS = {
                    'nomeFantasia','municipio','uf','vProd','vFrete','vTotal','vBaseICMS','vICMS','itens','obs',
                    'responsavel','status','driveId','driveLink','paginas','leitura','historico','usuario','criadoEm','atualizadoEm'],
   'EstoqueSaidas':['id','obra','materialId','descricao','un','qtd','data','capid','rua','responsavel','obs','usuario','criadoEm'],
+  /* BOTA-FORA. Uma linha por viagem de caminhão que sai do canteiro. As três
+     provas (`fotoCarga`, `assinatura`, `fotoTicket`) guardam PONTEIRO do
+     Drive, nunca a imagem: base64 numa célula estoura o limite de 50 mil
+     caracteres da planilha e ainda torna a aba impossível de abrir. As
+     colunas saem na ordem da aba FRETE do fechamento, que é o formato em
+     que o escritório recebe. */
+  'BotaFora':     ['id','clientId','obra','data','fornecedor','placa','material','servico','projeto',
+                   'motorista','valor','origem','destino','obs','fotoCarga','assinatura','fotoTicket',
+                   'usuario','criadoEm'],
   /* MEDIÇÕES FECHADAS. `itens` guarda o snapshot do que foi APRESENTADO à
      fiscalização naquela competência, em JSON. Sem isso, um lançamento
      retroativo reescrevia em silêncio a prévia de um mês já medido e já
@@ -82,9 +92,10 @@ function rotear(e) {
                       'usuariosListar', 'usuarioSalvar', 'usuarioExcluir',
                       'rdoFoto', 'obterFoto',
                       'equipListar', 'equipCadastrar', 'equipDesativar', 'locadoraCadastrar',
-                      'equipApontar', 'equipApagar', 'equipApontamentos', 'equipUltimos',
+                      'equipApontar', 'equipApagar', 'equipEditar', 'equipApontamentos', 'equipUltimos',
                       'nfListar', 'nfSalvar', 'nfExcluir', 'nfImagem', 'nfLerIA', 'nfDiag',
-                      'nfConsultarChave', 'saidaSalvar', 'saidaExcluir'];
+                      'nfConsultarChave', 'saidaSalvar', 'saidaExcluir',
+                      'bfListar', 'bfSalvar', 'bfExcluir'];
     if (PROTEGIDAS.indexOf(action) !== -1) {
       var falhaAuth = exigirTokenSeAtivo(p.token);
       if (falhaAuth) return responder(falhaAuth, p.callback);
@@ -99,7 +110,7 @@ function rotear(e) {
     // checagem fica aqui, no roteador, e não dentro de nfSalvar/saidaSalvar —
     // essas duas são do bloco compartilhado com o app "Gestor", que precisa
     // continuar idêntico dos dois lados.
-    var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar'];
+    var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar', 'bfSalvar'];
     if (POR_OBRA.indexOf(action) !== -1) {
       var sessObraR = sessaoDoToken(p.token);
       if (sessObraR && !sessaoPodeNaObra(sessObraR, p.obra)) {
@@ -121,8 +132,8 @@ function rotear(e) {
        A trava vai aqui, no roteador, e só para as ações que ainda NÃO têm a
        sua — pegar de novo uma trava já tomada dentro da mesma execução é o
        tipo de coisa que só se descobre em produção. */
-    var SEM_TRAVA_PROPRIA = ['deleteRDO', 'updateRDO', 'rdoFoto', 'equipApagar',
-                             'nfSalvar', 'nfExcluir', 'saidaSalvar', 'saidaExcluir'];
+    var SEM_TRAVA_PROPRIA = ['deleteRDO', 'updateRDO', 'rdoFoto', 'equipApagar', 'equipEditar',
+                             'nfSalvar', 'nfExcluir', 'saidaSalvar', 'saidaExcluir', 'bfExcluir'];
     var travaRoteador = null;
     if (SEM_TRAVA_PROPRIA.indexOf(action) !== -1) {
       travaRoteador = LockService.getScriptLock();
@@ -159,6 +170,7 @@ function rotear(e) {
       case 'locadoraCadastrar': resp = locadoraCadastrar(p.nome, p.observacoes, p.obra); break;
       case 'equipApontar':      resp = equipApontar(p); break;
       case 'equipApagar':       resp = equipApagar(p.carimbo, p.token); break;
+      case 'equipEditar':       resp = equipEditar(p); break;
       case 'equipUltimos':      resp = equipUltimos(p.obra, p.n); break;
       case 'equipApontamentos': resp = equipApontamentos(p.mes, p.obra, p.de, p.ate); break;
       case 'nfListar':          resp = nfListar(p.obra); break;
@@ -169,6 +181,9 @@ function rotear(e) {
       case 'nfDiag':            resp = nfDiag(); break;
       case 'nfConsultarChave':  resp = nfConsultarChave(p); break;
       case 'saidaSalvar':       resp = saidaSalvar(p); break;
+      case 'bfListar':          resp = bfListar(p.obra, p.de, p.ate); break;
+      case 'bfSalvar':          resp = bfSalvar(p); break;
+      case 'bfExcluir':         resp = bfExcluir(p.obra, p.id, p.token); break;
       case 'saidaExcluir':      resp = saidaExcluir(p.obra, p.id, p.token); break;
       case 'clima':           resp = climaDoDia(p.data, p.obra); break;
       case 'rdoFoto':         resp = rdoFoto(p); break;
@@ -1457,18 +1472,7 @@ function equipApontar(p) {
 
     // A assinatura do operador é imagem: vai para o Drive privado, e a
     // planilha guarda o ponteiro (igual às fotos do serviço).
-    var assin = String(p.assinatura || '');
-    if (assin.indexOf('data:image') === 0) {
-      try {
-        var blob = Utilities.newBlob(Utilities.base64Decode(assin.split(',')[1]), 'image/png',
-          'assinatura_' + (p.carimbo || Date.now()) + '.png');
-        var pastas = DriveApp.getFoldersByName('Assinaturas Teotônio (Privado)');
-        var pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder('Assinaturas Teotônio (Privado)');
-        var arq = pasta.createFile(blob);
-        arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
-        assin = 'drive_id:' + arq.getId();
-      } catch (e) { assin = ''; }
-    }
+    var assin = assinaturaParaDrive(p.assinatura, p.carimbo);
 
     var sess = sessaoDoToken(p.token) || { usuario: '', perfil: '' };
     var carimbo = p.carimbo || String(Date.now());
@@ -1503,6 +1507,223 @@ function equipApagar(carimbo, token) {
     }
   }
   return { ok: false, error: 'Apontamento não encontrado' };
+}
+
+/* A assinatura chega como data:image e não pode ficar na célula: são dezenas
+   de KB de base64 por linha. Vai para a pasta privada do Drive, e a planilha
+   guarda só o ponteiro — mesmo desenho das fotos do serviço.
+   O que já é ponteiro (ou vazio) passa direto: é o caso da EDIÇÃO em que
+   ninguém reassinou, e reenviar o mesmo traço criaria um arquivo órfão. */
+function assinaturaParaDrive(valor, carimbo) {
+  var assin = String(valor == null ? '' : valor);
+  if (assin.indexOf('data:image') !== 0) return assin;
+  try {
+    var blob = Utilities.newBlob(Utilities.base64Decode(assin.split(',')[1]), 'image/png',
+      'assinatura_' + (carimbo || Date.now()) + '.png');
+    var pastas = DriveApp.getFoldersByName('Assinaturas Teotônio (Privado)');
+    var pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder('Assinaturas Teotônio (Privado)');
+    var arq = pasta.createFile(blob);
+    arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    return 'drive_id:' + arq.getId();
+  } catch (e) { return ''; }
+}
+
+/* ------------------------------------------------------------------
+   CORRIGIR UM APONTAMENTO JÁ LANÇADO
+   ------------------------------------------------------------------
+   Até aqui, apontamento errado só tinha um caminho: APAGAR e lançar de
+   novo. Isso custava o carimbo (a identidade da linha), o `usuario` que
+   lançou e a assinatura do operador — e, no meio do caminho, deixava a
+   medição sem a hora daquele equipamento. Errar a hora do fim é o engano
+   mais comum do campo, e ele não deveria custar o registro inteiro.
+
+   A edição é NO LUGAR: mesma linha, mesmo carimbo, mesmo dono. Só os
+   campos do apontamento mudam, e a Auditoria guarda o antes e o depois —
+   é hora de máquina, que é cobrança.
+
+   Quem pode: o dono da linha, o administrador e a engenharia — a mesma
+   régua do updateRDO, pelo mesmo motivo (corrigir dado errado para poder
+   fechar a medição).
+   ------------------------------------------------------------------ */
+var EQUIP_EDITAVEIS = ['data', 'turno', 'equipamento', 'operador', 'inicio', 'fim', 'horas',
+                       'paradas', 'horimIni', 'horimFim', 'combustivel', 'situacao',
+                       'observacoes', 'assinatura'];
+
+function equipEditar(p) {
+  var carimbo = String(p.carimbo == null ? '' : p.carimbo).trim();
+  if (!carimbo) return { ok: false, error: 'Apontamento não informado' };
+
+  abaEquipComObra(ABA_APONT);
+  var a = getOrCreateAba(ABA_APONT);
+  var dados = a.getDataRange().getValues();
+  var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iC = idxColuna(cab, 'carimbo'), iU = idxColuna(cab, 'usuario'), iO = idxColuna(cab, 'obra');
+  if (iC === -1) return { ok: false, error: 'Coluna carimbo não encontrada' };
+
+  for (var i = 1; i < dados.length; i++) {
+    if (String(dados[i][iC]).trim() !== carimbo) continue;
+
+    // A obra é a DA LINHA, não a que o app disse: quem só tem acesso ao
+    // Ranário não corrige a hora de máquina da Teotônio.
+    var obraDaLinha = iO !== -1 ? normObra(dados[i][iO]) : '';
+    var sessObra = sessaoDoToken(p.token);
+    if (sessObra && obraDaLinha && !sessaoPodeNaObra(sessObra, obraDaLinha)) {
+      return negarPorObra(p.token, 'equipEditar', obraDaLinha);
+    }
+    var dono = iU !== -1 ? dados[i][iU] : '';
+    var perfil = perfilDoToken(p.token);
+    if (!podeApagarLinha(p.token, dono) && perfil !== 'engenharia') {
+      return negarPorPermissao(p.token, 'equipEditar', carimbo, dono);
+    }
+
+    // 2º apontamento do MESMO equipamento no mesmo dia e turno continua
+    // barrado — a edição não pode ser a porta dos fundos da duplicata. A
+    // própria linha, claro, não conta contra si mesma.
+    if (String(p.forcar) !== 'true' && p.data && p.turno && p.equipamento) {
+      var dia = normData(p.data), turnoP = String(p.turno).trim();
+      var equipP = String(p.equipamento).trim().toLowerCase();
+      var iD = idxColuna(cab, 'data'), iT = idxColuna(cab, 'turno'), iE = idxColuna(cab, 'equipamento');
+      for (var j = 1; j < dados.length; j++) {
+        if (j === i) continue;
+        if (iO !== -1 && normObra(dados[j][iO]) !== obraDaLinha) continue;
+        if (String(dados[j][iE]).trim().toLowerCase() === equipP &&
+            normData(dados[j][iD]) === dia && String(dados[j][iT]).trim() === turnoP) {
+          return { ok: false, duplicado: true,
+            erro: 'Já existe apontamento de "' + p.equipamento + '" nesse dia e turno.' };
+        }
+      }
+    }
+
+    var antes = [], depois = [];
+    for (var k = 0; k < EQUIP_EDITAVEIS.length; k++) {
+      var campo = EQUIP_EDITAVEIS[k];
+      if (p[campo] === undefined) continue;          // campo não enviado: não se toca
+      var col = idxColuna(cab, campo.toLowerCase());
+      if (col === -1 || col === iC || col === iU || col === iO) continue;
+      var valor = p[campo];
+      // Assinatura nova vira ponteiro do Drive; a que já era ponteiro fica.
+      if (campo === 'assinatura') valor = assinaturaParaDrive(valor, carimbo);
+      if (String(dados[i][col]) === String(valor)) continue;
+      antes.push(campo + '=' + dados[i][col]);
+      depois.push(campo + '=' + valor);
+      a.getRange(i + 1, col + 1).setValue(seguro(valor));
+    }
+    registrarAuditoria(usuarioDoToken(p.token), perfil, 'equipEditar', obraDaLinha || OBRA_ID,
+      carimbo, antes.join(' | '), depois.join(' | '));
+    return { ok: true, editado: carimbo, campos: depois.length };
+  }
+  return { ok: false, error: 'Apontamento não encontrado' };
+}
+
+/* ==================================================================
+   BOTA-FORA — as viagens de caminhão que saem do canteiro
+   ------------------------------------------------------------------
+   Cada linha é uma viagem cobrada. O que a torna contestável é a PROVA:
+   foto da carga/placa, assinatura do motorista e foto do ticket do
+   aterro. As três chegam como data:image e vão para a pasta privada do
+   Drive; a planilha guarda o ponteiro.
+
+   A régua de obra é a de sempre — a coluna `obra` separa as linhas, e o
+   roteador já barra quem não tem acesso a ela (POR_OBRA).
+   ================================================================== */
+function bfPastaProvas() {
+  var nome = 'Bota-Fora Teotônio (Privado)';
+  var pastas = DriveApp.getFoldersByName(nome);
+  return pastas.hasNext() ? pastas.next() : DriveApp.createFolder(nome);
+}
+
+/* Mesma ideia de assinaturaParaDrive, com a pasta e o nome desta tela.
+   O que já é ponteiro (ou vazio) passa direto. */
+function bfProvaParaDrive(valor, id, qual) {
+  var v = String(valor == null ? '' : valor);
+  if (v.indexOf('data:image') !== 0) return v;
+  try {
+    var tipo = v.substring(5, v.indexOf(';'));
+    var ext = tipo.indexOf('png') !== -1 ? '.png' : '.jpg';
+    var blob = Utilities.newBlob(Utilities.base64Decode(v.split(',')[1]), tipo,
+      'botafora_' + id + '_' + qual + ext);
+    var arq = bfPastaProvas().createFile(blob);
+    arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    return 'drive_id:' + arq.getId();
+  } catch (e) { return ''; }
+}
+
+function bfListar(obra, de, ate) {
+  garantirColuna(getOrCreateAba(ABA_BOTAFORA), 'obra');
+  var arr = linhasObj(ABA_BOTAFORA, obra).map(function (x) {
+    var o = {};
+    Object.keys(x).forEach(function (k) { o[k] = x[k]; });
+    o.data = normData(x.data);
+    return o;
+  });
+  if (de)  arr = arr.filter(function (x) { return String(x.data) >= String(de); });
+  if (ate) arr = arr.filter(function (x) { return String(x.data) <= String(ate); });
+  // Mais recente primeiro na tela; a planilha reordena por data ao exportar.
+  arr.sort(function (x, y) { return String(y.data).localeCompare(String(x.data)) ||
+                                    String(y.criadoEm).localeCompare(String(x.criadoEm)); });
+  return { ok: true, viagens: arr };
+}
+
+function bfSalvar(p) {
+  var sessObra = sessaoDoToken(p.token);
+  if (sessObra && !sessaoPodeNaObra(sessObra, p.obra)) {
+    return negarPorObra(p.token, 'bfSalvar', p.obra);
+  }
+  var lock = LockService.getScriptLock(); lock.waitLock(30000);
+  try {
+    garantirColuna(getOrCreateAba(ABA_BOTAFORA), 'obra');
+    /* Reenvio da fila offline não pode lançar a mesma viagem duas vezes —
+       e aqui isso seria uma viagem cobrada em duplicidade. */
+    if (p.clientId) {
+      var jaTem = linhasObj(ABA_BOTAFORA).some(function (x) {
+        return String(x.clientId).trim() === String(p.clientId).trim();
+      });
+      if (jaTem) return { ok: true, duplicate: true };
+    }
+    var id = p.id || gerarId(new Date(), 'bf');
+    var sess = sessaoDoToken(p.token) || { usuario: '', perfil: '' };
+    appendObj(ABA_BOTAFORA, {
+      id: id, clientId: p.clientId || '', obra: normObra(p.obra),
+      data: normData(p.data), fornecedor: p.fornecedor || '',
+      placa: String(p.placa || '').toUpperCase(), material: p.material || '',
+      servico: p.servico || 'FRETE', projeto: p.projeto || '',
+      motorista: p.motorista || '', valor: p.valor === '' || p.valor == null ? '' : Number(p.valor) || 0,
+      origem: p.origem || '', destino: p.destino || '', obs: p.obs || '',
+      fotoCarga: bfProvaParaDrive(p.fotoCarga, id, 'carga'),
+      assinatura: bfProvaParaDrive(p.assinatura, id, 'assinatura'),
+      fotoTicket: bfProvaParaDrive(p.fotoTicket, id, 'ticket'),
+      // O DONO vem do TOKEN, nunca do que o cliente declarou: é este campo
+      // que a regra "só admin ou quem lançou apaga" consulta.
+      usuario: sess.usuario, criadoEm: Date.now()
+    });
+    registrarAuditoria(sess.usuario, sess.perfil, 'bfRegistrar', normObra(p.obra), id, '',
+      String(p.placa || '') + ' · ' + (p.material || '') + ' · ' + (p.valor || '0') + ' em ' + (p.data || ''));
+    return { ok: true, id: id };
+  } finally { lock.releaseLock(); }
+}
+
+function bfExcluir(obra, id, token) {
+  if (!id) return { ok: false, error: 'ID não informado' };
+  var a = getOrCreateAba(ABA_BOTAFORA);
+  var dados = a.getDataRange().getValues();
+  if (dados.length < 2) return { ok: false, error: 'Viagem não encontrada' };
+  var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iId = idxColuna(cab, 'id'), iU = idxColuna(cab, 'usuario'), iO = idxColuna(cab, 'obra');
+  for (var i = 1; i < dados.length; i++) {
+    if (String(dados[i][iId]).trim() !== String(id).trim()) continue;
+    var obraDaLinha = iO !== -1 ? normObra(dados[i][iO]) : '';
+    var sessObra = sessaoDoToken(token);
+    if (sessObra && obraDaLinha && !sessaoPodeNaObra(sessObra, obraDaLinha)) {
+      return negarPorObra(token, 'bfExcluir', obraDaLinha);
+    }
+    var dono = iU !== -1 ? dados[i][iU] : '';
+    if (!podeApagarLinha(token, dono)) return negarPorPermissao(token, 'bfExcluir', id, dono);
+    a.deleteRow(i + 1);
+    registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'bfExcluir', obraDaLinha || OBRA_ID, id,
+      cab.map(function (c, k) { return c + '=' + dados[i][k]; }).join(' | '), '');
+    return { ok: true, removido: id };
+  }
+  return { ok: false, error: 'Viagem não encontrada' };
 }
 
 function equipApontamentos(mes, obra, de, ate) {

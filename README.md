@@ -491,6 +491,33 @@ de horas continua valendo depois que a máquina sai da obra.
 O backend cria sozinho as abas `Equipamentos`, `Locadoras` e `ApontEquip`.
 Sem sinal, o apontamento espera na fila do aparelho, como o RDO.
 
+### Corrigir um apontamento
+
+Errar o horário de fim é o engano mais comum do canteiro, e até aqui o único
+conserto era **apagar e lançar de novo** — o que custava o carimbo (a
+identidade da linha), o dono e a assinatura do operador, e deixava a hora
+daquele equipamento fora da medição no meio do caminho.
+
+Em **Últimos**, cada apontamento tem agora o botão de **corrigir** ao lado do
+de apagar. Ele traz o lançamento de volta **para o mesmo formulário** — as
+paradas voltam a ser linhas, e só os detalhes escritos pelo apontador voltam
+para as observações (o cabeçalho `[Turno: …] | Operação: …` é remontado no
+envio). Uma faixa âmbar no alto e o texto do botão dizem que se está
+corrigindo, não lançando; **Cancelar correção** desfaz, e sair da tela (ou
+trocar de obra) também.
+
+Quem pode corrigir é **o dono da linha, o administrador e a engenharia** — a
+mesma régua do `updateRDO`, pelo mesmo motivo: corrigir dado errado para poder
+fechar a medição. A obra conferida é a **da linha**, não a que o app declarou.
+No backend principal, `equipEditar` reescreve a linha **no lugar** e a
+Auditoria guarda o antes e o depois. No Apps Script legado da Teotônio, que
+este repositório não publica e não sabe editar, a correção é **reenvio**:
+grava o corrigido primeiro e só então apaga o antigo — nessa ordem, porque na
+inversa uma falha apagaria a hora da medição e não sobraria nada para ver.
+
+Máquina **desativada** depois do lançamento continua corrigível: ela entra no
+`<select>` marcada como *(fora do cadastro)*.
+
 **A tela existe em toda obra, e cada obra vê só a própria frota.** São dois
 backends: a **Teotônio** segue no Apps Script legado do app
 `Equipamentos-teotonio` (URL no campo `equipamentos` do cadastro dela — os
@@ -501,6 +528,53 @@ coluna nasce sozinha na primeira chamada, e linha antiga sem valor é da
 Teotônio, como nas outras abas. A tela é uma só: `backendEquip()` (em
 `js/equip/equipamentos.js`) decide URL e dialeto pela obra aberta, e trocar
 de obra zera o cache que a Central de Campo e a apresentação leem.
+
+## Bota-Fora
+
+Tela **Bota-Fora**: cada caminhão que sai do canteiro com entulho ou solo é uma
+**viagem cobrada**. O controle disso vivia numa planilha do escritório
+preenchida de memória no fim do mês, a partir de um maço de tickets — e a
+conta do transportador chegava com viagens que ninguém conseguia confirmar nem
+contestar.
+
+A viagem passa a ser registrada **na saída**, pelo apontador, com as três
+provas que a discussão exige:
+
+- **foto da carga / placa** — o que saiu e em qual caminhão;
+- **assinatura do motorista** — colhida no dedo, em tela cheia;
+- **foto do ticket** — o comprovante do aterro, que é o documento que o
+  transportador anexa à fatura.
+
+As imagens vão para a pasta **"Bota-Fora Teotônio (Privado)"** do Drive e a
+planilha guarda só o ponteiro `drive_id:<id>` — nada de link público, mesmo
+desenho das fotos do serviço. Sem sinal, a viagem inteira (provas incluídas)
+espera na fila do aparelho: bota-fora se registra na boca da obra, que é onde
+o 4G falha. O `clientId` impede que o reenvio cobre a mesma viagem duas vezes.
+
+Data, fornecedor, projeto, origem, destino e valor **ficam preenchidos** de uma
+viagem para a outra — o que muda a cada carga é placa, motorista e as provas.
+
+O backend cria sozinho a aba `BotaFora`, separada por obra pela coluna `obra`.
+Cada viagem registra quem lançou, e **só o administrador ou quem lançou pode
+apagá-la**.
+
+### A planilha (aba FRETE)
+
+O botão **Viagens e planilha** abre o período, mostra o que já foi gasto e
+gera o `.xlsx`. A aba **FRETE** sai no formato do fechamento que a empresa já
+usa, com as colunas na mesma ordem:
+
+`FORNECEDOR` · `DATA FRETE` · `PLACA` · `TIPO MATERIAL` · `MOTORISTA` ·
+`FRETE OU FRESA` · `PROJETO` · `VALOR FRETE` · `OBSERVAÇÕES`
+
+O título da primeira linha é o trajeto — `FRETE - <origem> >> <destino>` — e
+a última linha fecha o total do período. **Data é data e valor é número**, não
+texto: a planilha do escritório soma e ordena por essas colunas, e texto ali
+obriga a refazer tudo à mão.
+
+Vai junto uma segunda aba, **COMPROVAÇÃO**, com o link de cada prova no Drive
+— é com ela que se confere a fatura do transportador linha a linha. Onde a
+prova não existe, a célula diz isso em vez de ficar vazia.
 
 ## Fotos e Galeria
 
@@ -844,6 +918,8 @@ agregando por código, como sempre foi.
 | `ferramentas/croqui-estacas.py` | Gera o croqui de estaqueamento (planta + posição de cada estaca) a partir da prancha em PDF |
 | `docs/muros-planilha.csv` | As mesmas linhas prontas para colar nas abas `Pacotes` e `Coeficientes` |
 | `js/ui/icones.js` | Conjunto de ícones do app — traço único na grade de 24, cor herdada do tema. Cobre navegação, ações e frentes de serviço (`icFrente()` escolhe pelo nome da frente) |
+| `js/equip/equipamentos.js` | Tela de Equipamentos: apontamento de hora de máquina, correção de apontamento, painel e medição mensal |
+| `js/bf/bota-fora.js` | Tela de Bota-Fora: a viagem de caminhão com as três provas, e a planilha no formato da aba FRETE |
 | `vendor/` | Bibliotecas servidas pelo próprio site (ver abaixo) |
 
 ### Bibliotecas vendorizadas, carregadas sob demanda
