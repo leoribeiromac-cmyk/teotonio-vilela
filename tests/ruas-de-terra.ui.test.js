@@ -10,10 +10,13 @@
 //     por isso ninguém tinha visto. As Ruas de Terra têm cinco, e nenhuma
 //     delas abria.
 //
-//  2. O PDF INTERNO SAÍA COMO TEOTÔNIO. O cabeçalho trazia "Av. Senador
-//     Teotônio Vilela · Gestor Engenharia" escrito no código, então o
-//     relatório diário de QUALQUER obra chegava ao grupo com o nome da
-//     avenida — o das Ruas de Terra inclusive.
+//  2. OS PAPÉIS SAÍAM COMO TEOTÔNIO. O cabeçalho do PDF Interno trazia
+//     "Av. Senador Teotônio Vilela · Gestor Engenharia" escrito no código,
+//     então o relatório diário de QUALQUER obra chegava ao grupo com o nome
+//     da avenida. O mesmo defeito estava na capa e no rodapé do Relatório
+//     Executivo, no nome do arquivo dele e no prompt do Analista IA — que
+//     mandava a IA recomendar coisas de "duplicação viária" para uma obra
+//     de pavimentação de ruas de terra.
 //
 // Como rodar:  node tests/ruas-de-terra.ui.test.js
 //   (sobe o próprio servidor; não depende do 8099)
@@ -55,6 +58,14 @@ process.on('exit', encerrar);
                 body: cb ? `${cb}(${JSON.stringify(c)})` : JSON.stringify(c) });
   });
   await ctx.route('**docs.google.com/**', r => r.fulfill({ status: 200, contentType: 'text/csv', body: '' }));
+  // O Analista IA descreve a obra DENTRO do prompt. Interceptar a chamada é a
+  // única forma de ler o texto que de fato sai do aparelho.
+  let promptIA = '';
+  await ctx.route('**generativelanguage.googleapis.com/**', r => {
+    try { promptIA = JSON.parse(r.request().postData() || '{}').contents[0].parts[0].text; } catch (e) { }
+    r.fulfill({ status: 200, contentType: 'application/json',
+                body: JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] } }] }) });
+  });
 
   await p.goto(BASE + '/index.html', { waitUntil: 'load' });
   await p.waitForTimeout(900);
@@ -146,7 +157,10 @@ process.on('exit', encerrar);
         const d = new Orig(...arguments);
         const escrever = d.text.bind(d);
         d.text = function (t) { window.__linhas.push(String(t)); return escrever.apply(null, arguments); };
-        d.save = function () { window.__salvou = true; };   // nada de baixar no teste
+        // nada de baixar no teste — mas o NOME do arquivo importa: dois
+        // relatórios com o mesmo nome na pasta de downloads é o começo de
+        // um ser mandado no lugar do outro.
+        d.save = function (nome) { window.__salvou = true; window.__arquivo = nome || ''; };
         return d;
       }
       window.jspdf = Object.assign({}, window.jspdf, { jsPDF: Espiao });
@@ -187,6 +201,49 @@ process.on('exit', encerrar);
   });
   ok('na Teotônio o cabeçalho segue idêntico ao que era',
      teot === 'Av. Senador Teotônio Vilela · Gestor Engenharia', teot);
+
+  // ------------------------------------------------------------------
+  console.log('\nOS OUTROS PAPÉIS TAMBÉM FALAM DA OBRA ABERTA');
+  // O Relatório Executivo é o que vai para a diretoria. Sai da mesma obra
+  // aberta, e o nome do arquivo tem de dizer de qual obra ele é — dois
+  // relatórios com o mesmo nome na pasta de downloads é o começo de um ser
+  // mandado no lugar do outro.
+  const exec = await p.evaluate(async () => {
+    trocarObra('ruas-de-terra');
+    await new Promise(r => setTimeout(r, 400));
+    STATE.cargaFalhou = false; STATE.loaded = true;
+    navigate('executivo');
+    await new Promise(r => setTimeout(r, 800));
+    window.__linhas = [];
+    window.__arquivo = '';
+    await exportarRelatorioExecutivoPDF();
+    return { linhas: window.__linhas, arquivo: window.__arquivo };
+  });
+  ok('a capa do Relatório Executivo nomeia a obra aberta',
+     exec.linhas.some(t => /RUAS DE TERRA.*PAINEL EXECUTIVO/i.test(t)),
+     (exec.linhas.find(t => /PAINEL EXECUTIVO/i.test(t)) || '(não achei)'));
+  ok('o rodapé de todas as páginas também',
+     exec.linhas.some(t => /Ruas de Terra.*Relatório Gerencial/i.test(t)),
+     (exec.linhas.find(t => /Relatório Gerencial/i.test(t)) || '(não achei)'));
+  ok('e nada nele fala da Teotônio',
+     !exec.linhas.some(t => /Teotônio/i.test(t)),
+     exec.linhas.filter(t => /Teotônio/i.test(t)).join(' | '));
+  ok('o arquivo é nomeado pela obra, não pela Teotônio',
+     /^Relatorio_Executivo_ruas-de-terra_/.test(exec.arquivo || ''), exec.arquivo);
+
+  // O Analista IA descrevia a obra no próprio prompt. Com o texto fixo, a
+  // recomendação saía falando de duplicação viária numa obra de rua de terra.
+  await p.evaluate(async () => {
+    localStorage.setItem('teotonio_gemini_key', 'chave-de-teste');
+    await refreshIA();
+  });
+  await p.waitForTimeout(1200);
+  ok('o Analista IA foi chamado', !!promptIA, promptIA.slice(0, 60));
+  ok('e o prompt descreve a obra ABERTA', /Ruas de Terra/.test(promptIA),
+     promptIA.split('\n')[0].slice(0, 160));
+  ok('e não manda a IA opinar sobre a duplicação da avenida',
+     !/Teot[oô]nio|duplica/i.test(promptIA.split('\n')[0]),
+     promptIA.split('\n')[0].slice(0, 160));
 
   // ------------------------------------------------------------------
   console.log('\nO QUE NÃO PODE ACONTECER');

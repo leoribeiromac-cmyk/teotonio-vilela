@@ -9286,7 +9286,11 @@ async function carregarRecomendacaoIA(metrics, fa, totalPac, iniciados, gap, for
   el.classList.add('loading');
   txtEl.textContent = 'Analisando indicadores executivos…';
 
-  const prompt = `Você é um engenheiro de planejamento sênior. Com base nos indicadores abaixo da obra de duplicação da Av. Senador Teotônio Vilela, escreva UMA recomendação executiva curta, acionável, no imperativo, em português, com NO MÁXIMO 28 palavras. Não use markdown, não use aspas, sem preâmbulo.
+  /* A obra vem do cadastro. Escrita no código, ela fazia a IA recomendar
+     coisas de duplicação viária para uma obra de pavimentação de ruas de
+     terra — com a segurança de quem leu o contrato errado. */
+  const obraPrompt = [OBRA.nome, OBRA.objeto || OBRA.subtitulo].filter(Boolean).join(' — ');
+  const prompt = `Você é um engenheiro de planejamento sênior. Com base nos indicadores abaixo da obra ${obraPrompt}, escreva UMA recomendação executiva curta, acionável, no imperativo, em português, com NO MÁXIMO 28 palavras. Não use markdown, não use aspas, sem preâmbulo.
 
 DADOS:
 - Avanço ponderado realizado: ${(metrics.current * 100).toFixed(1)}%
@@ -10134,7 +10138,10 @@ function _exportarRelatorioExecutivoPDF() {
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(13);
-  doc.text('SISTEMA TEOTÔNIO VILELA · PAINEL EXECUTIVO', 17, y + 10);
+  // Mesmo defeito que o PDF Interno tinha: a obra estava escrita no código,
+  // e o relatório de qualquer obra saía anunciando a avenida. A linha de
+  // baixo já vinha do cadastro — esta faltava.
+  doc.text(String(o.nomeCurto || o.nome || '').toUpperCase() + ' · PAINEL EXECUTIVO', 17, y + 10);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
@@ -10497,11 +10504,13 @@ function _exportarRelatorioExecutivoPDF() {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(...MUTED_TEXT);
-    doc.text('Sistema Teotônio Vilela · Relatório Gerencial de Acompanhamento Executivo', 12, 288);
+    doc.text((OBRA.nomeCurto || OBRA.nome || '') +
+             ' · Relatório Gerencial de Acompanhamento Executivo', 12, 288);
     doc.text(`Página ${i} de ${pageCount}`, 198, 288, { align: 'right' });
   }
 
-  const filename = `Relatorio_Executivo_Teotonio_${today.toISOString().slice(0, 10)}.pdf`;
+  const idObra = String(OBRA.id || 'obra').replace(/[^a-z0-9-]/gi, '_');
+  const filename = `Relatorio_Executivo_${idObra}_${today.toISOString().slice(0, 10)}.pdf`;
   doc.save(filename);
   toast('Relatório Executivo PDF exportado com sucesso!', 'success');
 };
