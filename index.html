@@ -923,9 +923,9 @@ body.proj-cheia-ativa{overflow:hidden}
 }
 .bf-prova-assin img{background:#fff;padding:4px}
 .bf-prova-x{
-  position:absolute;top:-8px;right:-8px;width:22px;height:22px;padding:0;border:none;cursor:pointer;
+  position:absolute;top:-9px;right:-9px;width:26px;height:26px;min-height:0;padding:0;border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;border-radius:50%;
-  background:var(--red);color:#fff;
+  background:var(--red);color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3);
 }
 /* Selos do que foi (ou não foi) anexado. Na lista de viagens, é o que diz numa
    olhada qual linha da fatura tem como ser contestada. */
@@ -2918,7 +2918,15 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   /* alvo de dedo: nada abaixo de 42 px numa tela que se usa em pé */
   #apontamentoForm .btn,.eq-topo-acoes .btn,.eq-abas .btn,
   .eq-modal-corpo .btn,.eq-modal-topo .btn{min-height:42px}
-  .parada-remover,.btn-desativar,.btn-apagar-apont{min-height:42px;min-width:42px;justify-content:center}
+  .parada-remover,.btn-desativar,.btn-apagar-apont,.btn-editar-apont{min-height:42px;min-width:42px;justify-content:center}
+  /* O X que descarta uma prova é uma bolinha de 24 px na tela de mesa. No
+     celular a regra de alvo de dedo (`.btn, button { min-height:40px }`, lá em
+     cima) impunha 40 px de ALTURA e deixava os 24 de largura — a bolinha saía
+     uma elipse vermelha esticada. Vira um círculo de 40, que é o alvo que a
+     regra pede: descartar a prova errada é justamente o toque que não pode
+     depender de pontaria. */
+  .bf-prova-x{width:40px;height:40px;min-width:40px;top:-12px;right:-12px}
+  .bf-prova-x .ic{width:15px;height:15px}
   .eq-abas .btn{flex:1;justify-content:center}
 
   .eq-modal{padding:0;align-items:stretch;overflow:hidden}
