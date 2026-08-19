@@ -61,7 +61,9 @@ const ALVO = {
 // não pode ficar impossível porque a máquina foi desativada depois.
 const ALVO_FORA = Object.assign({}, ALVO, {
   carimbo: '1755000000001', equipamento: 'Motoniveladora que saiu do cadastro',
-  data: '2026-07-15', paradas: '', assinatura: '',
+  // De propósito NO FORMATO DO LEGADO: a planilha da Teotônio devolve a
+  // célula como Date serializado, e o <input type=date> recusa isso.
+  data: '2026-07-15T03:00:00.000Z', paradas: '', assinatura: '',
   observacoes: '[Turno: Diurno] | Operação: 07:00 às 17:00 | Paradas: Sem paradas\nDetalhes: Sem detalhes adicionais.',
 });
 
@@ -264,9 +266,12 @@ function camposDoPost(corpo) {
   const fora = await p.evaluate(() => ({
     valor: document.getElementById('equipamento').value,
     rotulo: (document.getElementById('equipamento').selectedOptions[0] || {}).textContent || '',
+    data: document.getElementById('data').value,
   }));
   ok('a máquina desativada ainda pode ser corrigida', fora.valor === ALVO_FORA.equipamento, fora.valor);
   ok('e a tela avisa que ela não está mais no cadastro', /fora do cadastro/i.test(fora.rotulo), fora.rotulo);
+  ok('e a data do backend legado (Date serializado) entra no campo, em vez de sumir',
+     fora.data === '2026-07-15', fora.data);
 
   // ------------------------------------------------------------------
   console.log('\nCORREÇÃO ABANDONADA NÃO ATRAVESSA A TELA');

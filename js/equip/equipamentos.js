@@ -681,6 +681,14 @@
         /* O texto que foi gravado nas paradas volta a ser linha de formulário.
            `resumoParadas()` escreve "Almoço 12:00-13:00; Chuva 15:00-15:30";
            isto é a volta exata desse caminho. */
+        function paraISO(v) {
+            const t = String(v == null ? '' : v).trim();
+            if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
+            const br = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+            if (br) return `${br[3]}-${br[2].padStart(2, '0')}-${br[1].padStart(2, '0')}`;
+            return '';
+        }
+
         function paradasDoTexto(txt) {
             return String(txt || '').split(';').map(s => s.trim()).filter(Boolean)
                 .map(item => {
@@ -705,7 +713,12 @@
             const g = id => document.getElementById(id);
             const set = (id, v) => { const e = g(id); if (e) e.value = v == null ? '' : String(v); };
 
-            set('data', a.data);
+            /* O <input type=date> só aceita 'aaaa-mm-dd'. O backend principal
+               já normaliza, mas o LEGADO devolve a célula como a planilha
+               entregou — que pode vir '2026-07-14T03:00:00.000Z' (Date) ou
+               '14/07/2026'. Data que o campo recusa entra em branco, e o
+               apontador salva a correção com a data apagada. */
+            set('data', paraISO(a.data));
             set('turno', a.turno);
             set('operador', a.operador);
             set('inicio', a.inicio);
