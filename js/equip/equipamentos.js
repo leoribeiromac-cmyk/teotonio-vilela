@@ -53,6 +53,7 @@
             cadastrarLocadora: 'locadoraCadastrar',
             desativarEquipamento: 'equipDesativar',
             apagarApontamento: 'equipApagar',
+            editarApontamento: 'equipEditar',
         };
 
         function paramsPrincipal() {
@@ -236,7 +237,11 @@
         function setLoading(isLoading) {
             if (!submitBtn) return;
             submitBtn.disabled = isLoading;
-            if (btnText) btnText.textContent = isLoading ? 'Enviando…' : 'Enviar apontamento';
+            if (!btnText) return;
+            // Corrigir e lançar são a mesma tela: o botão tem de dizer qual
+            // dos dois está acontecendo, inclusive ao voltar do "Enviando…".
+            btnText.textContent = isLoading ? (EDICAO ? 'Salvando…' : 'Enviando…')
+                                            : (EDICAO ? 'Salvar correção' : 'Enviar apontamento');
         }
 
         // O aviso passa a ser o do app — um só padrão de mensagem na tela toda.
@@ -453,7 +458,8 @@
             const hi = g('horimInicial').value, hf = g('horimFinal').value;
             set('cfHorim', (hi || hf) ? ((hi || '—') + ' → ' + (hf || '—')) : '—');
             set('cfComb', g('combustivel').value ? (g('combustivel').value + ' L') : '—');
-            set('cfAssin', document.getElementById('assinatura').value ? 'assinada' : '—');
+            set('cfAssin', document.getElementById('assinatura').value ? 'assinada'
+                 : (EDICAO && EDICAO.assinatura) ? 'assinada (a mesma de antes)' : '—');
             set('cfObs', g('observacoesUI').value.trim() || 'Sem detalhes adicionais.');
             EQ.abrir('confirmModal');
         }
@@ -511,6 +517,28 @@
                 fd.set(chaves.cb, canon(document.getElementById('combustivel').value));
 
                 if (forcar) fd.append('forcar', 'true');
+
+                /* CORRIGINDO: o mesmo formulário, outro destino. A linha é
+                   achada pelo carimbo e reescrita no lugar — o carimbo, o
+                   dono e o clientId ficam como estavam, senão a correção
+                   viraria um lançamento novo por cima do antigo. */
+                if (EDICAO) {
+                    const rEd = await salvarEdicao(fd, forcar);
+                    if (rEd && rEd.ok) {
+                        showToast(rEd.aviso || 'Correção salva.', rEd.aviso ? 'error' : 'success');
+                        cancelarEdicao();
+                    } else if (rEd && rEd.duplicado) {
+                        if (confirm(rEd.erro + '\n\nSalvar assim mesmo?')) {
+                            await enviarApontamento(true);
+                            return;
+                        }
+                        showToast('Correção cancelada — já existe apontamento igual.', 'error');
+                    } else {
+                        showToast((rEd && rEd.erro) || 'Não foi possível salvar a correção.', 'error');
+                    }
+                    return;
+                }
+
                 const resp = await fetch(be.url, { method: 'POST', body: fd });
                 const r = await resp.json();
                 if (r.ok) {
@@ -539,8 +567,73 @@
             }
         }
 
+        /* ------------------------------------------------------------------
+           GRAVAR A CORREÇÃO
+           ------------------------------------------------------------------
+           Os dois backends não sabem a mesma coisa, e o campo não tem por que
+           saber disso:
+
+           • BACKEND PRINCIPAL (Code.gs, obras novas) — `equipEditar` reescreve
+             a linha NO LUGAR. Carimbo, dono e clientId ficam de pé, e a
+             Auditoria guarda o antes e o depois.
+
+           • BACKEND LEGADO (o Apps Script antigo da Teotônio, que este
+             repositório não publica) — não tem ação de editar. Ali a correção
+             é REENVIO: grava o apontamento corrigido e só depois apaga o
+             antigo. Nessa ordem de propósito. Se a segunda metade falhar,
+             sobra uma linha repetida — que aparece na lista e se apaga com um
+             toque. Na ordem inversa, uma falha apagaria a hora da medição e
+             não sobraria nada para ver.
+           ------------------------------------------------------------------ */
+        async function salvarEdicao(fd, forcar) {
+            const be = backendEquip();
+            const carimbo = EDICAO.carimbo;
+            /* Sem traço novo, a assinatura é a que já está no Drive: o que a
+               planilha guarda é um ponteiro, e reenviá-lo não cria arquivo. */
+            const assinNova = document.getElementById('assinatura').value;
+            const assinatura = assinNova || EDICAO.assinatura || '';
+
+            if (!be.legado) {
+                fd.set('action', 'equipEditar');
+                fd.set('carimbo', carimbo);
+                fd.delete('clientId');            // o carimbo é a chave; clientId era do INSERT
+                // Campo ausente é campo que o servidor não toca. Sem assinatura
+                // nenhuma dos dois lados, melhor não mandar do que mandar vazio
+                // e apagar a que está lá.
+                if (assinatura) fd.set('assinatura', assinatura); else fd.delete('assinatura');
+                if (forcar) fd.set('forcar', 'true');
+                const resp = await fetch(be.url, { method: 'POST', body: fd });
+                const r = await resp.json();
+                if (r && !r.ok && !r.erro && (r.mensagem || r.error)) r.erro = r.mensagem || r.error;
+                return r;
+            }
+
+            // Legado: grava o corrigido primeiro…
+            if (assinatura) fd.set('assinatura', assinatura);
+            fd.set('forcar', 'true');             // o antigo ainda está lá; ele mesmo é a "duplicata"
+            const resp = await fetch(be.url, { method: 'POST', body: fd });
+            const r = await resp.json();
+            if (r && !r.ok && !r.erro && (r.mensagem || r.error)) r.erro = r.mensagem || r.error;
+            if (!r || !r.ok) return r;
+            // …e só então tira o antigo do caminho.
+            try {
+                const rDel = await postAcao({ action: 'apagarApontamento', carimbo });
+                if (!rDel || !rDel.ok) {
+                    return { ok: true, aviso: 'O apontamento corrigido entrou, mas o antigo continua na lista — apague-o em "Últimos".' };
+                }
+            } catch (e) {
+                return { ok: true, aviso: 'O apontamento corrigido entrou, mas não consegui apagar o antigo — apague-o em "Últimos".' };
+            }
+            return { ok: true };
+        }
+
         function abrirUltimos() { EQ.abrir('ultimosModal'); carregarUltimos(); }
         function fecharUltimos() { EQ.fechar('ultimosModal'); }
+
+        /* O que a lista mostrou da última vez. É daqui que a EDIÇÃO tira os
+           campos do apontamento — não vale pedir a linha de novo ao servidor
+           só para preencher um formulário que já está na tela. */
+        let ULTIMOS = [];
 
         async function carregarUltimos() {
             const box = document.getElementById('listaUltimos');
@@ -549,6 +642,7 @@
                 const resp = await fetch(urlEquip('ultimos', { n: 15 }));
                 const data = await resp.json();
                 const items = (data && data.apontamentos) || [];
+                ULTIMOS = items;
                 if (!items.length) { box.innerHTML = '<p class="eq-vazio">Nenhum apontamento ainda.</p>'; return; }
                 box.innerHTML = items.map(a => `
                     <div class="eq-item">
@@ -559,13 +653,137 @@
                         </div>
                         <div class="eq-item-lado">
                             <span class="eq-item-horas">${escapeHtml(String(a.horas))}h</span>
+                            <button type="button" data-carimbo="${a.carimbo}" class="btn-editar-apont btn btn-ghost btn-icone" title="Corrigir este apontamento" aria-label="Corrigir este apontamento">${ic('editar')}</button>
                             <button type="button" data-carimbo="${a.carimbo}" class="btn-apagar-apont btn btn-ghost btn-icone" title="Apagar este apontamento" aria-label="Apagar este apontamento">${ic('lixeira')}</button>
                         </div>
                     </div>`).join('');
+                box.querySelectorAll('.btn-editar-apont').forEach(b => b.addEventListener('click', () => editarApontamentoUI(b.getAttribute('data-carimbo'))));
                 box.querySelectorAll('.btn-apagar-apont').forEach(b => b.addEventListener('click', () => apagarApontamentoUI(b.getAttribute('data-carimbo'))));
             } catch (err) {
                 box.innerHTML = '<p class="eq-vazio">Erro ao carregar. Tente de novo.</p>';
             }
+        }
+
+        /* ==================================================================
+           CORRIGIR UM APONTAMENTO JÁ ENVIADO
+           ------------------------------------------------------------------
+           Errar a hora do fim é o engano mais comum do campo. Até aqui o
+           único conserto era APAGAR e lançar tudo de novo — e, entre uma
+           coisa e a outra, a hora daquele equipamento sumia da medição.
+
+           Editar traz o apontamento de volta PARA O MESMO FORMULÁRIO. Nada
+           de uma segunda tela com os mesmos campos: quem lança já sabe onde
+           fica cada um, e duas telas para o mesmo dado é o começo de duas
+           regras de cálculo diferentes para a mesma hora.
+           ================================================================== */
+        let EDICAO = null;   // { carimbo, assinatura } enquanto durar a correção
+
+        /* O texto que foi gravado nas paradas volta a ser linha de formulário.
+           `resumoParadas()` escreve "Almoço 12:00-13:00; Chuva 15:00-15:30";
+           isto é a volta exata desse caminho. */
+        function paradasDoTexto(txt) {
+            return String(txt || '').split(';').map(s => s.trim()).filter(Boolean)
+                .map(item => {
+                    const m = item.match(/^(.*?)\s*(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$/);
+                    return m ? { motivo: m[1].trim(), ini: m[2], fim: m[3] } : null;
+                }).filter(Boolean);
+        }
+
+        /* O campo `observacoes` guarda o cabeçalho montado no envio
+           ("[Turno: …] | Operação: … | Paradas: …") e, na segunda linha,
+           "Detalhes: <o que o apontador escreveu>". Só a segunda linha volta
+           para a tela — o resto se remonta sozinho no próximo envio. */
+        function detalhesDoTexto(txt) {
+            const m = String(txt || '').match(/Detalhes:\s*([\s\S]*)$/);
+            const d = m ? m[1].trim() : '';
+            return d === 'Sem detalhes adicionais.' ? '' : d;
+        }
+
+        function editarApontamentoUI(carimbo) {
+            const a = ULTIMOS.find(x => String(x.carimbo) === String(carimbo));
+            if (!a) { showToast('Não encontrei esse apontamento para corrigir.', 'error'); return; }
+            const g = id => document.getElementById(id);
+            const set = (id, v) => { const e = g(id); if (e) e.value = v == null ? '' : String(v); };
+
+            set('data', a.data);
+            set('turno', a.turno);
+            set('operador', a.operador);
+            set('inicio', a.inicio);
+            set('fim', a.fim);
+            set('horimInicial', a.horimInicial != null && a.horimInicial !== '' ? a.horimInicial : a.horimIni);
+            set('horimFinal', a.horimFinal != null && a.horimFinal !== '' ? a.horimFinal : a.horimFim);
+            set('combustivel', a.combustivel);
+            set('status', a.status || a.situacao || 'OperandoNormalmente');
+            set('observacoesUI', detalhesDoTexto(a.observacoes));
+
+            /* O equipamento pode ter sido DESATIVADO depois do lançamento, e aí
+               não está mais no <select>. Corrigir a hora dele não pode ser
+               impossível por isso: entra como opção da própria linha. */
+            const sel = g('equipamento');
+            if (sel && a.equipamento) {
+                if (![...sel.options].some(o => o.value === a.equipamento)) {
+                    const op = document.createElement('option');
+                    op.value = a.equipamento;
+                    op.textContent = a.equipamento + ' (fora do cadastro)';
+                    sel.appendChild(op);
+                }
+                sel.value = a.equipamento;
+            }
+
+            g('paradasList').innerHTML = '';
+            paradasDoTexto(a.paradas).forEach(p => adicionarParada(p.motivo, p.ini, p.fim));
+            atualizarParadasVazio();
+            calcularHoras();
+
+            /* A assinatura JÁ ESTÁ no Drive — o que a planilha guarda é o
+               ponteiro, não a imagem. Reaproveita-se o ponteiro; só se o
+               operador assinar de novo é que sobe traço novo. */
+            EDICAO = { carimbo: String(carimbo), assinatura: a.assinatura || '' };
+            set('assinatura', '');
+            const c = g('assinaturaCanvas'); if (c && c._clear) c._clear();
+            mostrarEstadoAssinatura();
+
+            EQ.fechar('ultimosModal');
+            marcarModoEdicao();
+            const topo = document.querySelector('.eq-topo');
+            if (topo && topo.scrollIntoView) topo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            showToast('Apontamento aberto para correção.', 'success');
+        }
+
+        function cancelarEdicao() {
+            EDICAO = null;
+            const d = document.getElementById('data');
+            const tempDate = d ? d.value : '';
+            if (form) form.reset();
+            if (d) d.value = tempDate;
+            document.getElementById('status').value = 'OperandoNormalmente';
+            document.getElementById('horasDisplay').innerHTML = '0.00<span class="eq-h">h</span>';
+            limparAssinatura();
+            document.getElementById('paradasList').innerHTML = '';
+            atualizarParadasVazio();
+            marcarModoEdicao();
+        }
+
+        /* A tela inteira precisa dizer que está corrigindo, não lançando:
+           a faixa no alto do formulário, o texto do botão e o título da
+           confirmação. Um formulário idêntico nos dois modos é como se
+           envia de novo o que se queria consertar. */
+        function marcarModoEdicao() {
+            const faixa = document.getElementById('eqEdicaoFaixa');
+            const alvo = document.getElementById('eqEdicaoAlvo');
+            const editando = !!EDICAO;
+            if (faixa) faixa.style.display = editando ? '' : 'none';
+            if (alvo && editando) {
+                const a = ULTIMOS.find(x => String(x.carimbo) === EDICAO.carimbo);
+                alvo.textContent = a
+                    ? `${a.equipamento} · ${formatarData(a.data)} · ${a.turno}`
+                    : 'apontamento já enviado';
+            }
+            if (btnText) btnText.textContent = editando ? 'Salvar correção' : 'Enviar apontamento';
+            const t = document.getElementById('cfTitulo');
+            if (t) t.textContent = editando ? 'Confira antes de salvar' : 'Confira antes de enviar';
+            const bt = document.getElementById('cfBotao');
+            if (bt) bt.textContent = editando ? 'Salvar correção' : 'Confirmar e enviar';
         }
 
         async function apagarApontamentoUI(carimbo) {
@@ -641,8 +859,11 @@
             const img = document.getElementById('assinaturaPrev');
             const h = document.getElementById('assinatura');
             const assinado = !!(h && h.value);
+            const herdada = !assinado && !!(EDICAO && EDICAO.assinatura);
             if (txt) txt.textContent = assinado
                 ? 'Assinado. Toque em Assinar para refazer, ou Limpar para apagar.'
+                : herdada
+                ? 'Assinatura do envio original mantida. Toque em Assinar para refazer.'
                 : 'Sem assinatura — o apontamento pode ser enviado assim.';
             if (img) {
                 if (assinado) { img.src = h.value; img.style.display = ''; }
@@ -1183,6 +1404,16 @@
     <form id="apontamentoForm" class="card" style="margin-top:14px">
       <div class="card-body">
 
+        <!-- A faixa é o que separa CORRIGIR de LANÇAR. Sem ela, o formulário
+             preenchido parece um lançamento novo, e salvar vira duplicata. -->
+        <div id="eqEdicaoFaixa" class="eq-edicao" style="display:none">
+          <div class="eq-edicao-txt">
+            <b>Corrigindo um apontamento já enviado</b>
+            <span id="eqEdicaoAlvo" class="kpi-s"></span>
+          </div>
+          <button type="button" class="btn btn-sm btn-ghost" onclick="EQ.cancelarEdicao()">Cancelar correção</button>
+        </div>
+
         <div class="eq-horas">
           <div>
             <div class="kpi-s">Horas apuradas</div>
@@ -1296,7 +1527,7 @@
         <button type="button" class="btn btn-primary" onclick="EQ.confirmarAssinatura()">${ic('check')} Confirmar assinatura</button>
       </div>`, '640px')}
 
-    ${modal('confirmModal', 'Confira antes de enviar', 'Depois de enviado, só o administrador apaga', `
+    ${modal('confirmModal', '<span id="cfTitulo">Confira antes de enviar</span>', 'Depois de enviado, só o administrador apaga', `
       <div class="eq-conf">
         ${linhaConf('Data', 'cfData')}${linhaConf('Turno', 'cfTurno')}
         ${linhaConf('Equipamento', 'cfEquip')}${linhaConf('Operador', 'cfOperador')}
@@ -1307,7 +1538,7 @@
       </div>
       <div class="eq-modal-rodape">
         <button type="button" class="btn btn-outline" onclick="EQ.fechar('confirmModal')">Voltar e revisar</button>
-        <button type="button" class="btn btn-primary" onclick="EQ.confirmarEnvio()">Confirmar e enviar</button>
+        <button type="button" class="btn btn-primary" onclick="EQ.confirmarEnvio()"><span id="cfBotao">Confirmar e enviar</span></button>
       </div>`)}
 
     ${modal('cadastroModal', 'Cadastros', 'Equipamentos e locadoras da obra', `
@@ -1391,6 +1622,12 @@
   function boot() {
     // modais que abrir() mudou para o body numa montagem anterior da tela
     document.querySelectorAll('body > .eq-modal').forEach(m => m.remove());
+    /* A tela remonta a cada entrada (e a cada troca de obra). Uma correção
+       aberta e abandonada não pode sobreviver a isso: o formulário volta em
+       branco, e o próximo envio gravaria por cima de uma linha que ninguém
+       mais está vendo — de outra obra, inclusive. */
+    EDICAO = null;
+    ULTIMOS = [];
     form = document.getElementById('apontamentoForm');
     submitBtn = document.getElementById('submitBtn');
     btnText = document.getElementById('btnText');
@@ -1407,6 +1644,7 @@
     // initAssinatura() roda ao ABRIR o modal — canvas escondido mede 0 de
     // largura e sairia com a resolução errada (ver abrirAssinatura).
     mostrarEstadoAssinatura();
+    marcarModoEdicao();
     atualizarParadasVazio();
     toggleLocadora();
     trocarAba('equip');
@@ -1439,6 +1677,7 @@
     calcularHoras: calcularHoras,
     adicionarParada: adicionarParada,
     limparAssinatura: limparAssinatura,
+    cancelarEdicao: cancelarEdicao,
     abrirAssinatura: abrirAssinatura,
     confirmarAssinatura: confirmarAssinatura,
     confirmarEnvio: confirmarEnvio,

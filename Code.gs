@@ -82,7 +82,7 @@ function rotear(e) {
                       'usuariosListar', 'usuarioSalvar', 'usuarioExcluir',
                       'rdoFoto', 'obterFoto',
                       'equipListar', 'equipCadastrar', 'equipDesativar', 'locadoraCadastrar',
-                      'equipApontar', 'equipApagar', 'equipApontamentos', 'equipUltimos',
+                      'equipApontar', 'equipApagar', 'equipEditar', 'equipApontamentos', 'equipUltimos',
                       'nfListar', 'nfSalvar', 'nfExcluir', 'nfImagem', 'nfLerIA', 'nfDiag',
                       'nfConsultarChave', 'saidaSalvar', 'saidaExcluir'];
     if (PROTEGIDAS.indexOf(action) !== -1) {
@@ -121,7 +121,7 @@ function rotear(e) {
        A trava vai aqui, no roteador, e só para as ações que ainda NÃO têm a
        sua — pegar de novo uma trava já tomada dentro da mesma execução é o
        tipo de coisa que só se descobre em produção. */
-    var SEM_TRAVA_PROPRIA = ['deleteRDO', 'updateRDO', 'rdoFoto', 'equipApagar',
+    var SEM_TRAVA_PROPRIA = ['deleteRDO', 'updateRDO', 'rdoFoto', 'equipApagar', 'equipEditar',
                              'nfSalvar', 'nfExcluir', 'saidaSalvar', 'saidaExcluir'];
     var travaRoteador = null;
     if (SEM_TRAVA_PROPRIA.indexOf(action) !== -1) {
@@ -159,6 +159,7 @@ function rotear(e) {
       case 'locadoraCadastrar': resp = locadoraCadastrar(p.nome, p.observacoes, p.obra); break;
       case 'equipApontar':      resp = equipApontar(p); break;
       case 'equipApagar':       resp = equipApagar(p.carimbo, p.token); break;
+      case 'equipEditar':       resp = equipEditar(p); break;
       case 'equipUltimos':      resp = equipUltimos(p.obra, p.n); break;
       case 'equipApontamentos': resp = equipApontamentos(p.mes, p.obra, p.de, p.ate); break;
       case 'nfListar':          resp = nfListar(p.obra); break;
@@ -1457,18 +1458,7 @@ function equipApontar(p) {
 
     // A assinatura do operador é imagem: vai para o Drive privado, e a
     // planilha guarda o ponteiro (igual às fotos do serviço).
-    var assin = String(p.assinatura || '');
-    if (assin.indexOf('data:image') === 0) {
-      try {
-        var blob = Utilities.newBlob(Utilities.base64Decode(assin.split(',')[1]), 'image/png',
-          'assinatura_' + (p.carimbo || Date.now()) + '.png');
-        var pastas = DriveApp.getFoldersByName('Assinaturas Teotônio (Privado)');
-        var pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder('Assinaturas Teotônio (Privado)');
-        var arq = pasta.createFile(blob);
-        arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
-        assin = 'drive_id:' + arq.getId();
-      } catch (e) { assin = ''; }
-    }
+    var assin = assinaturaParaDrive(p.assinatura, p.carimbo);
 
     var sess = sessaoDoToken(p.token) || { usuario: '', perfil: '' };
     var carimbo = p.carimbo || String(Date.now());
@@ -1501,6 +1491,112 @@ function equipApagar(carimbo, token) {
         cab.map(function (c, k) { return c + '=' + dados[i][k]; }).join(' | '), '');
       return { ok: true, deleted: carimbo };
     }
+  }
+  return { ok: false, error: 'Apontamento não encontrado' };
+}
+
+/* A assinatura chega como data:image e não pode ficar na célula: são dezenas
+   de KB de base64 por linha. Vai para a pasta privada do Drive, e a planilha
+   guarda só o ponteiro — mesmo desenho das fotos do serviço.
+   O que já é ponteiro (ou vazio) passa direto: é o caso da EDIÇÃO em que
+   ninguém reassinou, e reenviar o mesmo traço criaria um arquivo órfão. */
+function assinaturaParaDrive(valor, carimbo) {
+  var assin = String(valor == null ? '' : valor);
+  if (assin.indexOf('data:image') !== 0) return assin;
+  try {
+    var blob = Utilities.newBlob(Utilities.base64Decode(assin.split(',')[1]), 'image/png',
+      'assinatura_' + (carimbo || Date.now()) + '.png');
+    var pastas = DriveApp.getFoldersByName('Assinaturas Teotônio (Privado)');
+    var pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder('Assinaturas Teotônio (Privado)');
+    var arq = pasta.createFile(blob);
+    arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+    return 'drive_id:' + arq.getId();
+  } catch (e) { return ''; }
+}
+
+/* ------------------------------------------------------------------
+   CORRIGIR UM APONTAMENTO JÁ LANÇADO
+   ------------------------------------------------------------------
+   Até aqui, apontamento errado só tinha um caminho: APAGAR e lançar de
+   novo. Isso custava o carimbo (a identidade da linha), o `usuario` que
+   lançou e a assinatura do operador — e, no meio do caminho, deixava a
+   medição sem a hora daquele equipamento. Errar a hora do fim é o engano
+   mais comum do campo, e ele não deveria custar o registro inteiro.
+
+   A edição é NO LUGAR: mesma linha, mesmo carimbo, mesmo dono. Só os
+   campos do apontamento mudam, e a Auditoria guarda o antes e o depois —
+   é hora de máquina, que é cobrança.
+
+   Quem pode: o dono da linha, o administrador e a engenharia — a mesma
+   régua do updateRDO, pelo mesmo motivo (corrigir dado errado para poder
+   fechar a medição).
+   ------------------------------------------------------------------ */
+var EQUIP_EDITAVEIS = ['data', 'turno', 'equipamento', 'operador', 'inicio', 'fim', 'horas',
+                       'paradas', 'horimIni', 'horimFim', 'combustivel', 'situacao',
+                       'observacoes', 'assinatura'];
+
+function equipEditar(p) {
+  var carimbo = String(p.carimbo == null ? '' : p.carimbo).trim();
+  if (!carimbo) return { ok: false, error: 'Apontamento não informado' };
+
+  abaEquipComObra(ABA_APONT);
+  var a = getOrCreateAba(ABA_APONT);
+  var dados = a.getDataRange().getValues();
+  var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iC = idxColuna(cab, 'carimbo'), iU = idxColuna(cab, 'usuario'), iO = idxColuna(cab, 'obra');
+  if (iC === -1) return { ok: false, error: 'Coluna carimbo não encontrada' };
+
+  for (var i = 1; i < dados.length; i++) {
+    if (String(dados[i][iC]).trim() !== carimbo) continue;
+
+    // A obra é a DA LINHA, não a que o app disse: quem só tem acesso ao
+    // Ranário não corrige a hora de máquina da Teotônio.
+    var obraDaLinha = iO !== -1 ? normObra(dados[i][iO]) : '';
+    var sessObra = sessaoDoToken(p.token);
+    if (sessObra && obraDaLinha && !sessaoPodeNaObra(sessObra, obraDaLinha)) {
+      return negarPorObra(p.token, 'equipEditar', obraDaLinha);
+    }
+    var dono = iU !== -1 ? dados[i][iU] : '';
+    var perfil = perfilDoToken(p.token);
+    if (!podeApagarLinha(p.token, dono) && perfil !== 'engenharia') {
+      return negarPorPermissao(p.token, 'equipEditar', carimbo, dono);
+    }
+
+    // 2º apontamento do MESMO equipamento no mesmo dia e turno continua
+    // barrado — a edição não pode ser a porta dos fundos da duplicata. A
+    // própria linha, claro, não conta contra si mesma.
+    if (String(p.forcar) !== 'true' && p.data && p.turno && p.equipamento) {
+      var dia = normData(p.data), turnoP = String(p.turno).trim();
+      var equipP = String(p.equipamento).trim().toLowerCase();
+      var iD = idxColuna(cab, 'data'), iT = idxColuna(cab, 'turno'), iE = idxColuna(cab, 'equipamento');
+      for (var j = 1; j < dados.length; j++) {
+        if (j === i) continue;
+        if (iO !== -1 && normObra(dados[j][iO]) !== obraDaLinha) continue;
+        if (String(dados[j][iE]).trim().toLowerCase() === equipP &&
+            normData(dados[j][iD]) === dia && String(dados[j][iT]).trim() === turnoP) {
+          return { ok: false, duplicado: true,
+            erro: 'Já existe apontamento de "' + p.equipamento + '" nesse dia e turno.' };
+        }
+      }
+    }
+
+    var antes = [], depois = [];
+    for (var k = 0; k < EQUIP_EDITAVEIS.length; k++) {
+      var campo = EQUIP_EDITAVEIS[k];
+      if (p[campo] === undefined) continue;          // campo não enviado: não se toca
+      var col = idxColuna(cab, campo.toLowerCase());
+      if (col === -1 || col === iC || col === iU || col === iO) continue;
+      var valor = p[campo];
+      // Assinatura nova vira ponteiro do Drive; a que já era ponteiro fica.
+      if (campo === 'assinatura') valor = assinaturaParaDrive(valor, carimbo);
+      if (String(dados[i][col]) === String(valor)) continue;
+      antes.push(campo + '=' + dados[i][col]);
+      depois.push(campo + '=' + valor);
+      a.getRange(i + 1, col + 1).setValue(seguro(valor));
+    }
+    registrarAuditoria(usuarioDoToken(p.token), perfil, 'equipEditar', obraDaLinha || OBRA_ID,
+      carimbo, antes.join(' | '), depois.join(' | '));
+    return { ok: true, editado: carimbo, campos: depois.length };
   }
   return { ok: false, error: 'Apontamento não encontrado' };
 }
