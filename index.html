@@ -2501,6 +2501,13 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .topbar { overflow: hidden; }
   /* o bloco do título é o que cede espaço */
   .topbar > div:first-child { min-width: 0; flex: 1 1 auto; }
+  /* …e o `min-width:0` precisa chegar ATÉ o bloco que segura o título e o
+     subtítulo. Parando um nível acima, ele deixava esse bloco com a largura
+     do conteúdo: a elipse abaixo nunca entrava e o subtítulo seguia por
+     baixo dos botões de ação, em TODAS as telas do celular — "Frota da obra
+     · apontamento de hora de máquina" terminava em 315px numa faixa de
+     ações que começa em 119px. */
+  .topbar > div:first-child > div { min-width: 0; }
   .topbar-title, .topbar-sub {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
