@@ -680,6 +680,17 @@ quadrados num **balde próprio** (`VERSAO_PRANCHAS`), que sobrevive à atualiza�
 do app, e os serve **sem revalidar**: são imutáveis, e revalidar dezenas deles a
 cada arrastada gastaria o 4G do canteiro para receber o mesmo desenho de volta.
 
+A camada da GPU é do **movimento**, não da folha. `will-change: transform` (e o
+`translate3d`) fazem o navegador guardar a prancha como camada e compor o gesto
+na placa de vídeo — mas camada é rasterizada UMA VEZ, numa escala escolhida na
+hora, e o `will-change` é literalmente o pedido para NÃO refazer esse raster
+quando o transform muda. Parada, a prancha ficava sendo esticada a partir de um
+raster velho: desenho borrado, que só endireitava quando outra coisa da página
+obrigava o navegador a redesenhar — minutos depois, de uma vez só. Por isso a
+classe `.movendo` entra quando o dedo (ou a roda, ou a inércia, ou a animação de
+zoom) encosta e sai quando tudo para: em movimento vale a fluidez, parada vale a
+nitidez. `tests/prancha-camada.ui.test.js` é a trava.
+
 No visor: arrastar (com inércia), pinça, roda do mouse, toque duplo, setas do
 teclado, **Girar** (a folha é 3,3× mais larga que alta — deitada, ocupa a tela
 do celular em pé) e **Tela cheia** — esta por CSS, porque o Safari do iPhone só
