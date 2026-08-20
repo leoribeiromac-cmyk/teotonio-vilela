@@ -72,22 +72,22 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=52"></script>
-<script src="dados/ruas-de-terra.js?v=52"></script>
+<script src="dados/ranario.js?v=53"></script>
+<script src="dados/ruas-de-terra.js?v=53"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=52"></script>
+<script src="dados/teotonio-muros.js?v=53"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=52"></script>
-<script src="js/nf/adaptador.js?v=52"></script>
-<script src="js/nf/notas.js?v=52"></script>
-<script src="js/equip/equipamentos.js?v=52"></script>
+<script src="js/ui/icones.js?v=53"></script>
+<script src="js/nf/adaptador.js?v=53"></script>
+<script src="js/nf/notas.js?v=53"></script>
+<script src="js/equip/equipamentos.js?v=53"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=52"></script>
+<script src="js/bf/bota-fora.js?v=53"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -846,11 +846,28 @@ html,body{
 }
 .proj-mapa.arrastando{cursor:grabbing}
 /* A folha é o único elemento que recebe transform — os quadrados vão de
-   carona. `will-change` mantém a camada na GPU entre um gesto e outro. */
+   carona.
+
+   `will-change` e `backface-visibility` mandam o navegador guardar a folha
+   como CAMADA na GPU. Isso é o que faz o gesto correr solto: arrastar e
+   ampliar viram uma matriz na placa de vídeo, sem redesenhar nada.
+
+   Só que camada na GPU é rasterizada UMA VEZ, numa escala escolhida na hora,
+   e o `will-change` é justamente o pedido para NÃO refazer esse raster quando
+   o transform muda — é para isso que ele existe. Parada, a folha ficava sendo
+   esticada a partir de um raster velho: desenho borrado, que só se resolvia
+   quando alguma outra coisa na página obrigava o navegador a redesenhar —
+   minutos depois, de uma vez só.
+
+   Por isso a camada agora é do MOVIMENTO, não da folha: `.movendo` entra
+   quando o dedo (ou a roda, ou a animação) encosta e sai quando tudo para.
+   Parada, a folha é conteúdo normal — o navegador rasteriza na escala em que
+   ela está sendo vista, que é o que dá o traço nítido. */
 .proj-folha{
   position:absolute;left:0;top:0;transform-origin:0 0;
-  background:#fff;will-change:transform;backface-visibility:hidden;
+  background:#fff;
 }
+.proj-folha.movendo{will-change:transform;backface-visibility:hidden}
 .proj-folha > .proj-nivel{position:absolute;left:0;top:0;width:100%;height:100%}
 .proj-quadrado{position:absolute;display:block;pointer-events:none}
 .proj-dica{
@@ -7561,6 +7578,13 @@ const VISOR = {
   s: 1, tx: 0, ty: 0, rot: 0, fit: 1, min: 1, max: 8,
   cx: 0, cy: 0, rect: null, giroManual: false,
   raf: 0, animId: 0, inerciaId: 0, ouvintes: [], gesto: 0, tNivel: 0, elZoom: null, nivelAtual: 0,
+  // Três coisas contam como MOVIMENTO, e é o movimento — não o simples fato de
+  // a folha existir — que a põe na GPU (ver `.proj-folha.movendo`):
+  // `arrastando`, o dedo (ou o mouse) na tela; `gesto`, a pinça, a roda e a
+  // animação de zoom; `deslizando`, a inércia depois do arrasto. Faltar um só
+  // deles troca um defeito por outro: sem `arrastando`, o arrasto de um dedo
+  // sairia da camada e o navegador redesenharia a prancha a cada quadro.
+  arrastando: false, deslizando: 0, emCamada: false,
 };
 
 /* base64 -> bytes. O manifesto guarda "quais quadrados existem" como bitmap:
@@ -7632,6 +7656,7 @@ function visorMontar(box, base, man) {
 function visorFechar() {
   const V = VISOR;
   V.animId++; V.inerciaId++; V.gesto = 0;
+  V.arrastando = false; V.deslizando = 0; V.emCamada = false;
   if (V.raf) { cancelAnimationFrame(V.raf); V.raf = 0; }
   V.ouvintes.forEach(([alvo, tipo, fn, op]) => alvo.removeEventListener(tipo, fn, op));
   V.ouvintes = [];
@@ -7727,8 +7752,21 @@ function visorAplicar() {
   const V = VISOR;
   if (!V.folha) return;
   visorLimitar();
-  V.folha.style.transform = 'translate3d(' + V.tx.toFixed(2) + 'px,' + V.ty.toFixed(2) +
-    'px,0) rotate(' + V.rot + 'deg) scale(' + V.s.toFixed(5) + ')';
+  // Em movimento a folha vai para a GPU; parada, sai de lá. O `translate3d`
+  // acompanha a classe porque ele SOZINHO já pede uma camada: deixá-lo fixo
+  // manteria a prancha composta na placa de vídeo, com o raster velho, e o
+  // desenho seguiria borrado mesmo sem o `will-change`. Parada, o navegador
+  // rasteriza na escala em que a prancha está sendo vista — que é a única
+  // forma de o traço sair certo sem depender de um redesenho por acaso.
+  const movendo = V.arrastando || V.gesto > 0 || V.deslizando > 0;
+  if (movendo !== V.emCamada) {
+    V.emCamada = movendo;
+    V.folha.classList.toggle('movendo', movendo);
+  }
+  V.folha.style.transform =
+    (movendo ? 'translate3d(' + V.tx.toFixed(2) + 'px,' + V.ty.toFixed(2) + 'px,0)'
+             : 'translate(' + V.tx.toFixed(2) + 'px,' + V.ty.toFixed(2) + 'px)') +
+    ' rotate(' + V.rot + 'deg) scale(' + V.s.toFixed(5) + ')';
   // Isto roda a cada quadro de um arrasto. Nada de `getElementById` nem de
   // objeto novo aqui dentro: é o caminho quente, e o que o app economiza aqui
   // é o que sobra para o navegador compor os 60 quadros por segundo.
@@ -7876,6 +7914,7 @@ function visorLigarEventos() {
     try { box.setPointerCapture(e.pointerId); } catch (_) { }
     pts.set(e.pointerId, local(e));
     box.classList.add('arrastando');
+    V.arrastando = true;
     if (pts.size === 2) {
       const c = centro();
       pinca = { d: afast(), s: V.s, m: visorMundo(c.x, c.y) };
@@ -7926,8 +7965,13 @@ function visorLigarEventos() {
     }
     if (pts.size) return;
     box.classList.remove('arrastando');
-    if (pinca) { V.gesto = Math.max(0, V.gesto - 1); pinca = null; visorAplicar(); }
+    V.arrastando = false;
+    if (pinca) { V.gesto = Math.max(0, V.gesto - 1); pinca = null; }
     const p = local(e), agora = performance.now();
+    // Daqui para baixo, cada saída tem de deixar a folha no estado certo: a que
+    // ainda vai correr (toque duplo, inércia) segue na camada, porque quem a
+    // toca já marcou o movimento; a que acaba aqui precisa de um `visorAplicar`
+    // para SAIR dela — é esse quadro que devolve o traço nítido.
     if (andou < 12) {
       if (agora - toque.t < 330 && Math.hypot(p.x - toque.x, p.y - toque.y) < 34) {
         toque.t = 0;
@@ -7935,9 +7979,11 @@ function visorLigarEventos() {
         return;
       }
       toque = { t: agora, x: p.x, y: p.y };
+      visorAplicar();
       return;
     }
     if (Math.hypot(vx, vy) > 0.12) visorInercia(vx, vy);
+    else visorAplicar();
   };
   _visorEscutar(box, 'pointerup', soltou);
   _visorEscutar(box, 'pointercancel', soltou);
@@ -7988,15 +8034,22 @@ function visorLigarEventos() {
 function visorInercia(vx, vy) {
   const V = VISOR, id = ++V.inerciaId;
   let px = vx, py = vy, t0 = performance.now();
+  // A inércia é movimento como qualquer outro: enquanto ela corre, a folha fica
+  // na GPU. O que importa é SAIR da camada no último quadro, e não um depois —
+  // é ali que o desenho tem de virar nítido, com o dedo já longe da tela.
+  V.deslizando++;
+  const parar = () => { V.deslizando = Math.max(0, V.deslizando - 1); };
   const passo = () => {
-    if (id !== V.inerciaId || !V.folha) return;
+    if (id !== V.inerciaId || !V.folha) { parar(); return; }
     const agora = performance.now(), dt = Math.min(34, agora - t0);
     t0 = agora;
     V.tx += px * dt; V.ty += py * dt;
     const f = Math.pow(0.938, dt / 16);
     px *= f; py *= f;
+    const segue = Math.hypot(px, py) > 0.02;
+    if (!segue) parar();
     visorAplicar();
-    if (Math.hypot(px, py) > 0.02) requestAnimationFrame(passo);
+    if (segue) requestAnimationFrame(passo);
   };
   requestAnimationFrame(passo);
 }
