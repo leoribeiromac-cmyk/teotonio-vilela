@@ -25,7 +25,7 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v51'; // v51: tela de Bota-Fora (js/bf/bota-fora.js, nova), correção de apontamento de equipamento, Projetos volta a trocar de prancha e o PDF Interno fala da obra aberta
+const VERSAO = 'teotonio-v52'; // v52: a prancha da Teotônio dobra de resolução (24 px por ponto do PDF) e o teto do zoom acompanha
 // As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
 // app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
 // Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no
@@ -33,11 +33,15 @@ const VERSAO = 'teotonio-v51'; // v51: tela de Bota-Fora (js/bf/bota-fora.js, no
 // quando trocar de fato um arquivo dentro de vendor/.
 const VERSAO_VENDOR = 'teotonio-vendor-v1';
 // As pranchas também têm balde próprio, pela mesma razão e com mais motivo: a
-// pirâmide da Teotônio tem 835 quadrados / ~13 MB. Se ela morasse no balde do
+// pirâmide da Teotônio tem 2.586 quadrados / ~16 MB. Se ela morasse no balde do
 // app, cada correção de uma linha de código mandaria o celular baixar tudo de
 // novo. Suba este número quando REFATIAR uma prancha — é o que descarta os
 // quadrados antigos, já que o nome do arquivo não muda.
-const VERSAO_PRANCHAS = 'teotonio-pranchas-v1';
+// v2: a Teotônio refatiada a 24 px por ponto do PDF (era 12). O nível novo tem
+// nome de arquivo novo e viria sozinho, mas os sete de baixo foram regravados
+// em quase-sem-perdas — mesmas URLs, conteúdo melhor e menor — e sem trocar o
+// balde o celular seguiria servindo os quadrados com artefato do cache.
+const VERSAO_PRANCHAS = 'teotonio-pranchas-v2';
 const BALDES = [VERSAO, VERSAO_VENDOR, VERSAO_PRANCHAS];
 // Quadrado de prancha: o conteúdo de cada URL nunca muda dentro de uma versão.
 const IMUTAVEL = /\/projetos\/.+\/\d+\/\d+_\d+\.webp$/;
