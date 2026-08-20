@@ -638,24 +638,41 @@ funciona:
 
 ```
 projetos/teotonio/implantacao/
-  prancha.json          manifesto (856 bytes)
+  prancha.json          manifesto (1,5 KB)
   0/0_0.webp            nível 0 — a folha inteira, 443 px
   …
-  6/12_34.webp          nível 6 — 28368 × 8556 px (12 px por ponto do PDF)
+  7/16_16.webp          nível 7 — 56736 × 17112 px (24 px por ponto do PDF)
 ```
 
-Cada nível tem o dobro da resolução do anterior, até **12 px por ponto do PDF**
-(~864 dpi na folha A1 — dá para ler cota de 2,9 pt sem borrar). Arrastar e
-ampliar viram **um `transform`** na camada: a GPU compõe o que já está
-desenhado, nada é rasterizado de novo, e só os poucos quadrados que entram na
-tela são baixados.
+Cada nível tem o dobro da resolução do anterior, até **24 px por ponto do PDF**
+(~1728 dpi na folha A1). Arrastar e ampliar viram **um `transform`** na camada:
+a GPU compõe o que já está desenhado, nada é rasterizado de novo, e só os poucos
+quadrados que entram na tela são baixados.
 
-| | |
-|---|---|
-| Pirâmide inteira | 835 quadrados · 12,6 MB |
-| **Custo de abrir a tela** | **~100 KB** (a folha inteira, num nível grosso) |
-| Custo de ampliar num ponto | ~10 quadrados, ~150 KB |
-| Papel em branco | 393 dos 952 quadrados do nível fino **não existem** |
+Os 24 vieram no lugar de 12 porque o celular tem 3 pixels de tela para cada
+pixel de CSS: com 12, o desenho de verdade acabava na metade do zoom que o visor
+oferece, e dali para a frente o navegador só ampliava o borrão. Agora o traço é
+real até o fim — e o quadrado do nível fino ficou MAIS leve, porque é a mesma
+tinta espalhada em quatro vezes mais pixels:
+
+| | antes (12 px/pt) | agora (24 px/pt) |
+|---|---|---|
+| Pirâmide inteira | 835 quadrados · 12,6 MB | 2.586 quadrados · 15,8 MB |
+| **Custo de abrir a tela** | ~150 KB | **~120 KB** (a folha inteira, num nível grosso) |
+| Custo de ampliar num ponto | ~12 quadrados, ~160 KB | **~12 quadrados, ~60 KB** |
+| Papel em branco | 393 dos 952 do nível fino | 2.023 dos 3.774 do nível fino |
+
+O que cresceu foi só o total da pasta — que só quem aperta **Offline** baixa
+inteiro. Ver e ampliar ficou mais barato, não mais caro.
+
+Os quadrados são gravados em WebP **sem perdas**, com o pré-arredondamento do
+`cwebp` (`-near_lossless`). Traço de CAD é a pior entrada possível para
+compressão com perdas, e a versão q92 que o fatiador usava antes errava até 208
+de 255 num quadrado cheio: comia a linha de eixo fina e sujava a borda de todo
+texto colorido. O modo atual erra no máximo 16 de 255, e só na rampa de
+antisserrilhado — em tamanho real, lado a lado, é o mesmo desenho. De quebra,
+saiu **menor em todos os sete níveis que já existiam** (−43% no nível de 12
+px/pt), o que é o que pagou boa parte do nível novo.
 
 O manifesto traz um bitmap dizendo quais quadrados existem — quadrado em branco
 não vira arquivo no repositório nem pedido de rede. O `sw.js` guarda os
@@ -670,7 +687,8 @@ dá fullscreen a vídeo. O botão **Offline** baixa a pirâmide inteira para o
 aparelho, para a prancha abrir sem sinal nenhum.
 
 Para fatiar uma prancha nova: `python3 ferramentas/fatiar-prancha.py entrada.pdf
-projetos/<obra>/<nome>/` (precisa de `pymupdf` e `pillow`). Refatiar uma prancha
+projetos/<obra>/<nome>/` (precisa de `pymupdf` e `pillow`; com o `cwebp` do
+pacote `webp` no PATH, os quadrados saem bem menores). Refatiar uma prancha
 existente pede que se suba o `VERSAO_PRANCHAS` do `sw.js` — o nome do arquivo
 não muda, então é a versão do balde que descarta os quadrados velhos.
 

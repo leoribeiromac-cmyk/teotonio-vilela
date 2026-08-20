@@ -72,22 +72,22 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=51"></script>
-<script src="dados/ruas-de-terra.js?v=51"></script>
+<script src="dados/ranario.js?v=52"></script>
+<script src="dados/ruas-de-terra.js?v=52"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=51"></script>
+<script src="dados/teotonio-muros.js?v=52"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=51"></script>
-<script src="js/nf/adaptador.js?v=51"></script>
-<script src="js/nf/notas.js?v=51"></script>
-<script src="js/equip/equipamentos.js?v=51"></script>
+<script src="js/ui/icones.js?v=52"></script>
+<script src="js/nf/adaptador.js?v=52"></script>
+<script src="js/nf/notas.js?v=52"></script>
+<script src="js/equip/equipamentos.js?v=52"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=51"></script>
+<script src="js/bf/bota-fora.js?v=52"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -7678,9 +7678,14 @@ function visorMedir(reenquadrar) {
   V.min = V.fit;
   // Teto do zoom: o nível mais fino da pirâmide, com folga de 2× para quem
   // quiser chegar mais perto. Passar muito disso só entrega borrão ampliado.
+  //
+  // O teto absoluto acompanha a pirâmide, e por isso subiu de 14 para 16: com
+  // 24 px por ponto do PDF, o celular (3 pixels de tela por pixel de CSS) tem
+  // desenho DE VERDADE até 8× — e parar em 14 desperdiçaria a folga que a
+  // resolução nova abriu justamente para quem quer chegar perto da cota.
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   const resMax = V.niveis[V.niveis.length - 1].res;
-  V.max = Math.max(V.fit * 3, Math.min(14, resMax * 2 / dpr));
+  V.max = Math.max(V.fit * 3, Math.min(16, resMax * 2 / dpr));
   if (reenquadrar) {
     V.s = V.fit;
     visorPara(V.man.larguraPt / 2, V.man.alturaPt / 2, V.cx / 2, V.cy / 2);
@@ -7705,7 +7710,7 @@ function visorLimitar() {
 }
 
 /* O percentual sozinho não dizia quanto AINDA CABE de zoom: a pirâmide vai
-   até 12 px por ponto do PDF, e quem não leu o README parava no primeiro
+   até 24 px por ponto do PDF, e quem não leu o README parava no primeiro
    borrão achando que tinha chegado ao fim da nitidez. O nível diz em que
    degrau da escada o desenho está — e quantos degraus ela tem. */
 function visorRotularZoom() {
