@@ -58,6 +58,21 @@
 
   let VIAGENS = [];          // o que a última consulta trouxe
   let PROVAS = { carga: null, ticket: null, assinatura: '' };
+
+  /* O RASCUNHO. A viagem em preenchimento não pode morrer com a aba: o
+     apontador toca em "Tirar", o Android abre a câmera e, num aparelho
+     apertado de memória, DESCARTA a página para dar RAM ao aplicativo de
+     foto. Ao voltar, não é a mesma tela — é um carregamento novo. Só o
+     que estiver gravado fora da página volta.
+
+     Vale 14 horas: o suficiente para atravessar um turno inteiro, e
+     pouco para ressuscitar a viagem de anteontem em cima do dia de
+     hoje. */
+  const RASC_VALIDADE = 14 * 60 * 60 * 1000;
+  const RASC_CAMPOS = ['bfData', 'bfPlaca', 'bfMotorista', 'bfFornecedor', 'bfMaterial',
+                       'bfServico', 'bfProjeto', 'bfValor', 'bfOrigem', 'bfDestino', 'bfObs'];
+  let rasc = null;           // gravador da tela montada
+  let mexeu = false;         // já digitaram? então o rascunho não sobrescreve
   let form = null, submitBtn = null, btnText = null;
   let carregando = false;
 
@@ -142,12 +157,15 @@
     try {
       PROVAS[qual] = await comprimirImg(arq, LADO_MAX, QUALIDADE);
       pintarProvas();
+      // A foto acabou de chegar da câmera: gravar AGORA, não daqui a meio
+      // segundo. É justamente esta a prova que se perdia.
+      gravarRascunho();
     } catch (e) {
       aviso('Não consegui ler essa imagem. Tente tirar de novo.', 'error');
     }
   };
 
-  window.bfRemoverFoto = function (qual) { PROVAS[qual] = null; pintarProvas(); };
+  window.bfRemoverFoto = function (qual) { PROVAS[qual] = null; pintarProvas(); gravarRascunho(); };
 
   function pintarProvas() {
     ['carga', 'ticket'].forEach(qual => {
@@ -192,12 +210,14 @@
     if (c && c._temTraco && c._temTraco()) PROVAS.assinatura = c.toDataURL('image/png');
     fechar('bfAssinaturaModal');
     pintarProvas();
+    gravarRascunho();
   };
   window.bfLimparCanvas = function () { const c = g('bfCanvas'); if (c && c._limpar) c._limpar(); };
   window.bfRemoverAssinatura = function () {
     PROVAS.assinatura = '';
     const c = g('bfCanvas'); if (c && c._limpar) c._limpar();
     pintarProvas();
+    gravarRascunho();
   };
 
   function montarCanvas() {
@@ -243,9 +263,79 @@
   // ------------------------------------------------------------------
   // REGISTRAR A VIAGEM
   // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // O RASCUNHO DA VIAGEM
+  // ------------------------------------------------------------------
+  function chaveRasc() { return 'botafora:' + obraId(); }
+
+  /* Devolve null quando não há viagem nenhuma em andamento — é o sinal de
+     "apague o rascunho". Data, fornecedor e trajeto sozinhos NÃO contam:
+     eles já vêm preenchidos de padrões, e um rascunho feito só disso
+     ressuscitaria em toda abertura sem nada de útil dentro. */
+  function coletarRascunho() {
+    if (!g('bfForm')) return null;
+    const campos = {};
+    RASC_CAMPOS.forEach(id => { const e = g(id); if (e) campos[id] = e.value; });
+    const digitou = ['bfPlaca', 'bfMotorista', 'bfObs'].some(id => (campos[id] || '').trim());
+    const anexou = !!(PROVAS.carga || PROVAS.ticket || PROVAS.assinatura);
+    if (!digitou && !anexou) return null;
+    return { campos, provas: { carga: PROVAS.carga, ticket: PROVAS.ticket, assinatura: PROVAS.assinatura } };
+  }
+
+  function gravarRascunho() { if (rasc) rasc.agora(); }
+
+  async function restaurarRascunho() {
+    if (typeof rascunhoLer !== 'function') return;
+    let reg = null;
+    try { reg = await rascunhoLer(chaveRasc(), RASC_VALIDADE); } catch (e) { }
+    // A leitura é assíncrona. Se o apontador começou a digitar enquanto ela
+    // vinha, quem manda é o dedo dele — não um rascunho de minutos atrás.
+    if (!reg || mexeu || !g('bfForm')) { ligarRascunho(); return; }
+    const d = reg.dados || {};
+    Object.keys(d.campos || {}).forEach(id => {
+      const e = g(id);
+      if (e && d.campos[id] != null) e.value = d.campos[id];
+    });
+    const pr = d.provas || {};
+    PROVAS = { carga: pr.carga || null, ticket: pr.ticket || null, assinatura: pr.assinatura || '' };
+    pintarProvas();
+    avisarRascunho(!!reg.semImagens);
+    ligarRascunho();
+  }
+
+  function ligarRascunho() {
+    if (typeof rascunhoDe === 'function') rasc = rascunhoDe(chaveRasc(), coletarRascunho);
+  }
+
+  function avisarRascunho(semImagens) {
+    const el = g('bfRascunho');
+    if (!el) return;
+    el.innerHTML = ic('atualizar', 16)
+      + '<span>Recuperei a viagem que você estava preenchendo'
+      + (semImagens ? ' — as fotos não couberam na memória do aparelho e precisam ser tiradas de novo' : '')
+      + '.</span>'
+      + '<button type="button" class="btn btn-ghost btn-sm" onclick="bfDescartarRascunho()">Descartar</button>';
+    el.style.display = '';
+  }
+
+  function esconderAvisoRascunho() {
+    const el = g('bfRascunho');
+    if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+  }
+
+  /* Descartar apaga a VIAGEM, não o dia: mesma regra de limparFormulario —
+     fornecedor, trajeto e data seguem, que é o que não muda de carga para
+     carga. */
+  window.bfDescartarRascunho = function () {
+    limparFormulario();
+  };
+
   function ligarForm() {
     form = g('bfForm');
     if (!form) return;
+    const anotar = () => { mexeu = true; if (rasc) rasc.agendar(); };
+    form.addEventListener('input', anotar);
+    form.addEventListener('change', anotar);
     form.addEventListener('submit', e => {
       e.preventDefault();
       if (!val('bfData')) { aviso('Informe a data da viagem.'); return; }
@@ -361,6 +451,10 @@
     PROVAS = { carga: null, ticket: null, assinatura: '' };
     const c = g('bfCanvas'); if (c && c._limpar) c._limpar();
     pintarProvas();
+    // A viagem foi gravada (ou descartada): o rascunho dela não pode
+    // reaparecer na próxima abertura como se ainda estivesse por lançar.
+    if (rasc) rasc.apagar();
+    esconderAvisoRascunho();
     const pl = g('bfPlaca'); if (pl) pl.focus();
   }
 
@@ -674,6 +768,8 @@
 
     <form id="bfForm" class="card" style="margin-top:14px">
       <div class="card-body">
+        <!-- Preenchido por restaurarRascunho(); nasce escondido. -->
+        <div id="bfRascunho" class="rascunho-aviso" style="display:none"></div>
 
         <div class="form-grid">
           <div class="field"><label for="bfData">Data da viagem</label>
@@ -804,8 +900,14 @@
     // Provas são da viagem que estava na tela; remontar a tela zera.
     PROVAS = { carga: null, ticket: null, assinatura: '' };
     VIAGENS = [];
+    rasc = null;
+    mexeu = false;
     ligarForm();
     pintarProvas();
+    /* Depois de ligar o formulário: a restauração é assíncrona e só cria o
+       gravador no fim, para não haver a chance de gravar um formulário
+       vazio POR CIMA do rascunho que ainda está sendo lido. */
+    restaurarRascunho();
     const mes = g('bfDe');
     if (mes && !mes.value) {
       const n = new Date();

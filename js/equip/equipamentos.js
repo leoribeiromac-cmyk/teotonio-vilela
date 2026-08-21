@@ -82,6 +82,23 @@
         // Resolvidas em EQ.boot(), depois que a tela existe no DOM.
         let form = null, submitBtn = null, btnText = null;
 
+        /* O RASCUNHO. Um turno de apontamento — operador, horímetro,
+           paradas, assinatura — é meia hora de trabalho, e some inteiro se
+           o aparelho recarregar a página. Não é hipótese: o celular do
+           canteiro descarta a aba para dar memória à câmera ou a outro
+           aplicativo, e ao voltar o formulário nasce vazio. O RDO nunca
+           sofreu disso porque grava rascunho; aqui passa a gravar também.
+
+           14 horas de validade: atravessa o turno e não ressuscita o
+           apontamento de anteontem em cima do dia de hoje. */
+        const RASC_VALIDADE = 14 * 60 * 60 * 1000;
+        const RASC_CAMPOS = ['data', 'turno', 'equipamento', 'operador', 'inicio', 'fim',
+                             'horimInicial', 'horimFinal', 'combustivel', 'status',
+                             'observacoesUI', 'assinatura'];
+        let rasc = null;          // gravador da tela montada
+        let mexeu = false;        // já digitaram? então o rascunho não sobrescreve
+        let equipPendente = '';   // equipamento do rascunho, à espera da lista chegar
+
         // Conversor de Horas
         function timeToMinutes(timeStr) {
             if (!timeStr) return 0;
@@ -176,8 +193,10 @@
             if (fim) row.querySelector('.parada-fim').value = fim;
             row.querySelector('.parada-inicio').addEventListener('change', calcularHoras);
             row.querySelector('.parada-fim').addEventListener('change', calcularHoras);
-            row.querySelector('.parada-remover').addEventListener('click', () => { row.remove(); atualizarParadasVazio(); calcularHoras(); });
+            row.querySelector('.parada-remover').addEventListener('click', () => { row.remove(); atualizarParadasVazio(); calcularHoras(); gravarRascunho(); });
             atualizarParadasVazio();
+            // Só depois que a linha existe: acrescentar parada é preenchimento.
+            gravarRascunho();
         }
         function atualizarParadasVazio() {
             const vazio = document.getElementById('paradasVazio');
@@ -194,7 +213,106 @@
             return arr.join('; ');
         }
 
+        /* ===================== RASCUNHO DO APONTAMENTO ===================== */
+        function chaveRasc() {
+            return 'equip:' + ((typeof OBRA !== 'undefined' && OBRA && OBRA.id) || '');
+        }
+
+        /* null = não há apontamento em andamento, e o rascunho deve ser
+           apagado. Data e turno sozinhos não contam: o boot já os preenche,
+           e um rascunho só disso reapareceria em toda abertura sem nada
+           dentro. */
+        function coletarRascunho() {
+            const f = document.getElementById('apontamentoForm');
+            if (!f) return null;
+            /* CORREÇÃO NÃO VIRA RASCUNHO. Se a página recarregar no meio de
+               uma correção, EDICAO se perde — e restaurar aqueles campos num
+               formulário de LANÇAR gravaria um apontamento novo em vez de
+               corrigir o antigo, ou seja, duplicaria a hora de máquina. É
+               melhor perder a correção (que está gravada no servidor como
+               estava) do que duplicar medição. */
+            if (EDICAO) return null;
+            const campos = {};
+            RASC_CAMPOS.forEach(id => { const e = document.getElementById(id); if (e) campos[id] = e.value; });
+            const paradas = [];
+            document.querySelectorAll('#paradasList .parada-row').forEach(row => {
+                paradas.push({
+                    motivo: row.querySelector('.parada-motivo').value,
+                    inicio: row.querySelector('.parada-inicio').value,
+                    fim: row.querySelector('.parada-fim').value,
+                });
+            });
+            const preencheu = ['equipamento', 'operador', 'horimInicial', 'horimFinal',
+                               'combustivel', 'observacoesUI', 'assinatura']
+                .some(id => (campos[id] || '').trim());
+            if (!preencheu && !paradas.length) return null;
+            return { campos, paradas };
+        }
+
+        function gravarRascunho() { if (rasc) rasc.agora(); }
+
+        async function restaurarRascunho() {
+            if (typeof rascunhoLer !== 'function') { ligarRascunho(); return; }
+            let reg = null;
+            try { reg = await rascunhoLer(chaveRasc(), RASC_VALIDADE); } catch (e) { }
+            // Leitura assíncrona: se já começaram a digitar, quem manda é o dedo.
+            if (!reg || mexeu || !document.getElementById('apontamentoForm')) { ligarRascunho(); return; }
+            const d = reg.dados || {};
+            Object.keys(d.campos || {}).forEach(id => {
+                const e = document.getElementById(id);
+                if (!e || d.campos[id] == null) return;
+                if (id === 'equipamento') { equipPendente = d.campos[id]; e.value = d.campos[id]; return; }
+                e.value = d.campos[id];
+            });
+            document.getElementById('paradasList').innerHTML = '';
+            (d.paradas || []).forEach(p => adicionarParada(p.motivo, p.inicio, p.fim));
+            atualizarParadasVazio();
+            calcularHoras();
+            mostrarEstadoAssinatura();
+            avisarRascunho(!!reg.semImagens);
+            ligarRascunho();
+        }
+
+        function ligarRascunho() {
+            if (typeof rascunhoDe === 'function') rasc = rascunhoDe(chaveRasc(), coletarRascunho);
+        }
+
+        function avisarRascunho(semImagens) {
+            const el = document.getElementById('eqRascunho');
+            if (!el) return;
+            el.innerHTML = ic('atualizar', 16)
+                + '<span>Recuperei o apontamento que você estava preenchendo'
+                + (semImagens ? ' — a assinatura não coube na memória do aparelho e precisa ser refeita' : '')
+                + '.</span>'
+                + '<button type="button" class="btn btn-ghost btn-sm" onclick="EQ.descartarRascunho()">Descartar</button>';
+            el.style.display = '';
+        }
+
+        function esconderAvisoRascunho() {
+            const el = document.getElementById('eqRascunho');
+            if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+        }
+
+        /* Zera o formulário de lançamento e o rascunho junto. É o mesmo que
+           acontece depois de um envio bem-sucedido, e o botão Descartar da
+           faixa aponta para cá. */
+        function limparApontamento() {
+            const dia = document.getElementById('data').value;
+            form.reset();
+            document.getElementById('data').value = dia;
+            document.getElementById('status').value = 'OperandoNormalmente';
+            document.getElementById('horasDisplay').innerHTML = '0.00<span class="eq-h">h</span>';
+            limparAssinatura();
+            document.getElementById('paradasList').innerHTML = '';
+            atualizarParadasVazio();
+            if (rasc) rasc.apagar();
+            esconderAvisoRascunho();
+        }
+
         function ligarFormApontamento() {
+        const anotar = () => { mexeu = true; if (rasc) rasc.agendar(); };
+        form.addEventListener('input', anotar);
+        form.addEventListener('change', anotar);
         form.addEventListener('submit', e => {
             e.preventDefault();
 
@@ -278,7 +396,11 @@
         function popularDropdownEquip() {
             const sel = document.getElementById('equipamento');
             if (!EQUIPAMENTOS.length) return; // mantém a lista fixa como reserva
-            const valorAtual = sel.value;
+            /* O equipamento do rascunho não podia ser reposto no boot: a
+               lista vem do servidor, e `select.value` num <option> que ainda
+               não existe simplesmente não pega. Ele espera aqui. */
+            const valorAtual = sel.value || equipPendente;
+            equipPendente = '';
             const grupos = {};
             EQUIPAMENTOS.forEach(eq => {
                 const t = eq.tipo || 'Outros';
@@ -544,13 +666,7 @@
                 const r = await resp.json();
                 if (r.ok) {
                     showToast('Transmissão concluída com sucesso!', 'success');
-                    const tempDate = document.getElementById('data').value;
-                    form.reset();
-                    document.getElementById('data').value = tempDate;
-                    document.getElementById('status').value = 'OperandoNormalmente';
-                    document.getElementById('horasDisplay').innerHTML = '0.00<span class="eq-h">h</span>';
-                    limparAssinatura();
-                    document.getElementById('paradasList').innerHTML = ''; atualizarParadasVazio();
+                    limparApontamento();
                 } else if (r.duplicado) {
                     if (confirm(r.erro + '\n\nDeseja registrar mesmo assim (2º apontamento)?')) {
                         await enviarApontamento(true);
@@ -777,6 +893,10 @@
             limparAssinatura();
             document.getElementById('paradasList').innerHTML = '';
             atualizarParadasVazio();
+            // Sair da correção também limpa o rascunho: o que está na tela
+            // agora é um formulário em branco, e é isso que tem de voltar.
+            if (rasc) rasc.apagar();
+            esconderAvisoRascunho();
             marcarModoEdicao();
         }
 
@@ -873,6 +993,8 @@
             capturarAssinatura();
             EQ.fechar('assinaturaModal');
             mostrarEstadoAssinatura();
+            // O traço não passa por evento de input: grava aqui, na hora.
+            gravarRascunho();
         }
         /* O formulário mostra o que foi assinado sem precisar reabrir nada:
            o traço é a prova que viaja no apontamento. */
@@ -1426,6 +1548,9 @@
     <form id="apontamentoForm" class="card" style="margin-top:14px">
       <div class="card-body">
 
+        <!-- Preenchida por restaurarRascunho(); nasce escondida. -->
+        <div id="eqRascunho" class="rascunho-aviso" style="display:none"></div>
+
         <!-- A faixa é o que separa CORRIGIR de LANÇAR. Sem ela, o formulário
              preenchido parece um lançamento novo, e salvar vira duplicata. -->
         <div id="eqEdicaoFaixa" class="eq-edicao" style="display:none">
@@ -1650,6 +1775,9 @@
        mais está vendo — de outra obra, inclusive. */
     EDICAO = null;
     ULTIMOS = [];
+    rasc = null;
+    mexeu = false;
+    equipPendente = '';
     form = document.getElementById('apontamentoForm');
     submitBtn = document.getElementById('submitBtn');
     btnText = document.getElementById('btnText');
@@ -1670,6 +1798,11 @@
     atualizarParadasVazio();
     toggleLocadora();
     trocarAba('equip');
+
+    /* Depois de ligar o formulário: a restauração é assíncrona e só cria o
+       gravador no fim, para não haver a chance de gravar um formulário vazio
+       POR CIMA do rascunho que ainda está sendo lido. */
+    restaurarRascunho();
 
     // As listas vêm do mesmo motor de sempre; sem elas o <select> fica vazio.
     if (!ligado) { ligado = true; }
@@ -1700,6 +1833,7 @@
     adicionarParada: adicionarParada,
     limparAssinatura: limparAssinatura,
     cancelarEdicao: cancelarEdicao,
+    descartarRascunho: limparApontamento,
     abrirAssinatura: abrirAssinatura,
     confirmarAssinatura: confirmarAssinatura,
     confirmarEnvio: confirmarEnvio,
