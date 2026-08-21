@@ -35,7 +35,7 @@ para a navegação, então a mudança chega sem precisar limpar cache.
   **pirâmide de quadrados** (`<prancha>/<nível>/<linha>_<coluna>.webp` +
   `prancha.json`), não um PDF: A1 redesenhada a cada passo de zoom trava o
   celular. Gerada por `ferramentas/fatiar-prancha.py <pdf> <pasta> [res]`;
-  `res` é o teto de pixels por ponto (12 na Teotônio, que é uma A1 lotada;
+  `res` é o teto de pixels por ponto (24 na Teotônio, que é uma A1 lotada;
   6 nas Ruas de Terra, plantas de rua curta). Refatiar exige subir o
   `VERSAO_PRANCHAS` do `sw.js` — os nomes dos arquivos não mudam, então é a
   versão do balde que descarta os quadrados velhos. O `.pdf` ao lado é o
