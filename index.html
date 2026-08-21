@@ -72,22 +72,22 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=54"></script>
-<script src="dados/ruas-de-terra.js?v=54"></script>
+<script src="dados/ranario.js?v=55"></script>
+<script src="dados/ruas-de-terra.js?v=55"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=54"></script>
+<script src="dados/teotonio-muros.js?v=55"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=54"></script>
-<script src="js/nf/adaptador.js?v=54"></script>
-<script src="js/nf/notas.js?v=54"></script>
-<script src="js/equip/equipamentos.js?v=54"></script>
+<script src="js/ui/icones.js?v=55"></script>
+<script src="js/nf/adaptador.js?v=55"></script>
+<script src="js/nf/notas.js?v=55"></script>
+<script src="js/equip/equipamentos.js?v=55"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=54"></script>
+<script src="js/bf/bota-fora.js?v=55"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -955,6 +955,16 @@ body.proj-cheia-ativa{overflow:hidden}
 .bf-selo .ic{width:12px;height:12px;vertical-align:0}
 /* Falta de prova na conferência não pode passar como texto comum. */
 .bf-falta{color:var(--ylw-d);font-weight:700}
+/* A faixa que avisa que o preenchimento foi recuperado. Discreta: quem
+   voltou da câmera quer terminar a viagem, não ler aviso. Mas precisa
+   existir — rascunho que reaparece sem explicação parece defeito. */
+.rascunho-aviso{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-bottom:14px;padding:10px 12px;
+  border:1px solid var(--grn);border-radius:var(--r-sm);
+  background:var(--grn-l);color:var(--grn);font-size:var(--fs-sm)}
+.rascunho-aviso .ic{width:16px;height:16px;flex:none}
+.rascunho-aviso > span{flex:1;min-width:0}
 
 /* ---- obras permitidas, no cadastro de usuário ---- */
 .usr-obras{display:flex;flex-wrap:wrap;gap:8px 18px;padding:10px 12px;
@@ -4014,6 +4024,139 @@ function atualizarIndicadorOutbox() {
     el.innerHTML = `<span class="ob-ic">${ic('syncOff')}</span><span style="flex:1">Sem conexão — lançamentos ficam guardados e enviam sozinhos depois</span>`;
   }
 }
+
+/* ====================================================================
+   RASCUNHO DE FORMULÁRIO — o preenchimento sobrevive ao aparelho
+   --------------------------------------------------------------------
+   Não basta o app parar de se redesenhar por cima de quem preenche (é o
+   que a lista TELAS_DE_FORMULARIO faz em carregarTudo). O celular do
+   canteiro tem pouca memória, e quando o apontador abre a câmera o
+   Android pode DESCARTAR a aba inteira para dar RAM ao aplicativo de
+   foto. Ao voltar não houve re-render nenhum: houve um carregamento
+   novo, e o formulário nasceu vazio.
+
+   Foi o que continuou acontecendo num aparelho depois de a guarda já
+   estar no ar — "no meu funciona, no dele às vezes apaga, aí tem que
+   sair e entrar de novo". Guarda nenhuma alcança isso: quando a página
+   é recarregada, o que estava só na tela já não existe.
+
+   O RDO nunca sofreu desse mal porque grava rascunho desde sempre
+   (loadDraft/saveDraft). Aqui é o mesmo desenho, com uma diferença: as
+   provas do bota-fora são FOTOS, e três fotos em base64 não cabem com
+   folga no localStorage (5 MB para o site inteiro, fila offline
+   incluída). Por isso o rascunho mora no IndexedDB, com o localStorage
+   como plano B — e, se nem lá couber, grava o que é texto e MARCA que
+   as imagens ficaram de fora, em vez de perder tudo em silêncio.
+   ==================================================================== */
+const RASC_DB = 'teotonio_rascunho_v1';
+const RASC_STORE = 'formularios';
+const RASC_LS = 'teotonio_rascunho_v1:';
+let _rascDB = null, _rascAbriu = false;
+
+function _rascAbrir() {
+  if (_rascAbriu) return Promise.resolve(_rascDB);
+  return new Promise(resolve => {
+    const pronto = db => { _rascAbriu = true; _rascDB = db; resolve(db); };
+    if (!window.indexedDB) return pronto(null);
+    let req;
+    try { req = indexedDB.open(RASC_DB, 1); } catch (e) { return pronto(null); }
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(RASC_STORE)) db.createObjectStore(RASC_STORE, { keyPath: 'chave' });
+    };
+    req.onsuccess = () => pronto(req.result);
+    req.onerror = () => pronto(null);        // navegação privada, cota zerada…
+    req.onblocked = () => pronto(null);
+  });
+}
+
+function _rascOp(db, modo, fn) {
+  return new Promise((ok, erro) => {
+    let tx;
+    try { tx = db.transaction(RASC_STORE, modo); } catch (e) { return erro(e); }
+    let pedido;
+    try { pedido = fn(tx.objectStore(RASC_STORE)); } catch (e) { return erro(e); }
+    tx.oncomplete = () => ok(pedido ? pedido.result : undefined);
+    tx.onerror = () => erro(tx.error || new Error('rascunho: falha ao gravar'));
+    tx.onabort = () => erro(tx.error || new Error('rascunho: gravação abortada'));
+  });
+}
+
+/* Tira as imagens de dentro de um rascunho, preservando o resto. Só é
+   usado quando o localStorage recusa o tamanho: perder as fotos e manter
+   placa, motorista e valor é melhor do que voltar da câmera para o
+   nada. */
+function _rascSemImagens(v) {
+  if (typeof v === 'string') return /^data:/.test(v) ? '' : v;
+  if (Array.isArray(v)) return v.map(_rascSemImagens);
+  if (v && typeof v === 'object') {
+    const o = {};
+    Object.keys(v).forEach(k => { o[k] = _rascSemImagens(v[k]); });
+    return o;
+  }
+  return v;
+}
+
+async function rascunhoGravar(chave, dados) {
+  const reg = { chave, dados, em: Date.now() };
+  const db = await _rascAbrir();
+  if (db) {
+    try { await _rascOp(db, 'readwrite', s => s.put(reg)); return true; } catch (e) { }
+  }
+  try { localStorage.setItem(RASC_LS + chave, JSON.stringify(reg)); return true; }
+  catch (e) {
+    const enxuto = { chave, dados: _rascSemImagens(dados), em: reg.em, semImagens: true };
+    try { localStorage.setItem(RASC_LS + chave, JSON.stringify(enxuto)); return true; } catch (e2) { return false; }
+  }
+}
+
+/* `validadeMs` existe para o rascunho não ressuscitar dias depois: viagem
+   de ontem restaurada em cima do turno de hoje é lançamento errado. */
+async function rascunhoLer(chave, validadeMs) {
+  let reg = null;
+  const db = await _rascAbrir();
+  if (db) { try { reg = await _rascOp(db, 'readonly', s => s.get(chave)); } catch (e) { } }
+  if (!reg) { try { reg = JSON.parse(localStorage.getItem(RASC_LS + chave) || 'null'); } catch (e) { } }
+  if (!reg || !reg.dados) return null;
+  if (validadeMs && (Date.now() - (reg.em || 0)) > validadeMs) { rascunhoApagar(chave); return null; }
+  return reg;
+}
+
+async function rascunhoApagar(chave) {
+  try { localStorage.removeItem(RASC_LS + chave); } catch (e) { }
+  const db = await _rascAbrir();
+  if (db) { try { await _rascOp(db, 'readwrite', s => s.delete(chave)); } catch (e) { } }
+}
+
+/* O gravador de UMA tela. Junta as teclas numa gravação só (`agendar`) e
+   descarrega na hora (`agora`) quando o aparelho pode morrer a seguir —
+   abrir a câmera é exatamente isso.
+
+   `coletar()` devolvendo null significa "não há nada digitado": aí o
+   rascunho é APAGADO, senão limpar o formulário deixaria um fantasma
+   para a próxima abertura. */
+let _rascAtivo = null;
+function rascunhoDe(chave, coletar) {
+  let t = null;
+  const gravar = () => {
+    t = null;
+    const d = coletar();
+    if (d) rascunhoGravar(chave, d); else rascunhoApagar(chave);
+  };
+  const api = {
+    chave,
+    agendar() { if (t) clearTimeout(t); t = setTimeout(gravar, 500); },
+    agora() { if (t) { clearTimeout(t); t = null; } gravar(); },
+    apagar() { if (t) { clearTimeout(t); t = null; } rascunhoApagar(chave); },
+  };
+  _rascAtivo = api;               // uma tela de formulário por vez
+  return api;
+}
+
+/* O aparelho está saindo da frente: é AGORA ou nunca. `pagehide` cobre o
+   caso em que a aba é descartada sem passar por "escondida". */
+function rascunhoDescarregar() { if (_rascAtivo) _rascAtivo.agora(); }
+window.addEventListener('pagehide', rascunhoDescarregar);
 
 function num(s) {
   if (s === null || s === undefined || s === '') return 0;
@@ -18169,7 +18312,10 @@ document.addEventListener('DOMContentLoaded', () => {
      ficou no bolso, ou o navegador jogou a aba para segundo plano e parou os
      temporizadores. Ao voltar à frente, ressincroniza. */
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return;
+    /* SAINDO da frente — a câmera assumindo a tela é o caso comum. Daqui
+       para a frente o Android pode descartar a aba a qualquer momento, e
+       nada mais nosso roda. O rascunho tem de estar gravado ANTES. */
+    if (document.visibilityState !== 'visible') { rascunhoDescarregar(); return; }
     // App instalado na tela inicial fica aberto por dias e NUNCA é navegado
     // de novo — sem isto, o aparelho podia ficar semanas numa versão antiga
     // sem nem receber o aviso. Voltar para a frente vira o momento de olhar.

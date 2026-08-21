@@ -22,6 +22,23 @@ para a navegação, então a mudança chega sem precisar limpar cache.
 - `js/bf/bota-fora.js` — tela de Bota-Fora: a viagem de caminhão com foto da
   carga/placa, assinatura do motorista e foto do ticket, e a exportação no
   formato da aba FRETE do fechamento. Só fala com o `Code.gs`.
+
+## Formulário aberto é dado do apontador
+
+Tela de formulário **não pode ser redesenhada nem esquecida** por baixo de
+quem está preenchendo. São duas travas, e as duas são necessárias:
+
+1. `TELAS_DE_FORMULARIO` (no `index.html`) tira essas telas do `render()`
+   da carga de fundo. Tela nova que peça preenchimento entra nessa lista.
+2. `rascunhoGravar/Ler/Apagar` + `rascunhoDe()` (também no `index.html`)
+   gravam o que está na tela FORA da página — IndexedDB, com localStorage
+   de reserva. É o que salva o caso que a trava 1 não alcança: o celular
+   do canteiro descarta a aba enquanto a câmera está aberta, e o retorno
+   é um carregamento novo, não um re-render. Quem preenche chama
+   `rascunhoDe(chave, coletar)` no boot da tela, `.agendar()` a cada
+   digitação, `.agora()` quando anexa foto ou assinatura (não dá para
+   esperar o debounce) e `.apagar()` quando grava ou descarta.
+   `tests/rascunho-formulario.ui.test.js` recarrega a página de verdade.
 - `vendor/` — bibliotecas servidas pelo próprio site (Chart.js, jsPDF +
   AutoTable, xlsx-js-style, PDF.js). **Não voltar a usar CDN**: o app precisa
   abrir offline no canteiro. Ao trocar uma versão, subir também o `VERSAO`
