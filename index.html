@@ -72,22 +72,22 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=53"></script>
-<script src="dados/ruas-de-terra.js?v=53"></script>
+<script src="dados/ranario.js?v=54"></script>
+<script src="dados/ruas-de-terra.js?v=54"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=53"></script>
+<script src="dados/teotonio-muros.js?v=54"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=53"></script>
-<script src="js/nf/adaptador.js?v=53"></script>
-<script src="js/nf/notas.js?v=53"></script>
-<script src="js/equip/equipamentos.js?v=53"></script>
+<script src="js/ui/icones.js?v=54"></script>
+<script src="js/nf/adaptador.js?v=54"></script>
+<script src="js/nf/notas.js?v=54"></script>
+<script src="js/equip/equipamentos.js?v=54"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=53"></script>
+<script src="js/bf/bota-fora.js?v=54"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -940,9 +940,9 @@ body.proj-cheia-ativa{overflow:hidden}
 }
 .bf-prova-assin img{background:#fff;padding:4px}
 .bf-prova-x{
-  position:absolute;top:-8px;right:-8px;width:22px;height:22px;padding:0;border:none;cursor:pointer;
+  position:absolute;top:-9px;right:-9px;width:26px;height:26px;min-height:0;padding:0;border:none;cursor:pointer;
   display:flex;align-items:center;justify-content:center;border-radius:50%;
-  background:var(--red);color:#fff;
+  background:var(--red);color:#fff;box-shadow:0 1px 4px rgba(0,0,0,.3);
 }
 /* Selos do que foi (ou não foi) anexado. Na lista de viagens, é o que diz numa
    olhada qual linha da fatura tem como ser contestada. */
@@ -2518,6 +2518,13 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .topbar { overflow: hidden; }
   /* o bloco do título é o que cede espaço */
   .topbar > div:first-child { min-width: 0; flex: 1 1 auto; }
+  /* …e o `min-width:0` precisa chegar ATÉ o bloco que segura o título e o
+     subtítulo. Parando um nível acima, ele deixava esse bloco com a largura
+     do conteúdo: a elipse abaixo nunca entrava e o subtítulo seguia por
+     baixo dos botões de ação, em TODAS as telas do celular — "Frota da obra
+     · apontamento de hora de máquina" terminava em 315px numa faixa de
+     ações que começa em 119px. */
+  .topbar > div:first-child > div { min-width: 0; }
   .topbar-title, .topbar-sub {
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
@@ -2935,7 +2942,15 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   /* alvo de dedo: nada abaixo de 42 px numa tela que se usa em pé */
   #apontamentoForm .btn,.eq-topo-acoes .btn,.eq-abas .btn,
   .eq-modal-corpo .btn,.eq-modal-topo .btn{min-height:42px}
-  .parada-remover,.btn-desativar,.btn-apagar-apont{min-height:42px;min-width:42px;justify-content:center}
+  .parada-remover,.btn-desativar,.btn-apagar-apont,.btn-editar-apont{min-height:42px;min-width:42px;justify-content:center}
+  /* O X que descarta uma prova é uma bolinha de 24 px na tela de mesa. No
+     celular a regra de alvo de dedo (`.btn, button { min-height:40px }`, lá em
+     cima) impunha 40 px de ALTURA e deixava os 24 de largura — a bolinha saía
+     uma elipse vermelha esticada. Vira um círculo de 40, que é o alvo que a
+     regra pede: descartar a prova errada é justamente o toque que não pode
+     depender de pontaria. */
+  .bf-prova-x{width:40px;height:40px;min-width:40px;top:-12px;right:-12px}
+  .bf-prova-x .ic{width:15px;height:15px}
   .eq-abas .btn{flex:1;justify-content:center}
 
   .eq-modal{padding:0;align-items:stretch;overflow:hidden}
@@ -6318,6 +6333,26 @@ function soDaObraAtiva(linhas) {
    descarta o que trouxe em vez de gravar por cima. */
 let _epocaCarga = 0;
 
+/* TELAS EM QUE SE PREENCHE ALGO — e que a carga de fundo NÃO pode redesenhar.
+   ------------------------------------------------------------------
+   `render()` reconstrói a página inteira a partir do zero. Numa tela de
+   consulta isso é o que se quer; numa de formulário, é apagar o trabalho de
+   quem está no meio dele.
+
+   O caso que trouxe isto à luz: no Bota-Fora, o apontador preenche a viagem,
+   toca em "Tirar" e o celular abre a câmera. Ao voltar, o navegador dispara
+   `visibilitychange` e o app ressincroniza. Como a lista trazia só o RDO e o
+   RDO Diário, a carga de fundo chamava `render()` — e a viagem inteira,
+   incluindo a foto recém-tirada, sumia da tela. O apontador voltava da
+   câmera para um formulário em branco, com o caminhão esperando.
+
+   `digitando` não cobria: o dedo estava na câmera, não no teclado, e nada
+   ficava focado. O mesmo vale para os Equipamentos, que também têm foto,
+   assinatura e um formulário longo.
+
+   Tela nova que peça preenchimento entra AQUI. */
+const TELAS_DE_FORMULARIO = ['rdo', 'rdodiario', 'equip', 'botafora'];
+
 async function carregarTudo(opts = {}) {
   const fundo = opts && opts.fundo === true;
   const minhaEpoca = ++_epocaCarga;
@@ -6355,7 +6390,7 @@ async function carregarTudo(opts = {}) {
     // Refresh de fundo em página de formulário (ou com campo focado em qualquer
     // página): NÃO re-renderiza — derrubaria foco/teclado do apontador no meio
     // da digitação. Os dados novos já estão no STATE; só os contadores mudam.
-    const emFormulario = ['rdo', 'rdodiario'].includes(STATE.currentPage);
+    const emFormulario = TELAS_DE_FORMULARIO.includes(STATE.currentPage);
     const digitando = document.activeElement &&
       ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
     // Linha do Histórico aberta em edição também é formulário: re-renderizar
