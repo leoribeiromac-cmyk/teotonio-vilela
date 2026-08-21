@@ -72,22 +72,22 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=51"></script>
-<script src="dados/ruas-de-terra.js?v=51"></script>
+<script src="dados/ranario.js?v=52"></script>
+<script src="dados/ruas-de-terra.js?v=52"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=51"></script>
+<script src="dados/teotonio-muros.js?v=52"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=51"></script>
-<script src="js/nf/adaptador.js?v=51"></script>
-<script src="js/nf/notas.js?v=51"></script>
-<script src="js/equip/equipamentos.js?v=51"></script>
+<script src="js/ui/icones.js?v=52"></script>
+<script src="js/nf/adaptador.js?v=52"></script>
+<script src="js/nf/notas.js?v=52"></script>
+<script src="js/equip/equipamentos.js?v=52"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=51"></script>
+<script src="js/bf/bota-fora.js?v=52"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -6316,6 +6316,26 @@ function soDaObraAtiva(linhas) {
    descarta o que trouxe em vez de gravar por cima. */
 let _epocaCarga = 0;
 
+/* TELAS EM QUE SE PREENCHE ALGO — e que a carga de fundo NÃO pode redesenhar.
+   ------------------------------------------------------------------
+   `render()` reconstrói a página inteira a partir do zero. Numa tela de
+   consulta isso é o que se quer; numa de formulário, é apagar o trabalho de
+   quem está no meio dele.
+
+   O caso que trouxe isto à luz: no Bota-Fora, o apontador preenche a viagem,
+   toca em "Tirar" e o celular abre a câmera. Ao voltar, o navegador dispara
+   `visibilitychange` e o app ressincroniza. Como a lista trazia só o RDO e o
+   RDO Diário, a carga de fundo chamava `render()` — e a viagem inteira,
+   incluindo a foto recém-tirada, sumia da tela. O apontador voltava da
+   câmera para um formulário em branco, com o caminhão esperando.
+
+   `digitando` não cobria: o dedo estava na câmera, não no teclado, e nada
+   ficava focado. O mesmo vale para os Equipamentos, que também têm foto,
+   assinatura e um formulário longo.
+
+   Tela nova que peça preenchimento entra AQUI. */
+const TELAS_DE_FORMULARIO = ['rdo', 'rdodiario', 'equip', 'botafora'];
+
 async function carregarTudo(opts = {}) {
   const fundo = opts && opts.fundo === true;
   const minhaEpoca = ++_epocaCarga;
@@ -6353,7 +6373,7 @@ async function carregarTudo(opts = {}) {
     // Refresh de fundo em página de formulário (ou com campo focado em qualquer
     // página): NÃO re-renderiza — derrubaria foco/teclado do apontador no meio
     // da digitação. Os dados novos já estão no STATE; só os contadores mudam.
-    const emFormulario = ['rdo', 'rdodiario'].includes(STATE.currentPage);
+    const emFormulario = TELAS_DE_FORMULARIO.includes(STATE.currentPage);
     const digitando = document.activeElement &&
       ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
     // Linha do Histórico aberta em edição também é formulário: re-renderizar
