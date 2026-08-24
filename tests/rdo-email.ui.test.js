@@ -69,17 +69,20 @@ function camposMultipart(corpo) {
 
   // ---------- 1. o Code.gs, que é quem manda o e-mail ----------
   const gs = fs.readFileSync(path.join(RAIZ, 'Code.gs'), 'utf8');
+  const html0 = fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8');
   console.log('Code.gs — a ação, o gatilho e a lista');
   ok('roteador conhece a ação rdoPdfDoDia', /case 'rdoPdfDoDia':/.test(gs));
   ok('a ação exige token como as outras de escrita',
      /PROTEGIDAS[\s\S]{0,900}'rdoPdfDoDia'/.test(gs));
   ok('a ação respeita a obra da sessão', /POR_OBRA[\s\S]{0,200}'rdoPdfDoDia'/.test(gs));
   ok('rdoPdfDoDia() existe', /function rdoPdfDoDia\(/.test(gs));
-  ok('o gatilho de envio existe', /function enviarRDODoDiaPorEmail\(/.test(gs));
+  ok('o gatilho de envio existe', /function enviarRDODeOntemPorEmail\(/.test(gs));
   ok('configurarGatilhos() agenda o envio',
-     /ScriptApp\.newTrigger\('enviarRDODoDiaPorEmail'\)/.test(gs));
+     /ScriptApp\.newTrigger\('enviarRDODeOntemPorEmail'\)/.test(gs));
   ok('configurarGatilhos() apaga o gatilho antigo antes de recriar (não duplica)',
-     /fn === 'enviarRDODoDiaPorEmail'\) ScriptApp\.deleteTrigger/.test(gs));
+     /fn === 'enviarRDODeOntemPorEmail'\) ScriptApp\.deleteTrigger/.test(gs));
+  ok('o reenvio manual e o depósito por geração cobrem o dia atrasado',
+     /depositarRDOPdf\(data, pacote\);/.test(html0));
   ok('existe reenvio manual para o RDO corrigido depois da hora',
      /function reenviarRDOPorEmail\(/.test(gs));
   ok('o mesmo dia não é enviado duas vezes', /function rdoEmailJaEnviado_\(/.test(gs));
@@ -149,14 +152,22 @@ function camposMultipart(corpo) {
   await s.p.evaluate(d => gerarPDFDiario(d), HOJE);
   await s.p.waitForTimeout(1200);
   ok('gerar o PDF Oficial à mão baixa o arquivo', baixados.length === 1, baixados.join(', '));
-  ok('e repõe o depósito quando o dia é recente', doDia().length === 2,
+  ok('e repõe o depósito daquele dia', doDia().length === 2,
      doDia().length + ' chamada(s)');
 
-  // --- dia antigo: baixa, mas não gasta 4G do canteiro com depósito ---
+  /* --- dia atrasado: gerar o PDF à mão é o que o faz existir para o
+     servidor. Sem isso não há como mandar por e-mail um RDO de semana
+     passada, que é justamente o caso de quem está pondo o envio em dia. --- */
   await s.p.evaluate(d => gerarPDFDiario(d), ANTIGO);
   await s.p.waitForTimeout(1200);
-  ok('dia antigo também baixa', baixados.length === 2, baixados.join(', '));
-  ok('dia antigo NÃO deposita', doDia().length === 2, doDia().length + ' chamada(s)');
+  ok('dia atrasado também baixa', baixados.length === 2, baixados.join(', '));
+  ok('e também deposita — é assim que se repõe um dia atrasado',
+     doDia().length === 3, doDia().length + ' chamada(s)');
+  const atrasado = doDia()[2] || { params: {} };
+  ok('o depósito do dia atrasado leva a data daquele dia',
+     atrasado.params.data === ANTIGO, atrasado.params.data);
+  ok('e o número de RDO daquele dia', atrasado.params.numero_rdo === '42',
+     atrasado.params.numero_rdo);
 
   // --- e o salvamento do turno continua chamando o depósito ---
   const html = fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8');

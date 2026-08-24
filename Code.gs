@@ -189,7 +189,7 @@ function rotear(e) {
       case 'clima':           resp = climaDoDia(p.data, p.obra); break;
       case 'rdoFoto':         resp = rdoFoto(p); break;
       // O PDF oficial do dia, que o app desenha e deixa aqui para o gatilho
-      // do fim da tarde anexar no e-mail da fiscalização.
+      // da manhã seguinte anexar no e-mail da fiscalização.
       case 'rdoPdfDoDia':     resp = rdoPdfDoDia(p); break;
       case 'obterFoto':       resp = obterFotoPrivada(p.fileId, p.mini); break;
       case 'usuariosListar':  resp = usuariosListar(p.token); break;
@@ -2417,20 +2417,23 @@ function configurarGatilhos() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     var fn = t.getHandlerFunction();
     if (fn === 'backupDiario' || fn === 'registrarClimaAuto' ||
-        fn === 'limparSessoesAbandonadas' || fn === 'enviarRDODoDiaPorEmail') ScriptApp.deleteTrigger(t);
+        fn === 'limparSessoesAbandonadas' ||
+        // o nome antigo continua na lista: quem já agendou a versão que
+        // mandava o RDO do próprio dia teria DOIS gatilhos depois desta
+        fn === 'enviarRDODoDiaPorEmail' || fn === 'enviarRDODeOntemPorEmail') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('backupDiario').timeBased().everyDays(1).atHour(2).create();
   ScriptApp.newTrigger('registrarClimaAuto').timeBased().everyDays(1).atHour(5).create();
   // Sessão não expira mais sozinha; a faxina é o que evita a propriedade
   // crescer sem fim (o teto do Apps Script é 500 KB no total).
   ScriptApp.newTrigger('limparSessoesAbandonadas').timeBased().everyDays(1).atHour(3).create();
-  // O RDO do dia sai por e-mail no fim da tarde, depois de o turno diurno
-  // ter sido fechado. A hora é trocada pela Propriedade RDO_EMAIL_HORA,
-  // sem mexer no código — mas só vale após rodar esta função de novo.
+  // O RDO sai por e-mail na manhã seguinte ao dia que ele relata. A hora é
+  // trocada pela Propriedade RDO_EMAIL_HORA, sem mexer no código — mas só
+  // vale depois de rodar esta função de novo.
   var horaRDO = rdoEmailHora();
-  ScriptApp.newTrigger('enviarRDODoDiaPorEmail').timeBased().everyDays(1).atHour(horaRDO).create();
+  ScriptApp.newTrigger('enviarRDODeOntemPorEmail').timeBased().everyDays(1).atHour(horaRDO).create();
   Logger.log('Gatilhos criados: backupDiario (02h), limparSessoesAbandonadas (03h), ' +
-             'registrarClimaAuto (05h) e enviarRDODoDiaPorEmail (' + horaRDO + 'h).');
+             'registrarClimaAuto (05h) e enviarRDODeOntemPorEmail (' + horaRDO + 'h).');
   return { ok: true };
 }
 
@@ -2448,16 +2451,23 @@ function configurarGatilhos() {
 //                  manda para cá (`rdoPdfDoDia`), que o guarda numa pasta
 //                  PRIVADA do Drive, um arquivo por obra e por data. RDO
 //                  corrigido reescreve o depósito daquele dia.
-//   2. ENVIO     — um gatilho de tempo roda uma vez por dia
-//                  (`enviarRDODoDiaPorEmail`) e manda o PDF depositado
+//   2. ENVIO     — um gatilho de tempo roda toda manhã
+//                  (`enviarRDODeOntemPorEmail`) e manda o PDF depositado
 //                  para a lista de destinatários, com o resumo do dia no
 //                  corpo do e-mail.
+//
+// O e-mail das 10h leva o RDO de ONTEM, não o de hoje. Às 10h o dia de hoje
+// mal começou: o turno diurno está no meio, e o que sairia para a
+// fiscalização seria um relatório quase vazio. O que se manda de manhã é o
+// dia que FECHOU — com os dois turnos, o efetivo inteiro e as ocorrências.
 //
 // O que acontece quando falta o depósito (dia sem RDO, domingo, apontador
 // que não fechou o turno): NADA vai para a fiscalização. O aviso de que o
 // dia ficou sem RDO vai só para o dono do script — é problema de dentro de
-// casa, e mandar "hoje não teve RDO" para o cliente todo fim de semana é a
-// forma mais rápida de o e-mail diário virar spam para quem o recebe.
+// casa, e mandar "ontem não teve RDO" para o cliente toda segunda-feira é a
+// forma mais rápida de o e-mail diário virar spam para quem o recebe. De
+// manhã esse aviso ainda serve para alguma coisa: dá tempo de cobrar o
+// apontador que não fechou o turno antes de o dia seguinte virar.
 //
 // Cada dia é enviado UMA vez: `RDO_EMAIL_LOG` guarda o que já saiu, então
 // o gatilho rodando duas vezes (ou alguém executando a função à mão) não
@@ -2481,7 +2491,7 @@ var RDO_EMAIL_DESTINOS = [
   'terceiro.wbotelho@spobras.sp.gov.br'
 ];
 
-var RDO_EMAIL_HORA_PADRAO = 19;                        // Propriedade: RDO_EMAIL_HORA
+var RDO_EMAIL_HORA_PADRAO = 10;                        // Propriedade: RDO_EMAIL_HORA
 var PASTA_RDO_PDF        = 'RDOs do dia em PDF (Teotônio Privado)';
 var RDO_EMAIL_LOG_CHAVE  = 'RDO_EMAIL_LOG';
 var RDO_EMAIL_LOG_MAX    = 60;                         // ~2 meses de histórico
@@ -2580,9 +2590,12 @@ function rdoPdfDoDia(p) {
 // ------------------------------------------------------------
 // 2. ENVIO — o gatilho diário
 // ------------------------------------------------------------
-function enviarRDODoDiaPorEmail() {
-  var hoje = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd');
-  return rdoEnviarPorEmail_(hoje, OBRA_ID, false);
+/* O gatilho da manhã. Manda o RDO de ONTEM — o dia que fechou. Ver a nota
+   no alto desta seção sobre por que não é o de hoje. */
+function enviarRDODeOntemPorEmail() {
+  var ontem = new Date(Date.now() - 24 * 3600 * 1000);
+  var iso = Utilities.formatDate(ontem, fusoDoScript(), 'yyyy-MM-dd');
+  return rdoEnviarPorEmail_(iso, OBRA_ID, false);
 }
 
 /* Reenvio manual, para rodar no editor: um RDO corrigido depois da hora do
@@ -2616,10 +2629,11 @@ function rdoEnviarPorEmail_(dataISO, obra, forcar) {
        como saber. O aviso vai para casa, não para a fiscalização. */
     rdoEmailAvisarDono_('RDO ' + rdoDataBR_(dataISO) + ' — não saiu por e-mail (sem PDF)',
       'Chegou a hora do envio automático e não havia RDO de ' + rdoDataBR_(dataISO) +
-      ' depositado.\n\n' +
+      ' (' + rdoDiaSemana_(dataISO) + ') depositado.\n\n' +
       'Se houve trabalho neste dia, o turno provavelmente não foi salvo no app, ou foi ' +
-      'salvo sem internet e ainda está na fila do aparelho. Abrir o RDO do dia no app e ' +
-      'gerar o PDF Oficial repõe o depósito; depois, para mandar:\n\n' +
+      'salvo sem internet e ainda está na fila do aparelho. Ainda dá tempo de cobrar o ' +
+      'apontador: abrir o RDO daquele dia no app e gerar o PDF Oficial repõe o depósito. ' +
+      'Depois, para mandar:\n\n' +
       "    reenviarRDOPorEmail('" + dataISO + "')\n");
     return { ok: false, error: 'Sem PDF depositado para ' + dataISO };
   }
@@ -2862,20 +2876,22 @@ function rdoEmailAvisarDono_(assunto, corpo) {
    quem vai, a que horas, e se o RDO de hoje já está depositado. Não manda
    e-mail nenhum. */
 function conferirEnvioRDOEmail() {
-  var hoje = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd');
+  // Confere o dia que o próximo envio vai levar: ontem, não hoje.
+  var alvo = Utilities.formatDate(new Date(Date.now() - 24 * 3600 * 1000),
+                                  fusoDoScript(), 'yyyy-MM-dd');
   var destinos = rdoEmailDestinatarios();
-  var arq = rdoPdfArquivo_(OBRA_ID, hoje);
+  var arq = rdoPdfArquivo_(OBRA_ID, alvo);
   var gatilho = ScriptApp.getProjectTriggers().some(function (t) {
-    return t.getHandlerFunction() === 'enviarRDODoDiaPorEmail';
+    return t.getHandlerFunction() === 'enviarRDODeOntemPorEmail';
   });
   var diag = {
     ok: true,
-    hoje: hoje,
+    proximo_envio_leva_o_RDO_de: alvo + ' (' + rdoDiaSemana_(alvo) + ')',
     destinatarios: destinos,
     hora_do_envio: rdoEmailHora() + 'h',
     gatilho_instalado: gatilho,
-    pdf_de_hoje_depositado: !!arq,
-    ja_enviado_hoje: rdoEmailJaEnviado_(OBRA_ID, hoje),
+    pdf_desse_dia_depositado: !!arq,
+    ja_enviado: rdoEmailJaEnviado_(OBRA_ID, alvo),
     cota_de_email_restante: MailApp.getRemainingDailyQuota()
   };
   Logger.log(JSON.stringify(diag, null, 2));

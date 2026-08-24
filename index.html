@@ -17690,22 +17690,19 @@ function _gerarPDFDiario(data, opcoes) {
   doc.save(fname);
   toast('PDF gerado: ' + fname, 'success');
 
-  /* Gerou à mão o oficial de um dia recente: aproveita o documento pronto e
-     repõe o depósito. É a rede de segurança do envio automático — se o
-     depósito de quando o turno foi salvo falhou (sinal ruim no canteiro),
-     abrir o PDF do dia conserta, sem ninguém precisar saber que existe
-     depósito nenhum. Dia antigo não entra: não vai ser enviado mesmo, e
-     subir 200 KB do 4G do apontador para nada é caro no canteiro. */
-  if (rdoDoDiaOuDeOntem(data)) depositarRDOPdf(data, pacote);
+  /* Gerou o oficial à mão: aproveita o documento pronto e repõe o depósito
+     daquele dia, seja ele qual for. São dois papéis num gesto só:
+       • a rede de segurança do envio automático — se o depósito de quando o
+         turno foi salvo falhou (sinal ruim no canteiro), abrir o PDF do dia
+         conserta, sem ninguém precisar saber que existe depósito nenhum;
+       • o jeito de repor um dia ATRASADO — um RDO de semana passada que
+         nunca foi depositado passa a existir para o servidor assim que
+         alguém gera o PDF dele, e aí `reenviarRDOPorEmail` tem o que mandar.
+     O custo é subir o PDF de novo a cada geração. Vale: gerar o oficial é um
+     gesto deliberado do escritório, não algo que o apontador faz sem querer,
+     e um dia sem depósito é um RDO que simplesmente não sai. */
+  depositarRDOPdf(data, pacote);
   return pacote;
-}
-
-/* Só hoje e ontem interessam ao envio automático: o gatilho manda o RDO do
-   próprio dia, e o de ontem ainda pode ser reenviado à mão pelo escritório. */
-function rdoDoDiaOuDeOntem(dataISO) {
-  const agora = new Date();
-  return dataISO === getLocalISODate(agora) ||
-         dataISO === getLocalISODate(new Date(agora.getTime() - 86400000));
 }
 
 /* ====================================================================
@@ -17717,16 +17714,16 @@ function rdoDoDiaOuDeOntem(dataISO) {
    primeiro ajuste feito de um lado só.
 
    Então o servidor não gera: ele RECEBE. Assim que o turno é salvo, o app
-   monta o PDF oficial do dia e o deixa guardado no backend; no fim da
-   tarde, um gatilho de tempo pega o que foi depositado e manda por e-mail
-   para a lista da obra (ver "RDO DO DIA POR E-MAIL", no Code.gs).
+   monta o PDF oficial do dia e o deixa guardado no backend; na manhã
+   seguinte, um gatilho de tempo pega o que foi depositado e manda por
+   e-mail para a lista da obra (ver "RDO DO DIA POR E-MAIL", no Code.gs).
 
    Este depósito é sempre um EXTRA, nunca um passo do salvamento: falhou
    (sem sinal, backend antigo, biblioteca do PDF que não carregou), o turno
    já está salvo do mesmo jeito e o apontador não é avisado de coisa
    nenhuma — não é problema dele. Quem cobra a falta do PDF é o próprio
-   gatilho do servidor, que avisa o escritório na hora do envio quando não
-   encontra o depósito daquele dia.
+   gatilho do servidor, que na manhã seguinte avisa o escritório quando não
+   encontra o depósito daquele dia — e aí ainda dá tempo de repor.
    ==================================================================== */
 async function depositarRDOPdf(data, pacotePronto) {
   try {

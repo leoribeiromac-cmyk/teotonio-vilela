@@ -404,7 +404,7 @@ No editor do Apps Script, selecione a função **`configurarGatilhos`** e clique
 
 - **`backupDiario`** (02h) — cópia completa da planilha na pasta "Backups Teotonio" do Drive, mantendo as 14 mais recentes.
 - **`registrarClimaAuto`** (05h) — chuva de ontem gravada em `RDO_Diario` (colunas `Chuva_mm_Auto`/`Clima_Fonte`, criadas sozinhas), **de todas as obras**, pela mesma fonte do botão do RDO (INMET, estação de cada obra). Contraprova objetiva do clima apontado — base para pleitos de prazo.
-- **`enviarRDODoDiaPorEmail`** (19h) — manda o RDO oficial do dia, em PDF, para a lista de destinatários da obra. Detalhado abaixo.
+- **`enviarRDODeOntemPorEmail`** (10h) — manda o RDO oficial de **ontem**, em PDF, para a lista de destinatários da obra. Detalhado abaixo.
 
 Utilitário: `criarRDOsVaziosDoMes()` preenche datas sem RDO de qualquer mês (edite `ANO_MES_ALVO` no topo da função antes de rodar).
 
@@ -418,20 +418,29 @@ primeiro ajuste feito de um lado só. Então o servidor não gera: ele **recebe*
 1. **Depósito.** Salvou o turno, o app monta o PDF oficial daquele dia e o manda
    para o backend (`rdoPdfDoDia`), que o guarda numa pasta privada do Drive —
    um arquivo por obra e por data. RDO corrigido, ou turno noturno salvo depois
-   do diurno, **substitui** o depósito do dia. Gerar o "PDF Oficial" à mão de
-   hoje ou de ontem também repõe o depósito: é a rede de segurança para quando o
-   sinal do canteiro derruba o envio na hora de salvar.
-2. **Envio.** Às 19h o gatilho pega o PDF depositado do dia e manda para a lista,
-   com o resumo do dia no corpo (nº do RDO, apontadores, clima, nº de serviços
-   lançados, visitas, paralisações, ocorrências e observações).
+   do diurno, **substitui** o depósito do dia. Gerar o "PDF Oficial" à mão
+   também repõe o depósito daquele dia — é a rede de segurança para quando o
+   sinal do canteiro derruba o envio na hora de salvar, e é como se põe em dia
+   um RDO atrasado: um dia que nunca foi depositado passa a existir para o
+   servidor assim que alguém gera o PDF dele, e aí `reenviarRDOPorEmail` tem o
+   que mandar.
+2. **Envio.** Às 10h o gatilho pega o PDF depositado **do dia anterior** e manda
+   para a lista, com o resumo do dia no corpo (nº do RDO, apontadores, clima, nº
+   de serviços lançados, visitas, paralisações, ocorrências e observações).
+
+O e-mail da manhã leva o RDO de **ontem**, não o de hoje: às 10h o dia de hoje mal
+começou — o turno diurno está no meio — e o que sairia para a fiscalização seria um
+relatório quase vazio. O que se manda de manhã é o dia que **fechou**, com os dois
+turnos, o efetivo inteiro e as ocorrências.
 
 Cada dia sai **uma vez**: a Propriedade `RDO_EMAIL_LOG` guarda o que já foi
 enviado, então o gatilho rodando duas vezes não repete o e-mail.
 
 **Dia sem RDO depositado** (domingo, feriado, turno que ninguém fechou): nada vai
-para a fiscalização. O aviso sai só para o dono do script — mandar "hoje não teve
-RDO" para o cliente todo fim de semana é a forma mais rápida de o e-mail diário
-virar spam para quem o recebe.
+para a fiscalização. O aviso sai só para o dono do script — mandar "ontem não teve
+RDO" para o cliente toda segunda-feira é a forma mais rápida de o e-mail diário
+virar spam para quem o recebe. De manhã esse aviso ainda serve para alguma coisa:
+dá tempo de cobrar o apontador que não fechou o turno antes de o dia seguinte virar.
 
 Configuração, tudo por Propriedade do script (Configurações do projeto →
 Propriedades do script) — sem deploy novo:
@@ -439,14 +448,15 @@ Propriedades do script) — sem deploy novo:
 | Propriedade | Para quê | Padrão |
 | --- | --- | --- |
 | `RDO_EMAILS` | Destinatários, separados por vírgula, ponto-e-vírgula ou quebra de linha. Quando existe, manda na lista do código. | a lista `RDO_EMAIL_DESTINOS` do `Code.gs` |
-| `RDO_EMAIL_HORA` | Hora do envio (0 a 23). Vale depois de rodar `configurarGatilhos()` de novo. | `19` |
+| `RDO_EMAIL_HORA` | Hora do envio (0 a 23). Vale depois de rodar `configurarGatilhos()` de novo. | `10` |
 
 Funções para rodar no editor:
 
 - **`conferirEnvioRDOEmail()`** — diz para quem vai, a que horas, se o gatilho
-  está instalado e se o RDO de hoje já foi depositado. Não manda e-mail nenhum.
+  está instalado e se o RDO que o próximo envio vai levar já foi depositado. Não
+  manda e-mail nenhum.
 - **`reenviarRDOPorEmail('2026-08-24')`** — manda (ou remanda) o RDO daquela
-  data. É o caminho do RDO corrigido depois das 19h.
+  data. É o caminho do RDO corrigido depois das 10h.
 
 > `MailApp` é uma permissão **nova** para o projeto: na primeira execução o
 > Google pede a autorização de novo ("app não verificado" → Avançado → Acessar).

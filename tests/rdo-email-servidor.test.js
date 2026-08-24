@@ -350,18 +350,38 @@ t('o e-mail é do dia certo mesmo com outra obra na mesma data', () => {
   verdade(e.body.indexOf('Outro Apontador') === -1, 'vazou apontador da outra obra');
 });
 
-t('o gatilho manda o RDO de HOJE — a data que ele mesmo calcula', () => {
-  // O gatilho não recebe data: ele pergunta as horas. Este é o único teste
-  // que usa o dia de verdade, e é justamente o que prova que a conta bate.
-  const agora = new Date();
-  const p = n => String(n).padStart(2, '0');
-  const hojeDeVerdade = agora.getFullYear() + '-' + p(agora.getMonth() + 1) + '-' + p(agora.getDate());
-  PLANILHA.RDO_Diario = [linhaDiario({ data: hojeDeVerdade })];
-  depositar({ data: hojeDeVerdade });
-  const r = ctx.enviarRDODoDiaPorEmail();
+/* O gatilho da manhã leva o RDO de ONTEM — o dia que fechou. Às 10h o dia de
+   hoje mal começou, e mandar o de hoje seria despachar para a fiscalização um
+   relatório com meio turno dentro. Estes dois testes usam a data de verdade,
+   que é o que prova que a conta do gatilho bate. */
+const p2 = n => String(n).padStart(2, '0');
+const diaDeVerdade = d => d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+const ONTEM_DE_VERDADE = diaDeVerdade(new Date(Date.now() - 24 * 3600 * 1000));
+const HOJE_DE_VERDADE = diaDeVerdade(new Date());
+
+t('o gatilho manda o RDO de ONTEM — a data que ele mesmo calcula', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ data: ONTEM_DE_VERDADE })];
+  depositar({ data: ONTEM_DE_VERDADE });
+  const r = ctx.enviarRDODeOntemPorEmail();
   verdade(r.ok, 'não enviou: ' + JSON.stringify(r));
   eq(paraFiscalizacao().length, 1);
-  eq(r.data, hojeDeVerdade);
+  eq(r.data, ONTEM_DE_VERDADE);
+});
+t('e NÃO manda o de hoje, que ainda está sendo preenchido', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ data: HOJE_DE_VERDADE })];
+  depositar({ data: HOJE_DE_VERDADE });          // só o de hoje está depositado
+  const r = ctx.enviarRDODeOntemPorEmail();
+  verdade(!r.ok, 'mandou o RDO de hoje: ' + JSON.stringify(r));
+  eq(paraFiscalizacao().length, 0, 'nada para a fiscalização');
+  eq(paraDono().length, 1, 'o dono é avisado de que ontem ficou sem RDO');
+});
+t('conferirEnvioRDOEmail() olha o dia que vai ser enviado, não o de hoje', () => {
+  depositar({ data: ONTEM_DE_VERDADE });
+  const d = ctx.conferirEnvioRDOEmail();
+  verdade(d.proximo_envio_leva_o_RDO_de.indexOf(ONTEM_DE_VERDADE) === 0,
+          'olhou o dia errado: ' + d.proximo_envio_leva_o_RDO_de);
+  verdade(d.pdf_desse_dia_depositado, 'não viu o depósito de ontem');
+  eq(d.hora_do_envio, '10h');
 });
 
 console.log('\nO registro do que já saiu');
@@ -380,14 +400,14 @@ t('log estragado não impede o envio de hoje', () => {
 });
 
 console.log('\nA hora do envio');
-t('19h por padrão', () => { eq(ctx.rdoEmailHora(), 19); });
+t('10h por padrão', () => { eq(ctx.rdoEmailHora(), 10); });
 t('a Propriedade RDO_EMAIL_HORA troca a hora', () => {
   PROPS.setProperty('RDO_EMAIL_HORA', '17');
   eq(ctx.rdoEmailHora(), 17);
 });
 t('hora sem sentido volta para o padrão', () => {
   PROPS.setProperty('RDO_EMAIL_HORA', '99');
-  eq(ctx.rdoEmailHora(), 19);
+  eq(ctx.rdoEmailHora(), 10);
 });
 
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');
