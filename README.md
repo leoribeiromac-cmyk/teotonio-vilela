@@ -404,11 +404,16 @@ No editor do Apps Script, selecione a função **`configurarGatilhos`** e clique
 
 - **`backupDiario`** (02h) — cópia completa da planilha na pasta "Backups Teotonio" do Drive, mantendo as 14 mais recentes.
 - **`registrarClimaAuto`** (05h) — chuva de ontem gravada em `RDO_Diario` (colunas `Chuva_mm_Auto`/`Clima_Fonte`, criadas sozinhas), **de todas as obras**, pela mesma fonte do botão do RDO (INMET, estação de cada obra). Contraprova objetiva do clima apontado — base para pleitos de prazo.
-- **`enviarRDODeOntemPorEmail`** (10h) — manda o RDO oficial de **ontem**, em PDF, para a lista de destinatários da obra. Detalhado abaixo.
+- **`enviarRDODeOntemPorEmail`** (10h) — manda o RDO oficial de **ontem**, em PDF, para a lista de destinatários. Só da **Teotônio**. Detalhado abaixo.
 
 Utilitário: `criarRDOsVaziosDoMes()` preenche datas sem RDO de qualquer mês (edite `ANO_MES_ALVO` no topo da função antes de rodar).
 
 ### O RDO do dia por e-mail
+
+Só da **Teotônio**: este backend atende várias obras, mas o RDO diário na caixa
+da fiscalização é exigência do contrato dela. O app das outras obras nem
+deposita (`OBRAS_COM_RDO_POR_EMAIL`, no `index.html`), e o depósito de outra
+obra é recusado pelo `Code.gs`. Obra que passar a mandar entra nos dois.
 
 O PDF oficial é desenhado **no navegador** (jsPDF, dentro do `index.html`), e o
 Apps Script não sabe redesenhá-lo — reescrever lá o layout de um documento que a
@@ -455,8 +460,9 @@ Funções para rodar no editor:
 - **`conferirEnvioRDOEmail()`** — diz para quem vai, a que horas, se o gatilho
   está instalado e se o RDO que o próximo envio vai levar já foi depositado. Não
   manda e-mail nenhum.
-- **`reenviarRDOPorEmail('2026-08-24')`** — manda (ou remanda) o RDO daquela
-  data. É o caminho do RDO corrigido depois das 10h.
+- **`reenviarRDOPorEmail('2026-08-24')`** — manda (ou remanda) o RDO da
+  Teotônio naquela data. É o caminho do RDO corrigido depois das 10h, e o de
+  pôr em dia um dia atrasado (depois de gerar o PDF Oficial dele no app).
 
 > `MailApp` é uma permissão **nova** para o projeto: na primeira execução o
 > Google pede a autorização de novo ("app não verificado" → Avançado → Acessar).
