@@ -2440,6 +2440,11 @@ function configurarGatilhos() {
 // ============================================================
 // RDO DO DIA POR E-MAIL
 // ------------------------------------------------------------
+// Só da TEOTÔNIO: este Code.gs atende várias obras, mas o RDO diário na
+// caixa da fiscalização é exigência do contrato dela. O app das outras obras
+// nem deposita (OBRAS_COM_RDO_POR_EMAIL, no index.html), e o depósito de
+// outra obra é recusado aqui. Obra que passar a mandar entra nos dois.
+//
 // O RDO oficial em PDF é desenhado NO NAVEGADOR (jsPDF, dentro do
 // index.html). Este servidor não sabe redesenhá-lo, e reescrever aqui o
 // layout de um documento que a fiscalização assina seria manter dois
@@ -2562,7 +2567,16 @@ function rdoPdfDoDia(p) {
   if (!bytes.length) return { ok: false, error: 'PDF vazio' };
   if (bytes.length > RDO_PDF_MAX_BYTES) return { ok: false, error: 'PDF grande demais para anexar' };
 
+  /* Só a Teotônio. Este Code.gs atende várias obras, mas o e-mail diário é
+     do contrato dela: guardar o PDF das outras encheria a pasta do Drive de
+     arquivo que nunca vai ser enviado. O app já nem manda (ver
+     OBRAS_COM_RDO_POR_EMAIL, no index.html) — esta é a trava do lado de cá,
+     para um aparelho com versão velha em cache não furar a regra. */
   var obra = normObra(p.obra) || OBRA_ID;
+  if (obra !== OBRA_ID) {
+    return { ok: false, error: 'O RDO por e-mail é só da Teotônio — nada foi guardado.' };
+  }
+
   var pasta = rdoPdfPasta_();
   var nome = rdoPdfNome_(obra, dataISO);
 
@@ -2599,10 +2613,11 @@ function enviarRDODeOntemPorEmail() {
 }
 
 /* Reenvio manual, para rodar no editor: um RDO corrigido depois da hora do
-   gatilho, ou um dia que ficou para trás.
+   gatilho, ou um dia que ficou para trás. Sempre da Teotônio — é a única obra
+   cujo contrato manda o RDO por e-mail.
    Uso:  reenviarRDOPorEmail('2026-08-24')  */
-function reenviarRDOPorEmail(dataISO, obra) {
-  return rdoEnviarPorEmail_(normData(dataISO), normObra(obra) || OBRA_ID, true);
+function reenviarRDOPorEmail(dataISO) {
+  return rdoEnviarPorEmail_(normData(dataISO), OBRA_ID, true);
 }
 
 function rdoEnviarPorEmail_(dataISO, obra, forcar) {

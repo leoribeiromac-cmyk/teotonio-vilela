@@ -83,6 +83,10 @@ function camposMultipart(corpo) {
      /fn === 'enviarRDODeOntemPorEmail'\) ScriptApp\.deleteTrigger/.test(gs));
   ok('o reenvio manual e o depósito por geração cobrem o dia atrasado',
      /depositarRDOPdf\(data, pacote\);/.test(html0));
+  ok('o depósito é só das obras que mandam RDO por e-mail',
+     /const OBRAS_COM_RDO_POR_EMAIL = \['teotonio'\];/.test(html0));
+  ok('e o servidor recusa o depósito de outra obra',
+     /O RDO por e-mail é só da Teotônio/.test(gs));
   ok('existe reenvio manual para o RDO corrigido depois da hora',
      /function reenviarRDOPorEmail\(/.test(gs));
   ok('o mesmo dia não é enviado duas vezes', /function rdoEmailJaEnviado_\(/.test(gs));
@@ -168,6 +172,19 @@ function camposMultipart(corpo) {
      atrasado.params.data === ANTIGO, atrasado.params.data);
   ok('e o número de RDO daquele dia', atrasado.params.numero_rdo === '42',
      atrasado.params.numero_rdo);
+
+  /* --- obra que não manda RDO por e-mail não deposita. Mesma página, mesmos
+     dados: só a obra ativa muda, então o que este teste isola é a trava, e
+     não a falta de RDO daquele dia. --- */
+  const antesDaTroca = doDia().length;
+  await s.p.evaluate(() => { OBRA.id = 'ranario'; });
+  const depositouOutra = await s.p.evaluate(d => depositarRDOPdf(d), HOJE);
+  await s.p.waitForTimeout(400);
+  ok('obra sem RDO por e-mail não deposita', depositouOutra === false,
+     JSON.stringify(depositouOutra));
+  ok('e não gasta o 4G do apontador com isso', doDia().length === antesDaTroca,
+     doDia().length + ' chamada(s), esperava ' + antesDaTroca);
+  await s.p.evaluate(() => { OBRA.id = 'teotonio'; });
 
   // --- e o salvamento do turno continua chamando o depósito ---
   const html = fs.readFileSync(path.join(RAIZ, 'index.html'), 'utf8');

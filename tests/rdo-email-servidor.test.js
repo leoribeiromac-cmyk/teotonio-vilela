@@ -247,6 +247,11 @@ t('o RDO corrigido SUBSTITUI o depósito do dia — não fica um par de PDFs', (
   const vivos = pasta.arquivos.filter(a => !a._lixo && a._nome === 'RDO_teotonio_2026_08_24.pdf');
   eq(vivos.length, 1, 'arquivos vivos do dia');
 });
+t('depósito de outra obra é recusado — o e-mail é só da Teotônio', () => {
+  const r = depositar({ obra: 'ranario' });
+  verdade(!r.ok, 'aceitou o depósito de outra obra');
+  verdade(!ctx.rdoPdfArquivo_('ranario', HOJE), 'guardou PDF de obra que não manda e-mail');
+});
 t('cada dia tem o seu arquivo', () => {
   depositar();
   depositar({ data: '2026-08-25' });
