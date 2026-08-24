@@ -23,6 +23,21 @@ para a navegação, então a mudança chega sem precisar limpar cache.
   carga/placa, assinatura do motorista e foto do ticket, e a exportação no
   formato da aba FRETE do fechamento. Só fala com o `Code.gs`.
 
+## O RDO do dia sai por e-mail sozinho
+
+Quem MANDA o e-mail é o `Code.gs` (gatilho de tempo, 10h, com o RDO de ONTEM —
+às 10h o dia de hoje mal começou). Quem DESENHA o PDF
+oficial é o navegador (`_gerarPDFDiario`, jsPDF). O servidor não redesenha o
+RDO — dois desenhos do mesmo documento divergem no primeiro ajuste de um lado
+só, e este é um papel que a fiscalização assina.
+
+Então são dois tempos: o app **deposita** (`depositarRDOPdf` → ação
+`rdoPdfDoDia`, um PDF por obra e por data numa pasta privada do Drive) e o
+gatilho **envia** o que foi depositado. Mexeu no gerador do PDF, confira que o
+depósito continua saindo; mexeu no envio, lembre que o servidor só tem o que o
+app deixou lá. `tests/rdo-email.ui.test.js` (o depósito, no app de verdade) e
+`tests/rdo-email-servidor.test.js` (o envio, com Drive e Gmail falsos).
+
 ## Formulário aberto é dado do apontador
 
 Tela de formulário **não pode ser redesenhada nem esquecida** por baixo de

@@ -90,7 +90,7 @@ function rotear(e) {
                       'deleteRDO', 'updateRDO', 'limparDuplicados', 'apagarPorPrefixoId',
                       'addBatchRDO', 'addRDODiario', 'updateRDODiario', 'deleteRDODiario',
                       'usuariosListar', 'usuarioSalvar', 'usuarioExcluir',
-                      'rdoFoto', 'obterFoto',
+                      'rdoFoto', 'obterFoto', 'rdoPdfDoDia',
                       'equipListar', 'equipCadastrar', 'equipDesativar', 'locadoraCadastrar',
                       'equipApontar', 'equipApagar', 'equipEditar', 'equipApontamentos', 'equipUltimos',
                       'nfListar', 'nfSalvar', 'nfExcluir', 'nfImagem', 'nfLerIA', 'nfDiag',
@@ -110,7 +110,7 @@ function rotear(e) {
     // checagem fica aqui, no roteador, e não dentro de nfSalvar/saidaSalvar —
     // essas duas são do bloco compartilhado com o app "Gestor", que precisa
     // continuar idêntico dos dois lados.
-    var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar', 'bfSalvar'];
+    var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar', 'bfSalvar', 'rdoPdfDoDia'];
     if (POR_OBRA.indexOf(action) !== -1) {
       var sessObraR = sessaoDoToken(p.token);
       if (sessObraR && !sessaoPodeNaObra(sessObraR, p.obra)) {
@@ -132,7 +132,7 @@ function rotear(e) {
        A trava vai aqui, no roteador, e só para as ações que ainda NÃO têm a
        sua — pegar de novo uma trava já tomada dentro da mesma execução é o
        tipo de coisa que só se descobre em produção. */
-    var SEM_TRAVA_PROPRIA = ['deleteRDO', 'updateRDO', 'rdoFoto', 'equipApagar', 'equipEditar',
+    var SEM_TRAVA_PROPRIA = ['deleteRDO', 'updateRDO', 'rdoFoto', 'rdoPdfDoDia', 'equipApagar', 'equipEditar',
                              'nfSalvar', 'nfExcluir', 'saidaSalvar', 'saidaExcluir', 'bfExcluir'];
     var travaRoteador = null;
     if (SEM_TRAVA_PROPRIA.indexOf(action) !== -1) {
@@ -150,7 +150,8 @@ function rotear(e) {
       // isso, o app só descobria tentando — e tentar guardar a folha 2 num
       // backend antigo apaga a folha 1, porque lá o nome do arquivo é o mesmo.
       case 'ping':            resp = { ok: true, pong: true, abas: [NOME_ABA, NOME_ABA_DIARIO],
-                                       recursos: { paginas: true, miniatura: true, obraNaListagem: true } }; break;
+                                       recursos: { paginas: true, miniatura: true, obraNaListagem: true,
+                                                   rdoPdfDoDia: true } }; break;
       case 'login':           resp = loginUsuario(p.usuario, p.senha); break;
       case 'logout':          resp = sessaoRevogar(p.token); break;
       case 'deleteRDO':       resp = deleteRDO(p.id, p.token); break;
@@ -187,6 +188,9 @@ function rotear(e) {
       case 'saidaExcluir':      resp = saidaExcluir(p.obra, p.id, p.token); break;
       case 'clima':           resp = climaDoDia(p.data, p.obra); break;
       case 'rdoFoto':         resp = rdoFoto(p); break;
+      // O PDF oficial do dia, que o app desenha e deixa aqui para o gatilho
+      // da manhã seguinte anexar no e-mail da fiscalização.
+      case 'rdoPdfDoDia':     resp = rdoPdfDoDia(p); break;
       case 'obterFoto':       resp = obterFotoPrivada(p.fileId, p.mini); break;
       case 'usuariosListar':  resp = usuariosListar(p.token); break;
       case 'usuarioSalvar':   resp = usuarioSalvar(p); break;
@@ -2413,15 +2417,485 @@ function configurarGatilhos() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     var fn = t.getHandlerFunction();
     if (fn === 'backupDiario' || fn === 'registrarClimaAuto' ||
-        fn === 'limparSessoesAbandonadas') ScriptApp.deleteTrigger(t);
+        fn === 'limparSessoesAbandonadas' ||
+        // o nome antigo continua na lista: quem já agendou a versão que
+        // mandava o RDO do próprio dia teria DOIS gatilhos depois desta
+        fn === 'enviarRDODoDiaPorEmail' || fn === 'enviarRDODeOntemPorEmail') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('backupDiario').timeBased().everyDays(1).atHour(2).create();
   ScriptApp.newTrigger('registrarClimaAuto').timeBased().everyDays(1).atHour(5).create();
   // Sessão não expira mais sozinha; a faxina é o que evita a propriedade
   // crescer sem fim (o teto do Apps Script é 500 KB no total).
   ScriptApp.newTrigger('limparSessoesAbandonadas').timeBased().everyDays(1).atHour(3).create();
-  Logger.log('Gatilhos criados: backupDiario (02h), limparSessoesAbandonadas (03h) e registrarClimaAuto (05h).');
+  // O RDO sai por e-mail na manhã seguinte ao dia que ele relata. A hora é
+  // trocada pela Propriedade RDO_EMAIL_HORA, sem mexer no código — mas só
+  // vale depois de rodar esta função de novo.
+  var horaRDO = rdoEmailHora();
+  ScriptApp.newTrigger('enviarRDODeOntemPorEmail').timeBased().everyDays(1).atHour(horaRDO).create();
+  Logger.log('Gatilhos criados: backupDiario (02h), limparSessoesAbandonadas (03h), ' +
+             'registrarClimaAuto (05h) e enviarRDODeOntemPorEmail (' + horaRDO + 'h).');
   return { ok: true };
+}
+
+// ============================================================
+// RDO DO DIA POR E-MAIL
+// ------------------------------------------------------------
+// O RDO oficial em PDF é desenhado NO NAVEGADOR (jsPDF, dentro do
+// index.html). Este servidor não sabe redesenhá-lo, e reescrever aqui o
+// layout de um documento que a fiscalização assina seria manter dois
+// desenhos do mesmo papel — que divergem no primeiro ajuste de um lado só.
+//
+// Por isso o envio automático é feito em dois tempos:
+//
+//   1. DEPÓSITO  — quando o turno é salvo, o app gera o PDF oficial e o
+//                  manda para cá (`rdoPdfDoDia`), que o guarda numa pasta
+//                  PRIVADA do Drive, um arquivo por obra e por data. RDO
+//                  corrigido reescreve o depósito daquele dia.
+//   2. ENVIO     — um gatilho de tempo roda toda manhã
+//                  (`enviarRDODeOntemPorEmail`) e manda o PDF depositado
+//                  para a lista de destinatários, com o resumo do dia no
+//                  corpo do e-mail.
+//
+// O e-mail das 10h leva o RDO de ONTEM, não o de hoje. Às 10h o dia de hoje
+// mal começou: o turno diurno está no meio, e o que sairia para a
+// fiscalização seria um relatório quase vazio. O que se manda de manhã é o
+// dia que FECHOU — com os dois turnos, o efetivo inteiro e as ocorrências.
+//
+// O que acontece quando falta o depósito (dia sem RDO, domingo, apontador
+// que não fechou o turno): NADA vai para a fiscalização. O aviso de que o
+// dia ficou sem RDO vai só para o dono do script — é problema de dentro de
+// casa, e mandar "ontem não teve RDO" para o cliente toda segunda-feira é a
+// forma mais rápida de o e-mail diário virar spam para quem o recebe. De
+// manhã esse aviso ainda serve para alguma coisa: dá tempo de cobrar o
+// apontador que não fechou o turno antes de o dia seguinte virar.
+//
+// Cada dia é enviado UMA vez: `RDO_EMAIL_LOG` guarda o que já saiu, então
+// o gatilho rodando duas vezes (ou alguém executando a função à mão) não
+// manda o mesmo RDO de novo. Para reenviar de propósito — RDO corrigido
+// depois da hora do gatilho — existe `reenviarRDOPorEmail('2026-08-24')`.
+//
+// ATENÇÃO ao colar este arquivo no Apps Script: `MailApp` é uma permissão
+// NOVA para este projeto. Na primeira execução o Google vai pedir a
+// autorização de novo (a tela de "este app não é verificado" → Avançado →
+// Acessar). Enquanto ela não for dada, o gatilho falha em silêncio.
+// ============================================================
+
+/* Para quem o RDO do dia vai. A Propriedade do script `RDO_EMAILS` (uma
+   lista separada por vírgula, ponto-e-vírgula ou quebra de linha) manda
+   nesta lista quando existe: trocar destinatário não precisa de deploy
+   novo, e um endereço tirado da lista para de receber na hora. */
+var RDO_EMAIL_DESTINOS = [
+  'leonardo@gestorengenharia.com.br',
+  'msantana@gestorengenharia.com.br',
+  'fabiolarufino@mobilidadepch.com.br',
+  'terceiro.wbotelho@spobras.sp.gov.br'
+];
+
+var RDO_EMAIL_HORA_PADRAO = 10;                        // Propriedade: RDO_EMAIL_HORA
+var PASTA_RDO_PDF        = 'RDOs do dia em PDF (Teotônio Privado)';
+var RDO_EMAIL_LOG_CHAVE  = 'RDO_EMAIL_LOG';
+var RDO_EMAIL_LOG_MAX    = 60;                         // ~2 meses de histórico
+var RDO_PDF_MAX_BYTES    = 12 * 1024 * 1024;           // teto de anexo do Gmail (25 MB) com folga
+
+var RDO_DIA_DA_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira',
+                         'quinta-feira', 'sexta-feira', 'sábado'];
+
+function rdoEmailHora() {
+  var h = parseInt(PropertiesService.getScriptProperties().getProperty('RDO_EMAIL_HORA'), 10);
+  return (!isNaN(h) && h >= 0 && h <= 23) ? h : RDO_EMAIL_HORA_PADRAO;
+}
+
+function rdoEmailDestinatarios() {
+  var raw = PropertiesService.getScriptProperties().getProperty('RDO_EMAILS');
+  var lista = raw ? String(raw).split(/[\s,;]+/) : RDO_EMAIL_DESTINOS;
+  var vistos = {}, out = [];
+  lista.forEach(function (e) {
+    var v = String(e == null ? '' : e).trim();
+    // Endereço torto na lista não pode derrubar o envio para os outros:
+    // é descartado aqui, e quem sobra recebe normalmente.
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) return;
+    var k = v.toLowerCase();
+    if (vistos[k]) return;
+    vistos[k] = true;
+    out.push(v);
+  });
+  return out;
+}
+
+// ------------------------------------------------------------
+// 1. DEPÓSITO — o app entrega o PDF oficial já pronto
+// ------------------------------------------------------------
+function rdoPdfPasta_() {
+  var pastas = DriveApp.getFoldersByName(PASTA_RDO_PDF);
+  if (pastas.hasNext()) return pastas.next();
+  var nova = DriveApp.createFolder(PASTA_RDO_PDF);
+  // RDO tem nome de trabalhador, placa e ocorrência do dia: pasta fechada.
+  nova.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  return nova;
+}
+
+function rdoPdfNome_(obra, dataISO) {
+  return 'RDO_' + String(obra || OBRA_ID) + '_' + String(dataISO).replace(/-/g, '_') + '.pdf';
+}
+
+function rdoPdfArquivo_(obra, dataISO) {
+  var arquivos = rdoPdfPasta_().getFilesByName(rdoPdfNome_(obra, dataISO));
+  while (arquivos.hasNext()) {
+    var a = arquivos.next();
+    if (!a.isTrashed()) return a;
+  }
+  return null;
+}
+
+function rdoPdfDoDia(p) {
+  /* O app manda "data:application/pdf;base64,…". Mas o jsPDF, cru, produz
+     "data:application/pdf;filename=generated.pdf;base64,…" — e o aparelho
+     com uma versão velha do app ainda em cache manda assim. As duas formas
+     valem: o que importa é ser PDF e vir em base64. */
+  var b64 = String(p.pdf || '');
+  if (!/^data:application\/pdf(;[^,]*)?;base64,/.test(b64)) return { ok: false, error: 'PDF inválido' };
+
+  var dataISO = normData(p.data);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataISO)) return { ok: false, error: 'Data inválida' };
+
+  var bytes = Utilities.base64Decode(b64.slice(b64.indexOf(',') + 1));
+  if (!bytes.length) return { ok: false, error: 'PDF vazio' };
+  if (bytes.length > RDO_PDF_MAX_BYTES) return { ok: false, error: 'PDF grande demais para anexar' };
+
+  var obra = normObra(p.obra) || OBRA_ID;
+  var pasta = rdoPdfPasta_();
+  var nome = rdoPdfNome_(obra, dataISO);
+
+  /* Um arquivo por obra e por dia. O depósito novo SUBSTITUI o anterior:
+     o turno noturno salvo depois do diurno, ou a correção de um dado
+     errado, geram um RDO mais completo que o primeiro — guardar os dois
+     só criaria a dúvida de qual foi o que a fiscalização recebeu. */
+  var antigos = pasta.getFilesByName(nome);
+  while (antigos.hasNext()) {
+    var velho = antigos.next();
+    if (!velho.isTrashed()) velho.setTrashed(true);
+  }
+
+  var arq = pasta.createFile(Utilities.newBlob(bytes, 'application/pdf', nome));
+  arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  if (p.numero_rdo) {
+    try { arq.setDescription('RDO nº ' + p.numero_rdo + ' — ' + dataISO); } catch (e) {}
+  }
+
+  registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoPdfDoDia', obra,
+                     dataISO, '', arq.getId());
+  return { ok: true, fileId: arq.getId(), arquivo: nome };
+}
+
+// ------------------------------------------------------------
+// 2. ENVIO — o gatilho diário
+// ------------------------------------------------------------
+/* O gatilho da manhã. Manda o RDO de ONTEM — o dia que fechou. Ver a nota
+   no alto desta seção sobre por que não é o de hoje. */
+function enviarRDODeOntemPorEmail() {
+  var ontem = new Date(Date.now() - 24 * 3600 * 1000);
+  var iso = Utilities.formatDate(ontem, fusoDoScript(), 'yyyy-MM-dd');
+  return rdoEnviarPorEmail_(iso, OBRA_ID, false);
+}
+
+/* Reenvio manual, para rodar no editor: um RDO corrigido depois da hora do
+   gatilho, ou um dia que ficou para trás.
+   Uso:  reenviarRDOPorEmail('2026-08-24')  */
+function reenviarRDOPorEmail(dataISO, obra) {
+  return rdoEnviarPorEmail_(normData(dataISO), normObra(obra) || OBRA_ID, true);
+}
+
+function rdoEnviarPorEmail_(dataISO, obra, forcar) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dataISO))) return { ok: false, error: 'Data inválida' };
+
+  var destinos = rdoEmailDestinatarios();
+  if (!destinos.length) {
+    rdoEmailAvisarDono_('RDO ' + rdoDataBR_(dataISO) + ' — sem destinatários configurados',
+      'A lista de destinatários do RDO está vazia.\n\n' +
+      'Preencha a Propriedade do script RDO_EMAILS (endereços separados por vírgula) ' +
+      'ou a lista RDO_EMAIL_DESTINOS no Code.gs.');
+    return { ok: false, error: 'Sem destinatários' };
+  }
+
+  if (!forcar && rdoEmailJaEnviado_(obra, dataISO)) {
+    Logger.log('RDO de ' + dataISO + ' já havia sido enviado — nada a fazer.');
+    return { ok: true, pulado: 'já enviado' };
+  }
+
+  var arq = rdoPdfArquivo_(obra, dataISO);
+  if (!arq) {
+    /* Dia sem PDF depositado. Pode ser domingo, feriado, ou o turno que
+       ninguém fechou — e a diferença entre os três este servidor não tem
+       como saber. O aviso vai para casa, não para a fiscalização. */
+    rdoEmailAvisarDono_('RDO ' + rdoDataBR_(dataISO) + ' — não saiu por e-mail (sem PDF)',
+      'Chegou a hora do envio automático e não havia RDO de ' + rdoDataBR_(dataISO) +
+      ' (' + rdoDiaSemana_(dataISO) + ') depositado.\n\n' +
+      'Se houve trabalho neste dia, o turno provavelmente não foi salvo no app, ou foi ' +
+      'salvo sem internet e ainda está na fila do aparelho. Ainda dá tempo de cobrar o ' +
+      'apontador: abrir o RDO daquele dia no app e gerar o PDF Oficial repõe o depósito. ' +
+      'Depois, para mandar:\n\n' +
+      "    reenviarRDOPorEmail('" + dataISO + "')\n");
+    return { ok: false, error: 'Sem PDF depositado para ' + dataISO };
+  }
+
+  // Cota do Gmail estourada manda um e-mail pela metade da lista, sem erro.
+  // Melhor não mandar nada e avisar: RDO que chega para um e não para os
+  // outros é pior que RDO atrasado.
+  var restante = MailApp.getRemainingDailyQuota();
+  if (restante < destinos.length) {
+    rdoEmailAvisarDono_('RDO ' + rdoDataBR_(dataISO) + ' — não saiu (cota de e-mail)',
+      'A cota diária de e-mails do Apps Script acabou (restam ' + restante + ', são ' +
+      destinos.length + ' destinatários). O RDO NÃO foi enviado.\n\n' +
+      "Depois que a cota virar, mande com:  reenviarRDOPorEmail('" + dataISO + "')");
+    return { ok: false, error: 'Cota de e-mail insuficiente' };
+  }
+
+  var linha = rdoDiarioDaData_(obra, dataISO);
+  var numero = linha ? String(linha['numero_rdo'] || linha['id'] || '').trim() : '';
+  var corpo = rdoEmailCorpo_(dataISO, obra, linha);
+  var assunto = 'RDO' + (numero ? ' nº ' + numero : '') + ' — ' + rdoObraNome_(obra) +
+                ' — ' + rdoDataBR_(dataISO);
+
+  var anexo = arq.getBlob().setName(
+    'RDO' + (numero ? '_' + numero : '') + '_' + String(dataISO).replace(/-/g, '_') + '.pdf');
+
+  MailApp.sendEmail({
+    to: destinos.join(','),
+    subject: assunto,
+    body: corpo.texto,
+    htmlBody: corpo.html,
+    name: 'Gestor Engenharia — RDO ' + rdoObraNome_(obra),
+    attachments: [anexo]
+  });
+
+  rdoEmailMarcar_(obra, dataISO, destinos);
+  Logger.log('RDO de ' + dataISO + ' enviado para: ' + destinos.join(', '));
+  return { ok: true, data: dataISO, para: destinos, anexo: anexo.getName() };
+}
+
+// ------------------------------------------------------------
+// O corpo do e-mail — o resumo do dia, para quem lê no celular
+// ------------------------------------------------------------
+function rdoDataBR_(dataISO) {
+  var p = String(dataISO).split('-');
+  return p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : String(dataISO);
+}
+
+function rdoDiaSemana_(dataISO) {
+  var p = String(dataISO).split('-');
+  if (p.length !== 3) return '';
+  var d = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+  return RDO_DIA_DA_SEMANA[d.getDay()] || '';
+}
+
+function rdoObraNome_(obra) {
+  return normObra(obra) === 'teotonio' ? 'Teotônio Vilela' : String(obra || '');
+}
+
+/* A linha do RDO_Diario daquele dia, com as chaves em minúsculas. Mais de
+   uma linha na mesma data (diurno e noturno gravados separados) é o caso
+   normal: junta as duas, e o campo preenchido ganha do vazio. */
+function rdoDiarioDaData_(obra, dataISO) {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return null;
+  var dados = aba.getDataRange().getValues();
+  if (dados.length <= 1) return null;
+  var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iData = idxColuna(cab, 'data');
+  var iObra = idxColuna(cab, 'obra');
+  if (iData === -1) return null;
+
+  var junta = null;
+  for (var i = 1; i < dados.length; i++) {
+    if (normData(dados[i][iData]) !== dataISO) continue;
+    if (iObra !== -1 && normObra(dados[i][iObra]) !== normObra(obra)) continue;
+    if (!junta) junta = {};
+    for (var c = 0; c < cab.length; c++) {
+      var v = dados[i][c];
+      if (junta[cab[c]] === undefined || String(junta[cab[c]]).trim() === '') junta[cab[c]] = v;
+    }
+  }
+  return junta;
+}
+
+/* Quantos serviços foram lançados no dia — o número que diz, de relance,
+   se o RDO anexado tem produção dentro ou está vazio. */
+function rdoServicosDoDia_(obra, dataISO) {
+  try {
+    var aba = abaServicos();
+    var dados = aba.getDataRange().getValues();
+    if (dados.length <= 1) return 0;
+    var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+    var iData = idxColuna(cab, 'data');
+    var iObra = idxColuna(cab, 'obra');
+    if (iData === -1) return 0;
+    var n = 0;
+    for (var i = 1; i < dados.length; i++) {
+      if (normData(dados[i][iData]) !== dataISO) continue;
+      if (iObra !== -1 && normObra(dados[i][iObra]) !== normObra(obra)) continue;
+      n++;
+    }
+    return n;
+  } catch (e) {
+    return 0;
+  }
+}
+
+/* As paralisações voltam do JSON que o app grava. Nunca derruba o e-mail:
+   JSON estragado vira lista vazia e o RDO segue anexado do mesmo jeito. */
+function rdoParalisacoesTexto_(linha) {
+  if (!linha) return [];
+  var bruto = linha['paralisacoes_json'];
+  if (!bruto) {
+    var resumo = String(linha['paralisado_motivo'] || '').trim();
+    return resumo ? [resumo] : [];
+  }
+  var obj;
+  try { obj = JSON.parse(String(bruto)); } catch (e) { return []; }
+  var todas = [].concat(obj && obj.diurno ? obj.diurno : [], obj && obj.noturno ? obj.noturno : []);
+  var out = [];
+  todas.forEach(function (p) {
+    if (!p || !String(p.motivo || '').trim()) return;
+    var partes = [String(p.motivo).trim()];
+    if (p.inicio && p.fim) partes.push(p.inicio + '–' + p.fim);
+    if (p.frente) partes.push('frente: ' + p.frente);
+    if (String(p.obs || '').trim()) partes.push(String(p.obs).trim());
+    out.push(partes.join(' · '));
+  });
+  return out;
+}
+
+function rdoEmailCorpo_(dataISO, obra, linha) {
+  function v(chave) { return linha ? String(linha[chave] == null ? '' : linha[chave]).trim() : ''; }
+
+  var numero = v('numero_rdo') || v('id');
+  var titulo = 'RDO' + (numero ? ' nº ' + numero : '') + ' — ' + rdoDataBR_(dataISO) +
+               (rdoDiaSemana_(dataISO) ? ' (' + rdoDiaSemana_(dataISO) + ')' : '');
+
+  var clima = [
+    v('clima_manha') ? 'manhã: ' + v('clima_manha') : '',
+    v('clima_tarde') ? 'tarde: ' + v('clima_tarde') : '',
+    v('clima_noite') ? 'noite: ' + v('clima_noite') : ''
+  ].filter(String).join('  ·  ');
+  if (v('chuva_mm_auto')) clima += (clima ? '  ·  ' : '') + 'chuva medida: ' + v('chuva_mm_auto') + ' mm';
+
+  var apontadores = [
+    v('apontador_diurno') ? v('apontador_diurno') + ' (diurno)' : '',
+    v('apontador_noturno') ? v('apontador_noturno') + ' (noturno)' : ''
+  ].filter(String).join('  ·  ');
+
+  var paralis = rdoParalisacoesTexto_(linha);
+  var nServicos = rdoServicosDoDia_(obra, dataISO);
+
+  var campos = [
+    ['Obra', rdoObraNome_(obra)],
+    ['Data', rdoDataBR_(dataISO) + (rdoDiaSemana_(dataISO) ? ' — ' + rdoDiaSemana_(dataISO) : '')],
+    ['Apontador', apontadores],
+    ['Clima', clima],
+    ['Serviços lançados', nServicos ? String(nServicos) : 'nenhum'],
+    ['Visitas', v('visitas')],
+    ['Paralisações', paralis.join('\n')],
+    ['Ocorrências', v('ocorrencias')],
+    ['Observações', v('observacoes_gerais')]
+  ].filter(function (c) { return String(c[1] || '').trim(); });
+
+  var texto = titulo + '\n\n' +
+    campos.map(function (c) { return c[0] + ': ' + c[1]; }).join('\n') +
+    '\n\nO relatório completo, assinado, vai em anexo neste e-mail (PDF).\n' +
+    '\n— Enviado automaticamente pelo app de campo da Gestor Engenharia.\n';
+
+  function esc(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  var html =
+    '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1a1a1a;max-width:640px">' +
+    '<div style="background:#1e3a5f;color:#fff;padding:14px 16px;border-radius:6px 6px 0 0">' +
+    '<div style="font-size:16px;font-weight:bold">' + esc(titulo) + '</div>' +
+    '<div style="font-size:12px;color:#c9d6e6;margin-top:2px">' + esc(rdoObraNome_(obra)) + '</div>' +
+    '</div>' +
+    '<table style="border-collapse:collapse;width:100%;border:1px solid #d8d8d8;border-top:none">' +
+    campos.map(function (c) {
+      return '<tr>' +
+        '<td style="padding:7px 10px;background:#f5f6f8;border-bottom:1px solid #e6e6e6;' +
+        'font-size:12px;color:#555;white-space:nowrap;vertical-align:top">' + esc(c[0]) + '</td>' +
+        '<td style="padding:7px 10px;border-bottom:1px solid #e6e6e6">' +
+        esc(c[1]).replace(/\n/g, '<br>') + '</td></tr>';
+    }).join('') +
+    '</table>' +
+    '<p style="font-size:13px;color:#333;margin:14px 0 4px">' +
+    'O relatório completo, assinado, vai <strong>em anexo</strong> neste e-mail (PDF).</p>' +
+    '<p style="font-size:11px;color:#888;margin:12px 0 0">' +
+    'Enviado automaticamente pelo app de campo da Gestor Engenharia.</p>' +
+    '</div>';
+
+  return { texto: texto, html: html };
+}
+
+// ------------------------------------------------------------
+// O que já saiu — para o mesmo dia não ser enviado duas vezes
+// ------------------------------------------------------------
+function rdoEmailLogLer_() {
+  try {
+    return JSON.parse(PropertiesService.getScriptProperties().getProperty(RDO_EMAIL_LOG_CHAVE) || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+function rdoEmailJaEnviado_(obra, dataISO) {
+  return !!rdoEmailLogLer_()[normObra(obra) + '|' + dataISO];
+}
+
+function rdoEmailMarcar_(obra, dataISO, destinos) {
+  var log = rdoEmailLogLer_();
+  log[normObra(obra) + '|' + dataISO] = {
+    em: Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm'),
+    para: destinos
+  };
+  /* A Propriedade não pode crescer sem fim — o teto do Apps Script é 500 KB
+     no projeto inteiro, dividido com as sessões. A chave é 'obra|data', que
+     ordena por data dentro de cada obra: o mais velho é o primeiro. */
+  var chaves = Object.keys(log).sort();
+  while (chaves.length > RDO_EMAIL_LOG_MAX) delete log[chaves.shift()];
+  PropertiesService.getScriptProperties().setProperty(RDO_EMAIL_LOG_CHAVE, JSON.stringify(log));
+}
+
+/* Avisos de dentro de casa: vão para quem é dono do script, nunca para a
+   lista da fiscalização. Falhar aqui não pode derrubar nada. */
+function rdoEmailAvisarDono_(assunto, corpo) {
+  try {
+    var dono = Session.getEffectiveUser().getEmail();
+    if (dono) MailApp.sendEmail(dono, assunto, corpo + '\n\n— app de campo, Teotônio Vilela\n');
+    Logger.log(assunto);
+  } catch (e) {
+    Logger.log('Não consegui avisar o dono do script: ' + e + ' — ' + assunto);
+  }
+}
+
+/* Conferência para rodar no editor antes de confiar no gatilho: diz para
+   quem vai, a que horas, e se o RDO de hoje já está depositado. Não manda
+   e-mail nenhum. */
+function conferirEnvioRDOEmail() {
+  // Confere o dia que o próximo envio vai levar: ontem, não hoje.
+  var alvo = Utilities.formatDate(new Date(Date.now() - 24 * 3600 * 1000),
+                                  fusoDoScript(), 'yyyy-MM-dd');
+  var destinos = rdoEmailDestinatarios();
+  var arq = rdoPdfArquivo_(OBRA_ID, alvo);
+  var gatilho = ScriptApp.getProjectTriggers().some(function (t) {
+    return t.getHandlerFunction() === 'enviarRDODeOntemPorEmail';
+  });
+  var diag = {
+    ok: true,
+    proximo_envio_leva_o_RDO_de: alvo + ' (' + rdoDiaSemana_(alvo) + ')',
+    destinatarios: destinos,
+    hora_do_envio: rdoEmailHora() + 'h',
+    gatilho_instalado: gatilho,
+    pdf_desse_dia_depositado: !!arq,
+    ja_enviado: rdoEmailJaEnviado_(OBRA_ID, alvo),
+    cota_de_email_restante: MailApp.getRemainingDailyQuota()
+  };
+  Logger.log(JSON.stringify(diag, null, 2));
+  return diag;
 }
 
 // ------------------------------------------------------------
