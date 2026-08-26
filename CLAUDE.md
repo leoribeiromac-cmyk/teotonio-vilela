@@ -25,8 +25,8 @@ para a navegação, então a mudança chega sem precisar limpar cache.
 
 ## O RDO do dia sai por e-mail sozinho
 
-Quem MANDA o e-mail é o `Code.gs` (gatilho de tempo, 10h, com o RDO de ONTEM —
-às 10h o dia de hoje mal começou). Quem DESENHA o PDF
+Quem MANDA o e-mail é o `Code.gs` (gatilho de tempo, 8h, com o RDO de ONTEM —
+às 8h o dia de hoje nem começou). Quem DESENHA o PDF
 oficial é o navegador (`_gerarPDFDiario`, jsPDF). O servidor não redesenha o
 RDO — dois desenhos do mesmo documento divergem no primeiro ajuste de um lado
 só, e este é um papel que a fiscalização assina.

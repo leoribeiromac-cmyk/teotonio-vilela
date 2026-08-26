@@ -2461,18 +2461,18 @@ function configurarGatilhos() {
 //                  para a lista de destinatários, com o resumo do dia no
 //                  corpo do e-mail.
 //
-// O e-mail das 10h leva o RDO de ONTEM, não o de hoje. Às 10h o dia de hoje
-// mal começou: o turno diurno está no meio, e o que sairia para a
-// fiscalização seria um relatório quase vazio. O que se manda de manhã é o
-// dia que FECHOU — com os dois turnos, o efetivo inteiro e as ocorrências.
+// O e-mail das 8h leva o RDO de ONTEM, não o de hoje. Às 8h o dia de hoje nem
+// começou: o que sairia para a fiscalização seria uma folha em branco. O que
+// se manda de manhã é o dia que FECHOU — com os dois turnos, o efetivo
+// inteiro e as ocorrências.
 //
 // O que acontece quando falta o depósito (dia sem RDO, domingo, apontador
 // que não fechou o turno): NADA vai para a fiscalização. O aviso de que o
 // dia ficou sem RDO vai só para o dono do script — é problema de dentro de
 // casa, e mandar "ontem não teve RDO" para o cliente toda segunda-feira é a
-// forma mais rápida de o e-mail diário virar spam para quem o recebe. De
-// manhã esse aviso ainda serve para alguma coisa: dá tempo de cobrar o
-// apontador que não fechou o turno antes de o dia seguinte virar.
+// forma mais rápida de o e-mail diário virar spam para quem o recebe. Às 8h
+// esse aviso ainda serve para alguma coisa: chega antes de o canteiro abrir,
+// e dá tempo de cobrar o apontador que não fechou o turno de ontem.
 //
 // Cada dia é enviado UMA vez: `RDO_EMAIL_LOG` guarda o que já saiu, então
 // o gatilho rodando duas vezes (ou alguém executando a função à mão) não
@@ -2496,7 +2496,7 @@ var RDO_EMAIL_DESTINOS = [
   'terceiro.wbotelho@spobras.sp.gov.br'
 ];
 
-var RDO_EMAIL_HORA_PADRAO = 10;                        // Propriedade: RDO_EMAIL_HORA
+var RDO_EMAIL_HORA_PADRAO = 8;                         // Propriedade: RDO_EMAIL_HORA
 var PASTA_RDO_PDF        = 'RDOs do dia em PDF (Teotônio Privado)';
 var RDO_EMAIL_LOG_CHAVE  = 'RDO_EMAIL_LOG';
 var RDO_EMAIL_LOG_MAX    = 60;                         // ~2 meses de histórico
