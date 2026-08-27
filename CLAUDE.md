@@ -55,6 +55,24 @@ quem está preenchendo. São duas travas, e as duas são necessárias:
    digitação, `.agora()` quando anexa foto ou assinatura (não dá para
    esperar o debounce) e `.apagar()` quando grava ou descarta.
    `tests/rascunho-formulario.ui.test.js` recarrega a página de verdade.
+
+## A foto é daquele serviço, daquela obra
+
+A foto escolhida no formulário NÃO mora no rascunho: fica em
+`_fotosPorServico` (`index.html`), um mapa em memória cuja chave é a
+**posição** do serviço na tela — `'0'`, `'1'`, `'o0'`. A posição se repete em
+toda obra e muda quando um serviço sai do meio da lista, então o mapa tem de
+ser mexido junto: `limparFotosDoFormulario()` ao trocar de obra, ao gravar e
+ao limpar o RDO; `reindexarFotosDoFormulario()` quando um serviço é removido.
+Sem isso a foto do Ranário reaparecia no serviço de mesma posição das Ruas de
+Terra e subia ligada a ELE.
+Do outro lado, o servidor anexa o ponteiro da foto pelo **id do serviço** — e
+o id é um carimbo de segundo, igual em todas as obras, que dividem a mesma
+planilha. Por isso o app manda `obra` junto no `rdoFoto` e o `Code.gs` só
+aceita a linha daquela obra (`linhaDoServicoParaFoto`).
+`tests/foto-fica-na-obra.ui.test.js` (o app de verdade) e
+`tests/multiobra.test.js` (o servidor, com planilha falsa).
+
 - `vendor/` — bibliotecas servidas pelo próprio site (Chart.js, jsPDF +
   AutoTable, xlsx-js-style, PDF.js). **Não voltar a usar CDN**: o app precisa
   abrir offline no canteiro. Ao trocar uma versão, subir também o `VERSAO`

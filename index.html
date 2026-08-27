@@ -3409,6 +3409,15 @@ function trocarObra(id, opcoes) {
   // Rascunho aberto é da obra que está saindo; ele fica guardado na chave
   // dela e volta quando ela for reaberta, mas não pode atravessar.
   STATE.draft = null;
+  /* E as FOTOS escolhidas também não. Elas não moram no rascunho: vivem num
+     mapa em memória cuja chave é a POSIÇÃO do serviço no formulário ('0',
+     '1', 'o0'…) — e essa posição existe igual em toda obra. Sem zerar aqui,
+     a foto tirada no Ranário e ainda não gravada reaparecia no serviço 0 das
+     Ruas de Terra e subia ligada a ELE: foto de uma obra virando prova de
+     outra, com o carimbo da obra errada queimado na imagem. */
+  const fotosPendentes = Object.keys(_fotosPorServico)
+    .reduce((n, k) => n + ((_fotosPorServico[k] || []).length), 0);
+  _fotosPorServico = {}; _ctxFotoPorChave = {}; _limiteFotoPorChave = {};
   localStorage.setItem(LS_OBRA, id);
   OBRA = OBRAS_CFG[id];
   CONFIG = montarConfig(id);
@@ -3440,6 +3449,14 @@ function trocarObra(id, opcoes) {
   renderShell();
   render();
   carregarTudo();
+  /* Foto escolhida e não gravada some ao trocar de obra — e some em
+     silêncio, porque a chave dela é a posição do serviço, não a obra.
+     Quem escolheu precisa saber, senão volta ao formulário achando que a
+     prova está lá. */
+  if (fotosPendentes) {
+    toast(`${fotosPendentes} foto(s) escolhida(s) e ainda não gravada(s) ficaram para trás na troca de obra. ` +
+          'Anexe de novo na obra certa.', 'info', 7000);
+  }
 }
 window.trocarObra = trocarObra;
 
@@ -5700,6 +5717,34 @@ function limiteFotos(chave) {
   return l == null ? MAX_FOTOS_SERVICO : l;
 }
 
+/* AS FOTOS ANDAM JUNTO COM O SERVIÇO QUANDO A LISTA MUDA DE TAMANHO.
+   --------------------------------------------------------------------
+   A chave das fotos é a POSIÇÃO do serviço no formulário ('0', '1', 'o0'…),
+   e não o serviço em si — ele ainda não tem id, é isso que só nasce no
+   envio. Tirar um serviço do meio da lista faz todos os de baixo subirem uma
+   posição; as fotos, paradas na chave antiga, passariam a pertencer ao
+   serviço que tomou o lugar — e subiriam como prova DELE.
+   Aqui elas andam junto: a chave removida sai e as de cima descem uma. */
+function reindexarFotosDoFormulario(prefixo, removido, totalAntes) {
+  [_fotosPorServico, _ctxFotoPorChave, _limiteFotoPorChave].forEach(mapa => {
+    delete mapa[prefixo + removido];
+    for (let i = removido + 1; i < totalAntes; i++) {
+      const de = prefixo + i, para = prefixo + (i - 1);
+      if (Object.prototype.hasOwnProperty.call(mapa, de)) { mapa[para] = mapa[de]; delete mapa[de]; }
+      else delete mapa[para];
+    }
+  });
+}
+
+/* Zera as fotos que estão presas ao FORMULÁRIO (posições numéricas e 'o<n>').
+   As do Histórico têm chave própria, com o id do serviço já gravado, e não
+   entram aqui — não é delas que o formulário se livra. */
+function limparFotosDoFormulario() {
+  [_fotosPorServico, _ctxFotoPorChave, _limiteFotoPorChave].forEach(mapa => {
+    Object.keys(mapa).forEach(k => { if (/^o?\d+$/.test(k)) delete mapa[k]; });
+  });
+}
+
 function contextoCarimboDeLinha(r) {
   var pac = STATE.pacotes.find(function (p) {
     return getCSVField(p, 'ID') === (getCSVField(r, 'Pacote_ID') || '');
@@ -6319,7 +6364,12 @@ async function enviarFotosDoLote(mapaIdParaFotos, idxBase) {
       // quem olha, coluna na planilha é o que dá para filtrar e mapear.
       // idxBase desloca a numeração quando a foto é anexada a um serviço
       // que já tem fotos, para o arquivo no Drive não repetir nome.
+      // A obra vai junto: no servidor, o ponteiro da foto é anexado à linha
+      // pelo id do serviço, e o id é o mesmo carimbo de segundo em todas as
+      // obras — que dividem a MESMA planilha. Sem a obra aqui, a foto podia
+      // ser pendurada na linha homônima de outra obra.
       const params = { action: 'rdoFoto', id, idx: (idxBase || 0) + i, foto: f.full,
+                       obra: OBRA.id,
                        lat: f.lat || '', lon: f.lon || '', prec: f.prec || '',
                        clientId: f.cid || '',
                        ...authParams() };
@@ -15499,6 +15549,9 @@ window.copiarServicosDeOntem = function() {
 };
 
 function removerServico(idx) {
+  // As fotos escolhidas seguem o serviço: sem isto, as do serviço removido
+  // ficariam na posição e virariam prova do serviço que subiu para ela.
+  reindexarFotosDoFormulario('', idx, STATE.draft.servicos.length);
   STATE.draft.servicos.splice(idx, 1);
   if (STATE.draft.servicos.length === 0) {
     STATE.draft.servicos.push({ frente: '', pacoteId: '', quantidade: '', equipe: '', observacao: '' });
@@ -15527,9 +15580,9 @@ function adicionarOutroServico() {
 
 function removerOutroServico(idx) {
   if (!STATE.draft.outrosServicos) return;
-  delete _fotosPorServico['o' + idx];
-  delete _ctxFotoPorChave['o' + idx];
-  delete _limiteFotoPorChave['o' + idx];
+  // Apagar só a chave do removido deixava as de cima uma posição acima do
+  // seu serviço: a foto do avulso 2 passava a subir ligada ao avulso 1.
+  reindexarFotosDoFormulario('o', idx, STATE.draft.outrosServicos.length);
   STATE.draft.outrosServicos.splice(idx, 1);
   saveDraft(STATE.draft);
   transitionTo(render);
@@ -15538,6 +15591,9 @@ function removerOutroServico(idx) {
 function resetDraft() {
   if (!confirm('Limpar todos os dados desse RDO? Não tem como desfazer.')) return;
   clearDraft();
+  // "Limpar" limpa TUDO, foto escolhida inclusive: ela vive fora do rascunho
+  // e, ficando, seria anexada ao primeiro serviço do RDO seguinte.
+  limparFotosDoFormulario();
   STATE.draft = defaultDraft();
   transitionTo(render);
 }
@@ -15838,7 +15894,7 @@ async function salvarRDO() {
       toast(`Enviando ${totalFotos} foto(s)…`, 'info', 2500);
       enviarFotosDoLote(fotosEnviar);   // não segura o apontador esperando
     }
-    _fotosPorServico = {};
+    limparFotosDoFormulario();
 
     limparFormularioRDO();
     setTimeout(() => carregarTudo(), 1500);
@@ -15879,13 +15935,13 @@ async function salvarRDO() {
           // apontador está em campo.
           const guardou = await outboxAdicionar({
             kind: 'foto',
-            params: { action: 'rdoFoto', id, idx: i, foto: f.full,
+            params: { action: 'rdoFoto', id, idx: i, foto: f.full, obra: OBRA.id,
                       lat: f.lat || '', lon: f.lon || '', prec: f.prec || '',
                       clientId: f.cid || '' },
             descricao: 'foto do serviço ' + id });
           if (guardou) fotosNaFila++;
         })));
-      _fotosPorServico = {};
+      limparFotosDoFormulario();
       toast('Sem internet — RDO' + (fotosNaFila ? ` e ${fotosNaFila} foto(s)` : '') +
         ' guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
       limparFormularioRDO();
