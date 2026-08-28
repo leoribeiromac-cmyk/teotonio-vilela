@@ -207,6 +207,25 @@ process.on('exit', encerrar);
      teot === 'Av. Senador Teotônio Vilela · Gestor Engenharia', teot);
 
   // ------------------------------------------------------------------
+  console.log('\nQUEM ASSINA O RDO É DE QUEM É A OBRA');
+  // A supervisão é um campo do CADASTRO (`rdo.supervisao`), como o objeto e a
+  // fiscalização. Obra que não a declara não pode ganhar um quadro de
+  // assinatura em branco na folha — nem herdar a supervisão da avenida.
+  const assinam = await p.evaluate(async () => {
+    const daTeotonio = rdoTitulosAssinatura();   // a Teotônio está aberta aqui
+    trocarObra('ruas-de-terra');
+    await new Promise(r => setTimeout(r, 400));
+    return { daTeotonio, dasRuas: rdoTitulosAssinatura() };
+  });
+  ok('a Teotônio assina em três: contratada, fiscalização e supervisão',
+     assinam.daTeotonio.length === 3 && /SUPERVISÃO \(SP OBRAS\)/.test(assinam.daTeotonio[2]),
+     JSON.stringify(assinam.daTeotonio));
+  ok('obra que não declara supervisão continua assinando em dois',
+     assinam.dasRuas.length === 2, JSON.stringify(assinam.dasRuas));
+  ok('e nenhum quadro das Ruas de Terra fala da supervisão da avenida',
+     !assinam.dasRuas.some(t => /SUPERVIS|SP OBRAS/.test(t)), JSON.stringify(assinam.dasRuas));
+
+  // ------------------------------------------------------------------
   console.log('\nOS OUTROS PAPÉIS TAMBÉM FALAM DA OBRA ABERTA');
   // O Relatório Executivo é o que vai para a diretoria. Sai da mesma obra
   // aberta, e o nome do arquivo tem de dizer de qual obra ele é — dois
