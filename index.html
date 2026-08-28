@@ -3167,6 +3167,11 @@ const OBRAS_CFG = {
       responsaveis: 'Paulo E. Façanha (2620250483859) / Marcio Santana dos Santos (2620260741525)',
       responsaveisCurto: 'Paulo E. Façanha / Marcio Santana dos Santos',
       fiscalizacao: 'SP OBRAS',
+      /* Terceira assinatura do RDO, ao lado da contratada e da fiscalização.
+         Quem supervisiona a obra assina a folha junto — e é assinatura de
+         quem NÃO é a fiscalização contratante, por isso um campo próprio.
+         Obra que não declara `supervisao` continua com as duas de sempre. */
+      supervisao: 'SP OBRAS',
       jornada: { diurno: ['07:00', '17:00'], noturno: ['19:00', '05:00'] },
       rodape: 'Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária',
     },
@@ -14271,6 +14276,9 @@ function rdoInfo() {
     responsaveis: r.responsaveis || '',
     responsaveisCurto: r.responsaveisCurto || r.responsaveis || '',
     fiscalizacao: r.fiscalizacao || '',
+    // Vazio = a obra não tem supervisão a assinar, e o quadro sai com dois
+    // campos, como sempre saiu.
+    supervisao: r.supervisao || '',
     // A jornada saía em branco no RDO. É o mesmo horário todo dia; quem
     // trabalha fora dele anota na ocorrência.
     jornada: r.jornada || { diurno: ['07:00', '17:00'], noturno: ['19:00', '05:00'] },
@@ -14297,6 +14305,16 @@ function rdoTituloEngenheiro() {
 function rdoTituloCliente() {
   const f = rdoInfo().fiscalizacao;
   return 'CLIENTE / FISCALIZAÇÃO' + (f ? ' (' + f + ')' : '');
+}
+function rdoTituloSupervisao() {
+  const s = rdoInfo().supervisao;
+  return s ? 'SUPERVISÃO (' + s + ')' : '';
+}
+/* Quem assina o RDO, na ordem em que os quadros saem — e é UMA lista só,
+   para o PDF e o Excel nunca discordarem sobre quantas assinaturas o
+   documento tem. Obra sem supervisão declarada devolve duas. */
+function rdoTitulosAssinatura() {
+  return [rdoTituloEngenheiro(), rdoTituloCliente(), rdoTituloSupervisao()].filter(Boolean);
 }
 
 // ── Exportação Excel no MESMO MODELO do PDF (uma aba por RDO) ──────────────
@@ -14524,9 +14542,21 @@ function wsRDOModeloPDF(d, data) {
 
   // Assinaturas
   rSection('ASSINATURAS');
-  r = push([rdoTituloEngenheiro(), '', '', rdoTituloCliente(), '', '']); sty(r, 0, ST.sign); sty(r, 3, ST.sign);
-  r = push(['__________________________', '', '', '__________________________', '', '']); sty(r, 0, ST.signC); sty(r, 3, ST.signC);
-  r = push([df, '', '', df, '', '']); sty(r, 0, ST.signC); sty(r, 3, ST.signC);
+  /* As mesmas assinaturas do PDF, repartindo as seis colunas da aba: duas
+     ocupam as colunas 0 e 3; três, as colunas 0, 2 e 4. Cada uma é mesclada
+     com a vizinha, senão o rótulo do meio some por baixo do seguinte. */
+  const titulosXls = rdoTitulosAssinatura();
+  const passo = Math.floor(6 / titulosXls.length);
+  const linhaAssin = valor => {
+    const cels = ['', '', '', '', '', ''];
+    titulosXls.forEach((t, i) => { cels[i * passo] = valor(t); });
+    const rr = push(cels);
+    titulosXls.forEach((_, i) => { sty(rr, i * passo, ST.signC); mrg(rr, i * passo, i * passo + passo - 1); });
+    return rr;
+  };
+  r = linhaAssin(t => t); titulosXls.forEach((_, i) => sty(r, i * passo, ST.sign));
+  linhaAssin(() => '__________________________');
+  linhaAssin(() => df);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!merges'] = merges;
@@ -17706,10 +17736,19 @@ function _gerarPDFDiario(data, opcoes) {
   espaco(cFim, 5 + 16);
   rf(ML, cFim.y, TW, 5, NAV); sf(6.8, 'bold', W); tx('ASSINATURAS', ML + 2, cFim.y + 3.4);
   cFim.y += 5;
-  const sw = (TW - 4) / 2;
-  [[rdoTituloEngenheiro(), ML], [rdoTituloCliente(), ML + sw + 4]].forEach(([rotulo, x0]) => {
+  /* Os quadros dividem a largura entre si: dois quando a obra só tem
+     contratada e fiscalização, três quando declara supervisão. O rótulo
+     encolhe se não couber — nome de órgão longo cortado no meio é o tipo de
+     folha que a fiscalização devolve. */
+  const titulos = rdoTitulosAssinatura();
+  const sw = (TW - 4 * (titulos.length - 1)) / titulos.length;
+  titulos.forEach((rotulo, i) => {
+    const x0 = ML + i * (sw + 4);
     rf(x0, cFim.y, sw, 16, W, BD);
-    sf(6, 'bold', DG); tx(rotulo, x0 + 2, cFim.y + 5);
+    sf(6, 'bold', DG);
+    let corpo = 6;
+    while (corpo > 4.4 && doc.getTextWidth(rotulo) > sw - 4) { corpo -= 0.2; sf(corpo, 'bold', DG); }
+    tx(rotulo, x0 + 2, cFim.y + 5);
     ln(x0 + 3, cFim.y + 12, x0 + sw - 3, cFim.y + 12, [120, 120, 120], 0.3);
     sf(6, 'normal', DG); tx(df, x0 + sw / 2, cFim.y + 14.5, { align: 'center' });
   });

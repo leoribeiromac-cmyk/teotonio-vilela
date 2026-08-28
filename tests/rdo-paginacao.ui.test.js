@@ -247,6 +247,26 @@ const csvPacotes = [
   ok('as assinaturas aparecem uma vez só, na última folha',
      pagsComAssinatura.length === 1 && pagsComAssinatura[0] === T, 'em ' + pagsComAssinatura);
 
+  /* Os campos de assinatura: contratada, fiscalização e — quando a obra
+     declara `rdo.supervisao` — a supervisão. Eles repartem a largura da
+     folha entre si, então cada rótulo tem de caber no SEU quadro: rótulo
+     que transborda encosta no vizinho e a folha volta da fiscalização. */
+  const ultima = paginas[T - 1];
+  const LARG_QUADRO = (194 - 4 * 2) / 3;            // três quadros, 4 mm entre eles
+  const assinaturas = ['ENGENHEIRO', 'CLIENTE / FISCALIZAÇÃO', 'SUPERVISÃO']
+    .map(rot => ({ rot, it: ultima.find(i => i.t.startsWith(rot)) }));
+  const faltando = assinaturas.filter(a => !a.it).map(a => a.rot);
+  ok('o quadro traz os três campos: contratada, fiscalização e supervisão',
+     faltando.length === 0, 'não saiu: ' + faltando.join(' ; '));
+  if (!faltando.length) {
+    const ys = assinaturas.map(a => a.it.y);
+    ok('os três ficam lado a lado, na mesma linha',
+       Math.max(...ys) - Math.min(...ys) < 1, JSON.stringify(ys.map(y => Math.round(y))));
+    const largos = assinaturas.filter(a => a.it.w > pt(LARG_QUADRO - 4))
+      .map(a => a.rot + ' (' + Math.round(a.it.w / MM) + 'mm de ' + Math.round(LARG_QUADRO - 4) + ')');
+    ok('e cada rótulo cabe dentro do seu quadro', largos.length === 0, largos.join(' ; '));
+  }
+
   // a ocorrência tem 137 caracteres e cabia em quatro linhas com "…" no fim
   ok('a ocorrência do dia é impressa por inteiro',
      paginas.some(p => tem(p, 'OCORRÊNCIAS E OBSERVAÇÕES DO DIA')) &&
