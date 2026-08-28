@@ -32,7 +32,7 @@ const literais = [
   ['objeto do contrato', 'CONTRATAÇÃO DE EMPRESA OU CONSÓRCIO'],
   ['local da obra', 'Av. Sen. Teotônio Vilela ('],
   ['data de início', 'Início: 09/05/2024'],
-  ['responsáveis técnicos', 'Roberto V. França'],
+  ['responsáveis técnicos', 'Paulo E. Façanha'],
   ['órgão fiscalizador', 'SP OBRAS'],
   ['rodapé do PDF', 'Av. Senador Teotônio Vilela, São Paulo'],
   ['nome da contratada', "'Gestor Engenharia  |"],
