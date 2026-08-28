@@ -3159,8 +3159,13 @@ const OBRAS_CFG = {
       subtitulo: 'Duplicação Viária — Av. Sen. Teotônio Vilela, SP',
       inicio: '09/05/2024',
       prazoDias: 669,
-      responsaveis: 'Roberto V. França (2620250486954) / Paulo E. Façanha (2620250483859) / Adriano L. Pedroso (2620251795809)',
-      responsaveisCurto: 'Roberto V. França / Paulo E. Façanha / Adriano L. Pedroso',
+      /* Os responsáveis técnicos são os que estão com ART ATIVA na obra —
+         é o que a fiscalização confere no cabeçalho do RDO. Saíram Roberto
+         V. França (2620250486954) e Adriano L. Pedroso (2620251795809);
+         entrou Marcio Santana dos Santos. RDO já emitido não muda: o PDF é
+         desenhado na hora, com quem responde pela obra naquele dia. */
+      responsaveis: 'Paulo E. Façanha (2620250483859) / Marcio Santana dos Santos (2620260741525)',
+      responsaveisCurto: 'Paulo E. Façanha / Marcio Santana dos Santos',
       fiscalizacao: 'SP OBRAS',
       jornada: { diurno: ['07:00', '17:00'], noturno: ['19:00', '05:00'] },
       rodape: 'Av. Senador Teotônio Vilela, São Paulo – SP  |  Duplicação Viária',
