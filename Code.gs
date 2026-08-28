@@ -1216,6 +1216,23 @@ function rdoFoto(p) {
   var b64 = String(p.foto || '');
   if (b64.indexOf('data:image') !== 0) return { ok: false, error: 'Foto inválida' };
 
+  /* A LINHA É PROCURADA ANTES DE A IMAGEM IR PARA O DRIVE.
+     ---------------------------------------------------------------
+     O ponteiro da foto é anexado à linha do serviço pelo ID — e o ID é um
+     carimbo de segundo (`yyyyMMddHHmmss_k_aleatório`) gerado no aparelho,
+     igual em todas as obras, que dividem a MESMA planilha. Procurando só
+     pelo ID, a foto de uma obra podia ser pendurada na linha homônima de
+     outra: a Galeria da obra errada passa a mostrar a foto, e a obra certa
+     fica sem a prova.
+     Com a obra vinda do app (versões antigas não a mandam, e aí vale o que
+     valia antes), a linha só serve se for DA MESMA OBRA. Se o ID existir e
+     for de outra, a foto é recusada aqui, ANTES de virar arquivo no Drive —
+     recusar depois deixaria a imagem órfã na pasta. */
+  var alvo = linhaDoServicoParaFoto(p.id, p.obra);
+  if (alvo.deOutraObra) {
+    return { ok: false, error: 'O serviço ' + p.id + ' não é desta obra — foto não anexada.' };
+  }
+
   /* IDEMPOTÊNCIA — o reenvio da fila offline não pode duplicar a foto.
      O caminho da duplicata: o servidor grava a foto, mas a resposta se
      perde no sinal fraco do canteiro; o app entende como falha, guarda a
@@ -1255,10 +1272,9 @@ function rdoFoto(p) {
   // Anexa o ponteiro na linha do serviço. Se a foto subiu mas a linha ainda
   // não existe (fila offline), o arquivo fica no Drive e o app reenvia depois.
   try {
-    var aba = abaServicos();
-    var dados = aba.getDataRange().getValues();
+    var aba = alvo.aba || abaServicos();
+    var dados = alvo.dados || aba.getDataRange().getValues();
     var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
-    var iId = idxColuna(cab, 'id');
     // a planilha já tem 'foto_link' — usa essa; só cria coluna se não houver
     var iFotos = idxColuna(cab, 'foto_link');
     if (iFotos === -1) {
@@ -1277,27 +1293,60 @@ function rdoFoto(p) {
       if (iLon === -1) { aba.getRange(1, aba.getLastColumn() + 1).setValue('foto_lon'); iLon = aba.getLastColumn() - 1; }
     }
 
-    if (iId !== -1) {
-      for (var i = 1; i < dados.length; i++) {
-        if (String(dados[i][iId]).trim() === String(p.id || '').trim()) {
-          var atual = String(dados[i][iFotos] == null ? '' : dados[i][iFotos]).trim();
-          // reenvio de foto reaproveitada: o ponteiro pode já estar na linha
-          if (atual.split(/\s+/).indexOf(ponteiro) === -1) {
-            aba.getRange(i + 1, iFotos + 1).setValue(atual ? atual + ' ' + ponteiro : ponteiro);
-          }
-          if (iLat !== -1 && !String(dados[i][iLat] == null ? '' : dados[i][iLat]).trim()) {
-            aba.getRange(i + 1, iLat + 1).setValue(parseFloat(p.lat));
-            aba.getRange(i + 1, iLon + 1).setValue(parseFloat(p.lon));
-          }
-          break;
-        }
+    var i = alvo.linha;   // já achada (e conferida contra a obra) lá em cima
+    if (i > 0) {
+      var atual = String(dados[i][iFotos] == null ? '' : dados[i][iFotos]).trim();
+      // reenvio de foto reaproveitada: o ponteiro pode já estar na linha
+      if (atual.split(/\s+/).indexOf(ponteiro) === -1) {
+        aba.getRange(i + 1, iFotos + 1).setValue(atual ? atual + ' ' + ponteiro : ponteiro);
+      }
+      if (iLat !== -1 && !String(dados[i][iLat] == null ? '' : dados[i][iLat]).trim()) {
+        aba.getRange(i + 1, iLat + 1).setValue(parseFloat(p.lat));
+        aba.getRange(i + 1, iLon + 1).setValue(parseFloat(p.lon));
       }
     }
   } catch (e) {}
 
-  registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoFoto', OBRA_ID, p.id || '',
+  registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoFoto', normObra(p.obra), p.id || '',
                      '', fileId + (reaproveitada ? ' (reenvio — arquivo reaproveitado)' : ''));
   return { ok: true, url: ponteiro, fileId: fileId };
+}
+
+/* Em que linha da aba de serviços esta foto pode encostar.
+   Devolve { linha, deOutraObra, aba, dados }:
+     • linha > 0 ....... índice na matriz lida (a linha da planilha é linha+1);
+     • linha === -1 .... o serviço ainda não está na planilha. Não é erro: a
+                         fila offline sobe a foto antes de a linha existir, e
+                         o app reenvia depois — o arquivo espera no Drive.
+     • deOutraObra ..... o ID existe, mas em outra obra. Aí a foto é recusada:
+                         anexar seria dar a prova de uma obra para a outra.
+   `obra` em branco (app antigo, que não a manda) volta ao comportamento de
+   antes: casa só pelo ID. Falha de leitura da planilha também não recusa
+   nada — devolve linha -1 e a foto segue para o Drive, como sempre seguiu. */
+function linhaDoServicoParaFoto(id, obra) {
+  var alvo = { linha: -1, deOutraObra: false, aba: null, dados: null };
+  var procurado = String(id == null ? '' : id).trim();
+  if (!procurado) return alvo;
+  try {
+    alvo.aba = abaServicos();
+    alvo.dados = alvo.aba.getDataRange().getValues();
+    var cab = alvo.dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+    var iId = idxColuna(cab, 'id');
+    if (iId === -1) return alvo;
+    var iObra = idxColuna(cab, 'obra');
+    var daObra = String(obra == null ? '' : obra).trim() ? normObra(obra) : '';
+    var outra = false;
+    for (var i = 1; i < alvo.dados.length; i++) {
+      if (String(alvo.dados[i][iId]).trim() !== procurado) continue;
+      if (daObra && iObra !== -1 && normObra(alvo.dados[i][iObra]) !== daObra) { outra = true; continue; }
+      alvo.linha = i;
+      return alvo;
+    }
+    alvo.deOutraObra = outra;   // o ID existe, mas nenhuma linha dele é desta obra
+  } catch (e) {
+    alvo.linha = -1; alvo.deOutraObra = false;
+  }
+  return alvo;
 }
 
 // ------------------------------------------------------------

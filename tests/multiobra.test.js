@@ -579,5 +579,75 @@ t('equipApontamentos filtra por periodo de/ate dentro da obra', () => {
   assert.ok(r.apontamentos.length >= 1, 'o periodo deveria ter apontamento');
 });
 
+/* ---------------------------------------------------------------------
+   A FOTO NÃO ENCOSTA NA LINHA DE OUTRA OBRA
+   ---------------------------------------------------------------------
+   O ponteiro da foto é anexado pelo ID do serviço, e o ID é um carimbo de
+   segundo gerado no aparelho — o mesmo formato em todas as obras, que
+   dividem a MESMA planilha. Procurando só pelo ID, a foto do Ranário podia
+   ser pendurada na linha homônima das Ruas de Terra: a Galeria da obra
+   errada mostrava a foto e a obra certa ficava sem a prova.
+   --------------------------------------------------------------------- */
+const FOTO_SVC = 'data:image/jpeg;base64,' + Buffer.from('imagem-de-teste').toString('base64');
+
+function linhaPorId(id) {
+  const cab = ABAS.RDO_Avanco.dados[0].map(c => String(c).toLowerCase());
+  const iId = cab.indexOf('id');
+  return ABAS.RDO_Avanco.dados.find((l, i) => i > 0 && String(l[iId]).trim() === id);
+}
+function fotosDaLinha(l) {
+  const cab = ABAS.RDO_Avanco.dados[0].map(c => String(c).toLowerCase());
+  const i = cab.indexOf('foto_link');
+  return i === -1 ? '' : String(l[i] || '');
+}
+
+t('duas obras podem ter serviço com o MESMO id (o app gera pelo relógio)', () => {
+  assert.ok(ctx.addBatchRDO(JSON.stringify([
+    { id: '20260827164400_o0_1234', obra: 'ranario', data: '2026-08-27', turno: 'Diurno',
+      pacote_id: 'OUTRO', pacote_nome: 'teste', quantidade: 0 }
+  ]), 'cli-foto-ran', null).ok);
+  assert.ok(ctx.addBatchRDO(JSON.stringify([
+    { id: '20260827164400_o0_1234', obra: 'ruas-de-terra', data: '2026-08-27', turno: 'Diurno',
+      pacote_id: 'OUTRO', pacote_nome: 'Compactação rolo pé de carneiro', quantidade: 0 }
+  ]), 'cli-foto-rdt', null).ok);
+});
+
+/* A linha do RANÁRIO foi gravada PRIMEIRO — antes desta correção o servidor
+   parava nela, que é a primeira do ID, e a foto das Ruas de Terra ia parar
+   na Galeria do Ranário. */
+t('a foto das Ruas de Terra vai para a linha DELAS, não para a homônima do Ranário', () => {
+  const r = ctx.rdoFoto({ id: '20260827164400_o0_1234', obra: 'ruas-de-terra', idx: 0,
+                          foto: FOTO_SVC, clientId: 'f-rdt-1' });
+  assert.ok(r.ok, JSON.stringify(r));
+  const cab = ABAS.RDO_Avanco.dados[0].map(c => String(c).toLowerCase());
+  const iObra = cab.indexOf('obra'), iId = cab.indexOf('id');
+  const linhas = ABAS.RDO_Avanco.dados.filter((l, i) => i > 0 &&
+    String(l[iId]).trim() === '20260827164400_o0_1234');
+  const daRan = linhas.find(l => l[iObra] === 'ranario');
+  const daRdt = linhas.find(l => l[iObra] === 'ruas-de-terra');
+  assert.ok(fotosDaLinha(daRdt).indexOf('drive_id:') === 0, 'as Ruas de Terra ficaram sem a foto');
+  assert.strictEqual(fotosDaLinha(daRan), '', 'a foto das Ruas de Terra encostou no Ranário');
+});
+
+t('foto de um serviço que é de OUTRA obra é recusada (e não vira arquivo no Drive)', () => {
+  const antes = ARQUIVOS.length;
+  const r = ctx.rdoFoto({ id: '20260827164400_o0_1234', obra: 'teotonio', idx: 0,
+                          foto: FOTO_SVC, clientId: 'f-teo-1' });
+  assert.strictEqual(r.ok, false, JSON.stringify(r));
+  assert.strictEqual(ARQUIVOS.length, antes, 'criou arquivo órfão no Drive');
+});
+
+t('app antigo (sem obra) continua anexando pelo id, como antes', () => {
+  const r = ctx.rdoFoto({ id: 't9', idx: 0, foto: FOTO_SVC, clientId: 'f-velho-1' });
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.ok(fotosDaLinha(linhaPorId('t9')).indexOf('drive_id:') === 0);
+});
+
+t('foto cuja linha ainda não existe (fila offline) segue sendo aceita', () => {
+  const r = ctx.rdoFoto({ id: 'ainda-nao-gravado', obra: 'ranario', idx: 0,
+                          foto: FOTO_SVC, clientId: 'f-fila-1' });
+  assert.ok(r.ok, JSON.stringify(r));
+});
+
 console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');
 process.exit(falhas ? 1 : 0);
