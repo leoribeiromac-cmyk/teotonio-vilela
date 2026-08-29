@@ -287,14 +287,55 @@ function ligarTela() {
 
 /* O traço sai em 600×200 — a mesma proporção 3:1 do quadro de assinatura do
    PDF. Normalizar aqui evita que a assinatura feita num celular estreito
-   saia esticada no documento. */
+   saia esticada no documento.
+
+   E vai RECORTADO no traço, não no quadro inteiro. Quem assina usa um canto
+   da área; mandar o quadro todo faz a firma chegar ao PDF cercada de margem
+   branca e sair do tamanho de uma linha de texto — pequena demais para o
+   papel que a fiscalização arquiva. O recorte é do desenho, com uma folga
+   de respiro, e é ele que é esticado até encher o quadro. */
+function limitesDoTraco() {
+  var w = TELA.width, h = TELA.height;
+  var d;
+  try { d = CTX.getImageData(0, 0, w, h).data; } catch (e) { return null; }
+  var x1 = w, y1 = h, x2 = -1, y2 = -1;
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      // fundo é branco; qualquer pixel escurecido é traço
+      if (d[(y * w + x) * 4] < 200) {
+        if (x < x1) x1 = x;
+        if (x > x2) x2 = x;
+        if (y < y1) y1 = y;
+        if (y > y2) y2 = y;
+      }
+    }
+  }
+  return x2 < 0 ? null : { x1: x1, y1: y1, x2: x2, y2: y2 };
+}
+
 function tracoPNG() {
   var saida = document.createElement('canvas');
   saida.width = 600; saida.height = 200;
   var c = saida.getContext('2d');
   c.fillStyle = '#fff';
   c.fillRect(0, 0, 600, 200);
-  c.drawImage(TELA, 0, 0, 600, 200);
+
+  var lim = limitesDoTraco();
+  if (!lim) {
+    c.drawImage(TELA, 0, 0, 600, 200);
+    return saida.toDataURL('image/png');
+  }
+  var folga = Math.max(6, Math.round(Math.min(TELA.width, TELA.height) * 0.04));
+  var rx = Math.max(0, lim.x1 - folga);
+  var ry = Math.max(0, lim.y1 - folga);
+  var rw = Math.min(TELA.width - rx, lim.x2 - lim.x1 + folga * 2);
+  var rh = Math.min(TELA.height - ry, lim.y2 - lim.y1 + folga * 2);
+
+  /* O recorte entra INTEIRO e centrado, mantendo a proporção dele: uma
+     rubrica curta e alta esticada até 3:1 viraria outro desenho. */
+  var escala = Math.min(600 / rw, 200 / rh);
+  var dw = rw * escala, dh = rh * escala;
+  c.drawImage(TELA, rx, ry, rw, rh, (600 - dw) / 2, (200 - dh) / 2, dw, dh);
   return saida.toDataURL('image/png');
 }
 

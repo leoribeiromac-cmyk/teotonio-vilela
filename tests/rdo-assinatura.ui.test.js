@@ -189,6 +189,33 @@ async function rabiscar(p) {
        !!env && env.assinatura.indexOf('data:image/png;base64,') === 0 &&
        env.assinatura.length > 1000, env && env.assinatura.slice(0, 40));
 
+    /* O traço vai RECORTADO no desenho, não no quadro inteiro. Sem isso a
+       firma chega ao PDF cercada de margem branca e sai do tamanho de uma
+       linha de texto — pequena demais para o papel que a fiscalização
+       arquiva. Aqui se mede o que foi enviado: o desenho tem de ocupar a
+       maior parte da imagem. */
+    const ocupacao = await p.evaluate(async (uri) => {
+      const img = new Image();
+      await new Promise(r => { img.onload = r; img.src = uri; });
+      const cv = document.createElement('canvas');
+      cv.width = img.width; cv.height = img.height;
+      cv.getContext('2d').drawImage(img, 0, 0);
+      const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+      let x1 = cv.width, y1 = cv.height, x2 = -1, y2 = -1;
+      for (let y = 0; y < cv.height; y++) {
+        for (let x = 0; x < cv.width; x++) {
+          if (d[(y * cv.width + x) * 4] < 200) {
+            if (x < x1) x1 = x; if (x > x2) x2 = x;
+            if (y < y1) y1 = y; if (y > y2) y2 = y;
+          }
+        }
+      }
+      return x2 < 0 ? null : { largura: (x2 - x1) / cv.width, altura: (y2 - y1) / cv.height };
+    }, env.assinatura);
+    ok('e recortado no traço, para a firma sair legível no RDO',
+       !!ocupacao && ocupacao.largura > 0.75 && ocupacao.altura > 0.4,
+       JSON.stringify(ocupacao));
+
     const recado = await p.textContent('#mensagem');
     ok('confirma com o código do registro', recado.includes('A1B2C3D4'), recado);
     ok('e avisa que era a última assinatura',
