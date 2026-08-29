@@ -19,6 +19,8 @@ para a navegação, então a mudança chega sem precisar limpar cache.
   DOIS backends: a Teotônio no Apps Script legado (campo `equipamentos` do
   cadastro dela), as demais no `Code.gs`. `backendEquip()` decide a cada
   chamada — mexer numa ação exige pensar nos dois dialetos.
+- `assinar.html` — página de assinatura online do RDO, aberta pelo link do
+  e-mail. Autônoma: não carrega o app, só fala com o `Code.gs`.
 - `js/bf/bota-fora.js` — tela de Bota-Fora: a viagem de caminhão com foto da
   carga/placa, assinatura do motorista e foto do ticket, e a exportação no
   formato da aba FRETE do fechamento. Só fala com o `Code.gs`.
@@ -38,6 +40,27 @@ depositam (`OBRAS_COM_RDO_POR_EMAIL`), e o servidor recusa se depositarem. Mexeu
 depósito continua saindo; mexeu no envio, lembre que o servidor só tem o que o
 app deixou lá. `tests/rdo-email.ui.test.js` (o depósito, no app de verdade) e
 `tests/rdo-email-servidor.test.js` (o envio, com Drive e Gmail falsos).
+
+## A assinatura do RDO é online, e o link é a credencial
+
+O engenheiro e o fiscal assinam pelo LINK PESSOAL que vai no mesmo e-mail das
+8h — um e-mail por pessoa, porque num e-mail único o link do fiscal chegaria
+também ao engenheiro. Não há login: quem assina não tem usuário no app.
+`assinar.html` é a página de quem assina, **fora** do app de propósito (nada de
+tela de login, nada de PWA de 1 MB, nenhum acesso ao resto da obra).
+
+Os papéis são TRÊS palavras que têm de bater dos dois lados — `engenheiro`,
+`fiscalizacao`, `supervisao`: `rdoPapeisAssinatura()` (index.html) e
+`RDO_ASSINANTES` (Code.gs). Trocar uma delas de um lado só põe a firma do
+fiscal no quadro da supervisão.
+
+E vale a mesma regra do RDO inteiro: quem DESENHA é o navegador. O servidor
+guarda o traço, o nome e a hora; o app os põe dentro dos quadros ao gerar o PDF
+oficial e REDEPOSITA — e é o depósito com todas as firmas que dispara o e-mail
+do "RDO ASSINADO". Daí o `assinaturas: N` do `rdoPdfDoDia`: é como o servidor
+sabe que o PDF guardado ficou para trás de quem assinou depois.
+`tests/rdo-assinatura-servidor.test.js` (o servidor) e
+`tests/rdo-assinatura.ui.test.js` (a página de assinar e o PDF com as firmas).
 
 ## Formulário aberto é dado do apontador
 

@@ -455,6 +455,9 @@ Propriedades do script) — sem deploy novo:
 | --- | --- | --- |
 | `RDO_EMAILS` | Destinatários, separados por vírgula, ponto-e-vírgula ou quebra de linha. Quando existe, manda na lista do código. | a lista `RDO_EMAIL_DESTINOS` do `Code.gs` |
 | `RDO_EMAIL_HORA` | Hora do envio (0 a 23). Vale depois de rodar `configurarGatilhos()` de novo. | `8` |
+| `RDO_ASSINANTES` | Quem assina o RDO online: JSON com `papel`, `rotulo`, `nome` e `email`. Os papéis válidos são `engenheiro`, `fiscalizacao` e `supervisao` — são eles que casam com os quadros do PDF. | a lista `RDO_ASSINANTES_PADRAO` do `Code.gs` |
+| `RDO_SITE_URL` | Endereço do app publicado, que é o começo do link de assinatura. | `https://leoribeiromac-cmyk.github.io/teotonio-vilela/` |
+| `RDO_ASSINATURA_DIAS` | Por quantos dias o link de assinatura continua valendo. | `60` |
 
 Funções para rodar no editor:
 
@@ -469,6 +472,53 @@ Funções para rodar no editor:
 > Google pede a autorização de novo ("app não verificado" → Avançado → Acessar).
 > Enquanto ela não for dada, o gatilho falha em silêncio — `conferirEnvioRDOEmail()`
 > roda antes e mostra se está tudo de pé.
+
+### Assinatura online do RDO
+
+O RDO saía com os quadros de assinatura **em branco**: quem recebia tinha de
+imprimir, assinar de caneta, digitalizar e devolver — e é por isso que a folha
+ficava semanas sem as firmas que o contrato exige. Agora o engenheiro e o fiscal
+recebem, cada um, um **link pessoal** no mesmo e-mail das 8h, abrem no celular e
+assinam com o dedo.
+
+**O link é a credencial.** Não há login: quem recebe já foi escolhido pela obra,
+e exigir senha de um fiscal da SP Obras para assinar uma folha por dia é a forma
+mais rápida de ninguém assinar. Por isso:
+
+- o token é sorteado (digest), **por dia e por assinante**, e vence em 60 dias;
+- vai **um e-mail para cada pessoa** — num e-mail único para a lista, o link do
+  fiscal chegaria também ao engenheiro;
+- o papel de quem assina vem da **linha do convite**, nunca do que o navegador
+  mandou: ninguém assina no lugar do outro;
+- o token nunca aparece no PDF nem em resposta pública. O que sai no documento é
+  um **código curto** de 8 caracteres, que é como se confere a firma.
+
+O ciclo, do lado do papel:
+
+1. **Assinar** — o link abre a página `assinar.html` (fora do app: quem assina
+   não tem usuário aqui). Ela mostra o **mesmo PDF** que foi anexado no e-mail,
+   pede o nome, o traço e o "li e assino", e grava. A imagem vai para uma pasta
+   privada do Drive; a planilha guarda o ponteiro, na aba `RDO_Assinaturas`.
+2. **Desenhar no RDO** — quem desenha o documento continua sendo o navegador.
+   Ao abrir aquele dia no app (ou gerar o PDF Oficial), as firmas registradas
+   saem **dentro dos quadros**, com nome, hora e código; quem ainda não assinou
+   continua com a linha vazia, para assinar de caneta.
+3. **Devolver assinado** — o depósito desse PDF diz ao servidor quantas firmas
+   ele traz. Quando o número fecha, sai o e-mail **"RDO ASSINADO"** para a lista,
+   com o PDF em anexo. Uma vez por dia de RDO.
+
+Na tela do RDO Diário há o painel **Assinatura online**: quem já assinou, quando,
+e o botão **Link** para copiar o link pessoal de quem ainda não assinou — é o que
+resolve o "não me chegou nada" sem esperar o e-mail do dia seguinte.
+
+Funções para rodar no editor:
+
+- **`conferirAssinaturasRDO('2026-08-24')`** — quem assina, quem já assinou e o
+  link de cada um naquele dia. Não manda e-mail.
+- **`rdoAssinaturaCancelar('2026-08-24', 'fiscalizacao', 'assinou no dia errado')`**
+  — cancela uma firma dada por engano, deixa o rastro na Auditoria e sorteia um
+  link novo.
+- **`reenviarRDOAssinado('2026-08-24')`** — remanda o RDO assinado daquele dia.
 
 ## Configuração pela planilha (sem mexer em código)
 
