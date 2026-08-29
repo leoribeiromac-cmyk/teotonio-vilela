@@ -240,8 +240,16 @@ console.log('\nASSINATURA ONLINE DO RDO — o lado do servidor\n');
 console.log('Quem assina');
 t('a lista do código vale quando não há Propriedade', () => {
   const a = ctx.rdoAssinantes();
-  eq(a.length, 3, 'quantidade');
-  eq(a.map(x => x.papel).join(','), 'engenheiro,fiscalizacao,supervisao', 'papéis e ordem');
+  eq(a.length, 2, 'quantidade');
+  eq(a.map(x => x.papel).join(','), 'engenheiro,fiscalizacao', 'papéis e ordem');
+});
+/* A supervisão assina A MÃO. O quadro dela sai no PDF, em branco, com a
+   linha para a caneta — mas ela não entra na assinatura online, e por isso
+   não pode ganhar convite, link, nem contar para o "RDO assinado". */
+t('a supervisão não assina online — assina a mão', () => {
+  verdade(ctx.rdoAssinantes().every(a => a.papel !== 'supervisao'),
+          'a supervisão voltou para a lista de quem assina pelo link');
+  verdade(convites().every(c => c.papel !== 'supervisao'), 'criou convite para a supervisão');
 });
 t('a Propriedade RDO_ASSINANTES manda na lista do código', () => {
   PROPS.setProperty('RDO_ASSINANTES', JSON.stringify([
@@ -253,7 +261,7 @@ t('a Propriedade RDO_ASSINANTES manda na lista do código', () => {
 });
 t('JSON estragado na Propriedade cai na lista do código — o RDO não fica sem assinante', () => {
   PROPS.setProperty('RDO_ASSINANTES', 'isso não é json');
-  eq(ctx.rdoAssinantes().length, 3);
+  eq(ctx.rdoAssinantes().length, 2);
 });
 t('assinante sem e-mail válido sai da lista — não teria como receber o link', () => {
   PROPS.setProperty('RDO_ASSINANTES', JSON.stringify([
@@ -280,20 +288,20 @@ t('papel repetido entra uma vez só — dois quadros disputando o mesmo lugar no
 console.log('\nO convite de cada um');
 t('cria uma linha por assinante no dia', () => {
   const c = convites();
-  eq(c.length, 3);
-  eq(PLANILHA.RDO_Assinaturas.length, 3, 'linhas gravadas');
+  eq(c.length, 2);
+  eq(PLANILHA.RDO_Assinaturas.length, 2, 'linhas gravadas');
   verdade(c.every(x => x.status === 'pendente'), 'nasce pendente');
 });
 t('chamar de novo NÃO duplica nem sorteia outro token — o link do e-mail continua valendo', () => {
   const antes = convites().map(x => x.token).join(',');
   const depois = convites().map(x => x.token).join(',');
-  eq(PLANILHA.RDO_Assinaturas.length, 3, 'linhas');
+  eq(PLANILHA.RDO_Assinaturas.length, 2, 'linhas');
   eq(depois, antes, 'o token mudou entre duas chamadas');
 });
 t('cada assinante tem um token só dele, e longo', () => {
   const c = convites();
   const t1 = c.map(x => x.token);
-  eq(new Set(t1).size, 3, 'tokens repetidos');
+  eq(new Set(t1).size, 2, 'tokens repetidos');
   verdade(t1.every(x => x.length >= 32), 'token curto: ' + t1[0]);
   verdade(t1.every(x => /^[0-9a-f]+$/.test(x)), 'token não é hexadecimal: ' + t1[0]);
 });
@@ -391,9 +399,8 @@ t('apertar duas vezes no sinal ruim NÃO reescreve a assinatura já dada', () =>
   eq(l.nomeAssinante, 'Walter Fiscal', 'trocou o nome de uma assinatura já dada');
 });
 t('diz quantas assinaturas ainda faltam', () => {
-  eq(assinar('engenheiro').faltam, 2);
-  eq(assinar('fiscalizacao').faltam, 1);
-  eq(assinar('supervisao').faltam, 0);
+  eq(assinar('engenheiro').faltam, 1);
+  eq(assinar('fiscalizacao').faltam, 0);
 });
 t('o escritório é avisado a cada assinatura — é ele que repõe o PDF assinado', () => {
   assinar('engenheiro', { nome: 'Paulo Engenheiro' });
@@ -494,9 +501,9 @@ t('o RDO assinado NÃO sai enquanto falta assinatura', () => {
   depositar({ assinaturas: '1' });
   eq(paraLista().length, 0, 'mandou o "assinado" com uma firma só');
 });
-t('o RDO assinado sai quando o depósito chega com todas as firmas', () => {
-  assinar('engenheiro'); assinar('fiscalizacao'); assinar('supervisao');
-  const r = depositar({ assinaturas: '3' });
+t('o RDO assinado sai quando o depósito chega com todas as firmas online', () => {
+  assinar('engenheiro'); assinar('fiscalizacao');
+  const r = depositar({ assinaturas: '2' });
   verdade(r.ok && r.assinadoEnviado, 'não mandou o RDO assinado: ' + JSON.stringify(r));
   eq(paraLista().length, 1, 'e-mails');
   verdade(paraLista()[0].subject.indexOf('ASSINADO') !== -1, paraLista()[0].subject);
@@ -504,21 +511,28 @@ t('o RDO assinado sai quando o depósito chega com todas as firmas', () => {
   verdade(paraLista()[0].body.indexOf('cód.') !== -1, 'o corpo não traz os códigos das firmas');
 });
 t('e sai UMA vez só — o app redeposita a cada PDF gerado', () => {
-  assinar('engenheiro'); assinar('fiscalizacao'); assinar('supervisao');
-  depositar({ assinaturas: '3' });
-  depositar({ assinaturas: '3' });
+  assinar('engenheiro'); assinar('fiscalizacao');
+  depositar({ assinaturas: '2' });
+  depositar({ assinaturas: '2' });
   eq(paraLista().length, 1);
 });
+/* O quadro da supervisão nunca vai ser preenchido pelo link: se o envio do
+   RDO assinado esperasse por ele, esperaria para sempre. */
+t('e não fica esperando a firma que vai ser dada a mão', () => {
+  assinar('engenheiro'); assinar('fiscalizacao');
+  verdade(depositar({ assinaturas: '2' }).assinadoEnviado,
+          'ficou esperando a assinatura da supervisão');
+});
 t('reenviarRDOAssinado manda de novo, de propósito', () => {
-  assinar('engenheiro'); assinar('fiscalizacao'); assinar('supervisao');
-  depositar({ assinaturas: '3' });
+  assinar('engenheiro'); assinar('fiscalizacao');
+  depositar({ assinaturas: '2' });
   verdade(ctx.reenviarRDOAssinado(HOJE).ok);
   eq(paraLista().length, 2);
 });
 t('falha no e-mail do assinado não derruba o depósito do PDF', () => {
-  assinar('engenheiro'); assinar('fiscalizacao'); assinar('supervisao');
+  assinar('engenheiro'); assinar('fiscalizacao');
   CORREIO.cota = 0;                       // o Gmail não vai deixar mandar
-  const r = depositar({ assinaturas: '3' });
+  const r = depositar({ assinaturas: '2' });
   verdade(r.ok, 'o depósito virou erro por causa do e-mail');
   verdade(!!ctx.rdoPdfArquivo_('teotonio', HOJE), 'o PDF não ficou guardado');
 });
@@ -529,7 +543,7 @@ t('devolve papel, imagem, código e link de cada um', () => {
   assinar('engenheiro', { nome: 'Paulo Engenheiro' });
   const r = ctx.rdoAssinaturasDoDia({ obra: 'teotonio', data: HOJE });
   verdade(r.ok);
-  eq(r.assinaturas.length, 3);
+  eq(r.assinaturas.length, 2);
   eq(r.assinadas, 1);
   const eng = r.assinaturas.filter(x => x.papel === 'engenheiro')[0];
   eq(eng.status, 'assinada');

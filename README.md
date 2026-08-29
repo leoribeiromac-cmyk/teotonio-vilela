@@ -455,7 +455,7 @@ Propriedades do script) — sem deploy novo:
 | --- | --- | --- |
 | `RDO_EMAILS` | Destinatários, separados por vírgula, ponto-e-vírgula ou quebra de linha. Quando existe, manda na lista do código. | a lista `RDO_EMAIL_DESTINOS` do `Code.gs` |
 | `RDO_EMAIL_HORA` | Hora do envio (0 a 23). Vale depois de rodar `configurarGatilhos()` de novo. | `8` |
-| `RDO_ASSINANTES` | Quem assina o RDO online: JSON com `papel`, `rotulo`, `nome` e `email`. Os papéis válidos são `engenheiro`, `fiscalizacao` e `supervisao` — são eles que casam com os quadros do PDF. | a lista `RDO_ASSINANTES_PADRAO` do `Code.gs` |
+| `RDO_ASSINANTES` | Quem assina o RDO **online**: JSON com `papel`, `rotulo`, `nome` e `email`. Os papéis válidos são `engenheiro`, `fiscalizacao` e `supervisao` — são eles que casam com os quadros do PDF. Quem não estiver aqui não ganha convite nem link: hoje são o engenheiro (Marcio Santana) e a fiscalização (Willian Botelho); a **supervisão assina a mão**. | a lista `RDO_ASSINANTES_PADRAO` do `Code.gs` |
 | `RDO_SITE_URL` | Endereço do app publicado, que é o começo do link de assinatura. | `https://leoribeiromac-cmyk.github.io/teotonio-vilela/` |
 | `RDO_ASSINATURA_DIAS` | Por quantos dias o link de assinatura continua valendo. | `60` |
 
@@ -480,6 +480,12 @@ imprimir, assinar de caneta, digitalizar e devolver — e é por isso que a folh
 ficava semanas sem as firmas que o contrato exige. Agora o engenheiro e o fiscal
 recebem, cada um, um **link pessoal** no mesmo e-mail das 8h, abrem no celular e
 assinam com o dedo.
+
+**Quem assina online são dois**: o engenheiro da contratada e a fiscalização. A
+**supervisão assina a mão** — o quadro dela continua saindo no PDF, em branco,
+com a linha para a caneta. As duas formas convivem na mesma folha, e o e-mail do
+"RDO ASSINADO" fecha com as duas firmas online: esperar pela da caneta seria
+esperar para sempre.
 
 **O link é a credencial.** Não há login: quem recebe já foi escolhido pela obra,
 e exigir senha de um fiscal da SP Obras para assinar uma folha por dia é a forma

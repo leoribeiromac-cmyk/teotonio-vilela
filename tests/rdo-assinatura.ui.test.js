@@ -350,9 +350,8 @@ const FIRMAS = [
   { papel: 'fiscalizacao', rotulo: 'Cliente / Fiscalização — SP OBRAS', nome: '', email: 'fis@y.com',
     status: 'pendente', assinadoEm: '', nomeAssinante: '', codigo: 'E5F6A7B8',
     link: 'https://x/assinar.html?t=def' },
-  { papel: 'supervisao', rotulo: 'Supervisão', nome: '', email: 'sup@z.com',
-    status: 'pendente', assinadoEm: '', nomeAssinante: '', codigo: 'C9D0E1F2',
-    link: 'https://x/assinar.html?t=ghi' },
+  /* A supervisão NÃO está aqui: ela assina a mão. É o que faz o quadro dela
+     no PDF ter de continuar saindo em branco, com a linha e a data. */
 ];
 
 function camposMultipart(corpo) {
@@ -445,6 +444,8 @@ async function comOAppDeVerdade() {
      'antes ' + semFirma.imagens + ', depois ' + comFirma.imagens);
   ok('quem ainda não assinou continua com a linha para assinar de caneta',
      comFirma.texto.includes('CLIENTE / FISCALIZAÇÃO'), comFirma.texto.slice(-400));
+  ok('e o quadro da supervisão, que assina a mão, continua na folha',
+     comFirma.texto.includes('SUPERVISÃO'), comFirma.texto.slice(-400));
   ok('o quadro do fiscal NÃO ganhou o nome do engenheiro',
      (comFirma.texto.match(/Paulo Facanha/g) || []).length === 1);
 
@@ -470,9 +471,11 @@ async function comOAppDeVerdade() {
   ok('a tela do RDO mostra quem já assinou', painel.includes('Paulo Facanha'), painel);
   ok('e quem ainda falta', painel.includes('pendente'), painel);
   ok('com a conta de quantas firmas já entraram',
-     painel.includes('1 de 3'), painel);
+     painel.includes('1 de 2'), painel);
+  ok('a supervisão não aparece no painel — não é ela que assina pelo link',
+     !painel.includes('Supervisão'), painel);
   ok('e o botão de copiar o link só aparece para quem ainda não assinou',
-     (await s.p.locator('#rdoAssinaturasPainel button').count()) === 2,
+     (await s.p.locator('#rdoAssinaturasPainel button').count()) === 1,
      await s.p.locator('#rdoAssinaturasPainel button').count());
 
   ok('nenhum erro de página durante o teste', s.erros.length === 0, s.erros.join(' | '));

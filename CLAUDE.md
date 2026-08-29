@@ -54,6 +54,12 @@ Os papéis são TRÊS palavras que têm de bater dos dois lados — `engenheiro`
 `RDO_ASSINANTES` (Code.gs). Trocar uma delas de um lado só põe a firma do
 fiscal no quadro da supervisão.
 
+Mas só DOIS assinam online: o engenheiro e a fiscalização. A supervisão assina
+A MÃO, e por isso não está no `RDO_ASSINANTES` — o quadro dela sai no PDF em
+branco, com a linha para a caneta. Daí "todas as assinaturas" querer dizer as
+ONLINE previstas, e não os quadros da folha: quem espera pela firma da caneta
+espera para sempre.
+
 E vale a mesma regra do RDO inteiro: quem DESENHA é o navegador. O servidor
 guarda o traço, o nome e a hora; o app os põe dentro dos quadros ao gerar o PDF
 oficial e REDEPOSITA — e é o depósito com todas as firmas que dispara o e-mail

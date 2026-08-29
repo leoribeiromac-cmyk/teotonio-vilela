@@ -3121,10 +3121,14 @@ var RDO_ASSIN_DIAS      = 60;                 // Propriedade: RDO_ASSINATURA_DIA
 var RDO_ASSINADO_LOG    = 'RDO_ASSINADO_LOG';
 var RDO_ASSIN_MAX_BYTES = 400 * 1024;         // um traço de canvas não passa de ~30 KB
 
-/* QUEM ASSINA — e é a MESMA ordem dos quadros do PDF (ver
-   rdoPapeisAssinatura(), no index.html): engenheiro da contratada,
-   cliente/fiscalização e supervisão. Os papéis têm de bater nos dois lados,
-   senão a assinatura do fiscal iria parar no quadro da supervisão.
+/* QUEM ASSINA ONLINE — na MESMA ordem dos quadros do PDF (ver
+   rdoPapeisAssinatura(), no index.html). Os papéis têm de bater nos dois
+   lados, senão a assinatura do fiscal iria parar no quadro da supervisão.
+
+   A SUPERVISÃO NÃO ESTÁ AQUI, e não é esquecimento: ela assina A MÃO. O
+   quadro dela continua saindo no PDF, em branco, com a linha para a caneta —
+   as duas formas convivem na mesma folha. Quem não está nesta lista não
+   ganha convite, não recebe link e não conta para o "RDO assinado".
 
    A Propriedade do script `RDO_ASSINANTES` manda nesta lista quando existe
    (um JSON com papel, rotulo, nome e email). Trocar o fiscal de uma obra
@@ -3138,9 +3142,7 @@ var RDO_ASSINANTES_PADRAO = [
   { papel: 'engenheiro',   rotulo: 'Engenheiro — Gestor Engenharia',
     nome: 'Marcio Santana dos Santos', email: 'msantana@gestorengenharia.com.br' },
   { papel: 'fiscalizacao', rotulo: 'Cliente / Fiscalização — SP OBRAS',
-    nome: 'Willian Botelho', email: 'terceiro.wbotelho@spobras.sp.gov.br' },
-  { papel: 'supervisao',   rotulo: 'Supervisão',
-    nome: '', email: 'fabiolarufino@mobilidadepch.com.br' }
+    nome: 'Willian Botelho', email: 'terceiro.wbotelho@spobras.sp.gov.br' }
 ];
 
 function rdoAssinantes() {
@@ -3590,6 +3592,9 @@ function rdoAssinadoLogLer_() {
    três PDFs iguais na caixa de quem já assinou é o caminho mais curto para
    o e-mail diário virar spam. */
 function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
+  /* "Todas" são as assinaturas ONLINE previstas — não os quadros do PDF. A
+     supervisão assina a mão: o quadro dela nunca vai ser preenchido por
+     aqui, e esperar por ele seria esperar para sempre. */
   var previstas = rdoAssinantes().length;
   if (!previstas || quantasNoPdf < previstas) return { ok: true, pulado: 'ainda falta assinatura' };
 
