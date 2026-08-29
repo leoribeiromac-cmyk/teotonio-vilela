@@ -261,6 +261,15 @@ t('assinante sem e-mail válido sai da lista — não teria como receber o link'
     { papel: 'fiscalizacao', email: 'sem-arroba' }]));
   eq(ctx.rdoAssinantes().map(x => x.papel).join(','), 'engenheiro');
 });
+/* Assinante que não está na lista do e-mail diário NUNCA recebe o link: o
+   convite é criado, o quadro do PDF fica esperando, e ninguém do lado de cá
+   percebe. Foi o que aconteceu quando o engenheiro foi cadastrado com o
+   endereço errado. */
+t('todo assinante do padrão também recebe o e-mail diário — senão o link não chega a ninguém', () => {
+  const destinos = ctx.rdoEmailDestinatarios().map(e => e.toLowerCase());
+  const fora = ctx.rdoAssinantes().filter(a => destinos.indexOf(a.email.toLowerCase()) === -1);
+  eq(fora.map(a => a.papel + '=' + a.email).join(', '), '', 'assinante fora da lista de envio');
+});
 t('papel repetido entra uma vez só — dois quadros disputando o mesmo lugar no PDF', () => {
   PROPS.setProperty('RDO_ASSINANTES', JSON.stringify([
     { papel: 'engenheiro', email: 'a@x.com' },

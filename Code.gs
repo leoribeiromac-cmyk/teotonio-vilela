@@ -3130,11 +3130,15 @@ var RDO_ASSIN_MAX_BYTES = 400 * 1024;         // um traço de canvas não passa 
    (um JSON com papel, rotulo, nome e email). Trocar o fiscal de uma obra
    pública é coisa de ofício, não de deploy: quem sai para de receber o link
    na hora, e quem entra passa a receber o dele. */
+/* O `nome` só chega PREENCHIDO no campo da página de assinatura — quem abre
+   o link pode ser o substituto do titular naquela semana, e é o nome digitado
+   ali que sai no documento. O engenheiro é o responsável técnico com ART ativa
+   na obra (o mesmo do cabeçalho do RDO, no index.html). */
 var RDO_ASSINANTES_PADRAO = [
   { papel: 'engenheiro',   rotulo: 'Engenheiro — Gestor Engenharia',
-    nome: '', email: 'leonardo@gestorengenharia.com.br' },
+    nome: 'Marcio Santana dos Santos', email: 'msantana@gestorengenharia.com.br' },
   { papel: 'fiscalizacao', rotulo: 'Cliente / Fiscalização — SP OBRAS',
-    nome: '', email: 'terceiro.wbotelho@spobras.sp.gov.br' },
+    nome: 'Willian Botelho', email: 'terceiro.wbotelho@spobras.sp.gov.br' },
   { papel: 'supervisao',   rotulo: 'Supervisão',
     nome: '', email: 'fabiolarufino@mobilidadepch.com.br' }
 ];
