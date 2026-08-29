@@ -29,6 +29,7 @@ var ABA_APONT      = 'ApontEquip';   // apontamento diário de hora de máquina
 var ABA_BOTAFORA   = 'BotaFora';     // viagens de bota-fora / frete, com as provas
 var ABA_NF         = 'NotasFiscais';
 var ABA_SAIDA      = 'EstoqueSaidas';
+var ABA_RDO_ASSIN  = 'RDO_Assinaturas'; // quem assinou o RDO do dia, e quando
 
 // Identificador desta obra na trilha de auditoria. Este backend atende UMA
 // obra, mas o campo existe para a auditoria ter o mesmo formato do app
@@ -69,7 +70,15 @@ var HEADERS = {
      fiscalização naquela competência, em JSON. Sem isso, um lançamento
      retroativo reescrevia em silêncio a prévia de um mês já medido e já
      pago, e nada no sistema registrava o que tinha sido entregue. */
-  'Medicoes':     ['id','obra','competencia','fechadaEm','fechadaPor','itens','observacao','reaberta','reabertaEm','reabertaPor']
+  'Medicoes':     ['id','obra','competencia','fechadaEm','fechadaPor','itens','observacao','reaberta','reabertaEm','reabertaPor'],
+  /* ASSINATURA ONLINE DO RDO. Uma linha por assinante e por dia. `assinatura`
+     guarda PONTEIRO do Drive (drive_id:…), nunca a imagem: o mesmo motivo da
+     aba BotaFora — base64 numa célula estoura o limite de 50 mil caracteres.
+     `token` é a credencial do link que vai no e-mail: quem tem o link assina,
+     e por isso ele nunca aparece no PDF nem em resposta pública. */
+  'RDO_Assinaturas': ['id','obra','data','papel','rotulo','nome','email','token','status',
+                      'convidadoEm','assinadoEm','assinatura','nomeAssinante','documento',
+                      'agente','observacao']
 };
 
 // ------------------------------------------------------------
@@ -90,7 +99,7 @@ function rotear(e) {
                       'deleteRDO', 'updateRDO', 'limparDuplicados', 'apagarPorPrefixoId',
                       'addBatchRDO', 'addRDODiario', 'updateRDODiario', 'deleteRDODiario',
                       'usuariosListar', 'usuarioSalvar', 'usuarioExcluir',
-                      'rdoFoto', 'obterFoto', 'rdoPdfDoDia',
+                      'rdoFoto', 'obterFoto', 'rdoPdfDoDia', 'rdoAssinaturasDoDia',
                       'equipListar', 'equipCadastrar', 'equipDesativar', 'locadoraCadastrar',
                       'equipApontar', 'equipApagar', 'equipEditar', 'equipApontamentos', 'equipUltimos',
                       'nfListar', 'nfSalvar', 'nfExcluir', 'nfImagem', 'nfLerIA', 'nfDiag',
@@ -110,7 +119,8 @@ function rotear(e) {
     // checagem fica aqui, no roteador, e não dentro de nfSalvar/saidaSalvar —
     // essas duas são do bloco compartilhado com o app "Gestor", que precisa
     // continuar idêntico dos dois lados.
-    var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar', 'bfSalvar', 'rdoPdfDoDia'];
+    var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar', 'bfSalvar', 'rdoPdfDoDia',
+                    'rdoAssinaturasDoDia'];
     if (POR_OBRA.indexOf(action) !== -1) {
       var sessObraR = sessaoDoToken(p.token);
       if (sessObraR && !sessaoPodeNaObra(sessObraR, p.obra)) {
@@ -133,6 +143,7 @@ function rotear(e) {
        sua — pegar de novo uma trava já tomada dentro da mesma execução é o
        tipo de coisa que só se descobre em produção. */
     var SEM_TRAVA_PROPRIA = ['deleteRDO', 'updateRDO', 'rdoFoto', 'rdoPdfDoDia', 'equipApagar', 'equipEditar',
+                             'rdoAssinaturaGravar', 'rdoAssinaturasDoDia',
                              'nfSalvar', 'nfExcluir', 'saidaSalvar', 'saidaExcluir', 'bfExcluir'];
     var travaRoteador = null;
     if (SEM_TRAVA_PROPRIA.indexOf(action) !== -1) {
@@ -151,7 +162,7 @@ function rotear(e) {
       // backend antigo apaga a folha 1, porque lá o nome do arquivo é o mesmo.
       case 'ping':            resp = { ok: true, pong: true, abas: [NOME_ABA, NOME_ABA_DIARIO],
                                        recursos: { paginas: true, miniatura: true, obraNaListagem: true,
-                                                   rdoPdfDoDia: true } }; break;
+                                                   rdoPdfDoDia: true, assinaturaOnline: true } }; break;
       case 'login':           resp = loginUsuario(p.usuario, p.senha); break;
       case 'logout':          resp = sessaoRevogar(p.token); break;
       case 'deleteRDO':       resp = deleteRDO(p.id, p.token); break;
@@ -191,6 +202,13 @@ function rotear(e) {
       // O PDF oficial do dia, que o app desenha e deixa aqui para o gatilho
       // da manhã seguinte anexar no e-mail da fiscalização.
       case 'rdoPdfDoDia':     resp = rdoPdfDoDia(p); break;
+      /* ASSINATURA ONLINE. As duas primeiras são PÚBLICAS de propósito: quem
+         assina é o fiscal, que não tem usuário no app, e o que autoriza é o
+         token do link — que só abre o RDO daquele dia. A terceira devolve os
+         LINKS, que são credenciais, e por isso exige sessão. */
+      case 'rdoAssinaturaAbrir':  resp = rdoAssinaturaAbrir(p); break;
+      case 'rdoAssinaturaGravar': resp = rdoAssinaturaGravar(p); break;
+      case 'rdoAssinaturasDoDia': resp = rdoAssinaturasDoDia(p); break;
       case 'obterFoto':       resp = obterFotoPrivada(p.fileId, p.mini); break;
       case 'usuariosListar':  resp = usuariosListar(p.token); break;
       case 'usuarioSalvar':   resp = usuarioSalvar(p); break;
@@ -2641,13 +2659,38 @@ function rdoPdfDoDia(p) {
 
   var arq = pasta.createFile(Utilities.newBlob(bytes, 'application/pdf', nome));
   arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
-  if (p.numero_rdo) {
-    try { arq.setDescription('RDO nº ' + p.numero_rdo + ' — ' + dataISO); } catch (e) {}
-  }
+
+  /* QUANTAS ASSINATURAS ESTE PDF JÁ TRAZ DESENHADAS. O app conta os quadros
+     que preencheu e manda o número junto; ele fica na descrição do arquivo,
+     que é o único lugar que não tem como ficar dessincronizado do PDF que
+     está lá. É por esse número que o app sabe que alguém assinou DEPOIS do
+     último depósito — e que o arquivo guardado ainda tem o quadro em branco. */
+  var comAssinaturas = parseInt(p.assinaturas, 10);
+  if (isNaN(comAssinaturas) || comAssinaturas < 0) comAssinaturas = 0;
+  try {
+    arq.setDescription((p.numero_rdo ? 'RDO nº ' + p.numero_rdo + ' — ' : 'RDO ') + dataISO +
+                       ' — assinaturas: ' + comAssinaturas);
+  } catch (e) {}
 
   registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoPdfDoDia', obra,
                      dataISO, '', arq.getId());
-  return { ok: true, fileId: arq.getId(), arquivo: nome };
+
+  /* Chegou o depósito com TODAS as firmas: é a hora de mandar o RDO assinado
+     para a lista — o das 8h saiu com os quadros em branco, porque de manhã
+     ninguém tinha assinado ainda. Nunca derruba o depósito: o PDF já está
+     guardado, e falha de e-mail não pode transformar isso em erro para o app. */
+  var avisoAssinado = null;
+  if (comAssinaturas > 0) {
+    try {
+      avisoAssinado = rdoEnviarAssinadoSePronto_(obra, dataISO, comAssinaturas);
+    } catch (e) {
+      Logger.log('RDO assinado de ' + dataISO + ' não saiu por e-mail: ' + e);
+    }
+  }
+
+  return { ok: true, fileId: arq.getId(), arquivo: nome,
+           assinaturas: comAssinaturas,
+           assinadoEnviado: !!(avisoAssinado && avisoAssinado.ok && !avisoAssinado.pulado) };
 }
 
 // ------------------------------------------------------------
@@ -2716,20 +2759,38 @@ function rdoEnviarPorEmail_(dataISO, obra, forcar) {
 
   var linha = rdoDiarioDaData_(obra, dataISO);
   var numero = linha ? String(linha['numero_rdo'] || linha['id'] || '').trim() : '';
-  var corpo = rdoEmailCorpo_(dataISO, obra, linha);
   var assunto = 'RDO' + (numero ? ' nº ' + numero : '') + ' — ' + rdoObraNome_(obra) +
                 ' — ' + rdoDataBR_(dataISO);
 
   var anexo = arq.getBlob().setName(
     'RDO' + (numero ? '_' + numero : '') + '_' + String(dataISO).replace(/-/g, '_') + '.pdf');
 
-  MailApp.sendEmail({
-    to: destinos.join(','),
-    subject: assunto,
-    body: corpo.texto,
-    htmlBody: corpo.html,
-    name: 'Gestor Engenharia — RDO ' + rdoObraNome_(obra),
-    attachments: [anexo]
+  /* UM E-MAIL POR PESSOA, e não um só para a lista inteira.
+     ---------------------------------------------------------------
+     O link de assinatura É a credencial de quem assina. Num e-mail único
+     para os quatro, o link do fiscal chegaria também ao engenheiro — e
+     assinatura de fiscal dada por quem executa a obra é exatamente o que
+     não pode acontecer numa folha que a fiscalização arquiva.
+     Quem não assina (as cópias do escritório) recebe o mesmo e-mail, com o
+     andamento das assinaturas e sem link nenhum. */
+  var assinaturas = rdoAssinaturasGarantir_(obra, dataISO);
+  var minhaPorEmail = {};
+  assinaturas.forEach(function (a) {
+    var e = String(a.email || '').trim().toLowerCase();
+    if (e) minhaPorEmail[e] = a;
+  });
+
+  destinos.forEach(function (destino) {
+    var minha = minhaPorEmail[String(destino).toLowerCase()] || null;
+    var corpo = rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha);
+    MailApp.sendEmail({
+      to: destino,
+      subject: assunto,
+      body: corpo.texto,
+      htmlBody: corpo.html,
+      name: 'Gestor Engenharia — RDO ' + rdoObraNome_(obra),
+      attachments: [anexo]
+    });
   });
 
   rdoEmailMarcar_(obra, dataISO, destinos);
@@ -2829,7 +2890,11 @@ function rdoParalisacoesTexto_(linha) {
   return out;
 }
 
-function rdoEmailCorpo_(dataISO, obra, linha) {
+/* O corpo do e-mail. `assinaturas` e `minha` são opcionais: sem elas o
+   e-mail sai como sempre saiu (é o que a página de assinatura usa para
+   montar o resumo do dia). Com elas, o e-mail ganha o andamento das firmas
+   e — só para quem assina — o botão do link pessoal. */
+function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha) {
   function v(chave) { return linha ? String(linha[chave] == null ? '' : linha[chave]).trim() : ''; }
 
   var numero = v('numero_rdo') || v('id');
@@ -2863,9 +2928,34 @@ function rdoEmailCorpo_(dataISO, obra, linha) {
     ['Observações', v('observacoes_gerais')]
   ].filter(function (c) { return String(c[1] || '').trim(); });
 
+  /* O ANDAMENTO DAS ASSINATURAS. Vai para todo mundo — inclusive para as
+     cópias do escritório, que é quem cobra quem ainda não assinou. */
+  var listaAss = (assinaturas || []).map(function (a) {
+    var assinada = String(a.status) === 'assinada';
+    return { rotulo: String(a.rotulo || a.papel || ''), assinada: assinada,
+             quem: String(a.nomeAssinante || ''), quando: String(a.assinadoEm || '').slice(0, 16) };
+  });
+  var linkMeu = minha && String(minha.status) !== 'assinada' ? rdoAssinaturaLink_(minha.token) : '';
+  var jaAssinei = !!(minha && String(minha.status) === 'assinada');
+
+  var textoAss = '';
+  if (listaAss.length) {
+    textoAss = '\nASSINATURAS\n' + listaAss.map(function (a) {
+      return '  ' + (a.assinada ? '[x] ' : '[ ] ') + a.rotulo +
+             (a.assinada ? ' — ' + (a.quem || 'assinado') + ' em ' + a.quando : ' — pendente');
+    }).join('\n') + '\n';
+  }
+  if (linkMeu) {
+    textoAss += '\nVocê assina este RDO. Abra o seu link pessoal (não repasse — ele ' +
+                'assina no seu nome):\n' + linkMeu + '\n';
+  } else if (jaAssinei) {
+    textoAss += '\nVocê já assinou este RDO. Obrigado.\n';
+  }
+
   var texto = titulo + '\n\n' +
-    campos.map(function (c) { return c[0] + ': ' + c[1]; }).join('\n') +
-    '\n\nO relatório completo, assinado, vai em anexo neste e-mail (PDF).\n' +
+    campos.map(function (c) { return c[0] + ': ' + c[1]; }).join('\n') + '\n' +
+    textoAss +
+    '\nO relatório completo vai em anexo neste e-mail (PDF).\n' +
     '\n— Enviado automaticamente pelo app de campo da Gestor Engenharia.\n';
 
   function esc(s) {
@@ -2886,8 +2976,40 @@ function rdoEmailCorpo_(dataISO, obra, linha) {
         esc(c[1]).replace(/\n/g, '<br>') + '</td></tr>';
     }).join('') +
     '</table>' +
+    (listaAss.length
+      ? '<div style="border:1px solid #d8d8d8;border-top:none;padding:10px 12px;background:#fbfbfc">' +
+        '<div style="font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.06em;' +
+        'font-weight:bold;margin-bottom:6px">Assinaturas</div>' +
+        listaAss.map(function (a) {
+          return '<div style="font-size:13px;margin:3px 0">' +
+            (a.assinada
+              ? '<span style="color:#1a7f45;font-weight:bold">&#10003;</span> '
+              : '<span style="color:#b08900;font-weight:bold">&#9679;</span> ') +
+            esc(a.rotulo) +
+            (a.assinada
+              ? '<span style="color:#555"> — ' + esc(a.quem || 'assinado') + ' em ' + esc(a.quando) + '</span>'
+              : '<span style="color:#888"> — pendente</span>') +
+            '</div>';
+        }).join('') +
+        '</div>'
+      : '') +
+    (linkMeu
+      ? '<div style="margin:16px 0 4px;padding:14px;border:1px solid #1e3a5f;border-radius:6px;' +
+        'background:#f2f6fb">' +
+        '<div style="font-size:14px;font-weight:bold;color:#1e3a5f;margin-bottom:8px">' +
+        'Você assina este RDO</div>' +
+        '<a href="' + esc(linkMeu) + '" style="display:inline-block;background:#1e3a5f;color:#fff;' +
+        'text-decoration:none;padding:11px 20px;border-radius:5px;font-size:15px;font-weight:bold">' +
+        'Ler e assinar o RDO</a>' +
+        '<div style="font-size:11px;color:#666;margin-top:9px">' +
+        'O link é pessoal e assina no seu nome — não repasse. ' +
+        'Abre no celular: dá para assinar com o dedo.</div></div>'
+      : (jaAssinei
+          ? '<p style="font-size:13px;color:#1a7f45;margin:14px 0 4px">' +
+            '&#10003; Você já assinou este RDO. Obrigado.</p>'
+          : '')) +
     '<p style="font-size:13px;color:#333;margin:14px 0 4px">' +
-    'O relatório completo, assinado, vai <strong>em anexo</strong> neste e-mail (PDF).</p>' +
+    'O relatório completo vai <strong>em anexo</strong> neste e-mail (PDF).</p>' +
     '<p style="font-size:11px;color:#888;margin:12px 0 0">' +
     'Enviado automaticamente pelo app de campo da Gestor Engenharia.</p>' +
     '</div>';
@@ -2960,6 +3082,575 @@ function conferirEnvioRDOEmail() {
   };
   Logger.log(JSON.stringify(diag, null, 2));
   return diag;
+}
+
+// ============================================================
+// ASSINATURA ONLINE DO RDO
+// ------------------------------------------------------------
+// O RDO saía por e-mail com os quadros de assinatura EM BRANCO: quem
+// recebia tinha de imprimir, assinar de caneta, digitalizar e devolver —
+// e é por isso que, na prática, a folha ficava semanas sem as três firmas
+// que o contrato exige. A assinatura online fecha esse ciclo sem tirar
+// ninguém de onde está: o engenheiro e o fiscal recebem, cada um, um LINK
+// PESSOAL no mesmo e-mail das 8h, abrem no celular, leem o RDO daquele dia
+// e assinam com o dedo.
+//
+// O LINK É A CREDENCIAL. Não há login: quem recebe o e-mail já foi
+// escolhido pela obra, e exigir senha de um fiscal da SP Obras para
+// assinar uma folha por dia é a forma mais rápida de ninguém assinar. Por
+// isso o token é longo, sorteado por dia e por assinante, tem prazo de
+// validade, e o link de um NUNCA vale pelo do outro — assinatura de fiscal
+// dada pelo engenheiro é exatamente o que este arquivo existe para
+// impedir. O token não sai em resposta pública nem é desenhado no PDF.
+//
+// QUEM DESENHA A ASSINATURA NO PDF É O APP, não este servidor — a mesma
+// regra do RDO inteiro (ver "RDO DO DIA POR E-MAIL", acima). Aqui só se
+// GUARDA o traço, o nome e a hora; o navegador redesenha o RDO com as
+// assinaturas dentro dos quadros e o REDEPOSITA. Quando o depósito volta
+// com todas as firmas, este arquivo manda o RDO ASSINADO para a lista —
+// que é o documento que a fiscalização arquiva.
+//
+// A imagem do traço vai para o Drive, e a planilha guarda o PONTEIRO: o
+// mesmo motivo da aba BotaFora — base64 numa célula estoura o limite de
+// 50 mil caracteres e ainda torna a aba impossível de abrir.
+// ============================================================
+
+var PASTA_RDO_ASSIN     = 'Assinaturas do RDO (Teotônio Privado)';
+var RDO_SITE_PADRAO     = 'https://leoribeiromac-cmyk.github.io/teotonio-vilela/';
+var RDO_ASSIN_DIAS      = 60;                 // Propriedade: RDO_ASSINATURA_DIAS
+var RDO_ASSINADO_LOG    = 'RDO_ASSINADO_LOG';
+var RDO_ASSIN_MAX_BYTES = 400 * 1024;         // um traço de canvas não passa de ~30 KB
+
+/* QUEM ASSINA ONLINE — na MESMA ordem dos quadros do PDF (ver
+   rdoPapeisAssinatura(), no index.html). Os papéis têm de bater nos dois
+   lados, senão a assinatura do fiscal iria parar no quadro da supervisão.
+
+   A SUPERVISÃO NÃO ESTÁ AQUI, e não é esquecimento: ela assina A MÃO. O
+   quadro dela continua saindo no PDF, em branco, com a linha para a caneta —
+   as duas formas convivem na mesma folha. Quem não está nesta lista não
+   ganha convite, não recebe link e não conta para o "RDO assinado".
+
+   A Propriedade do script `RDO_ASSINANTES` manda nesta lista quando existe
+   (um JSON com papel, rotulo, nome e email). Trocar o fiscal de uma obra
+   pública é coisa de ofício, não de deploy: quem sai para de receber o link
+   na hora, e quem entra passa a receber o dele. */
+/* O `nome` só chega PREENCHIDO no campo da página de assinatura — quem abre
+   o link pode ser o substituto do titular naquela semana, e é o nome digitado
+   ali que sai no documento. O engenheiro é o responsável técnico com ART ativa
+   na obra (o mesmo do cabeçalho do RDO, no index.html). */
+var RDO_ASSINANTES_PADRAO = [
+  { papel: 'engenheiro',   rotulo: 'Engenheiro — Gestor Engenharia',
+    nome: 'Marcio Santana dos Santos', email: 'msantana@gestorengenharia.com.br' },
+  { papel: 'fiscalizacao', rotulo: 'Cliente / Fiscalização — SP OBRAS',
+    nome: 'Willian Botelho', email: 'terceiro.wbotelho@spobras.sp.gov.br' }
+];
+
+function rdoAssinantes() {
+  var raw = PropertiesService.getScriptProperties().getProperty('RDO_ASSINANTES');
+  var lista = RDO_ASSINANTES_PADRAO;
+  if (raw) {
+    try {
+      var j = JSON.parse(raw);
+      if (j && j.length) lista = j;
+    } catch (e) {
+      /* JSON torto na Propriedade não pode deixar o RDO sem assinante
+         nenhum: cai na lista do código e o dono é avisado pelo Logger. */
+      Logger.log('RDO_ASSINANTES não é um JSON válido — valendo a lista do código.');
+    }
+  }
+  var vistos = {}, out = [];
+  lista.forEach(function (a) {
+    if (!a) return;
+    var papel = String(a.papel == null ? '' : a.papel).trim().toLowerCase().replace(/[^a-z]/g, '');
+    var email = String(a.email == null ? '' : a.email).trim();
+    // Assinante sem e-mail válido não tem como receber o link — e um papel
+    // repetido geraria dois quadros disputando o mesmo lugar no PDF.
+    if (!papel || vistos[papel]) return;
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return;
+    vistos[papel] = true;
+    out.push({ papel: papel, rotulo: String(a.rotulo || papel), nome: String(a.nome || ''), email: email });
+  });
+  return out;
+}
+
+function rdoAssinValidadeDias() {
+  var d = parseInt(PropertiesService.getScriptProperties().getProperty('RDO_ASSINATURA_DIAS'), 10);
+  return (!isNaN(d) && d >= 1 && d <= 365) ? d : RDO_ASSIN_DIAS;
+}
+
+/* O endereço do app publicado, que é o começo do link de assinatura. Fica
+   numa Propriedade porque o dia em que o site mudar de endereço não pode
+   exigir um deploy do backend para os links voltarem a abrir. */
+function rdoSiteUrl() {
+  var u = String(PropertiesService.getScriptProperties().getProperty('RDO_SITE_URL') || '').trim();
+  if (!/^https?:\/\//i.test(u)) u = RDO_SITE_PADRAO;
+  return u.replace(/\/+$/, '') + '/';
+}
+
+function rdoAssinaturaLink_(token) {
+  return rdoSiteUrl() + 'assinar.html?t=' + encodeURIComponent(token);
+}
+
+/* O token do link. Sai de um digest, e não de um contador nem da hora: um
+   token que carregue a sequência do dia anterior é um convite a adivinhar o
+   link do fiscal. */
+function rdoAssinToken_() {
+  var cru = Utilities.getUuid() + '|' + Date.now() + '|' + Math.random() + '|' + Math.random();
+  var hex = '';
+  try {
+    var bytes = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, cru);
+    for (var i = 0; i < bytes.length; i++) {
+      var b = (bytes[i] + 256) % 256;
+      hex += (b < 16 ? '0' : '') + b.toString(16);
+    }
+  } catch (e) {
+    hex = '';
+  }
+  // Digest indisponível (ambiente de teste, permissão negada) não pode
+  // devolver token vazio — que valeria por qualquer link.
+  if (hex.length < 32) hex = String(cru).replace(/[^a-z0-9]/gi, '') + String(Math.random()).slice(2);
+  return hex.slice(0, 40);
+}
+
+/* O código curto que aparece no PDF e no e-mail, embaixo da assinatura. É
+   o que alguém de fora usa para conferir que aquele traço é o traço que o
+   sistema registrou — o token inteiro não pode aparecer no documento,
+   porque quem o lesse poderia assinar no lugar do fiscal. */
+function rdoAssinCodigo_(token) {
+  return String(token || '').slice(0, 8).toUpperCase();
+}
+
+function rdoAssinPasta_() {
+  var pastas = DriveApp.getFoldersByName(PASTA_RDO_ASSIN);
+  if (pastas.hasNext()) return pastas.next();
+  var nova = DriveApp.createFolder(PASTA_RDO_ASSIN);
+  // Assinatura é firma de pessoa: pasta fechada, como a dos RDOs.
+  nova.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  return nova;
+}
+
+// ------------------------------------------------------------
+// As linhas do dia — uma por assinante
+// ------------------------------------------------------------
+function rdoAssinLinhasDoDia_(obra, dataISO) {
+  var alvo = normData(dataISO);
+  return linhasObj(ABA_RDO_ASSIN, normObra(obra)).filter(function (x) {
+    return normData(x.data) === alvo;
+  });
+}
+
+/* Cria o que faltar e devolve as linhas do dia. Chamada tanto pelo envio do
+   e-mail quanto pelo app: o escritório precisa poder copiar o link de quem
+   perdeu o e-mail ANTES de as 8h do dia seguinte chegarem. Assinante que
+   entra na lista depois ganha a linha dele na primeira chamada seguinte;
+   quem sai da lista mantém a linha que já tem (e a assinatura que já deu —
+   apagá-la reescreveria um documento assinado). */
+function rdoAssinaturasGarantir_(obra, dataISO) {
+  var o = normObra(obra), d = normData(dataISO);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return [];
+  garantirColuna(getOrCreateAba(ABA_RDO_ASSIN), 'obra');
+
+  var existentes = rdoAssinLinhasDoDia_(o, d);
+  var porPapel = {};
+  existentes.forEach(function (x) { porPapel[String(x.papel || '').toLowerCase()] = x; });
+
+  var agora = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss');
+  rdoAssinantes().forEach(function (a) {
+    if (porPapel[a.papel]) return;
+    var reg = {
+      id: 'ASS_' + o + '_' + d.replace(/-/g, '') + '_' + a.papel,
+      obra: o, data: d, papel: a.papel, rotulo: a.rotulo, nome: a.nome, email: a.email,
+      token: rdoAssinToken_(), status: 'pendente', convidadoEm: agora,
+      assinadoEm: '', assinatura: '', nomeAssinante: '', documento: '', agente: '', observacao: ''
+    };
+    appendObj(ABA_RDO_ASSIN, reg);
+    porPapel[a.papel] = reg;
+  });
+
+  // Na ordem dos assinantes configurados — que é a ordem dos quadros do PDF.
+  var ordem = rdoAssinantes().map(function (a) { return a.papel; });
+  var todas = [];
+  ordem.forEach(function (p) { if (porPapel[p]) todas.push(porPapel[p]); });
+  existentes.forEach(function (x) {
+    if (ordem.indexOf(String(x.papel || '').toLowerCase()) === -1) todas.push(x);
+  });
+  return todas;
+}
+
+/* A linha de um token, com o índice para poder gravar de volta. Varre a aba
+   uma vez só: é chamada em toda abertura do link. */
+function rdoAssinPorToken_(token) {
+  var t = String(token == null ? '' : token).trim();
+  if (t.length < 16) return null;              // token curto é lixo, não busca
+  var aba = getOrCreateAba(ABA_RDO_ASSIN);
+  var dados = aba.getDataRange().getValues();
+  if (dados.length <= 1) return null;
+  /* Duas leituras do mesmo cabeçalho, e as duas são necessárias: `cab`
+     minúsculo é o que o idxColuna espera; `nomes` guarda a grafia original,
+     que é a das chaves usadas em todo o resto deste arquivo (convidadoEm,
+     assinadoEm, nomeAssinante). Misturar as duas foi o que fez a data de
+     assinatura voltar vazia na primeira leitura. */
+  var nomes = dados[0].map(function (h) { return String(h).trim(); });
+  var cab = nomes.map(function (h) { return h.toLowerCase(); });
+  var iTok = idxColuna(cab, 'token');
+  if (iTok === -1) return null;
+  for (var i = 1; i < dados.length; i++) {
+    if (String(dados[i][iTok]).trim() !== t) continue;
+    var obj = {};
+    for (var c = 0; c < nomes.length; c++) obj[nomes[c]] = dados[i][c];
+    return { aba: aba, linha: i + 1, cab: cab, obj: obj };
+  }
+  return null;
+}
+
+function rdoAssinGravarCampo_(alvo, campo, valor) {
+  var i = idxColuna(alvo.cab, campo);
+  if (i === -1) {
+    i = garantirColuna(alvo.aba, campo);
+    alvo.cab = alvo.aba.getRange(1, 1, 1, alvo.aba.getLastColumn()).getValues()[0]
+                  .map(function (h) { return String(h).trim().toLowerCase(); });
+    i = idxColuna(alvo.cab, campo);
+    if (i === -1) return;
+  }
+  alvo.aba.getRange(alvo.linha, i + 1).setValue(valor);
+  alvo.obj[campo] = valor;
+}
+
+/* O convite venceu? Um link de assinatura que vale para sempre é uma chave
+   permanente do RDO daquele dia circulando por caixa de e-mail. */
+function rdoAssinVencida_(linha) {
+  var quando = String(linha.convidadoEm || linha.data || '').slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(quando)) return false;
+  var p = quando.split('-');
+  var nasceu = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
+  var dias = Math.floor((Date.now() - nasceu.getTime()) / (24 * 3600 * 1000));
+  return dias > rdoAssinValidadeDias();
+}
+
+// ------------------------------------------------------------
+// AÇÃO PÚBLICA — abrir o link e ler o RDO daquele dia
+// ------------------------------------------------------------
+/* Sem token de sessão de propósito: quem chega aqui é o fiscal, que não tem
+   (nem vai ter) usuário no app. O que autoriza é o token do link, e ele só
+   abre O RDO DAQUELE DIA — nunca a lista de RDOs, nunca outra obra. */
+function rdoAssinaturaAbrir(p) {
+  var alvo = rdoAssinPorToken_(p.token_assinatura || p.t);
+  if (!alvo) return { ok: false, error: 'Link de assinatura inválido ou já cancelado.' };
+  var l = alvo.obj;
+
+  if (rdoAssinVencida_(l) && String(l.status) !== 'assinada') {
+    return { ok: false, error: 'Este link de assinatura venceu. Peça um novo ao escritório.',
+             vencido: true };
+  }
+
+  var obra = normObra(l.obra), dataISO = normData(l.data);
+  var linhaRDO = rdoDiarioDaData_(obra, dataISO);
+  var numero = linhaRDO ? String(linhaRDO['numero_rdo'] || linhaRDO['id'] || '').trim() : '';
+  var corpo = rdoEmailCorpo_(dataISO, obra, linhaRDO);
+
+  var resp = {
+    ok: true,
+    obra: obra, obraNome: rdoObraNome_(obra),
+    data: dataISO, dataBR: rdoDataBR_(dataISO), diaSemana: rdoDiaSemana_(dataISO),
+    numeroRdo: numero,
+    papel: l.papel, rotulo: l.rotulo, nome: l.nome, email: l.email,
+    assinada: String(l.status) === 'assinada',
+    assinadoEm: String(l.assinadoEm || ''),
+    nomeAssinante: String(l.nomeAssinante || ''),
+    codigo: rdoAssinCodigo_(l.token),
+    resumo: corpo.texto,
+    // O andamento das OUTRAS assinaturas, sem token nenhum: quem assina
+    // quer saber se está assinando sozinho ou fechando a folha.
+    outras: rdoAssinLinhasDoDia_(obra, dataISO).map(function (x) {
+      return { papel: x.papel, rotulo: x.rotulo,
+               assinada: String(x.status) === 'assinada',
+               assinadoEm: String(x.assinadoEm || ''),
+               nomeAssinante: String(x.nomeAssinante || '') };
+    })
+  };
+
+  /* O PDF do dia é o que está depositado — o mesmo arquivo que foi anexado
+     no e-mail. Ninguém assina o que não pode ler; sem depósito, a página
+     diz isso em vez de mostrar um quadro vazio para assinar. */
+  var arq = rdoPdfArquivo_(obra, dataISO);
+  if (!arq) {
+    resp.semPdf = true;
+    resp.aviso = 'O PDF deste RDO ainda não foi depositado pelo app. ' +
+                 'Assim que o escritório gerar o RDO Oficial do dia, ele aparece aqui.';
+  } else {
+    var blob = arq.getBlob();
+    resp.pdf = 'data:application/pdf;base64,' + Utilities.base64Encode(blob.getBytes());
+    resp.pdfNome = 'RDO' + (numero ? '_' + numero : '') + '_' + dataISO.replace(/-/g, '') + '.pdf';
+  }
+  return resp;
+}
+
+// ------------------------------------------------------------
+// AÇÃO PÚBLICA — assinar
+// ------------------------------------------------------------
+function rdoAssinaturaGravar(p) {
+  var alvo = rdoAssinPorToken_(p.token_assinatura || p.t);
+  if (!alvo) return { ok: false, error: 'Link de assinatura inválido ou já cancelado.' };
+  var l = alvo.obj;
+
+  /* JÁ ASSINADO NÃO É ERRO, E TAMBÉM NÃO REESCREVE. O celular do fiscal
+     perde o sinal na hora do envio, ele aperta de novo, e a segunda chamada
+     chega depois de a primeira ter gravado. Trocar o traço e a hora de uma
+     assinatura já registrada seria alterar um documento assinado — devolve
+     o que já existe e pronto. Assinatura errada se cancela no escritório
+     (rdoAssinaturaCancelar), com rastro. */
+  if (String(l.status) === 'assinada') {
+    return { ok: true, jaAssinada: true, assinadoEm: String(l.assinadoEm || ''),
+             codigo: rdoAssinCodigo_(l.token) };
+  }
+  if (rdoAssinVencida_(l)) {
+    return { ok: false, error: 'Este link de assinatura venceu. Peça um novo ao escritório.',
+             vencido: true };
+  }
+
+  var img = String(p.assinatura || '');
+  if (img.indexOf('data:image/png;base64,') !== 0) {
+    return { ok: false, error: 'Assinatura inválida — o traço não chegou.' };
+  }
+  var bytes;
+  try { bytes = Utilities.base64Decode(img.split(',')[1]); } catch (e) { bytes = []; }
+  if (!bytes.length) return { ok: false, error: 'Assinatura vazia.' };
+  if (bytes.length > RDO_ASSIN_MAX_BYTES) return { ok: false, error: 'Assinatura grande demais.' };
+
+  // O nome de quem assina é do documento, não do cadastro: quem abre o link
+  // pode ser o substituto do titular naquela semana.
+  var nome = String(p.nome || l.nome || '').trim().slice(0, 120);
+  if (nome.length < 3) return { ok: false, error: 'Escreva o nome de quem está assinando.' };
+
+  var obra = normObra(l.obra), dataISO = normData(l.data);
+  var arq = rdoAssinPasta_().createFile(Utilities.newBlob(bytes, 'image/png',
+    'assinatura_' + obra + '_' + dataISO.replace(/-/g, '') + '_' + l.papel + '.png'));
+  arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+
+  var agora = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss');
+  rdoAssinGravarCampo_(alvo, 'assinatura', 'drive_id:' + arq.getId());
+  rdoAssinGravarCampo_(alvo, 'nomeAssinante', nome);
+  rdoAssinGravarCampo_(alvo, 'documento', String(p.documento || '').trim().slice(0, 60));
+  rdoAssinGravarCampo_(alvo, 'observacao', String(p.observacao || '').trim().slice(0, 500));
+  rdoAssinGravarCampo_(alvo, 'agente', String(p.agente || '').slice(0, 200));
+  rdoAssinGravarCampo_(alvo, 'assinadoEm', agora);
+  rdoAssinGravarCampo_(alvo, 'status', 'assinada');
+
+  registrarAuditoria(nome, 'assinante', 'rdoAssinar', obra, dataISO, l.papel,
+                     rdoAssinCodigo_(l.token) + ' · ' + agora);
+
+  var doDia = rdoAssinLinhasDoDia_(obra, dataISO);
+  var faltam = doDia.filter(function (x) { return String(x.status) !== 'assinada'; }).length;
+  rdoAssinAvisarEscritorio_(obra, dataISO, l, nome, faltam);
+
+  return { ok: true, assinadoEm: agora, codigo: rdoAssinCodigo_(l.token),
+           faltam: faltam, nomeAssinante: nome };
+}
+
+/* Assinou: o escritório precisa saber, porque é ELE quem gera o RDO Oficial
+   de novo — com o traço dentro do quadro — e redeposita. Vai só para casa;
+   avisar a fiscalização de que a fiscalização assinou não serve a ninguém. */
+function rdoAssinAvisarEscritorio_(obra, dataISO, linha, nome, faltam) {
+  try {
+    rdoEmailAvisarDono_(
+      'RDO ' + rdoDataBR_(dataISO) + ' — assinado por ' + (linha.rotulo || linha.papel),
+      nome + ' assinou o RDO de ' + rdoDataBR_(dataISO) + ' (' + rdoDiaSemana_(dataISO) + ') ' +
+      'como ' + (linha.rotulo || linha.papel) + '.\n\n' +
+      (faltam ? 'Ainda faltam ' + faltam + ' assinatura(s).\n'
+              : 'Era a última: o RDO está assinado por todos.\n') +
+      '\nAbra o RDO desse dia no app e gere o RDO Oficial: é o app que desenha as ' +
+      'assinaturas dentro dos quadros e devolve o PDF assinado para cá.\n');
+  } catch (e) {}
+}
+
+// ------------------------------------------------------------
+// AÇÃO DO APP — o que desenhar no PDF, e o link de cada um
+// ------------------------------------------------------------
+/* Protegida por token de SESSÃO: devolve os links, que são credenciais.
+   O app usa para (1) desenhar as assinaturas nos quadros do PDF oficial e
+   (2) mostrar na tela quem já assinou — com o link à mão para reenviar a
+   quem perdeu o e-mail. */
+function rdoAssinaturasDoDia(p) {
+  var obra = normObra(p.obra), dataISO = normData(p.data);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataISO)) return { ok: false, error: 'Data inválida' };
+  if (obra !== OBRA_ID) {
+    // Mesma trava do depósito: a assinatura online é do contrato da Teotônio.
+    return { ok: true, assinaturas: [], indisponivel: 'A assinatura online é só da Teotônio.' };
+  }
+
+  var linhas = rdoAssinaturasGarantir_(obra, dataISO);
+  var comImagem = String(p.imagens) !== '0';
+  var out = linhas.map(function (l) {
+    var reg = {
+      papel: String(l.papel || ''), rotulo: String(l.rotulo || ''),
+      nome: String(l.nome || ''), email: String(l.email || ''),
+      status: String(l.status || 'pendente'),
+      assinadoEm: String(l.assinadoEm || ''),
+      nomeAssinante: String(l.nomeAssinante || ''),
+      documento: String(l.documento || ''),
+      codigo: rdoAssinCodigo_(l.token),
+      link: rdoAssinaturaLink_(l.token),
+      vencido: rdoAssinVencida_(l) && String(l.status) !== 'assinada'
+    };
+    var ponteiro = String(l.assinatura || '');
+    if (comImagem && ponteiro.indexOf('drive_id:') === 0) {
+      try {
+        var b = DriveApp.getFileById(ponteiro.slice(9)).getBlob();
+        reg.imagem = 'data:' + (b.getContentType() || 'image/png') + ';base64,' +
+                     Utilities.base64Encode(b.getBytes());
+      } catch (e) {
+        // Imagem sumida do Drive não pode derrubar a tela: o quadro sai com
+        // o nome e a hora, que continuam sendo o registro da assinatura.
+      }
+    }
+    return reg;
+  });
+
+  return { ok: true, obra: obra, data: dataISO, assinaturas: out,
+           assinadas: out.filter(function (x) { return x.status === 'assinada'; }).length,
+           /* Quantas assinaturas o PDF que está depositado já traz desenhadas.
+              É como o app sabe que precisa redepositar: alguém assinou depois
+              do último depósito, e o arquivo que a fiscalização receberia
+              ainda tem o quadro em branco. -1 = não há depósito nenhum. */
+           noDeposito: rdoPdfAssinaturasNoDeposito_(obra, dataISO) };
+}
+
+/* Cancelar uma assinatura — para rodar no editor. Assinatura dada por
+   engano (papel trocado, dia errado) não se apaga da planilha à mão: isto
+   deixa o rastro na Auditoria e sorteia um token novo, para quem tem de
+   assinar receber um link que funcione.
+   Uso:  rdoAssinaturaCancelar('2026-08-24', 'fiscalizacao', 'assinou no dia errado')  */
+function rdoAssinaturaCancelar(dataISO, papel, motivo) {
+  var d = normData(dataISO), pp = String(papel || '').toLowerCase();
+  var linhas = rdoAssinLinhasDoDia_(OBRA_ID, d).filter(function (x) {
+    return String(x.papel || '').toLowerCase() === pp;
+  });
+  if (!linhas.length) return { ok: false, error: 'Não há assinatura de "' + papel + '" em ' + d };
+  var alvo = rdoAssinPorToken_(linhas[0].token);
+  if (!alvo) return { ok: false, error: 'Linha não encontrada' };
+
+  registrarAuditoria(Session.getEffectiveUser().getEmail(), 'admin', 'rdoAssinaturaCancelar',
+                     OBRA_ID, d, pp + ' · ' + String(alvo.obj.nomeAssinante || '') + ' · ' +
+                     String(alvo.obj.assinadoEm || ''), String(motivo || ''));
+
+  var novo = rdoAssinToken_();
+  rdoAssinGravarCampo_(alvo, 'status', 'cancelada');
+  rdoAssinGravarCampo_(alvo, 'observacao', 'Cancelada: ' + String(motivo || '') +
+                       ' (era de ' + String(alvo.obj.nomeAssinante || '—') + ')');
+  rdoAssinGravarCampo_(alvo, 'assinatura', '');
+  rdoAssinGravarCampo_(alvo, 'assinadoEm', '');
+  rdoAssinGravarCampo_(alvo, 'nomeAssinante', '');
+  rdoAssinGravarCampo_(alvo, 'token', novo);
+  rdoAssinGravarCampo_(alvo, 'status', 'pendente');
+  rdoAssinGravarCampo_(alvo, 'convidadoEm',
+                       Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss'));
+  Logger.log('Novo link: ' + rdoAssinaturaLink_(novo));
+  return { ok: true, link: rdoAssinaturaLink_(novo) };
+}
+
+/* Conferência para rodar no editor: quem assina, quem já assinou e qual é o
+   link de cada um no dia pedido. Não manda e-mail.
+   Uso:  conferirAssinaturasRDO('2026-08-24')  */
+function conferirAssinaturasRDO(dataISO) {
+  var d = normData(dataISO || Utilities.formatDate(new Date(Date.now() - 24 * 3600 * 1000),
+                                                   fusoDoScript(), 'yyyy-MM-dd'));
+  var r = rdoAssinaturasDoDia({ obra: OBRA_ID, data: d, imagens: '0' });
+  Logger.log(JSON.stringify(r, null, 2));
+  return r;
+}
+
+// ------------------------------------------------------------
+// O RDO ASSINADO — o que volta para a fiscalização no fim
+// ------------------------------------------------------------
+/* Quantas assinaturas o PDF depositado traz desenhadas. Fica na descrição
+   do próprio arquivo: é o único lugar que não pode ficar dessincronizado do
+   arquivo que está lá. -1 = não há depósito. */
+function rdoPdfAssinaturasNoDeposito_(obra, dataISO) {
+  var arq = rdoPdfArquivo_(obra, dataISO);
+  if (!arq) return -1;
+  try {
+    var m = String(arq.getDescription() || '').match(/assinaturas:\s*(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+  } catch (e) {
+    return 0;
+  }
+}
+
+function rdoAssinadoLogLer_() {
+  try {
+    return JSON.parse(PropertiesService.getScriptProperties().getProperty(RDO_ASSINADO_LOG) || '{}');
+  } catch (e) {
+    return {};
+  }
+}
+
+/* O depósito acabou de chegar com todas as firmas: manda o RDO ASSINADO
+   para a lista. Este é o documento que a fiscalização arquiva — o das 8h
+   ainda tem os quadros em branco, porque de manhã ninguém assinou ainda.
+
+   Sai UMA vez por dia de RDO: o app redeposita a cada geração do oficial, e
+   três PDFs iguais na caixa de quem já assinou é o caminho mais curto para
+   o e-mail diário virar spam. */
+function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
+  /* "Todas" são as assinaturas ONLINE previstas — não os quadros do PDF. A
+     supervisão assina a mão: o quadro dela nunca vai ser preenchido por
+     aqui, e esperar por ele seria esperar para sempre. */
+  var previstas = rdoAssinantes().length;
+  if (!previstas || quantasNoPdf < previstas) return { ok: true, pulado: 'ainda falta assinatura' };
+
+  var chave = normObra(obra) + '|' + dataISO;
+  var log = rdoAssinadoLogLer_();
+  if (log[chave]) return { ok: true, pulado: 'assinado já enviado' };
+
+  var destinos = rdoEmailDestinatarios();
+  if (!destinos.length) return { ok: false, error: 'Sem destinatários' };
+  if (MailApp.getRemainingDailyQuota() < destinos.length) {
+    rdoEmailAvisarDono_('RDO ' + rdoDataBR_(dataISO) + ' — assinado, mas não saiu (cota)',
+      'O RDO assinado de ' + rdoDataBR_(dataISO) + ' está depositado, mas a cota de e-mail ' +
+      'acabou. Mande com:  reenviarRDOAssinado(\'' + dataISO + '\')');
+    return { ok: false, error: 'Cota de e-mail insuficiente' };
+  }
+
+  var arq = rdoPdfArquivo_(obra, dataISO);
+  if (!arq) return { ok: false, error: 'Sem PDF depositado' };
+
+  var linhaRDO = rdoDiarioDaData_(obra, dataISO);
+  var numero = linhaRDO ? String(linhaRDO['numero_rdo'] || linhaRDO['id'] || '').trim() : '';
+  var assinantes = rdoAssinLinhasDoDia_(obra, dataISO);
+  var quem = assinantes.map(function (x) {
+    return '• ' + (x.rotulo || x.papel) + ': ' + (x.nomeAssinante || '—') +
+           ' — ' + (x.assinadoEm || '') + ' (cód. ' + rdoAssinCodigo_(x.token) + ')';
+  }).join('\n');
+
+  var anexo = arq.getBlob().setName(
+    'RDO' + (numero ? '_' + numero : '') + '_' + String(dataISO).replace(/-/g, '_') + '_assinado.pdf');
+
+  MailApp.sendEmail({
+    to: destinos.join(','),
+    subject: 'RDO' + (numero ? ' nº ' + numero : '') + ' ASSINADO — ' + rdoObraNome_(obra) +
+             ' — ' + rdoDataBR_(dataISO),
+    body: 'O RDO de ' + rdoDataBR_(dataISO) + ' (' + rdoDiaSemana_(dataISO) + ') está assinado ' +
+          'por todos.\n\n' + quem + '\n\nO PDF com as assinaturas vai em anexo.\n' +
+          '\n— Enviado automaticamente pelo app de campo da Gestor Engenharia.\n',
+    name: 'Gestor Engenharia — RDO ' + rdoObraNome_(obra),
+    attachments: [anexo]
+  });
+
+  log[chave] = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm');
+  var chaves = Object.keys(log).sort();
+  while (chaves.length > RDO_EMAIL_LOG_MAX) delete log[chaves.shift()];
+  PropertiesService.getScriptProperties().setProperty(RDO_ASSINADO_LOG, JSON.stringify(log));
+  return { ok: true, data: dataISO, para: destinos };
+}
+
+/* Reenvio manual do RDO assinado, para rodar no editor.
+   Uso:  reenviarRDOAssinado('2026-08-24')  */
+function reenviarRDOAssinado(dataISO) {
+  var d = normData(dataISO);
+  var log = rdoAssinadoLogLer_();
+  delete log[OBRA_ID + '|' + d];
+  PropertiesService.getScriptProperties().setProperty(RDO_ASSINADO_LOG, JSON.stringify(log));
+  return rdoEnviarAssinadoSePronto_(OBRA_ID, d, rdoPdfAssinaturasNoDeposito_(OBRA_ID, d));
 }
 
 // ------------------------------------------------------------

@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<!--
+  Sistema de controle de obra — Av. Senador Teotônio Vilela
+  Copyright © 2026 Leonardo Maciel. Todos os direitos reservados.
+
+  Software proprietário. O código estar visível não autoriza uso, cópia
+  nem obra derivada — ver LICENSE, na raiz do repositório.
+  ============================================================
+  ASSINATURA ONLINE DO RDO — a página de quem assina
+
+  Quem abre esta página é o ENGENHEIRO ou o FISCAL, pelo link pessoal que
+  chegou no e-mail das 8h. Não há login, e é de propósito: o fiscal da SP
+  Obras não tem (nem vai ter) usuário no app, e exigir senha para assinar
+  uma folha por dia é a forma mais rápida de a folha nunca ser assinada. O
+  que autoriza é o token do link — que só abre o RDO DAQUELE DIA.
+
+  Por isso esta página é SEPARADA do app: quem assina não deve cair na tela
+  de login, não precisa baixar 1 MB de PWA, e não pode ter acesso a mais
+  nada da obra. Ela pede uma coisa só ao servidor (o RDO daquele dia) e
+  devolve uma coisa só (o traço, o nome e a hora).
+
+  O PDF que aparece aqui é o MESMO arquivo que foi anexado no e-mail —
+  ninguém assina o que não pode ler, e ler outra versão do documento seria
+  assinar um papel diferente do que está guardado.
+  ============================================================
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#1e3a5f">
+<title>Assinar RDO — Gestor Engenharia</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  :root{
+    --nav:#1e3a5f; --nav-claro:#2c5488; --tinta:#1a1a1a; --fraco:#5f6773;
+    --linha:#dfe3e9; --fundo:#eef1f5; --papel:#fff;
+    --ok:#1a7f45; --alerta:#b08900; --erro:#b3261e;
+    --r:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    background:var(--fundo); color:var(--tinta);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .faixa{background:var(--nav);color:#fff;padding:16px 18px}
+  .faixa h1{margin:0;font-size:17px;letter-spacing:.01em}
+  .faixa p{margin:3px 0 0;font-size:13px;color:#c9d6e6}
+  .env{max-width:860px;margin:0 auto;padding:16px 14px 40px}
+  .cartao{background:var(--papel);border:1px solid var(--linha);border-radius:var(--r);
+          margin-bottom:14px;overflow:hidden}
+  .cartao > h2{margin:0;padding:12px 14px;font-size:12px;font-weight:700;color:var(--fraco);
+               text-transform:uppercase;letter-spacing:.07em;border-bottom:1px solid var(--linha);
+               background:#fafbfc}
+  .corpo{padding:14px}
+  .aviso{padding:12px 14px;border-radius:var(--r);font-size:14px;margin-bottom:14px}
+  .aviso.erro{background:#fdecea;border:1px solid #f0b4ae;color:#8c1d16}
+  .aviso.atencao{background:#fff8e1;border:1px solid #e8d08a;color:#6b5200}
+  .aviso.feito{background:#e9f7ef;border:1px solid #a8dcbf;color:#12633a}
+
+  /* O RDO em si. Cada folha vira um canvas — é o mesmo desenho do PDF
+     anexado no e-mail, não uma segunda versão do documento. */
+  #folhas{padding:10px;background:#e4e8ee;max-height:62vh;overflow:auto;-webkit-overflow-scrolling:touch}
+  #folhas canvas{display:block;margin:0 auto 10px;max-width:100%;height:auto;
+                 box-shadow:0 1px 4px rgba(0,0,0,.18);background:#fff}
+  .barra-pdf{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;
+             border-top:1px solid var(--linha);background:#fafbfc}
+
+  .campo{margin-bottom:12px}
+  .campo label{display:block;font-size:12px;font-weight:700;color:var(--fraco);
+               text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px}
+  .campo input[type=text]{width:100%;padding:11px 12px;font-size:16px;border:1px solid var(--linha);
+                          border-radius:8px;background:#fff;color:var(--tinta)}
+  .campo input[type=text]:focus{outline:2px solid var(--nav-claro);outline-offset:-1px}
+  .dica{font-size:12px;color:var(--fraco);margin-top:5px}
+
+  /* O QUADRO DE ASSINAR. `touch-action:none` é obrigatório: sem isso, o dedo
+     que assina rola a página, e o traço sai picado ou não sai. */
+  .quadro{position:relative;border:1px dashed #9aa4b2;border-radius:8px;background:#fff;
+          height:min(38vh,220px)}
+  .quadro canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;
+                 cursor:crosshair;border-radius:8px}
+  .quadro .linha-base{position:absolute;left:22px;right:22px;bottom:38px;border-top:1px solid #c8cfd8;
+                      pointer-events:none}
+  .quadro .marca{position:absolute;left:22px;bottom:20px;font-size:12px;color:#9aa4b2;
+                 pointer-events:none;user-select:none}
+
+  .botoes{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  button{font:inherit;font-weight:700;border-radius:8px;padding:13px 20px;border:1px solid transparent;
+         cursor:pointer}
+  .b-prim{background:var(--nav);color:#fff;flex:1;min-width:180px}
+  .b-prim:disabled{background:#a9b4c2;cursor:not-allowed}
+  .b-sec{background:#fff;color:var(--nav);border-color:var(--linha)}
+  a.b-sec{text-decoration:none;display:inline-block;padding:9px 14px;font-size:13px}
+
+  .concordo{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:14px}
+  .concordo input{margin-top:3px;width:19px;height:19px;flex:none}
+
+  .quem{display:flex;gap:9px;align-items:baseline;padding:7px 0;border-bottom:1px solid var(--linha);
+        font-size:14px}
+  .quem:last-child{border-bottom:none}
+  .quem .selo{font-weight:700;flex:none}
+  .quem .selo.sim{color:var(--ok)} .quem .selo.nao{color:var(--alerta)}
+  .quem small{color:var(--fraco)}
+
+  pre.resumo{margin:0;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;
+             white-space:pre-wrap;word-break:break-word;color:#333}
+  .rodape{text-align:center;font-size:12px;color:var(--fraco);padding:6px 10px 0}
+  .oculto{display:none !important}
+</style>
+</head>
+<body>
+
+<div class="faixa">
+  <h1 id="tituloTopo">Assinatura do RDO</h1>
+  <p id="subTopo">Carregando o relatório…</p>
+</div>
+
+<div class="env">
+  <div id="mensagem" class="oculto"></div>
+
+  <!-- O RDO. Fica ANTES do quadro de assinar: ler vem primeiro. -->
+  <div id="cartaoRdo" class="cartao oculto">
+    <h2>O relatório deste dia</h2>
+    <div id="folhas"></div>
+    <div class="barra-pdf">
+      <a id="baixar" class="b-sec" download>Baixar o PDF</a>
+      <span class="dica" id="dicaFolhas"></span>
+    </div>
+  </div>
+
+  <div id="cartaoResumo" class="cartao oculto">
+    <h2>Resumo do dia</h2>
+    <div class="corpo"><pre class="resumo" id="resumo"></pre></div>
+  </div>
+
+  <!-- Assinar -->
+  <div id="cartaoAssinar" class="cartao oculto">
+    <h2 id="tituloAssinar">Assinar</h2>
+    <div class="corpo">
+      <div class="campo">
+        <label for="nome">Nome de quem assina</label>
+        <input type="text" id="nome" autocomplete="name" placeholder="Nome completo">
+        <div class="dica">É o nome que sai embaixo da assinatura, no RDO.</div>
+      </div>
+      <div class="campo">
+        <label for="documento">CREA / RG / matrícula <span style="font-weight:400;text-transform:none">(opcional)</span></label>
+        <input type="text" id="documento" placeholder="Ex.: CREA 0000000000">
+      </div>
+
+      <label style="display:block;font-size:12px;font-weight:700;color:var(--fraco);
+                    text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Assinatura</label>
+      <div class="quadro">
+        <canvas id="tela"></canvas>
+        <div class="linha-base"></div>
+        <div class="marca">Assine aqui com o dedo ou o mouse</div>
+      </div>
+
+      <label class="concordo">
+        <input type="checkbox" id="concordo">
+        <span id="textoConcordo">Li o relatório acima e o assino.</span>
+      </label>
+
+      <div class="botoes">
+        <button type="button" class="b-prim" id="btAssinar" disabled>Assinar o RDO</button>
+        <button type="button" class="b-sec" id="btLimpar">Apagar o traço</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="cartaoQuem" class="cartao oculto">
+    <h2>Quem assina este RDO</h2>
+    <div class="corpo" id="listaQuem"></div>
+  </div>
+
+  <p class="rodape">Gestor Engenharia · assinatura eletrônica do RDO<br>
+     <span id="codigoRodape"></span></p>
+</div>
+
+<script src="vendor/pdfjs/pdf.min.js"></script>
+<script>
+/* ====================================================================
+   O BACKEND é o mesmo Apps Script da obra. O endereço está aqui em vez
+   de vir do cadastro do app porque esta página não carrega o app: ela é
+   uma folha só, que abre no celular de quem não tem nada instalado.
+   ==================================================================== */
+var BACKEND = 'https://script.google.com/macros/s/AKfycbwfslMjc5bmKbZ3y6OpUZyi8MD2KGriocjAVBUci5FOMiI7ho0KgTXvtAioDGWkpk5I/exec';
+
+var TOKEN = new URLSearchParams(location.search).get('t') || '';
+var DADOS = null;
+
+/* POST com FormData, e não JSONP: o PDF do RDO volta em base64 e passa
+   MUITO do teto de URL do navegador. É o mesmo transporte que o app usa
+   para as fotos (ver enviarPost, no index.html). */
+function chamar(params) {
+  var fd = new FormData();
+  Object.keys(params).forEach(function (k) { fd.append(k, params[k] == null ? '' : params[k]); });
+  return fetch(BACKEND, { method: 'POST', body: fd }).then(function (r) {
+    if (!r.ok) throw new Error('Falha de rede (HTTP ' + r.status + ')');
+    return r.text();
+  }).then(function (txt) {
+    try {
+      return JSON.parse(txt);
+    } catch (e) {
+      /* O Apps Script devolve HTML quando está fora do ar ou quando o Google
+         interpõe uma página de login. Não é assinatura recusada — é servidor
+         indisponível, e quem assina precisa saber a diferença. */
+      throw new Error('O servidor respondeu uma página em vez de dados. Tente de novo em alguns minutos.');
+    }
+  });
+}
+
+function q(id) { return document.getElementById(id); }
+function mostrar(id, sim) { q(id).classList.toggle('oculto', !sim); }
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function recado(texto, tipo) {
+  var el = q('mensagem');
+  el.className = 'aviso ' + (tipo || 'atencao');
+  el.textContent = texto;
+  el.classList.remove('oculto');
+}
+
+// -------------------------------------------------- o quadro de assinar
+var TELA = null, CTX = null, TEM_TRACO = false;
+
+function prepararTela() {
+  TELA = q('tela');
+  var ratio = Math.min(2, window.devicePixelRatio || 1);
+  var w = TELA.clientWidth || 600, h = TELA.clientHeight || 200;
+  TELA.width = Math.round(w * ratio);
+  TELA.height = Math.round(h * ratio);
+  CTX = TELA.getContext('2d');
+  CTX.scale(ratio, ratio);
+  /* FUNDO BRANCO, não transparente. O traço vai parar dentro do quadro do
+     PDF e no arquivo que o escritório abre no Drive: PNG transparente some
+     em visualizador que pinta o fundo de preto. */
+  CTX.fillStyle = '#fff';
+  CTX.fillRect(0, 0, w, h);
+  CTX.strokeStyle = '#101828';
+  CTX.lineWidth = 2.2;
+  CTX.lineCap = 'round';
+  CTX.lineJoin = 'round';
+  TEM_TRACO = false;
+  atualizarBotao();
+}
+
+function ligarTela() {
+  var desenhando = false, ux = 0, uy = 0;
+  function ponto(ev) {
+    var r = TELA.getBoundingClientRect();
+    var t = ev.touches && ev.touches[0] ? ev.touches[0] : ev;
+    return { x: t.clientX - r.left, y: t.clientY - r.top };
+  }
+  function inicio(ev) {
+    ev.preventDefault();
+    desenhando = true;
+    var p = ponto(ev); ux = p.x; uy = p.y;
+    // Um toque só (um pingo) também é traço: assinatura com ponto final.
+    CTX.beginPath(); CTX.moveTo(ux, uy); CTX.lineTo(ux + 0.1, uy); CTX.stroke();
+    TEM_TRACO = true;
+    atualizarBotao();
+  }
+  function move(ev) {
+    if (!desenhando) return;
+    ev.preventDefault();
+    var p = ponto(ev);
+    CTX.beginPath(); CTX.moveTo(ux, uy); CTX.lineTo(p.x, p.y); CTX.stroke();
+    ux = p.x; uy = p.y;
+  }
+  function fim() { desenhando = false; }
+
+  TELA.addEventListener('mousedown', inicio);
+  TELA.addEventListener('mousemove', move);
+  window.addEventListener('mouseup', fim);
+  TELA.addEventListener('touchstart', inicio, { passive: false });
+  TELA.addEventListener('touchmove', move, { passive: false });
+  TELA.addEventListener('touchend', fim);
+  TELA.addEventListener('touchcancel', fim);
+}
+
+/* O traço sai em 600×200 — a mesma proporção 3:1 do quadro de assinatura do
+   PDF. Normalizar aqui evita que a assinatura feita num celular estreito
+   saia esticada no documento.
+
+   E vai RECORTADO no traço, não no quadro inteiro. Quem assina usa um canto
+   da área; mandar o quadro todo faz a firma chegar ao PDF cercada de margem
+   branca e sair do tamanho de uma linha de texto — pequena demais para o
+   papel que a fiscalização arquiva. O recorte é do desenho, com uma folga
+   de respiro, e é ele que é esticado até encher o quadro. */
+function limitesDoTraco() {
+  var w = TELA.width, h = TELA.height;
+  var d;
+  try { d = CTX.getImageData(0, 0, w, h).data; } catch (e) { return null; }
+  var x1 = w, y1 = h, x2 = -1, y2 = -1;
+  for (var y = 0; y < h; y++) {
+    for (var x = 0; x < w; x++) {
+      // fundo é branco; qualquer pixel escurecido é traço
+      if (d[(y * w + x) * 4] < 200) {
+        if (x < x1) x1 = x;
+        if (x > x2) x2 = x;
+        if (y < y1) y1 = y;
+        if (y > y2) y2 = y;
+      }
+    }
+  }
+  return x2 < 0 ? null : { x1: x1, y1: y1, x2: x2, y2: y2 };
+}
+
+function tracoPNG() {
+  var saida = document.createElement('canvas');
+  saida.width = 600; saida.height = 200;
+  var c = saida.getContext('2d');
+  c.fillStyle = '#fff';
+  c.fillRect(0, 0, 600, 200);
+
+  var lim = limitesDoTraco();
+  if (!lim) {
+    c.drawImage(TELA, 0, 0, 600, 200);
+    return saida.toDataURL('image/png');
+  }
+  var folga = Math.max(6, Math.round(Math.min(TELA.width, TELA.height) * 0.04));
+  var rx = Math.max(0, lim.x1 - folga);
+  var ry = Math.max(0, lim.y1 - folga);
+  var rw = Math.min(TELA.width - rx, lim.x2 - lim.x1 + folga * 2);
+  var rh = Math.min(TELA.height - ry, lim.y2 - lim.y1 + folga * 2);
+
+  /* O recorte entra INTEIRO e centrado, mantendo a proporção dele: uma
+     rubrica curta e alta esticada até 3:1 viraria outro desenho. */
+  var escala = Math.min(600 / rw, 200 / rh);
+  var dw = rw * escala, dh = rh * escala;
+  c.drawImage(TELA, rx, ry, rw, rh, (600 - dw) / 2, (200 - dh) / 2, dw, dh);
+  return saida.toDataURL('image/png');
+}
+
+function atualizarBotao() {
+  var bt = q('btAssinar');
+  if (!bt) return;
+  var nome = q('nome').value.trim();
+  bt.disabled = !(TEM_TRACO && nome.length >= 3 && q('concordo').checked);
+}
+
+// -------------------------------------------------- o RDO na tela
+function desenharPdf(dataUri) {
+  if (!window.pdfjsLib) {
+    q('dicaFolhas').textContent = 'Não consegui abrir o PDF aqui — use o botão "Baixar o PDF".';
+    return;
+  }
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js';
+  var cru = atob(dataUri.slice(dataUri.indexOf(',') + 1));
+  var bytes = new Uint8Array(cru.length);
+  for (var i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i);
+
+  window.pdfjsLib.getDocument({ data: bytes }).promise.then(function (doc) {
+    var caixa = q('folhas');
+    caixa.innerHTML = '';
+    q('dicaFolhas').textContent = doc.numPages + (doc.numPages > 1 ? ' folhas' : ' folha') +
+                                  ' · role para ler tudo';
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var larguraAlvo = Math.max(280, caixa.clientWidth - 24);
+
+    function folha(n) {
+      if (n > doc.numPages) return;
+      return doc.getPage(n).then(function (pg) {
+        var escala = larguraAlvo / pg.getViewport({ scale: 1 }).width;
+        var vp = pg.getViewport({ scale: escala });
+        var cv = document.createElement('canvas');
+        cv.width = Math.floor(vp.width * dpr);
+        cv.height = Math.floor(vp.height * dpr);
+        cv.style.width = Math.floor(vp.width) + 'px';
+        cv.style.height = Math.floor(vp.height) + 'px';
+        caixa.appendChild(cv);
+        return pg.render({
+          canvasContext: cv.getContext('2d'), viewport: vp,
+          transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined
+        }).promise.then(function () { return folha(n + 1); });
+      });
+    }
+    return folha(1);
+  }).catch(function () {
+    q('dicaFolhas').textContent = 'Não consegui desenhar o PDF aqui — use o botão "Baixar o PDF".';
+  });
+}
+
+function listarQuem(lista) {
+  if (!lista || !lista.length) { mostrar('cartaoQuem', false); return; }
+  q('listaQuem').innerHTML = lista.map(function (a) {
+    return '<div class="quem">' +
+      '<span class="selo ' + (a.assinada ? 'sim' : 'nao') + '">' + (a.assinada ? '✓' : '●') + '</span>' +
+      '<span>' + esc(a.rotulo || a.papel) +
+      (a.assinada
+        ? '<br><small>' + esc(a.nomeAssinante || 'assinado') + ' · ' + esc(String(a.assinadoEm || '').slice(0, 16)) + '</small>'
+        : '<br><small>pendente</small>') +
+      '</span></div>';
+  }).join('');
+  mostrar('cartaoQuem', true);
+}
+
+// -------------------------------------------------- carregar
+function abrir() {
+  if (!TOKEN) {
+    q('subTopo').textContent = 'Link incompleto';
+    recado('Este endereço não traz o código do convite. Abra o link exatamente como ele chegou no e-mail.', 'erro');
+    return;
+  }
+  chamar({ action: 'rdoAssinaturaAbrir', t: TOKEN }).then(function (r) {
+    if (!r || !r.ok) {
+      q('subTopo').textContent = 'Não foi possível abrir';
+      recado((r && r.error) || 'Link inválido.', 'erro');
+      return;
+    }
+    DADOS = r;
+    q('tituloTopo').textContent = 'RDO' + (r.numeroRdo ? ' nº ' + r.numeroRdo : '') + ' — ' + r.dataBR;
+    q('subTopo').textContent = r.obraNome + (r.diaSemana ? ' · ' + r.diaSemana : '');
+    q('tituloAssinar').textContent = 'Assinar como ' + (r.rotulo || r.papel);
+    q('textoConcordo').textContent = 'Li o RDO de ' + r.dataBR + ' e o assino como ' +
+                                     (r.rotulo || r.papel) + '.';
+    q('codigoRodape').textContent = 'Convite ' + r.codigo;
+    if (r.nome) q('nome').value = r.nome;
+
+    if (r.resumo) { q('resumo').textContent = r.resumo; mostrar('cartaoResumo', true); }
+    listarQuem(r.outras);
+
+    if (r.pdf) {
+      mostrar('cartaoRdo', true);
+      q('baixar').href = r.pdf;
+      q('baixar').setAttribute('download', r.pdfNome || 'RDO.pdf');
+      desenharPdf(r.pdf);
+    } else if (r.semPdf) {
+      recado(r.aviso || 'O PDF deste RDO ainda não está disponível.', 'atencao');
+    }
+
+    if (r.assinada) {
+      recado('Você já assinou este RDO em ' + String(r.assinadoEm || '').slice(0, 16) +
+             '. Código ' + r.codigo + '.', 'feito');
+      return;                       // nada a assinar: o quadro nem aparece
+    }
+
+    mostrar('cartaoAssinar', true);
+    prepararTela();
+    ligarTela();
+  }).catch(function (e) {
+    q('subTopo').textContent = 'Falha ao carregar';
+    recado(e.message || 'Não consegui falar com o servidor.', 'erro');
+  });
+}
+
+// -------------------------------------------------- assinar
+function assinar() {
+  var bt = q('btAssinar');
+  bt.disabled = true;
+  var rotuloOriginal = bt.textContent;
+  bt.textContent = 'Enviando…';
+
+  chamar({
+    action: 'rdoAssinaturaGravar',
+    t: TOKEN,
+    assinatura: tracoPNG(),
+    nome: q('nome').value.trim(),
+    documento: q('documento').value.trim(),
+    agente: navigator.userAgent
+  }).then(function (r) {
+    if (!r || !r.ok) {
+      recado((r && r.error) || 'Não consegui registrar a assinatura.', 'erro');
+      bt.textContent = rotuloOriginal;
+      atualizarBotao();
+      return;
+    }
+    mostrar('cartaoAssinar', false);
+    recado(r.jaAssinada
+      ? 'Esta assinatura já estava registrada (código ' + r.codigo + ').'
+      : 'Assinado. Código ' + r.codigo + ' · ' + String(r.assinadoEm || '').slice(0, 16) +
+        (r.faltam ? ' · ainda faltam ' + r.faltam + ' assinatura(s).'
+                  : ' · era a última: o RDO está assinado por todos.'),
+      'feito');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Reabre só para atualizar a lista de quem assinou — sem custo para quem
+    // já terminou, e evita a página ficar mostrando o estado de antes.
+    chamar({ action: 'rdoAssinaturaAbrir', t: TOKEN }).then(function (novo) {
+      if (novo && novo.ok) listarQuem(novo.outras);
+    }).catch(function () {});
+  }).catch(function (e) {
+    /* Falhou no envio: o traço CONTINUA na tela. Mandar o fiscal assinar de
+       novo do zero por causa de um sinal ruim é o jeito mais certo de ele
+       fechar a página e não voltar. */
+    recado((e.message || 'Falha de rede') + ' — o seu traço continua aqui; tente enviar de novo.', 'erro');
+    bt.textContent = rotuloOriginal;
+    atualizarBotao();
+  });
+}
+
+q('btLimpar').addEventListener('click', function () { prepararTela(); });
+q('btAssinar').addEventListener('click', assinar);
+q('nome').addEventListener('input', atualizarBotao);
+q('concordo').addEventListener('change', atualizarBotao);
+// Girar o celular remede o canvas — e mudar canvas.width apaga o traço, então
+// só remede quando ainda não há nada desenhado.
+window.addEventListener('resize', function () { if (!TEM_TRACO && CTX) prepararTela(); });
+
+abrir();
+</script>
+</body>
+</html>

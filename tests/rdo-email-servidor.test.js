@@ -32,6 +32,7 @@ function arquivoFalso(nome, bytes, pasta) {
     isTrashed() { return this._lixo; },
     setTrashed(v) { this._lixo = v; return this; },
     setDescription(d) { this._desc = d; return this; },
+    getDescription() { return this._desc; },
     setSharing() { return this; },
     getBlob() {
       const self = this;
@@ -68,16 +69,25 @@ const DriveApp = {
 };
 
 // ---------------- planilha falsa ----------------
-const PLANILHA = { RDO_Diario: [], RDO_Avanco: [] };
+const PLANILHA = { RDO_Diario: [], RDO_Avanco: [], RDO_Assinaturas: [] };
 const CAB_DIARIO = ['id', 'data', 'obra', 'numero_rdo', 'clima_manha', 'clima_tarde', 'clima_noite',
                     'apontador_diurno', 'apontador_noturno', 'visitas', 'ocorrencias',
                     'observacoes_gerais', 'paralisacoes_json', 'paralisado_motivo', 'chuva_mm_auto'];
 const CAB_AVANCO = ['id', 'data', 'obra', 'pacote_id', 'quantidade'];
+const CAB_ASSIN = ['id', 'obra', 'data', 'papel', 'rotulo', 'nome', 'email', 'token', 'status',
+                   'convidadoEm', 'assinadoEm', 'assinatura', 'nomeAssinante', 'documento',
+                   'agente', 'observacao'];
 
 function abaFalsa(nome, cab, linhas) {
   return {
     getDataRange: () => ({ getValues: () => [cab].concat(linhas) }),
-    getRange: () => ({ setValue() {}, setValues() {}, getValues: () => [cab] }),
+    /* Grava de verdade: o convite de assinatura precisa continuar existindo
+       na chamada seguinte, senão cada envio sortearia um token novo. */
+    getRange: (l, c, nl, nc) => ({
+      setValue(v) { if (l > 1 && linhas[l - 2]) linhas[l - 2][c - 1] = v; },
+      setValues(vals) { if (l > 1) linhas[l - 2] = vals[0].slice(); },
+      getValues: () => [cab],
+    }),
     getLastColumn: () => cab.length, getLastRow: () => linhas.length + 1,
     appendRow() {}, getName: () => nome,
   };
@@ -88,6 +98,7 @@ const SpreadsheetApp = {
     getSheetByName(n) {
       if (n === 'RDO_Diario') return abaFalsa(n, CAB_DIARIO, PLANILHA.RDO_Diario);
       if (n === 'RDO_Avanco') return abaFalsa(n, CAB_AVANCO, PLANILHA.RDO_Avanco);
+      if (n === 'RDO_Assinaturas') return abaFalsa(n, CAB_ASSIN, PLANILHA.RDO_Assinaturas);
       return null;
     },
     insertSheet: (n) => abaFalsa(n, [], []),
@@ -167,6 +178,7 @@ function limpar() {
   Object.keys(_props).forEach(k => delete _props[k]);
   DRIVE.pastas = {}; DRIVE.seq = 0;
   PLANILHA.RDO_Diario = [linhaDiario()];
+  PLANILHA.RDO_Assinaturas = [];
   PLANILHA.RDO_Avanco = [
     ['A1', HOJE, 'teotonio', 'P01', 10],
     ['A2', HOJE, 'teotonio', 'P02', 5],
@@ -260,12 +272,17 @@ t('cada dia tem o seu arquivo', () => {
 });
 
 console.log('\nO envio');
-t('manda o PDF do dia para toda a lista, com o resumo no corpo', () => {
+/* UM E-MAIL POR PESSOA, e não um só para a lista inteira: o link de
+   assinatura é a credencial de quem assina, e num e-mail único o link do
+   fiscal chegaria também ao engenheiro. */
+t('manda o PDF do dia para toda a lista — um e-mail para cada, com o resumo no corpo', () => {
   depositar();
   verdade(ctx.reenviarRDOPorEmail(HOJE).ok, 'enviou');
-  eq(paraFiscalizacao().length, 1, 'um e-mail');
+  eq(paraFiscalizacao().length, 4, 'um e-mail por destinatário');
+  eq(paraFiscalizacao().map(e => e.to).sort().join(','),
+     ctx.rdoEmailDestinatarios().slice().sort().join(','), 'destinatários');
   const e = paraFiscalizacao()[0];
-  eq(e.to.split(',').length, 4, 'destinatários');
+  eq(e.to.split(',').length, 1, 'cada e-mail vai para uma pessoa só');
   verdade(e.subject.indexOf('nº 128') !== -1, 'assunto sem o número: ' + e.subject);
   verdade(e.subject.indexOf('24/08/2026') !== -1, 'assunto sem a data: ' + e.subject);
   eq(e.attachments.length, 1, 'anexos');
@@ -293,7 +310,7 @@ t('paralisação com JSON estragado não derruba o envio', () => {
   PLANILHA.RDO_Diario = [linhaDiario({ paralisacoes_json: '{isso não é json' })];
   depositar();
   verdade(ctx.reenviarRDOPorEmail(HOJE).ok);
-  eq(paraFiscalizacao().length, 1);
+  eq(paraFiscalizacao().length, 4);
 });
 t('o mesmo dia não é enviado duas vezes (gatilho repetido não repete o e-mail)', () => {
   depositar();
@@ -301,13 +318,13 @@ t('o mesmo dia não é enviado duas vezes (gatilho repetido não repete o e-mail
   const r2 = ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
   verdade(r2.ok, 'não é erro');
   eq(r2.pulado, 'já enviado');
-  eq(paraFiscalizacao().length, 1, 'e-mails');
+  eq(paraFiscalizacao().length, 4, 'e-mails');
 });
 t('reenvio manual manda de novo, de propósito', () => {
   depositar();
   ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
   ctx.reenviarRDOPorEmail(HOJE);
-  eq(paraFiscalizacao().length, 2);
+  eq(paraFiscalizacao().length, 8);
 });
 t('dia sem PDF: a fiscalização não recebe nada, o dono é avisado', () => {
   const r = ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
@@ -343,7 +360,7 @@ t('RDO sem linha na planilha ainda vai — o PDF é o que importa', () => {
   PLANILHA.RDO_Diario = [];
   depositar();
   verdade(ctx.reenviarRDOPorEmail(HOJE).ok);
-  eq(paraFiscalizacao().length, 1);
+  eq(paraFiscalizacao().length, 4);
 });
 t('o e-mail é do dia certo mesmo com outra obra na mesma data', () => {
   PLANILHA.RDO_Diario = [linhaDiario(), linhaDiario({ id: 'D0500', obra: 'ranario', numero_rdo: '7',
@@ -369,7 +386,7 @@ t('o gatilho manda o RDO de ONTEM — a data que ele mesmo calcula', () => {
   depositar({ data: ONTEM_DE_VERDADE });
   const r = ctx.enviarRDODeOntemPorEmail();
   verdade(r.ok, 'não enviou: ' + JSON.stringify(r));
-  eq(paraFiscalizacao().length, 1);
+  eq(paraFiscalizacao().length, 4);
   eq(r.data, ONTEM_DE_VERDADE);
 });
 t('e NÃO manda o de hoje, que ainda está sendo preenchido', () => {
