@@ -2316,7 +2316,14 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
   margin-top:2px;
 }
 .exec-kpi-val .unit { font-size:var(--fs-lg); color: var(--muted); font-weight: 500; letter-spacing: 0; margin-left:4px; }
-.exec-kpi-sub { font-size:var(--fs-xs); color: var(--muted); line-height: 1.4; margin-top:4px; }
+/* margin-top:auto cola o apoio na BASE do cartão. Os rótulos têm alturas
+   diferentes ("Frentes sem lançamento há 7+ dias" quebra em duas linhas
+   onde "RDOs no período" não quebra), e sem isso a última linha de cada
+   cartão parava numa altura diferente da vizinha. */
+.exec-kpi-sub { font-size:var(--fs-xs); color: var(--muted); line-height: 1.4; margin-top:auto; padding-top:6px; }
+/* O alerta vive no próprio número. Antes era um selo laranja no rótulo
+   repetindo o mesmo algarismo dois centímetros acima dele. */
+.exec-kpi-val.alerta { color: var(--acc); }
 .exec-kpi-sub strong { color: var(--text-2); font-weight: 600; }
 
 /* ===== Row 2:1 ===== */
@@ -2344,6 +2351,12 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 .exec-list-body { flex: 1; min-width: 0; }
 .exec-list-name { font-size:var(--fs-md); font-weight: 600; color: var(--text); line-height: 1.25; }
 .exec-list-meta { font-size:var(--fs-xs); color: var(--muted); margin-top:4px; }
+/* O título de seção existia só como style inline numa div. Vira classe:
+   o próximo bloco do painel herda o mesmo peso e o mesmo respiro em vez
+   de repetir os quatro atributos no olho. */
+.section-title { font-size:var(--fs-2xl); font-weight: 800; letter-spacing: -0.02em;
+  color: var(--text); margin: 28px 0 16px; }
+
 .exec-list-val { font-family: 'JetBrains Mono', monospace; font-size:var(--fs-md); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .exec-list-val.up { color: var(--grn); }
 .exec-list-val.down { color: var(--red); }
@@ -2439,13 +2452,22 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 .bar3d {
   position: absolute;
   width: 4px; margin-left: -2px;
-  background: linear-gradient(180deg, oklch(0.82 0.18 50) 0%, oklch(0.62 0.18 38) 55%, oklch(0.42 0.16 38) 100%);
+  /* A luminosidade sobe com --r (0..1): estaca cheia queima, estaca fraca
+     recua. É o segundo canal de leitura, ao lado da altura — que a
+     perspectiva achata. */
+  background: linear-gradient(180deg,
+    oklch(calc(0.70 + var(--r, .5) * 0.18) 0.18 50) 0%,
+    oklch(calc(0.52 + var(--r, .5) * 0.14) 0.18 38) 55%,
+    oklch(calc(0.36 + var(--r, .5) * 0.10) 0.16 38) 100%);
   border-radius: 1px;
   transform-origin: bottom center;
   transform: rotateX(-52deg);
   box-shadow: 0 0 8px oklch(0.62 0.18 38 / 0.5);
   animation: bar3dGrow 0.9s cubic-bezier(.34, 1.4, .64, 1) backwards;
 }
+/* A estaca de pico é citada no cabeçalho ("pico em E227"); agora dá para
+   achá-la na cena sem contar barra por barra. */
+.bar3d.pico { width: 6px; margin-left: -3px; box-shadow: 0 0 16px oklch(0.78 0.19 55 / 0.85); }
 .bar3d.dim { background: linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.06) 100%); box-shadow: none; width: 3px; margin-left: -1.5px; }
 .bar3d.cb { bottom: 72%; }
 .bar3d.bc { bottom: 14%; }
@@ -10144,7 +10166,12 @@ function renderAvenida3D(rdosAtivos, pacotesAtivos) {
     const dim    = e.lancamentos === 0 ? 'dim' : '';
     const delay  = 500 + Math.floor(i * 15) + atraso;
     const title  = `${e.rot} · ${e.lancamentos} RDO${e.lancamentos!==1?'s':''} · ${e.pacotes.size} pacote${e.pacotes.size!==1?'s':''}`;
-    return `<div class="bar3d ${pista} ${dim}" style="left:${left.toFixed(2)}%;height:${height}px;animation-delay:${delay}ms" title="${title}"></div>`;
+    // --r leva a intensidade para o CSS. A altura sozinha não bastava: a
+    // cena está deitada em rotateX(52deg), que comprime justamente a altura,
+    // e duas estacas bem diferentes chegavam ao olho quase iguais. Com a cor
+    // junto, o pico se lê mesmo achatado pelo ângulo.
+    const pico = e === topEstaca && e.lancamentos > 0 ? ' pico' : '';
+    return `<div class="bar3d ${pista} ${dim}${pico}" style="left:${left.toFixed(2)}%;height:${height}px;--r:${ratio.toFixed(3)};animation-delay:${delay}ms" title="${title}"></div>`;
   }
 
   /* Uma cena por VIA — e via não é a mesma coisa que eixo (ver
@@ -10186,7 +10213,7 @@ function renderAvenida3D(rdosAtivos, pacotesAtivos) {
             <div class="road-3d">${lados.map(l => l.barras).join('')}</div>
           </div>
           <div class="scene-legend">
-            <span class="scene-legend-item"><span class="scene-legend-swatch"></span>altura = nº de RDOs</span>
+            <span class="scene-legend-item"><span class="scene-legend-swatch"></span>altura e brilho = nº de RDOs</span>
             <span class="scene-legend-item"><span class="scene-legend-swatch dim"></span>sem atividade</span>
           </div>
         </div>`);
@@ -10618,8 +10645,8 @@ function renderExecutivo() {
         <!-- "Frentes em risco: 2" era lido em voz alta na reunião sem o
              critério junto, e "risco" cada um entende de um jeito. O rótulo
              passa a SER o critério; a linha de apoio fica para o detalhe. -->
-        <div class="exec-kpi-lbl">Frentes sem lançamento há 7+ dias ${frentesParadas > 0 ? '<span class="badge-mini">'+frentesParadas+'</span>' : ''}</div>
-        <div class="exec-kpi-val">${frentesParadas}<span class="unit">de ${totalFrentesNoFiltro}</span></div>
+        <div class="exec-kpi-lbl">Frentes sem lançamento há 7+ dias</div>
+        <div class="exec-kpi-val${frentesParadas > 0 ? ' alerta' : ''}">${frentesParadas}<span class="unit">de ${totalFrentesNoFiltro}</span></div>
         <div class="exec-kpi-sub">${frentesParadas === 0 ? 'Todas as frentes lançaram nos últimos 7 dias' : 'Contadas as frentes do filtro atual, pela data do último RDO'}</div>
       </div>
       <div class="exec-kpi stagger-item" style="animation-delay:.20s">
@@ -10686,7 +10713,7 @@ function renderExecutivo() {
                   <div class="exec-list-name">${escHtml(a.frente)}</div>
                   <div class="exec-list-meta">${a.dias === null ? 'Nunca recebeu RDO' : 'Última: ' + fmtData(a.ultData)}${a.pacotes ? ' · ' + a.pacotes + ' pacote' + (a.pacotes>1?'s':'') : ''}</div>
                 </div>
-                <div class="exec-list-val warn">${a.dias === null ? '— d' : a.dias + ' d'}</div>
+                <div class="exec-list-val warn">${a.dias === null ? '—' : a.dias + ' d'}</div>
               </div>
             `).join('') : `<div class="exec-list-empty">${ic('check')} Todas as frentes com atividade recente</div>`}
           </div>
@@ -10694,7 +10721,7 @@ function renderExecutivo() {
       </div>
     </div>
 
-    <div class="section-title stagger-item" style="animation-delay:.2s; font-size:var(--fs-2xl); font-weight:800; margin: 24px 0 16px; color: var(--text);">Infraestrutura & Avanço Físico</div>
+    <div class="section-title stagger-item" style="animation-delay:.2s">Infraestrutura & Avanço Físico</div>
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px;">
        ${Object.entries(porFrente).sort((a,b) => b[1].pctPond - a[1].pctPond).map(([f, d], i) => {
           // O ícone da frente sai do conjunto do app (icFrente lê o nome da
