@@ -3654,6 +3654,102 @@ function reenviarRDOAssinado(dataISO) {
 }
 
 // ------------------------------------------------------------
+// PARA RODAR NO EDITOR — as funções sem argumento
+// ------------------------------------------------------------
+/* O ▶ Executar do Apps Script NÃO passa argumentos: ele roda a função
+   escolhida na lista, e nada mais. Então `reenviarRDOPorEmail('2026-08-23')`
+   não tem onde ser digitado — quem só tem o editor fica sem como pôr em dia
+   um RDO atrasado, ou sem como ensaiar a assinatura antes de o link real
+   chegar à fiscalização.
+
+   O arranjo é o mesmo do ANO_MES_ALVO dos RDOs vazios: uma constante aqui
+   em cima, editada antes de rodar, e um irmão sem argumento para cada
+   função que precisa de data. As versões com argumento continuam existindo,
+   para quem chama de código. */
+var DATA_ALVO_ASSINATURA  = '';               // '' = ONTEM. Ex.: '2026-08-23'
+var PAPEL_ALVO_ASSINATURA = 'fiscalizacao';   // engenheiro | fiscalizacao | supervisao
+
+function dataAlvoAssinatura_() {
+  var d = normData(DATA_ALVO_ASSINATURA);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  // Vazio (ou torto) vale ONTEM — o mesmo dia que o gatilho da manhã leva.
+  return Utilities.formatDate(new Date(Date.now() - 24 * 3600 * 1000),
+                              fusoDoScript(), 'yyyy-MM-dd');
+}
+
+/* Quem assina o dia alvo, quem já assinou, e o LINK de cada um. Não manda
+   e-mail nenhum — é por onde se começa, e é o que pede a autorização nova
+   do Drive na primeira execução. */
+function verLinksDeAssinatura() {
+  return conferirAssinaturasRDO(dataAlvoAssinatura_());
+}
+
+/* Manda (ou remanda) o RDO do dia alvo para a lista, com o link pessoal de
+   cada assinante. É o caminho do RDO corrigido depois das 8h, e o do ensaio
+   com a Propriedade RDO_EMAILS apontando só para você. */
+function reenviarRDODoDiaAlvo() {
+  return reenviarRDOPorEmail(dataAlvoAssinatura_());
+}
+
+/* Remanda o RDO ASSINADO do dia alvo — o que leva o PDF com as firmas. */
+function reenviarRDOAssinadoDoDiaAlvo() {
+  return reenviarRDOAssinado(dataAlvoAssinatura_());
+}
+
+/* Cancela a assinatura de PAPEL_ALVO_ASSINATURA no dia alvo: apaga a firma,
+   deixa o rastro na Auditoria e sorteia um link novo para quem tem de
+   assinar. É o caminho da assinatura dada por engano — papel trocado, dia
+   errado. */
+function cancelarAssinaturaDoDiaAlvo() {
+  return rdoAssinaturaCancelar(dataAlvoAssinatura_(), PAPEL_ALVO_ASSINATURA,
+                               'cancelada pelo escritório');
+}
+
+/* DESFAZ UM ENSAIO. Apaga as linhas de assinatura do dia alvo — convites,
+   firmas e tudo.
+   --------------------------------------------------------------
+   Existe por causa de uma armadilha real: o convite de um dia é criado UMA
+   vez. Quem ensaia o fluxo apontando a Propriedade RDO_ASSINANTES para o
+   próprio e-mail deixa, naquele dia, linhas com o endereço errado — e como
+   elas já existem, o envio seguinte NÃO as recria. O fiscal simplesmente
+   nunca receberia o link daquele dia, sem erro nenhum aparecer.
+
+   Apagar as linhas devolve o dia ao estado de antes: o próximo envio cria
+   os convites de novo, já com os assinantes de verdade.
+
+   O que se perde é real — a firma que estava registrada ali. Por isso o
+   rastro vai para a Auditoria antes, e por isso isto não é uma ação do app:
+   é uma função de editor, rodada por quem sabe o que está desfazendo. */
+function apagarConvitesDoDiaAlvo() {
+  var d = dataAlvoAssinatura_();
+  var aba = getOrCreateAba(ABA_RDO_ASSIN);
+  var dados = aba.getDataRange().getValues();
+  if (dados.length <= 1) return { ok: true, apagadas: 0, data: d };
+
+  var nomes = dados[0].map(function (h) { return String(h).trim(); });
+  var cab = nomes.map(function (h) { return h.toLowerCase(); });
+  var iData = idxColuna(cab, 'data');
+  var iObra = idxColuna(cab, 'obra');
+  if (iData === -1) return { ok: false, error: 'Aba sem coluna de data' };
+
+  // De baixo para cima: apagar de cima envelheceria os índices das de baixo.
+  var apagadas = [];
+  for (var i = dados.length - 1; i >= 1; i--) {
+    if (normData(dados[i][iData]) !== d) continue;
+    if (iObra !== -1 && normObra(dados[i][iObra]) !== OBRA_ID) continue;
+    var resumo = nomes.map(function (n, k) {
+      return n === 'token' ? '' : n + '=' + dados[i][k];      // o token não vai para o log
+    }).filter(String).join(' | ');
+    registrarAuditoria(Session.getEffectiveUser().getEmail(), 'admin',
+                       'rdoAssinaturaApagarConvite', OBRA_ID, d, resumo, 'ensaio desfeito');
+    aba.deleteRow(i + 1);
+    apagadas.push(String(dados[i][idxColuna(cab, 'papel')] || ''));
+  }
+  Logger.log('Convites apagados em ' + d + ': ' + (apagadas.join(', ') || 'nenhum'));
+  return { ok: true, data: d, apagadas: apagadas.length, papeis: apagadas };
+}
+
+// ------------------------------------------------------------
 // BACKUP DIÁRIO — copia a planilha inteira para o Drive (pasta
 // "Backups Teotonio") e mantém as últimas 14 cópias.
 // ------------------------------------------------------------
