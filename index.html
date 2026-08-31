@@ -1089,13 +1089,22 @@ body.proj-cheia-ativa{overflow:hidden}
 
 
 /* ===== Curva S — a leitura embaixo do gráfico ===== */
+/* O canvas tinha 260px fixos dentro de um cartão que estica junto com o de
+   Destaques, ao lado: sobravam ~100px de vazio embaixo do gráfico. Agora a
+   altura é distribuída — o gráfico ocupa o que houver, com 260px de piso. */
+.curva-card{ display:flex; flex-direction:column; }
+.curva-card > .card-body{ flex:1; display:flex; flex-direction:column; }
+.curva-canvas{ position:relative; flex:1; min-height:260px; }
 .curva-leitura{
   display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;
-  margin-top:10px; padding-top:10px; border-top:1px solid var(--border);
-  font-size:var(--fs-sm); color:var(--muted); line-height:1.5;
+  margin-top:10px; padding-top:12px; border-top:1px solid var(--border);
+  font-size:var(--fs-lg); color:var(--muted); line-height:1.5;
 }
 .curva-leitura:empty{display:none}
-.cl-forte{font-weight:650}
+/* Este número é a conclusão do gráfico inteiro — "39,2 p.p. atrás do
+   cronograma" é o que se repete na reunião. Estava no mesmo corpo da
+   legenda de eixo. */
+.cl-forte{font-weight:750; font-size:var(--fs-xl); letter-spacing:-.01em}
 .cl-pos{color:var(--grn)}
 .cl-neg{color:var(--red)}
 .cl-neutro{color:var(--text-2)}
@@ -10664,7 +10673,7 @@ function renderExecutivo() {
 
     <!-- ============ CURVA S + DESTAQUES ============ -->
     <div class="exec-row-21">
-      <div class="card stagger-item" style="animation-delay:.24s">
+      <div class="card curva-card stagger-item" style="animation-delay:.24s">
         <div class="card-header">
           <div>
             <div class="card-title-lg">Curva S — Realizado vs. Previsto</div>
@@ -10676,7 +10685,7 @@ function renderExecutivo() {
         </div>
         <div class="card-body">
           ${rdosOrdenados.length > 0 ? `
-            <div style="position:relative;height:260px"><canvas id="curvaS"></canvas></div>
+            <div class="curva-canvas"><canvas id="curvaS"></canvas></div>
             <!-- preenchido por montarGraficos(): a leitura depende das séries -->
             <div class="curva-leitura" id="curvaLeitura"></div>
           ` : `<div class="empty"><div class="empty-icon">${ic('relogio')}</div><div class="empty-title">Sem dados no filtro</div><div class="empty-sub">Altere o filtro de mês ou frente.</div></div>`}
