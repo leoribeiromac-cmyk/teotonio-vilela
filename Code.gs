@@ -1263,29 +1263,36 @@ function rdoFoto(p) {
      já estavam na fila dos aparelhos sem clientId (nome determinístico
      id+idx). */
   var clientId = String(p.clientId || '').trim().replace(/[^\w-]/g, '').slice(0, 40);
-  var nome = 'rdo_teotonio_' + (p.id || Date.now()) + '_' + (p.idx || 0) +
-             (clientId ? '_' + clientId : '') + '.jpg';
-  var bytes = Utilities.base64Decode(b64.split(',')[1]);
+  var base = 'rdo_teotonio_' + (p.id || Date.now()) + '_' + (p.idx || 0) +
+             (clientId ? '_' + clientId : '');
   var pastas = DriveApp.getFoldersByName(PASTA_FOTOS);
   var pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder(PASTA_FOTOS);
 
-  var arquivo = null, reaproveitada = false;
-  try {
-    var iguais = pasta.getFilesByName(nome);
-    while (iguais.hasNext()) {
-      var jaExiste = iguais.next();
-      if (!jaExiste.isTrashed() && jaExiste.getSize() === bytes.length) {
-        arquivo = jaExiste; reaproveitada = true; break;
-      }
-    }
-  } catch (e) {}
-  if (!arquivo) {
-    arquivo = pasta.createFile(Utilities.newBlob(bytes, 'image/jpeg', nome));
-    arquivo.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  var gravada = gravarFotoNoDrive_(pasta, base + '.jpg', b64);
+  var arquivo = gravada.arquivo, reaproveitada = gravada.reaproveitada;
+
+  /* A SEGUNDA VERSÃO — A MESMA FOTO, SEM O CARIMBO.
+     ---------------------------------------------------------------
+     O carimbo é queimado na imagem no aparelho, ANTES do upload: é o que
+     faz a foto valer como prova em qualquer lugar que ela vá parar. O
+     preço é que o pixel de baixo da tarja se perde, e a mesma foto não
+     serve mais para relatório, apresentação ou ofício.
+     Por isso o app manda as duas, e as duas ficam na MESMA pasta privada.
+     Se a limpa falhar (cota, tempo de execução), a carimbada já está
+     gravada e a linha recebe o ponteiro assim mesmo: perder a versão de
+     enfeite é muito melhor do que perder a prova. */
+  var fileIdLimpa = '';
+  var limpaB64 = String(p.fotoLimpa || '');
+  if (limpaB64.indexOf('data:image') === 0) {
+    try { fileIdLimpa = gravarFotoNoDrive_(pasta, base + '_limpa.jpg', limpaB64).arquivo.getId(); }
+    catch (e) { fileIdLimpa = ''; }
   }
 
   var fileId = arquivo.getId();
-  var ponteiro = 'drive_id:' + fileId;
+  /* `drive_id:<carimbada>|<limpa>`. O app antigo casa `[\w-]+` e PARA no
+     `|`, então ele lê o ponteiro novo e enxerga a foto carimbada — a
+     Galeria de quem ainda não atualizou continua funcionando igual. */
+  var ponteiro = 'drive_id:' + fileId + (fileIdLimpa ? '|' + fileIdLimpa : '');
 
   // Anexa o ponteiro na linha do serviço. Se a foto subiu mas a linha ainda
   // não existe (fila offline), o arquivo fica no Drive e o app reenvia depois.
@@ -1326,8 +1333,33 @@ function rdoFoto(p) {
   } catch (e) {}
 
   registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoFoto', normObra(p.obra), p.id || '',
-                     '', fileId + (reaproveitada ? ' (reenvio — arquivo reaproveitado)' : ''));
-  return { ok: true, url: ponteiro, fileId: fileId };
+                     '', fileId + (fileIdLimpa ? ' +limpa:' + fileIdLimpa : '') +
+                     (reaproveitada ? ' (reenvio — arquivo reaproveitado)' : ''));
+  return { ok: true, url: ponteiro, fileId: fileId, fileIdLimpa: fileIdLimpa };
+}
+
+/* Grava (ou reaproveita) uma foto na pasta privada.
+   A IDEMPOTÊNCIA é o motivo de isto existir separado: o reenvio da fila
+   offline manda a mesma foto de novo, e nome igual com o mesmo tamanho em
+   bytes é a mesma imagem chegando outra vez — reaproveita em vez de criar
+   um segundo arquivo no Drive e um segundo ponteiro na linha. */
+function gravarFotoNoDrive_(pasta, nome, dataUri) {
+  var bytes = Utilities.base64Decode(String(dataUri).split(',')[1]);
+  var arquivo = null, reaproveitada = false;
+  try {
+    var iguais = pasta.getFilesByName(nome);
+    while (iguais.hasNext()) {
+      var jaExiste = iguais.next();
+      if (!jaExiste.isTrashed() && jaExiste.getSize() === bytes.length) {
+        arquivo = jaExiste; reaproveitada = true; break;
+      }
+    }
+  } catch (e) {}
+  if (!arquivo) {
+    arquivo = pasta.createFile(Utilities.newBlob(bytes, 'image/jpeg', nome));
+    arquivo.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  }
+  return { arquivo: arquivo, reaproveitada: reaproveitada };
 }
 
 /* Em que linha da aba de serviços esta foto pode encostar.

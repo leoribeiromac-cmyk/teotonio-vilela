@@ -102,6 +102,29 @@ aceita a linha daquela obra (`linhaDoServicoParaFoto`).
 `tests/foto-fica-na-obra.ui.test.js` (o app de verdade) e
 `tests/multiobra.test.js` (o servidor, com planilha falsa).
 
+## A foto tem duas versões: a que prova e a que se usa
+
+O carimbo é queimado NA IMAGEM (`desenharCarimbo`) — é o que o faz sobreviver
+a download, e-mail, impressão e PDF, e por isso a foto vale como prova. O
+preço é que ele apaga o pixel: a versão limpa, a que vai para relatório,
+ofício e apresentação, deixava de existir no instante da escolha, ainda
+dentro do aparelho.
+
+Agora sobem as DUAS (chave "Guardar também a foto original", na tela do
+carimbo), e o ponteiro da planilha carrega as duas:
+`drive_id:<carimbada>|<limpa>`. O `|` foi escolhido porque o `[\w-]+` do
+`fotoFileId` PARA nele — o aparelho com o app velho lê o ponteiro novo e
+enxerga a carimbada, como sempre. São dois lados que têm de bater:
+`fotoLimpaId` (index.html) e o `ponteiro` do `rdoFoto` (`Code.gs`).
+
+Para o acervo que subiu ANTES disso não há original em lugar nenhum. Ali a
+Galeria RECORTA a tarja (`acharTarjaDoCarimbo`): o filete de acento é a única
+linha da foto que atravessa a imagem inteira com uma cor só. A foto sai limpa
+e mais baixa, e a mensagem diz quanto se perdeu. A trava que não pode cair:
+horizonte liso NÃO é tarja — recortar foto sem carimbo seria comer pedaço de
+prova. `tests/foto-sem-carimbo.ui.test.js` (o app de verdade) e
+`tests/foto-limpa-servidor.test.js` (o servidor, com Drive falso).
+
 - `vendor/` — bibliotecas servidas pelo próprio site (Chart.js, jsPDF +
   AutoTable, xlsx-js-style, PDF.js). **Não voltar a usar CDN**: o app precisa
   abrir offline no canteiro. Ao trocar uma versão, subir também o `VERSAO`
