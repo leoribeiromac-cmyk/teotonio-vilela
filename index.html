@@ -1304,14 +1304,22 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 .pill-pri{background:var(--pri-l);color:var(--pri)}
 
 /* Frente tags */
-.f-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:var(--fs-2xs);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
-.f-Drenagem{background:#dceefb;color:#1a5276}
-.f-Demoli, .f-demolicao{background:#fadbd8;color:#922b21}
-.f-Via{background:#fdebd0;color:#935116}
-.f-Pav{background:#d6dbdf;color:#2c3e50}
-.f-Vala{background:#fcf3cf;color:#7d6608}
-.f-Sinaliza{background:#d5f5e3;color:#196f3d}
-.f-Muro{background:#e8e0f3;color:#4a3269}
+/* O SELO DA FRENTE SAI DA MESMA FONTE QUE O CARTÃO E O GRÁFICO
+   ------------------------------------------------------------------
+   Eram sete cores pastel escritas à mão aqui (#dceefb, #fadbd8…) —
+   uma TERCEIRA paleta, além do oklch de corDaFrente() nos cartões e do
+   amarelo das barras. A mesma Drenagem saía azul-pastel na tabela e
+   roxa no cartão, e frente que não estivesse na lista (as Ruas de Terra
+   têm outras) vinha sem cor nenhuma.
+   Agora o selo herda --f-cor da linha, que é corDaFrente(): uma fonte
+   de verdade só, frente nova já entra pintada, e o tema escuro vem de
+   graça — corDaFrente() clareia a cor quando o tema é escuro, enquanto
+   o pastel fixo ficava ilegível.
+   O color-mix degrada sozinho: sem suporte, a declaração cai e fica o
+   fundo neutro da regra anterior. */
+.f-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:var(--fs-2xs);font-weight:600;letter-spacing:.02em;text-transform:uppercase;
+  background:var(--surface-2);color:var(--text-2)}
+.f-tag{background:color-mix(in oklch, var(--f-cor, var(--acc)) 15%, transparent);color:var(--f-cor, var(--acc))}
 
 .prog-bar-wrap{width:100%;min-width:60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle}
 .prog-bar{height:100%;border-radius:3px;transition:width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1)}
@@ -1958,13 +1966,16 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 
 /* ===================== GRUPOS TÉCNICOS (3D PREMIUM) ===================== */
 .tech-card-3d { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); cursor: pointer; box-shadow: var(--sh); }
-.tech-card-3d:hover { transform: translateY(-6px) scale(1.02); box-shadow: var(--sh-lg); border-color: var(--pri); }
+.tech-card-3d:hover { transform: translateY(-3px); box-shadow: var(--sh-md); border-color: var(--f-cor, var(--pri)); }
 .tech-card-3d.active { border-color: var(--pri); box-shadow: 0 0 0 3px var(--pri-l); }
 /* Cabeçalho do cartão de frente: painel grafite com uma malha discreta e o
    ícone da frente em traço. Substituiu as ilustrações 3D — pesavam ~500 KB
    cada, mudavam de estilo a cada frente e não acompanhavam o tema. */
 .tech-card-image {
-  height: 160px; position: relative; overflow: hidden;
+  /* 118px, não 160: a capa ilustra o cartão, o número é que o justifica.
+     Com 160 a arte ocupava mais altura que o dado que o cartão existe
+     para mostrar. */
+  height: 118px; position: relative; overflow: hidden;
   border-bottom: 1px solid var(--border);
   /* o halo herda a cor da frente (--f-halo), a mesma do gráfico Tempo ×
      Estaca: o cartão e a linha do gráfico passam a falar da mesma frente
@@ -1983,23 +1994,45 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 }
 .tech-card-3d:hover .tech-card-image::before { opacity: .55; }
 .tech-card-image::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0) 62%); }
+/* A marca fica à DIREITA e o título à esquerda: com os dois na esquerda,
+   baixar a capa para 118px punha um em cima do outro. E .82 de opacidade
+   porque o ícone é a assinatura da frente, não uma placa de neon — o halo
+   já diz de quem é o cartão. */
 .tech-card-marca {
-  position: absolute; left: 20px; top: 50%; transform: translateY(-56%);
-  color: var(--f-cor, var(--acc)); line-height: 0; z-index: 1;
-  filter: drop-shadow(0 3px 14px rgba(0,0,0,.55));
+  position: absolute; right: 16px; top: 46%; transform: translateY(-50%);
+  color: var(--f-cor, var(--acc)); line-height: 0; z-index: 1; opacity: .82;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,.5));
   transition: transform .4s cubic-bezier(0.2,0.8,0.2,1);
 }
+
+/* ------------------------------------------------------------------
+   UMA COR POR CARTÃO
+   ------------------------------------------------------------------
+   O halo e o ícone já vinham da frente (--f-cor), mas a barra de avanço
+   era amarela nos nove cartões. Eram duas linguagens de cor dentro do
+   mesmo componente: a barra dizia "atenção" onde a frente dizia outra
+   coisa. Agora a barra e o trilho herdam --f-cor — o cartão inteiro fala
+   de uma frente só, e continua batendo com a linha dela no gráfico
+   Tempo × Estaca. Por isso --f-cor subiu para o .tech-card-3d: do
+   cabeçalho ele não alcançava a barra, que fica no conteúdo. */
+.tech-card-3d .prog-bar.parcial,
+.tech-card-3d .prog-bar.zero,
+.linha-frente .prog-bar.parcial { background: var(--f-cor, var(--acc)); }
+/* .completo fica de fora de propósito: o verde de 100% é informação
+   ("essa acabou"), não enfeite — pintá-lo da cor da frente apagaria o
+   único estado que o cartão precisa gritar. */
+.tech-card-3d .prog-bar-wrap { background: color-mix(in oklch, var(--f-cor, var(--acc)) 14%, transparent); }
 /* traço mais grosso do que no resto do conjunto: aqui o ícone é o
    elemento principal do cartão, não um adorno ao lado de um rótulo */
 .tech-card-marca .ic { stroke-width: 1.45; vertical-align: 0; }
 .tech-card-marca .ic .ic-fill { fill-opacity: .22; }
-.tech-card-3d:hover .tech-card-marca { transform: translateY(-54%) scale(1.06); }
+.tech-card-3d:hover .tech-card-marca { transform: translateY(-50%) scale(1.05); opacity: .95; }
 .tech-card-title-overlay { position: absolute; bottom: 14px; left: 16px; right: 16px; color: #fff; z-index: 2; display: flex; justify-content: space-between; align-items: flex-end; }
-.tech-card-title { font-size:var(--fs-2xl); font-weight: 800; letter-spacing: -0.02em; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+.tech-card-title { font-size:var(--fs-xl); font-weight: 800; letter-spacing: -0.015em; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 .tech-card-content { padding:16px; display: flex; flex-direction: column; gap:12px; }
 .tech-card-metric { display: flex; justify-content: space-between; align-items: baseline; }
-.tech-card-val { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1; }
-.tech-card-label { font-size:var(--fs-2xs); color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.tech-card-val { font-size: 30px; font-weight: 800; color: var(--text); line-height: 1; letter-spacing: -0.025em; }
+.tech-card-label { font-size:var(--fs-2xs); color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; }
 .tech-card-stats { font-size:var(--fs-xs); color: var(--muted); background: var(--surface-2); padding: 8px 12px; border-radius: 6px; display: flex; align-items: center; gap:6px; border: 1px solid var(--border); }
 
 /* ====================================================================
@@ -10609,9 +10642,9 @@ function renderExecutivo() {
           // frente), no lugar das ilustrações 3D: mesma linguagem do resto do
           // sistema e frente nova já entra desenhada, sem cadastrar arquivo.
           return `
-          <div class="tech-card-3d ${STATE.filtros.frente === f ? 'active' : ''} stagger-item" style="animation-delay:.${25 + i*5}s" onclick="atualizarFiltro('frente', '${f}')">
-            <div class="tech-card-image" style="--f-cor:${corDaFrente(f)};--f-halo:${corDaFrente(f, 0.22)}">
-               <span class="tech-card-marca">${ic(icFrente(f), 84)}</span>
+          <div class="tech-card-3d ${STATE.filtros.frente === f ? 'active' : ''} stagger-item" style="animation-delay:.${25 + i*5}s;--f-cor:${corDaFrente(f)};--f-halo:${corDaFrente(f, 0.22)}" onclick="atualizarFiltro('frente', '${f}')">
+            <div class="tech-card-image">
+               <span class="tech-card-marca">${ic(icFrente(f), 66)}</span>
                <div class="tech-card-title-overlay">
                   <div class="tech-card-title">${escHtml(f)}</div>
                </div>
@@ -10649,9 +10682,9 @@ function renderExecutivo() {
             </thead>
             <tbody>
               ${ativosOrdenados.map(a => `
-                <tr>
+                <tr class="linha-frente" style="--f-cor:${corDaFrente(getCSVField(a.pacote, 'Frente'))}">
                   <td><strong>${escHtml(getCSVField(a.pacote, 'Pacote'))}</strong></td>
-                  <td><span class="f-tag f-${frenteSlug(getCSVField(a.pacote, 'Frente'))}">${escHtml(getCSVField(a.pacote, 'Frente')||'')}</span></td>
+                  <td><span class="f-tag">${escHtml(getCSVField(a.pacote, 'Frente')||'')}</span></td>
                   <td class="t-num">${fmtNum(a.qtdExecutada)} <span style="color:var(--muted);font-size:var(--fs-xs)">/ ${fmtNum(a.qtdEstimada,0)} ${getCSVField(a.pacote, 'Unidade Física')||''}</span></td>
                   <td>
                     <div style="display:flex;align-items:center;gap:8px">
