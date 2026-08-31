@@ -187,15 +187,6 @@
   --fs-2xl:18px;   /* título de seção */
   --fs-3xl:22px;   /* número de KPI */
 
-  /* Escala do calendário de RDOs. Vive em token porque ela se INVERTE no
-     tema escuro: no claro, mais lançamentos = célula mais escura; no escuro,
-     mais escuro é o fundo, então o dia cheio tem de ser o mais LUMINOSO —
-     do contrário o pico de produção some no preto. */
-  --cal-1:oklch(0.88 0.07 38);
-  --cal-2:oklch(0.76 0.13 38);
-  --cal-3:oklch(0.62 0.17 38);
-  --cal-4:oklch(0.48 0.18 38);
-
   --r:12px;
   --r-sm:6px;
   --r-lg:16px;
@@ -221,8 +212,6 @@
     --text:#f2ede3; --text-2:#d8d1c4; --muted:#948b7c; --muted-2:#7d7566;
     --sidebar-bg:#0f0d0a;
     --sidebar-text:rgba(242,237,227,0.68);
-    --cal-1:oklch(0.42 0.09 38); --cal-2:oklch(0.55 0.14 38);
-    --cal-3:oklch(0.68 0.17 38); --cal-4:oklch(0.80 0.16 38);
     --sidebar-active-bg:rgba(255,255,255,0.12);
     --sidebar-hover-bg:rgba(255,255,255,0.06);
     --sidebar-border:rgba(255,255,255,0.1);
@@ -243,8 +232,6 @@
   --text:#f2ede3; --text-2:#d8d1c4; --muted:#948b7c; --muted-2:#7d7566;
   --sidebar-bg:#0f0d0a;
   --sidebar-text:rgba(242,237,227,0.68);
-  --cal-1:oklch(0.42 0.09 38); --cal-2:oklch(0.55 0.14 38);
-  --cal-3:oklch(0.68 0.17 38); --cal-4:oklch(0.80 0.16 38);
   --sidebar-active-bg:rgba(255,255,255,0.12);
   --sidebar-hover-bg:rgba(255,255,255,0.06);
   --sidebar-border:rgba(255,255,255,0.1);
@@ -2543,46 +2530,6 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .road-3d { width: 90%; height: 90px; }
 }
 
-/* ===== CALENDÁRIO 90d ===== */
-.cal-card .card-body { padding: 16px 22px; }
-.cal-wrap { display: flex; gap:24px; align-items: center; flex-wrap: wrap; }
-.cal-stats { display: flex; gap:28px; min-width: 220px; }
-.cal-stat { display: flex; flex-direction: column; gap:4px; }
-.cal-stat-num { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
-.cal-stat-num.acc { color: var(--acc); }
-.cal-stat-lbl { font-size:var(--fs-2xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top:6px; line-height: 1.3; }
-.cal-stat-sub { font-size:var(--fs-xs); color: var(--muted); margin-top:2px; }
-.cal-heatmap { display: flex; gap:18px; align-items: center; flex: 1; min-width: 320px; }
-.cal-grid-wrap { flex: 1; min-width: 0; }
-/* O dia é um QUADRADO. Com 13 colunas de 1fr numa altura fixa de 96px cada
-   dia virava um retângulo deitado de ~46x10px, e o calendário lia como
-   código de barras. A célula agora tem lado próprio (--cel), que encolhe
-   com a tela mas nunca deixa de ser quadrada. */
-.cal-quadro { display: grid; grid-template-columns: auto 1fr; gap:4px 8px; }
-.cal-meses { grid-column: 2; display: grid; grid-auto-flow: column; grid-auto-columns: calc(var(--cel) + 4px);
-  font-size:var(--fs-2xs); color: var(--muted); letter-spacing: .04em; }
-.cal-dias { grid-column: 1; display: grid; grid-template-rows: repeat(7, var(--cel)); gap:4px;
-  font-size:var(--fs-2xs); color: var(--muted); align-items: center; text-align: right; }
-.cal-grid { --cel: clamp(14px, 4.4vw, 25px); grid-column: 2;
-  display: grid; grid-template-columns: repeat(13, var(--cel)); grid-template-rows: repeat(7, var(--cel));
-  grid-auto-flow: column; gap:4px; justify-content: start; }
-.cal-quadro { --cel: clamp(14px, 4.4vw, 25px); }
-.cal-cell { border-radius: 2px; background: var(--bg-2); transition: transform 0.15s, box-shadow 0.15s; position: relative; min-width: 9px; cursor: default; }
-.cal-cell:hover { transform: scale(1.6); z-index: 3; box-shadow: var(--sh-md); }
-.cal-cell.lv0 { background: var(--bg-2); border: 1px solid var(--border); }
-.cal-cell.lv1 { background: var(--cal-1); }
-.cal-cell.lv2 { background: var(--cal-2); }
-.cal-cell.lv3 { background: var(--cal-3); }
-.cal-cell.lv4 { background: var(--cal-4); }
-.cal-cell.future { background: transparent; border: 1px dashed var(--border); }
-.cal-cell.today { box-shadow: 0 0 0 2px var(--text); }
-.cal-legend { display: flex; gap:4px; align-items: center; font-size:var(--fs-2xs); color: var(--muted); margin-top:10px; }
-.cal-legend-cell { width: 11px; height: 11px; border-radius: 2px; }
-.cal-axis { display: flex; justify-content: space-between; margin-top:8px; padding: 0 2px; font-size:var(--fs-2xs); color: var(--muted); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em; }
-@media (max-width: 900px) {
-  .cal-wrap { flex-direction: column; align-items: stretch; }
-  .cal-stats { flex-direction: row; min-width: 0; justify-content: space-around; }
-}
 
 /* ====================================================================
    MOBILE PASS — otimizações universais para celular/tablet
@@ -2826,18 +2773,6 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .tech-card-val { font-size:var(--fs-3xl); }
 }
 
-/* ===== Calendário 90d ===== */
-@media (max-width: 768px) {
-  .cal-card .card-body { padding: 12px 14px; }
-  .cal-wrap { gap:14px; }
-  .cal-stats { gap:16px; }
-  .cal-stat-num { font-size:var(--fs-3xl); }
-  .cal-heatmap { gap:10px; min-width: 0; }
-  .cal-grid { gap:2px; height: 84px; }
-  .cal-cell { min-width: 7px; border-radius: 1.5px; }
-  .cal-cell.lv0 { border-width: 0.5px; }
-  .cal-axis, .cal-legend { font-size:var(--fs-2xs); }
-}
 
 /* ===== Avenida 3D mobile ===== */
 @media (max-width: 768px) {
@@ -2956,10 +2891,9 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 @media (max-width: 768px) {
   .main, .page { min-width: 0; }
   .main { overflow-x: clip; overscroll-behavior-x: none; }
-  .card, .exec-kpi, .exec-hero, .cal-card, .avenue-card { min-width: 0; max-width: 100%; }
+  .card, .exec-kpi, .exec-hero, .avenue-card { min-width: 0; max-width: 100%; }
   .hero-main, .hero-side { min-width: 0; }
   .card-body.flush { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .cal-grid-wrap { min-width: 0; max-width: 100%; }
 }
 
 /* ===== Tap feedback (substitui hover em touch) ===== */
@@ -10034,105 +9968,6 @@ window.refreshIA = function() {
   carregarRecomendacaoIA(metrics, fa, totalPac, iniciados, gap || 0, true);
 };
 
-function renderCalendarioHeatmap(rdosAtivos) {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const dias = 91;
-  const counts = {};
-  rdosAtivos.forEach(r => {
-    const d = parseISODate(getCSVField(r, 'Data'));
-    if (!d) return;
-    d.setHours(0,0,0,0);
-    const diff = Math.floor((today - d) / 86400000);
-    if (diff < 0 || diff >= dias) return;
-    const k = ymd(d);
-    counts[k] = (counts[k] || 0) + 1;
-  });
-  const startDate = new Date(today.getTime() - (dias - 1) * 86400000);
-  startDate.setDate(startDate.getDate() - startDate.getDay());
-  const cells = [];
-  const cellCount = 13 * 7;
-  for (let i = 0; i < cellCount; i++) {
-    const d = new Date(startDate.getTime() + i * 86400000);
-    const dStr = ymd(d);
-    const isFuture = d > today;
-    const isToday = d.getTime() === today.getTime();
-    const c = counts[dStr] || 0;
-    let lv = 'lv0';
-    if (c > 0 && c <= 1) lv = 'lv1';
-    else if (c <= 3) lv = 'lv2';
-    else if (c <= 6) lv = 'lv3';
-    else if (c > 6) lv = 'lv4';
-    if (isFuture) lv = 'future';
-    const cls = ['cal-cell', lv];
-    if (isToday) cls.push('today');
-    const title = isFuture ? d.toLocaleDateString('pt-BR') + ' · futuro'
-                : `${d.toLocaleDateString('pt-BR')} · ${c} RDO${c!==1?'s':''}`;
-    cells.push(`<div class="${cls.join(' ')}" title="${title}"></div>`);
-  }
-  // Rótulo de mês na coluna em que o mês vira. Sem isso o calendário tinha
-  // duas datas soltas nas pontas e nenhuma âncora no meio: dava para ver que
-  // houve um buraco de lançamentos, não em QUE mês ele foi.
-  const rotulosMes = [];
-  for (let s = 0; s < 13; s++) {
-    const dSem = new Date(startDate.getTime() + s * 7 * 86400000);
-    const mesAnterior = s === 0 ? -1 : new Date(startDate.getTime() + (s - 1) * 7 * 86400000).getMonth();
-    rotulosMes.push(dSem.getMonth() !== mesAnterior
-      ? dSem.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '') : '');
-  }
-  const totalNoPeriodo = Object.values(counts).reduce((a,b) => a+b, 0);
-  const diasAtivos = Object.values(counts).filter(c => c > 0).length;
-  const mediaDia = totalNoPeriodo / dias;
-  const inicio = startDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-  const fim    = today.toLocaleDateString('pt-BR',     { day: '2-digit', month: 'short' });
-  return `
-    <div class="card stagger-item cal-card" style="animation-delay:.22s">
-      <div class="card-header">
-        <div>
-          <div class="card-title-lg">Pulsação dos últimos 90 dias</div>
-          <div class="card-title-sub">Calendário de RDOs · cada célula = 1 dia · quanto mais forte a cor, mais lançamentos</div>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="cal-wrap">
-          <div class="cal-stats">
-            <div class="cal-stat">
-              <div class="cal-stat-num acc">${totalNoPeriodo}</div>
-              <div class="cal-stat-lbl">RDOs em 90 dias</div>
-              <div class="cal-stat-sub">média ${mediaDia.toFixed(1)}/dia</div>
-            </div>
-            <div class="cal-stat">
-              <div class="cal-stat-num">${diasAtivos}</div>
-              <div class="cal-stat-lbl">Dias com lançamentos</div>
-              <div class="cal-stat-sub">${(diasAtivos/dias*100).toFixed(0)}% dos dias</div>
-            </div>
-          </div>
-          <div class="cal-heatmap">
-            <div class="cal-grid-wrap">
-              <div class="cal-quadro">
-                <div class="cal-meses">${rotulosMes.map(m => `<span>${m}</span>`).join('')}</div>
-                <div class="cal-dias">${['','seg','','qua','','sex',''].map(d => `<span>${d}</span>`).join('')}</div>
-                <div class="cal-grid">${cells.join('')}</div>
-              </div>
-              <div class="cal-axis">
-                <span>${inicio}</span>
-                <span>hoje · ${fim}</span>
-              </div>
-              <div class="cal-legend">
-                <span>menos</span>
-                <span class="cal-legend-cell lv0" style="background:var(--bg-2);border:1px solid var(--border)"></span>
-                <span class="cal-legend-cell" style="background:var(--cal-1)"></span>
-                <span class="cal-legend-cell" style="background:var(--cal-2)"></span>
-                <span class="cal-legend-cell" style="background:var(--cal-3)"></span>
-                <span class="cal-legend-cell" style="background:var(--cal-4)"></span>
-                <span>mais</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
 
 function calcAvancoPorEstaca(rdosAtivos, pacotesAtivos) {
   const estacas = {};
@@ -10668,8 +10503,6 @@ function renderExecutivo() {
     <!-- ============ VISUALIZAÇÃO 3D DO TRECHO ============ -->
     ${renderAvenida3D(rdosAtivos, pacotesAtivos)}
 
-    <!-- ============ CALENDÁRIO 90D ============ -->
-    ${renderCalendarioHeatmap(rdosAtivos)}
 
     <!-- ============ CURVA S + DESTAQUES ============ -->
     <div class="exec-row-21">
