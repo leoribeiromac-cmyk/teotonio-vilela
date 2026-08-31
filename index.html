@@ -1124,6 +1124,29 @@ body.proj-cheia-ativa{overflow:hidden}
 @media (min-width:960px){
   .login-layout{grid-template-columns:minmax(360px,420px) minmax(0,1fr); max-width:940px; gap:44px}
 }
+/* ------------------------------------------------------------------
+   A PLANTA ATRÁS DO LOGIN
+   ------------------------------------------------------------------
+   A primeira tela do sistema era um formulário sobre fundo liso, com a
+   metade de baixo vazia. Agora tem a planta do trecho atrás — e ela não
+   é uma imagem colorida: é uma MÁSCARA (assets/planta-trama.webp, traço
+   preto virado alpha). Quem pinta é o CSS, com var(--acc).
+   É essa diferença que a faz sobreviver ao que derrubou as ilustrações
+   3D dos cartões: um arquivo só (72 KB), e a cor acompanha o tema
+   sozinha, porque quem manda na cor é o token, não o pixel. */
+.login-layout{ position:relative; }
+.login-layout::before{
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-color: var(--acc); opacity:.20;
+  -webkit-mask-image:url('assets/planta-trama.webp'); mask-image:url('assets/planta-trama.webp');
+  /* 130% e fora de centro: a planta ATRAVESSA a tela em vez de caber nela.
+     Enquadrada certinha ela vira um quadro no meio da página; sangrando,
+     vira o chão em que o formulário está apoiado. */
+  -webkit-mask-size:130% auto; mask-size:130% auto;
+  -webkit-mask-position:60% 40%; mask-position:60% 40%;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+}
+.login-layout > *{ position:relative; z-index:1; }
 .login-card{width:100%;border-top:4px solid var(--acc);margin:0}
 .login-contexto{display:none}
 @media (min-width:960px){ .login-contexto{display:block; padding-top:6px} }
