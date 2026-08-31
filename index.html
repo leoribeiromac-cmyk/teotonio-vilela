@@ -2026,6 +2026,19 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 }
 .tech-card-3d:hover .tech-card-image::before { opacity: .55; }
 .tech-card-image::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0) 62%); }
+/* A MESMA planta do login, agora dentro do cartão e na cor da frente.
+   Continua sendo máscara: um arquivo, colorido pelo CSS. É a diferença
+   entre isto e as ilustrações 3D que saíram daqui — lá eram nove PNGs de
+   ~500 KB, cada um com um estilo, nenhum acompanhando o tema. */
+.tech-card-planta{
+  position:absolute; inset:0; pointer-events:none;
+  background-color: var(--f-cor, var(--acc)); opacity:.17;
+  -webkit-mask-image:url('assets/planta-trama.webp'); mask-image:url('assets/planta-trama.webp');
+  -webkit-mask-size:230% auto; mask-size:230% auto;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+  -webkit-mask-position:var(--mx, 30%) 55%; mask-position:var(--mx, 30%) 55%;
+}
+
 /* A marca fica à DIREITA e o título à esquerda: com os dois na esquerda,
    baixar a capa para 118px punha um em cima do outro. E .82 de opacidade
    porque o ícone é a assinatura da frente, não uma placa de neon — o halo
@@ -10595,6 +10608,9 @@ function renderExecutivo() {
           return `
           <div class="tech-card-3d ${STATE.filtros.frente === f ? 'active' : ''} stagger-item" style="animation-delay:.${25 + i*5}s;--f-cor:${corDaFrente(f)};--f-halo:${corDaFrente(f, 0.22)}" onclick="atualizarFiltro('frente', '${f}')">
             <div class="tech-card-image">
+               <!-- --mx desloca o recorte da planta: mesma imagem, trecho
+                    diferente em cada frente. Nove texturas sem nove arquivos. -->
+               <span class="tech-card-planta" style="--mx:${(i*23)%100}%"></span>
                <span class="tech-card-marca">${ic(icFrente(f), 66)}</span>
                <div class="tech-card-title-overlay">
                   <div class="tech-card-title">${escHtml(f)}</div>
