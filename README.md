@@ -517,14 +517,40 @@ Na tela do RDO Diário há o painel **Assinatura online**: quem já assinou, qua
 e o botão **Link** para copiar o link pessoal de quem ainda não assinou — é o que
 resolve o "não me chegou nada" sem esperar o e-mail do dia seguinte.
 
-Funções para rodar no editor:
+#### Funções para rodar no editor
 
-- **`conferirAssinaturasRDO('2026-08-24')`** — quem assina, quem já assinou e o
-  link de cada um naquele dia. Não manda e-mail.
-- **`rdoAssinaturaCancelar('2026-08-24', 'fiscalizacao', 'assinou no dia errado')`**
-  — cancela uma firma dada por engano, deixa o rastro na Auditoria e sorteia um
-  link novo.
-- **`reenviarRDOAssinado('2026-08-24')`** — remanda o RDO assinado daquele dia.
+O **▶ Executar** do Apps Script não passa argumentos: ele roda a função
+escolhida na lista, e nada mais. Por isso cada função que precisa de uma data
+tem um irmão **sem argumento**, que lê `DATA_ALVO_ASSINATURA` — a constante no
+alto do bloco, editada antes de rodar (mesmo arranjo do `ANO_MES_ALVO` dos RDOs
+vazios). Deixe a constante **vazia** para trabalhar com **ontem**, que é o dia
+que o gatilho da manhã leva.
+
+| Função (▶ Executar) | O que faz |
+| --- | --- |
+| `verLinksDeAssinatura()` | Quem assina, quem já assinou e o **link** de cada um. Não manda e-mail — é por onde se começa, e é o que pede a autorização nova do Drive. |
+| `reenviarRDODoDiaAlvo()` | Manda (ou remanda) o RDO daquele dia, com o link pessoal de cada assinante. |
+| `reenviarRDOAssinadoDoDiaAlvo()` | Remanda o **RDO assinado** — o que leva o PDF com as firmas. |
+| `cancelarAssinaturaDoDiaAlvo()` | Cancela a firma de `PAPEL_ALVO_ASSINATURA` naquele dia, com rastro na Auditoria e link novo. |
+| `apagarConvitesDoDiaAlvo()` | **Desfaz um ensaio**: apaga as linhas de assinatura daquele dia. |
+
+As versões com argumento continuam existindo para quem chama de código:
+`conferirAssinaturasRDO(data)`, `reenviarRDOAssinado(data)`,
+`rdoAssinaturaCancelar(data, papel, motivo)`.
+
+#### Ensaiar antes de o link chegar à fiscalização
+
+Aponte tudo para você, com duas Propriedades temporárias — `RDO_EMAILS` só com
+o seu endereço, e `RDO_ASSINANTES` com os dois papéis apontando para ele.
+Escolha um **dia que não importa** (um domingo, um dia antigo), gere o PDF
+Oficial dele no app, e rode `reenviarRDODoDiaAlvo()`: os dois links chegam para
+você, dá para assinar os dois pelo celular e ver o "RDO ASSINADO" voltar.
+
+Ao terminar, **rode `apagarConvitesDoDiaAlvo()`** e remova as duas
+Propriedades. O passo não é opcional: o convite de um dia é criado **uma vez**,
+então as linhas do ensaio ficariam ali com o seu endereço, o envio seguinte não
+as recriaria, e o fiscal nunca receberia o link daquele dia — sem erro nenhum
+aparecer.
 
 ## Configuração pela planilha (sem mexer em código)
 

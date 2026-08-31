@@ -113,6 +113,7 @@ function abaFalsa(nome, cab, linhas) {
     getLastColumn: () => cab.length,
     getLastRow: () => linhas.length + 1,
     appendRow(l) { linhas.push(l.slice()); },
+    deleteRow(l) { if (l > 1) linhas.splice(l - 2, 1); },
   };
 }
 const ABAS_FALSAS = {
@@ -210,6 +211,9 @@ function limpar() {
   PLANILHA.RDO_Assinaturas = [];
   PLANILHA.Auditoria = [];
   CORREIO.enviados = []; CORREIO.cota = 100;
+  // as constantes do painel de editor voltam ao padrão entre um teste e outro
+  ctx.DATA_ALVO_ASSINATURA = '';
+  ctx.PAPEL_ALVO_ASSINATURA = 'fiscalizacao';
 }
 
 let falhas = 0;
@@ -581,6 +585,93 @@ t('outra obra não tem assinatura online — a mesma trava do depósito', () => 
 });
 t('data inválida é recusada', () => {
   verdade(!ctx.rdoAssinaturasDoDia({ obra: 'teotonio', data: 'ontem' }).ok);
+});
+
+console.log('\nAs funções sem argumento, para o ▶ Executar do editor');
+/* O editor do Apps Script não passa argumentos: quem só tem o botão ▶ ficava
+   sem como reenviar um RDO atrasado ou ensaiar a assinatura. */
+t('sem data na constante, o alvo é ONTEM — o mesmo dia do gatilho da manhã', () => {
+  ctx.DATA_ALVO_ASSINATURA = '';
+  const d = new Date(Date.now() - 24 * 3600 * 1000);
+  const ontem = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+                '-' + String(d.getDate()).padStart(2, '0');
+  eq(ctx.dataAlvoAssinatura_(), ontem);
+});
+t('com data na constante, é ela que vale', () => {
+  ctx.DATA_ALVO_ASSINATURA = HOJE;
+  eq(ctx.dataAlvoAssinatura_(), HOJE);
+});
+t('data torta na constante não trava nada — cai em ontem', () => {
+  ctx.DATA_ALVO_ASSINATURA = 'ontem de manhã';
+  verdade(/^\d{4}-\d{2}-\d{2}$/.test(ctx.dataAlvoAssinatura_()), ctx.dataAlvoAssinatura_());
+});
+t('verLinksDeAssinatura() roda sem argumento e traz os links do dia alvo', () => {
+  ctx.DATA_ALVO_ASSINATURA = HOJE;
+  const r = ctx.verLinksDeAssinatura();
+  verdade(r.ok, JSON.stringify(r));
+  eq(r.data, HOJE);
+  eq(r.assinaturas.length, 2);
+  verdade(r.assinaturas.every(a => String(a.link).indexOf('assinar.html?t=') !== -1), 'sem link');
+});
+t('reenviarRDODoDiaAlvo() manda o RDO daquele dia', () => {
+  ctx.DATA_ALVO_ASSINATURA = HOJE;
+  depositar();
+  verdade(ctx.reenviarRDODoDiaAlvo().ok);
+  eq(paraLista().length, 4);
+});
+
+console.log('\nDesfazer um ensaio');
+/* A armadilha: o convite de um dia é criado UMA vez. Quem ensaia apontando o
+   RDO_ASSINANTES para o próprio e-mail deixa o dia com o endereço errado, e
+   o envio seguinte NÃO recria — o fiscal nunca receberia o link daquele dia,
+   sem erro nenhum aparecer. */
+t('apaga os convites do dia alvo', () => {
+  ctx.DATA_ALVO_ASSINATURA = HOJE;
+  convites();
+  eq(PLANILHA.RDO_Assinaturas.length, 2, 'antes');
+  const r = ctx.apagarConvitesDoDiaAlvo();
+  verdade(r.ok, JSON.stringify(r));
+  eq(r.apagadas, 2);
+  eq(PLANILHA.RDO_Assinaturas.length, 0, 'depois');
+});
+t('e só os daquele dia — o dia vizinho fica de pé', () => {
+  ctx.DATA_ALVO_ASSINATURA = HOJE;
+  convites(HOJE);
+  convites('2026-08-25');
+  eq(PLANILHA.RDO_Assinaturas.length, 4, 'antes');
+  ctx.apagarConvitesDoDiaAlvo();
+  eq(PLANILHA.RDO_Assinaturas.length, 2, 'depois');
+  eq(ctx.rdoAssinLinhasDoDia_('teotonio', '2026-08-25').length, 2, 'o vizinho');
+});
+t('depois de apagar, o envio seguinte cria os convites de novo', () => {
+  ctx.DATA_ALVO_ASSINATURA = HOJE;
+  const antes = tokenDe('fiscalizacao');
+  ctx.apagarConvitesDoDiaAlvo();
+  const depois = tokenDe('fiscalizacao');
+  verdade(depois && depois !== antes, 'não sorteou convite novo');
+});
+t('a firma apagada deixa rastro na auditoria', () => {
+  ctx.DATA_ALVO_ASSINATURA = HOJE;
+  assinar('fiscalizacao', { nome: 'Ensaio do Escritório' });
+  ctx.apagarConvitesDoDiaAlvo();
+  const linhas = PLANILHA.Auditoria.filter(
+    l => l[CAB_AUDIT.indexOf('acao')] === 'rdoAssinaturaApagarConvite');
+  verdade(linhas.length >= 1, 'sem rastro');
+  verdade(linhas.some(l => String(l[CAB_AUDIT.indexOf('detalhesAnteriores')])
+                             .indexOf('Ensaio do Escritório') !== -1), 'sem quem tinha assinado');
+});
+t('e o rastro NÃO leva o token junto — ele é credencial, não histórico', () => {
+  ctx.DATA_ALVO_ASSINATURA = HOJE;
+  const tok = tokenDe('fiscalizacao');
+  ctx.apagarConvitesDoDiaAlvo();
+  const tudo = JSON.stringify(PLANILHA.Auditoria);
+  verdade(tudo.indexOf(tok) === -1, 'vazou o token na auditoria');
+});
+t('dia sem convite nenhum não é erro', () => {
+  ctx.DATA_ALVO_ASSINATURA = '2026-07-01';
+  const r = ctx.apagarConvitesDoDiaAlvo();
+  verdade(r.ok);
+  eq(r.apagadas, 0);
 });
 
 console.log('\nCancelar uma assinatura dada por engano');
