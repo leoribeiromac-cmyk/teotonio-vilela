@@ -1370,6 +1370,11 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 /* O rótulo da linha ACOMPANHA a rolagem horizontal: com 30+ colunas o grid
    passa da largura do cartão, e rolar de lado deixava só faixas de cor sem
    dizer de que pacote são. */
+/* O rótulo alinha à direita (fica colado na matriz, que é o certo para ler
+   linha a linha), mas alinhar à direita com overflow:hidden corta o texto
+   pelo COMEÇO: "Construção de muros de divisa" chegava na tela como
+   "trução de muros de divisa", e é o começo que diz qual serviço é. O nome
+   agora vive num span que corta pelo fim, com reticências. */
 .hm-row-label{
   font-size:var(--fs-2xs);font-weight:600;color:var(--muted);
   padding:0 8px 0 4px;display:flex;align-items:center;justify-content:flex-end;
@@ -1377,6 +1382,7 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
   position:sticky;left:0;z-index:2;background:var(--surface);
 }
 /* a faixa de valor daquela linha — cada linha tem escala própria */
+.hm-row-nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .hm-row-label small{font-weight:400;opacity:.75;margin-left:6px;flex-shrink:0}
 .hm-col-label{
   font-size:var(--fs-2xs);color:var(--muted);font-family:'JetBrains Mono',monospace;
@@ -12070,7 +12076,7 @@ function renderHeatmap(av) {
                ao lado do nome é o que torna a leitura possível. */
             const un = getCSVField(a.pacote, 'Unidade Física') || '';
             return `
-              <div class="hm-row-label" title="Nesta linha, o tom mais escuro vale ${fmtNum(max, 1)} ${escHtml(un)} numa estaca">${escHtml(getCSVField(a.pacote, 'Pacote'))}<small>0–${fmtNum(max, 0)} ${escHtml(un)}</small></div>
+              <div class="hm-row-label" title="${escHtml(getCSVField(a.pacote, 'Pacote'))} — nesta linha, o tom mais escuro vale ${fmtNum(max, 1)} ${escHtml(un)} numa estaca"><span class="hm-row-nome">${escHtml(getCSVField(a.pacote, 'Pacote'))}</span><small>0–${fmtNum(max, 0)} ${escHtml(un)}</small></div>
               ${lista.map(e => {
                 const v = a.porEstaca[e.id] || 0;
                 const intensity = max > 0 ? Math.min(v / max, 1) : 0;
