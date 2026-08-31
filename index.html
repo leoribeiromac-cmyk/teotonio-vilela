@@ -1319,7 +1319,11 @@ table.t th{
 table.t td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:var(--fs-md); transition: background 0.2s;}
 table.t tr:last-child td{border-bottom:none}
 table.t tr:hover td{background:var(--bg)}
-table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.04em;padding:8px 14px}
+/* A faixa de frente pega a COR DA FRENTE, como o cartão do painel e o selo
+   da tabela de pacotes. Era azul (--pri) para todas: Drenagem aparecia
+   magenta no painel e azul aqui, na mesma sessão de trabalho. O fallback
+   mantém o azul onde a linha não declara frente nenhuma. */
+table.t tr.summary td{background:color-mix(in oklch, var(--f-cor, var(--pri)) 13%, transparent);font-weight:600;color:var(--f-cor, var(--pri));font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.04em;padding:8px 14px}
 /* o avanço da frente, na mesma régua do Painel */
 table.t tr.summary .summary-pct{margin-left:10px;font-family:'JetBrains Mono',monospace;font-weight:700}
 table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:none;letter-spacing:0;opacity:.75}
@@ -2321,8 +2325,14 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 
 /* ===== Exec secondary KPIs ===== */
 .exec-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap:14px; }
-@media(max-width:900px){ .exec-kpi-grid { grid-template-columns: repeat(2,1fr); } }
-@media(max-width:560px){ .exec-kpi-grid { grid-template-columns: 1fr; } }
+/* O Cronograma tem cinco indicadores, não quatro. É uma CLASSE e não um
+   style inline porque inline ganha das media queries abaixo — e o mesmo
+   grid que fica bom em cinco colunas no desktop vira cinco tirinhas
+   ilegíveis no celular. */
+.exec-kpi-grid.cinco { grid-template-columns: repeat(5, 1fr); }
+@media(max-width:1100px){ .exec-kpi-grid.cinco { grid-template-columns: repeat(3,1fr); } }
+@media(max-width:900px){ .exec-kpi-grid, .exec-kpi-grid.cinco { grid-template-columns: repeat(2,1fr); } }
+@media(max-width:560px){ .exec-kpi-grid, .exec-kpi-grid.cinco { grid-template-columns: 1fr; } }
 .exec-kpi {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r); padding: 16px 18px;
@@ -2342,8 +2352,12 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 .exec-kpi-val {
   font-family: 'JetBrains Mono', monospace;
   font-size: 30px; font-weight: 700; letter-spacing: -0.03em;
-  line-height: 1.05; color: var(--text); font-variant-numeric: tabular-nums;
+  line-height: 1.05; font-variant-numeric: tabular-nums;
   margin-top:2px;
+  /* --kpi-cor deixa o cartão servir também ao Cronograma, onde a cor do
+     número é INFORMAÇÃO (atrasado, crítico, no prazo) e não enfeite.
+     Sem o token, cada tela reinventava o próprio cartão de indicador. */
+  color: var(--kpi-cor, var(--text));
 }
 .exec-kpi-val .unit { font-size:var(--fs-lg); color: var(--muted); font-weight: 500; letter-spacing: 0; margin-left:4px; }
 /* margin-top:auto cola o apoio na BASE do cartão. Os rótulos têm alturas
@@ -11867,7 +11881,7 @@ function renderAvancoFisico() {
                    que não diz nada sobre o andamento: oito pacotes podem ser
                    5% ou 95% da frente. Entra o avanço ponderado, a mesma
                    régua de dias-equivalentes do Painel. -->
-              <tr class="summary"><td colspan="7">${escHtml(f)} — ${lista.length} pacote${lista.length>1?'s':''}
+              <tr class="summary" style="--f-cor:${corDaFrente(f)}"><td colspan="7">${escHtml(f)} — ${lista.length} pacote${lista.length>1?'s':''}
                 <span class="summary-pct">${fmtPct(pctPondDaFrente(lista))} da frente</span>
                 <span class="summary-nota">avanço ponderado, em dias-equivalentes</span></td></tr>
               ${lista.map(a => `
@@ -12399,14 +12413,20 @@ function renderCronogramaReverso() {
   const proximos   = linhas.filter(l => l.inicioNec && !l.concluido).sort((a,b) => a.inicioNec - b.inicioNec);
   const urgente    = proximos.find(l => l.status !== 'atrasado'); // próximo início que ainda dá tempo
 
+  /* O MESMO cartão do Painel Executivo (.exec-kpi). Antes esta tela tinha
+     o seu: outro tamanho de número, outro espaçamento, a cor por style
+     inline e o padding escrito à mão na chamada. Três telas, três cartões
+     de indicador — e nenhuma razão para isso, porque dizem a mesma coisa.
+     A cor do número continua vindo de fora, que aqui é informação: quem
+     está atrasado é vermelho, quem tem folga é azul. */
   const kpiCard = (label, valor, sub, accent) =>
-    `<div class="kpi-card" style="--kpi-size:30px;padding:14px 16px">
-       <div class="kpi-label">${label}</div>
-       <div class="kpi-value" style="color:${accent||'var(--text)'}">${valor}</div>
-       <div class="kpi-sub">${sub}</div>
+    `<div class="exec-kpi">
+       <div class="exec-kpi-lbl">${label}</div>
+       <div class="exec-kpi-val" style="--kpi-cor:${accent||'var(--text)'}">${valor}</div>
+       <div class="exec-kpi-sub">${sub}</div>
      </div>`;
 
-  const kpis = `<div class="kpi-grid stagger-item" style="margin-bottom:14px">
+  const kpis = `<div class="exec-kpi-grid cinco stagger-item" style="margin-bottom:14px">
     ${kpiCard('Atrasados', nAtrasado, 'já deveriam ter começado', nAtrasado ? 'var(--red)' : 'var(--grn)')}
     ${kpiCard('Críticos', nCritico, `folga ≤ ${PLAN_CRITICO_DIAS} dias úteis`, nCritico ? 'var(--ylw-d)' : 'var(--muted)')}
     ${kpiCard('No prazo', nNoPrazo, 'com folga confortável', 'var(--blu)')}
@@ -12468,7 +12488,7 @@ function renderCronogramaReverso() {
   // ─── Tabela ──────────────────────────────────────────────────────────────
   let body = '';
   Object.entries(porFrente).forEach(([frente, arr]) => {
-    body += `<tr class="summary"><td colspan="7">${escHtml(frente)}</td></tr>`;
+    body += `<tr class="summary" style="--f-cor:${corDaFrente(frente)}"><td colspan="7">${escHtml(frente)}</td></tr>`;
 
     arr.forEach(l => {
       const { pid, unid, qtdTotal, qtdExec, saldo, pct, prodPadrao, plan, concluido } = l;
