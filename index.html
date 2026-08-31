@@ -2040,7 +2040,18 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
    ==================================================================== */
 .exec-hero {
   position: relative;
-  background: radial-gradient(ellipse at top right, #2a221c 0%, #1a1612 55%, #0f0c08 100%);
+  /* Três camadas, de cima para baixo:
+     1. um véu que escurece a ESQUERDA, onde mora o número grande — sem ele
+        a trama passa por trás do "50,1%" e come o contraste;
+     2. a trama: planta da avenida em traço fino (assets/hero-trama.webp,
+        54 KB, uma só, e o hero é sempre escuro — por isso ela não repete o
+        problema das ilustrações 3D de 500 KB que saíram dos cartões);
+     3. o gradiente de sempre, que continua sendo o fundo de verdade.
+     Nenhum texto vive na imagem: tudo que se lê no hero é DOM. */
+  background:
+    linear-gradient(90deg, #1a1612 0%, rgba(26,22,18,.97) 34%, rgba(26,22,18,.88) 62%, rgba(26,22,18,.78) 100%),
+    url('assets/hero-trama.webp') right center / cover no-repeat,
+    radial-gradient(ellipse at top right, #2a221c 0%, #1a1612 55%, #0f0c08 100%);
   color: #fff;
   border-radius: var(--r-lg);
   padding: 30px 36px 24px;
@@ -2049,6 +2060,15 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
   gap:36px;
   overflow: hidden;
   box-shadow: 0 1px 2px rgba(20,15,10,0.06), 0 12px 32px rgba(20,15,10,0.10);
+}
+/* No celular o hero vira uma coluna só e o texto ocupa a largura inteira:
+   o véu lateral não tem onde proteger, e a trama passa por trás de tudo.
+   Some ali de propósito — e de quebra são 54 KB que o 4G do canteiro não
+   baixa. */
+@media (max-width: 768px) {
+  .exec-hero {
+    background: radial-gradient(ellipse at top right, #2a221c 0%, #1a1612 55%, #0f0c08 100%);
+  }
 }
 .exec-hero::before {
   content: '';
