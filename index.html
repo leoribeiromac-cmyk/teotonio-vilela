@@ -1097,22 +1097,14 @@ body.proj-cheia-ativa{overflow:hidden}
 .cl-neutro{color:var(--text-2)}
 
 /* ===== Prévia de medição — a faixa de resumo ===== */
-.medicao-resumo{
-  display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:2px;
-  background:var(--border); border:1px solid var(--border); border-radius:var(--r);
-  overflow:hidden; margin-bottom:16px;
-}
-.med-kpi{background:var(--surface); padding:13px 16px; display:flex; flex-direction:column; gap:4px}
-.med-kpi-lbl{
-  font-size:var(--fs-2xs); font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
-}
-.med-kpi-val{
-  font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xl); font-weight:600;
-  font-variant-numeric:tabular-nums; color:var(--text); line-height:1.15;
-}
-.med-kpi.alerta .med-kpi-val{color:var(--red)}
-.med-kpi.atencao .med-kpi-val{color:var(--ylw-d)}
-.med-kpi-ok{font-family:inherit; font-size:var(--fs-sm); font-weight:500; color:var(--grn)}
+/* O Apoio à Medição tinha o TERCEIRO cartão de indicador do app
+   (.med-kpi, numa faixa colada de 2px). Agora usa o mesmo dos outros
+   dois. O que ele tinha de próprio e era legítimo virou variante:
+   .texto para o valor que é palavra e não número ("Obra inteira" em 30px
+   de monospace estouraria a coluna), e .exec-kpi-ok para o "nenhum"
+   verde ao lado do zero. */
+.exec-kpi-val.texto{ font-size:var(--fs-2xl); font-weight:600; letter-spacing:0; line-height:1.15; }
+.exec-kpi-ok{ font-family:inherit; font-size:var(--fs-sm); font-weight:500; color:var(--grn); }
 
 /* ===== Tela de acesso =====
    O formulário fica à esquerda e o contexto à direita, no computador; no
@@ -2330,6 +2322,7 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
    grid que fica bom em cinco colunas no desktop vira cinco tirinhas
    ilegíveis no celular. */
 .exec-kpi-grid.cinco { grid-template-columns: repeat(5, 1fr); }
+.exec-kpi-grid.auto { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
 @media(max-width:1100px){ .exec-kpi-grid.cinco { grid-template-columns: repeat(3,1fr); } }
 @media(max-width:900px){ .exec-kpi-grid, .exec-kpi-grid.cinco { grid-template-columns: repeat(2,1fr); } }
 @media(max-width:560px){ .exec-kpi-grid, .exec-kpi-grid.cinco { grid-template-columns: 1fr; } }
@@ -12888,22 +12881,26 @@ function renderMedicao(){
     ? lista.filter(x => !x.estourou && x.pctContrato !== null && x.pctContrato >= 0.9).length
     : 0;
   const resumoMedicao = !lista.length ? '' : `
-    <div class="medicao-resumo stagger-item">
-      <div class="med-kpi">
-        <span class="med-kpi-lbl">Período</span>
-        <span class="med-kpi-val">${escHtml(MEDICAO_MES ? nomeMesAno(MEDICAO_MES) : 'Obra inteira')}</span>
+    <div class="exec-kpi-grid auto stagger-item" style="margin-bottom:16px">
+      <div class="exec-kpi">
+        <div class="exec-kpi-lbl">Período</div>
+        <div class="exec-kpi-val texto">${escHtml(MEDICAO_MES ? nomeMesAno(MEDICAO_MES) : 'Obra inteira')}</div>
+        <div class="exec-kpi-sub">recorte aplicado à prévia abaixo</div>
       </div>
-      <div class="med-kpi">
-        <span class="med-kpi-lbl">Itens medidos</span>
-        <span class="med-kpi-val">${lista.length}</span>
+      <div class="exec-kpi">
+        <div class="exec-kpi-lbl">Itens medidos</div>
+        <div class="exec-kpi-val">${lista.length}</div>
+        <div class="exec-kpi-sub">itens contratuais com consumo no período</div>
       </div>
-      <div class="med-kpi${estourados.length ? ' alerta' : ''}">
-        <span class="med-kpi-lbl">Acima do contrato</span>
-        <span class="med-kpi-val">${estourados.length}${estourados.length ? '' : ' <span class="med-kpi-ok">nenhum</span>'}</span>
+      <div class="exec-kpi">
+        <div class="exec-kpi-lbl">Acima do contrato</div>
+        <div class="exec-kpi-val" style="--kpi-cor:${estourados.length ? 'var(--red)' : 'var(--text)'}">${estourados.length}${estourados.length ? '' : ' <span class="exec-kpi-ok">nenhum</span>'}</div>
+        <div class="exec-kpi-sub">${estourados.length ? 'consumo passou da quantidade contratada' : 'nenhum item passou da quantidade contratada'}</div>
       </div>
-      ${temContrato ? `<div class="med-kpi${emAlerta ? ' atencao' : ''}">
-        <span class="med-kpi-lbl">Saldo abaixo de 10%</span>
-        <span class="med-kpi-val">${emAlerta}</span>
+      ${temContrato ? `<div class="exec-kpi">
+        <div class="exec-kpi-lbl">Saldo abaixo de 10%</div>
+        <div class="exec-kpi-val" style="--kpi-cor:${emAlerta ? 'var(--ylw-d)' : 'var(--text)'}">${emAlerta}</div>
+        <div class="exec-kpi-sub">itens perto de esgotar o contratado</div>
       </div>` : ''}
     </div>`;
 
