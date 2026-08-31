@@ -1117,6 +1117,44 @@ body.proj-cheia-ativa{overflow:hidden}
   .login-layout{grid-template-columns:minmax(360px,420px) minmax(0,1fr); max-width:940px; gap:44px}
 }
 /* ------------------------------------------------------------------
+   A MARCA DE CADA TELA
+   ------------------------------------------------------------------
+   Cada tela do sistema ganha um desenho técnico próprio ao fundo, no
+   canto de cima à direita: a seção transversal cotada em Apoio à
+   Medição (onde se conta quantidade), o perfil longitudinal com
+   estaqueamento em Avanço Físico (onde se lê trecho por trecho) e a
+   planta de cruzamento no Cronograma e no Histórico.
+
+   Os três saíram da MESMA prancha, gerada de uma vez e recortada em três
+   — por isso o traço é idêntico nos três, o que nenhuma arte pedida
+   separadamente garantiria. Continuam sendo máscaras: quem pinta é o
+   CSS, com var(--acc), e cada arquivo só é baixado quando a tela dele
+   abre. Ficam em .07 de opacidade: é para dar chão, não para ser vista.
+   ------------------------------------------------------------------ */
+#page[data-tela]{ position:relative; }
+#page[data-tela="medicao"]::before,
+#page[data-tela="avancofisico"]::before,
+#page[data-tela="cronograma"]::before,
+#page[data-tela="historico"]::before{
+  content:''; position:fixed; right:0; top:52px;
+  width:min(52vw, 760px); height:min(46vh, 500px);
+  pointer-events:none; z-index:0; opacity:.13;
+  background-color:var(--acc);
+  -webkit-mask-repeat:no-repeat;   mask-repeat:no-repeat;
+  -webkit-mask-position:right top; mask-position:right top;
+  -webkit-mask-size:contain;       mask-size:contain;
+}
+#page[data-tela="medicao"]::before{ -webkit-mask-image:url('assets/tec-secao.webp');      mask-image:url('assets/tec-secao.webp'); }
+#page[data-tela="avancofisico"]::before{ -webkit-mask-image:url('assets/tec-perfil.webp'); mask-image:url('assets/tec-perfil.webp'); }
+#page[data-tela="cronograma"]::before,
+#page[data-tela="historico"]::before{ -webkit-mask-image:url('assets/tec-cruzamento.webp'); mask-image:url('assets/tec-cruzamento.webp'); }
+/* No celular a marca sai: a tela é estreita, o conteúdo ocupa tudo e ela
+   passaria por trás de tabela — além de ser download que o 4G não precisa. */
+@media (max-width: 768px){
+  #page[data-tela]::before{ display:none; }
+}
+
+/* ------------------------------------------------------------------
    A PLANTA ATRÁS DO LOGIN
    ------------------------------------------------------------------
    A primeira tela do sistema era um formulário sobre fundo liso, com a
@@ -7698,7 +7736,10 @@ function render() {
   if (STATE.currentPage !== 'projetos' && VISOR.folha) visorFechar();
   
   const pageEl = document.getElementById('page');
-  
+  // O CSS precisa saber QUAL tela está aberta para dar a marca d'água certa
+  // a cada uma (ver "A MARCA DE CADA TELA", no bloco de estilo).
+  if (pageEl) pageEl.dataset.tela = STATE.currentPage || '';
+
   const titles = {
     executivo: ['Painel Executivo', 'Visão consolidada da obra · KPIs interativos'],
     avancofisico: ['Avanço Físico', 'Pacotes, mapa de estacas e produtividade'],
