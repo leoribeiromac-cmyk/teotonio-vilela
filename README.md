@@ -1,6 +1,8 @@
-# Sistema Teotônio Vilela — Controle Integrado
+# Sistema Gestor Engenharia
 
-App de planejamento, RDO e apoio à medição da obra de duplicação da **Av. Senador Teotônio Vilela** (Contrato 084/SPOBRAS/2024 · CC 182 · Gestor Engenharia).
+App de planejamento, RDO e apoio à medição das obras da **Gestor Engenharia**. Nasceu na duplicação da
+**Av. Senador Teotônio Vilela** (Contrato 084/SPOBRAS/2024 · CC 182), que segue sendo a obra mais completa,
+e hoje atende também Ruas de Terra 4 e Ranário — a troca é pelo seletor **OBRA**, na barra lateral.
 
 **Produção:** https://leoribeiromac-cmyk.github.io/teotonio-vilela/
 

@@ -6,7 +6,7 @@
  * nem obra derivada — ver LICENSE, na raiz do repositório.
  */
 // ============================================================
-// Service Worker — Sistema Teotônio Vilela
+// Service Worker — Sistema Gestor Engenharia
 //
 // Estratégia:
 //  • index.html (navegação): REDE PRIMEIRO — atualizações do app chegam
@@ -25,7 +25,7 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v58'; // v58: assinatura online do RDO — o engenheiro e o fiscal assinam pelo link do e-mail (assinar.html), e o PDF oficial sai com as firmas dentro dos quadros
+const VERSAO = 'teotonio-v59'; // v59: o sistema passa a ser Gestor Engenharia — nome, logo da empresa e ícones novos. O balde TEM de virar: o v58 guarda os ícones antigos (a via em perspectiva) e o aparelho seguiria mostrando aquela marca na tela de início
 // As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
 // app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
 // Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no

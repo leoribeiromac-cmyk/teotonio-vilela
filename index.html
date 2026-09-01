@@ -14,7 +14,7 @@
 <meta name="theme-color" content="#1a1612">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Sistema Teotônio Vilela — Controle Integrado</title>
+<title>Sistema Gestor Engenharia</title>
 <!-- A marca é a própria avenida em perspectiva (ver favicon.svg). O data-URI
      repete o desenho sem gradiente: é o que a aba mostra antes de o arquivo
      externo carregar, e precisa ler bem a 16px. -->
@@ -728,6 +728,34 @@ html,body{
   transition:transform calc(.3s * var(--anim-speed)) cubic-bezier(.2,0,0,1);
 }
 .sidebar-logo{padding:20px 20px 16px;border-bottom:1px solid var(--sidebar-border);}
+/* ------------------------------------------------------------------
+   A MARCA DA EMPRESA
+   ------------------------------------------------------------------
+   No lugar do selo de texto "GESTOR ENGENHARIA" entra a logo de
+   verdade — a mesma da apresentação e do papel timbrado.
+   A barra lateral é escura NOS DOIS TEMAS (--sidebar-bg é #1a1612 no
+   claro e #0f0d0a no escuro), por isso aqui vai sempre a versão de
+   texto creme: uma imagem só, sem troca por tema.
+   O arquivo tem largura e altura declaradas para o texto abaixo não
+   pular enquanto ela carrega. */
+.marca-gestor{ display:block; width:126px; height:auto; margin:2px 0 14px; }
+
+/* Na tela de entrada o fundo MUDA com o tema, então ali são duas
+   versões — a de texto escuro e a de texto creme — trocadas pelo mesmo
+   padrão de tema que o resto do app usa. */
+/* .marca-login vem ANTES das regras de tema de propósito: com o mesmo
+   peso de seletor, quem estiver por último vence, e um display:block
+   declarado depois fazia as DUAS versões aparecerem juntas no login. */
+.marca-login{ width:168px; height:auto; margin:2px auto 18px; }
+.marca-gestor-clara{ display:block; }
+.marca-gestor-escura{ display:none; }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .marca-gestor-clara{ display:none; }
+  :root:not([data-theme="light"]) .marca-gestor-escura{ display:block; }
+}
+:root[data-theme="dark"] .marca-gestor-clara{ display:none; }
+:root[data-theme="dark"] .marca-gestor-escura{ display:block; }
+
 .badge-obra{
   display:inline-block;
   background:var(--acc);
@@ -5516,6 +5544,13 @@ function renderLogin() {
   return `
     <div class="login-layout">
     <div class="card login-card">
+      <!-- A marca abre a tela de entrada: é a primeira coisa que quem
+           chega vê, e a única tela do app onde ela cabe inteira. Duas
+           versões porque aqui o fundo acompanha o tema. -->
+      <img class="marca-login marca-gestor-clara"  src="assets/logo-gestor.webp"
+           alt="Gestor Engenharia" width="420" height="285" decoding="async">
+      <img class="marca-login marca-gestor-escura" src="assets/logo-gestor-escuro.webp"
+           alt="Gestor Engenharia" width="420" height="285" decoding="async">
       <div class="card-header">
         <div style="display:flex;align-items:center;gap:12px">
           <span class="login-selo">${ic('cadeado')}</span>
@@ -7507,7 +7542,8 @@ function renderShell() {
       <div class="sidebar-overlay" id="sidebarOverlay" onclick="toggleSidebar(false)"></div>
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-logo">
-          <div class="badge-obra">GESTOR ENGENHARIA</div>
+          <img class="marca-gestor" src="assets/logo-gestor-escuro.webp"
+               alt="Gestor Engenharia" width="420" height="285" decoding="async">
           <h1>${escHtml(OBRA.nome)}</h1>
           <p>${escHtml(OBRA.subtitulo || 'Sistema integrado de planejamento')}</p>
         </div>
