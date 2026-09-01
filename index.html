@@ -1135,7 +1135,10 @@ body.proj-cheia-ativa{overflow:hidden}
 #page[data-tela="medicao"]::before,
 #page[data-tela="avancofisico"]::before,
 #page[data-tela="cronograma"]::before,
-#page[data-tela="historico"]::before{
+#page[data-tela="historico"]::before,
+#page[data-tela="rdo"]::before,
+#page[data-tela="rdodiario"]::before,
+#page[data-tela="botafora"]::before{
   content:''; position:fixed; right:0; top:52px;
   width:min(52vw, 760px); height:min(46vh, 500px);
   pointer-events:none; z-index:0; opacity:.13;
@@ -1148,6 +1151,21 @@ body.proj-cheia-ativa{overflow:hidden}
 #page[data-tela="avancofisico"]::before{ -webkit-mask-image:url('assets/tec-perfil.webp'); mask-image:url('assets/tec-perfil.webp'); }
 #page[data-tela="cronograma"]::before,
 #page[data-tela="historico"]::before{ -webkit-mask-image:url('assets/tec-cruzamento.webp'); mask-image:url('assets/tec-cruzamento.webp'); }
+/* Segunda prancha, mesma mecânica e mesmo traço: quem lança serviço vê o
+   detalhe de guia e sarjeta (o que se executa e se mede em metro), quem
+   preenche o RDO Diário vê as máquinas em elevação (efetivo e
+   equipamento do dia) e quem registra bota-fora vê a caçamba
+   descarregando. */
+/* Nas telas de PREENCHIMENTO a marca recua para .09: ali o desenho passa
+   por trás de campo de digitação, e campo de formulário tem de estar
+   limpo — quem lança serviço às 6 da tarde no canteiro não pode hesitar
+   sobre o que está escrito no campo. */
+#page[data-tela="rdo"]::before,
+#page[data-tela="rdodiario"]::before,
+#page[data-tela="botafora"]::before{ opacity:.09; }
+#page[data-tela="rdo"]::before{ -webkit-mask-image:url('assets/tec-guia.webp'); mask-image:url('assets/tec-guia.webp'); }
+#page[data-tela="rdodiario"]::before{ -webkit-mask-image:url('assets/tec-maquinas.webp'); mask-image:url('assets/tec-maquinas.webp'); }
+#page[data-tela="botafora"]::before{ -webkit-mask-image:url('assets/tec-cacamba.webp'); mask-image:url('assets/tec-cacamba.webp'); }
 /* No celular a marca sai: a tela é estreita, o conteúdo ocupa tudo e ela
    passaria por trás de tabela — além de ser download que o 4G não precisa. */
 @media (max-width: 768px){
