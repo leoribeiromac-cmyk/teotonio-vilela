@@ -1076,34 +1076,35 @@ body.proj-cheia-ativa{overflow:hidden}
 
 
 /* ===== Curva S — a leitura embaixo do gráfico ===== */
+/* O canvas tinha 260px fixos dentro de um cartão que estica junto com o de
+   Destaques, ao lado: sobravam ~100px de vazio embaixo do gráfico. Agora a
+   altura é distribuída — o gráfico ocupa o que houver, com 260px de piso. */
+.curva-card{ display:flex; flex-direction:column; }
+.curva-card > .card-body{ flex:1; display:flex; flex-direction:column; }
+.curva-canvas{ position:relative; flex:1; min-height:260px; }
 .curva-leitura{
   display:flex; align-items:baseline; gap:6px; flex-wrap:wrap;
-  margin-top:10px; padding-top:10px; border-top:1px solid var(--border);
-  font-size:var(--fs-sm); color:var(--muted); line-height:1.5;
+  margin-top:10px; padding-top:12px; border-top:1px solid var(--border);
+  font-size:var(--fs-lg); color:var(--muted); line-height:1.5;
 }
 .curva-leitura:empty{display:none}
-.cl-forte{font-weight:650}
+/* Este número é a conclusão do gráfico inteiro — "39,2 p.p. atrás do
+   cronograma" é o que se repete na reunião. Estava no mesmo corpo da
+   legenda de eixo. */
+.cl-forte{font-weight:750; font-size:var(--fs-xl); letter-spacing:-.01em}
 .cl-pos{color:var(--grn)}
 .cl-neg{color:var(--red)}
 .cl-neutro{color:var(--text-2)}
 
 /* ===== Prévia de medição — a faixa de resumo ===== */
-.medicao-resumo{
-  display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:2px;
-  background:var(--border); border:1px solid var(--border); border-radius:var(--r);
-  overflow:hidden; margin-bottom:16px;
-}
-.med-kpi{background:var(--surface); padding:13px 16px; display:flex; flex-direction:column; gap:4px}
-.med-kpi-lbl{
-  font-size:var(--fs-2xs); font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted);
-}
-.med-kpi-val{
-  font-family:'JetBrains Mono',monospace; font-size:var(--fs-2xl); font-weight:600;
-  font-variant-numeric:tabular-nums; color:var(--text); line-height:1.15;
-}
-.med-kpi.alerta .med-kpi-val{color:var(--red)}
-.med-kpi.atencao .med-kpi-val{color:var(--ylw-d)}
-.med-kpi-ok{font-family:inherit; font-size:var(--fs-sm); font-weight:500; color:var(--grn)}
+/* O Apoio à Medição tinha o TERCEIRO cartão de indicador do app
+   (.med-kpi, numa faixa colada de 2px). Agora usa o mesmo dos outros
+   dois. O que ele tinha de próprio e era legítimo virou variante:
+   .texto para o valor que é palavra e não número ("Obra inteira" em 30px
+   de monospace estouraria a coluna), e .exec-kpi-ok para o "nenhum"
+   verde ao lado do zero. */
+.exec-kpi-val.texto{ font-size:var(--fs-2xl); font-weight:600; letter-spacing:0; line-height:1.15; }
+.exec-kpi-ok{ font-family:inherit; font-size:var(--fs-sm); font-weight:500; color:var(--grn); }
 
 /* ===== Tela de acesso =====
    O formulário fica à esquerda e o contexto à direita, no computador; no
@@ -1115,6 +1116,85 @@ body.proj-cheia-ativa{overflow:hidden}
 @media (min-width:960px){
   .login-layout{grid-template-columns:minmax(360px,420px) minmax(0,1fr); max-width:940px; gap:44px}
 }
+/* ------------------------------------------------------------------
+   A MARCA DE CADA TELA
+   ------------------------------------------------------------------
+   Cada tela do sistema ganha um desenho técnico próprio ao fundo, no
+   canto de cima à direita: a seção transversal cotada em Apoio à
+   Medição (onde se conta quantidade), o perfil longitudinal com
+   estaqueamento em Avanço Físico (onde se lê trecho por trecho) e a
+   planta de cruzamento no Cronograma e no Histórico.
+
+   Os três saíram da MESMA prancha, gerada de uma vez e recortada em três
+   — por isso o traço é idêntico nos três, o que nenhuma arte pedida
+   separadamente garantiria. Continuam sendo máscaras: quem pinta é o
+   CSS, com var(--acc), e cada arquivo só é baixado quando a tela dele
+   abre. Ficam em .07 de opacidade: é para dar chão, não para ser vista.
+   ------------------------------------------------------------------ */
+#page[data-tela]{ position:relative; }
+#page[data-tela="medicao"]::before,
+#page[data-tela="avancofisico"]::before,
+#page[data-tela="cronograma"]::before,
+#page[data-tela="historico"]::before,
+#page[data-tela="rdo"]::before,
+#page[data-tela="rdodiario"]::before,
+#page[data-tela="botafora"]::before{
+  content:''; position:fixed; right:0; top:52px;
+  width:min(52vw, 760px); height:min(46vh, 500px);
+  pointer-events:none; z-index:0; opacity:.13;
+  background-color:var(--acc);
+  -webkit-mask-repeat:no-repeat;   mask-repeat:no-repeat;
+  -webkit-mask-position:right top; mask-position:right top;
+  -webkit-mask-size:contain;       mask-size:contain;
+}
+#page[data-tela="medicao"]::before{ -webkit-mask-image:url('assets/tec-secao.webp');      mask-image:url('assets/tec-secao.webp'); }
+#page[data-tela="avancofisico"]::before{ -webkit-mask-image:url('assets/tec-perfil.webp'); mask-image:url('assets/tec-perfil.webp'); }
+#page[data-tela="cronograma"]::before,
+#page[data-tela="historico"]::before{ -webkit-mask-image:url('assets/tec-cruzamento.webp'); mask-image:url('assets/tec-cruzamento.webp'); }
+/* Segunda prancha, mesma mecânica e mesmo traço: quem lança serviço vê o
+   detalhe de guia e sarjeta (o que se executa e se mede em metro), quem
+   preenche o RDO Diário vê as máquinas em elevação (efetivo e
+   equipamento do dia) e quem registra bota-fora vê a caçamba
+   descarregando. */
+/* Nas telas de PREENCHIMENTO a marca recua para .09: ali o desenho passa
+   por trás de campo de digitação, e campo de formulário tem de estar
+   limpo — quem lança serviço às 6 da tarde no canteiro não pode hesitar
+   sobre o que está escrito no campo. */
+#page[data-tela="rdo"]::before,
+#page[data-tela="rdodiario"]::before,
+#page[data-tela="botafora"]::before{ opacity:.09; }
+#page[data-tela="rdo"]::before{ -webkit-mask-image:url('assets/tec-guia.webp'); mask-image:url('assets/tec-guia.webp'); }
+#page[data-tela="rdodiario"]::before{ -webkit-mask-image:url('assets/tec-maquinas.webp'); mask-image:url('assets/tec-maquinas.webp'); }
+#page[data-tela="botafora"]::before{ -webkit-mask-image:url('assets/tec-cacamba.webp'); mask-image:url('assets/tec-cacamba.webp'); }
+/* No celular a marca sai: a tela é estreita, o conteúdo ocupa tudo e ela
+   passaria por trás de tabela — além de ser download que o 4G não precisa. */
+@media (max-width: 768px){
+  #page[data-tela]::before{ display:none; }
+}
+
+/* ------------------------------------------------------------------
+   A PLANTA ATRÁS DO LOGIN
+   ------------------------------------------------------------------
+   A primeira tela do sistema era um formulário sobre fundo liso, com a
+   metade de baixo vazia. Agora tem a planta do trecho atrás — e ela não
+   é uma imagem colorida: é uma MÁSCARA (assets/planta-trama.webp, traço
+   preto virado alpha). Quem pinta é o CSS, com var(--acc).
+   É essa diferença que a faz sobreviver ao que derrubou as ilustrações
+   3D dos cartões: um arquivo só (72 KB), e a cor acompanha o tema
+   sozinha, porque quem manda na cor é o token, não o pixel. */
+.login-layout{ position:relative; }
+.login-layout::before{
+  content:''; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background-color: var(--acc); opacity:.20;
+  -webkit-mask-image:url('assets/planta-trama.webp'); mask-image:url('assets/planta-trama.webp');
+  /* 130% e fora de centro: a planta ATRAVESSA a tela em vez de caber nela.
+     Enquadrada certinha ela vira um quadro no meio da página; sangrando,
+     vira o chão em que o formulário está apoiado. */
+  -webkit-mask-size:130% auto; mask-size:130% auto;
+  -webkit-mask-position:60% 40%; mask-position:60% 40%;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+}
+.login-layout > *{ position:relative; z-index:1; }
 .login-card{width:100%;border-top:4px solid var(--acc);margin:0}
 .login-contexto{display:none}
 @media (min-width:960px){ .login-contexto{display:block; padding-top:6px} }
@@ -1287,7 +1367,11 @@ table.t th{
 table.t td{padding:11px 14px;border-bottom:1px solid var(--border);font-size:var(--fs-md); transition: background 0.2s;}
 table.t tr:last-child td{border-bottom:none}
 table.t tr:hover td{background:var(--bg)}
-table.t tr.summary td{background:var(--pri-l);font-weight:600;color:var(--pri);font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.04em;padding:8px 14px}
+/* A faixa de frente pega a COR DA FRENTE, como o cartão do painel e o selo
+   da tabela de pacotes. Era azul (--pri) para todas: Drenagem aparecia
+   magenta no painel e azul aqui, na mesma sessão de trabalho. O fallback
+   mantém o azul onde a linha não declara frente nenhuma. */
+table.t tr.summary td{background:color-mix(in oklch, var(--f-cor, var(--pri)) 13%, transparent);font-weight:600;color:var(--f-cor, var(--pri));font-size:var(--fs-sm);text-transform:uppercase;letter-spacing:.04em;padding:8px 14px}
 /* o avanço da frente, na mesma régua do Painel */
 table.t tr.summary .summary-pct{margin-left:10px;font-family:'JetBrains Mono',monospace;font-weight:700}
 table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:none;letter-spacing:0;opacity:.75}
@@ -1304,14 +1388,22 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 .pill-pri{background:var(--pri-l);color:var(--pri)}
 
 /* Frente tags */
-.f-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:var(--fs-2xs);font-weight:600;letter-spacing:.02em;text-transform:uppercase}
-.f-Drenagem{background:#dceefb;color:#1a5276}
-.f-Demoli, .f-demolicao{background:#fadbd8;color:#922b21}
-.f-Via{background:#fdebd0;color:#935116}
-.f-Pav{background:#d6dbdf;color:#2c3e50}
-.f-Vala{background:#fcf3cf;color:#7d6608}
-.f-Sinaliza{background:#d5f5e3;color:#196f3d}
-.f-Muro{background:#e8e0f3;color:#4a3269}
+/* O SELO DA FRENTE SAI DA MESMA FONTE QUE O CARTÃO E O GRÁFICO
+   ------------------------------------------------------------------
+   Eram sete cores pastel escritas à mão aqui (#dceefb, #fadbd8…) —
+   uma TERCEIRA paleta, além do oklch de corDaFrente() nos cartões e do
+   amarelo das barras. A mesma Drenagem saía azul-pastel na tabela e
+   roxa no cartão, e frente que não estivesse na lista (as Ruas de Terra
+   têm outras) vinha sem cor nenhuma.
+   Agora o selo herda --f-cor da linha, que é corDaFrente(): uma fonte
+   de verdade só, frente nova já entra pintada, e o tema escuro vem de
+   graça — corDaFrente() clareia a cor quando o tema é escuro, enquanto
+   o pastel fixo ficava ilegível.
+   O color-mix degrada sozinho: sem suporte, a declaração cai e fica o
+   fundo neutro da regra anterior. */
+.f-tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:4px;font-size:var(--fs-2xs);font-weight:600;letter-spacing:.02em;text-transform:uppercase;
+  background:var(--surface-2);color:var(--text-2)}
+.f-tag{background:color-mix(in oklch, var(--f-cor, var(--acc)) 15%, transparent);color:var(--f-cor, var(--acc))}
 
 .prog-bar-wrap{width:100%;min-width:60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle}
 .prog-bar{height:100%;border-radius:3px;transition:width 0.8s cubic-bezier(0.2, 0.8, 0.2, 1)}
@@ -1334,6 +1426,11 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 /* O rótulo da linha ACOMPANHA a rolagem horizontal: com 30+ colunas o grid
    passa da largura do cartão, e rolar de lado deixava só faixas de cor sem
    dizer de que pacote são. */
+/* O rótulo alinha à direita (fica colado na matriz, que é o certo para ler
+   linha a linha), mas alinhar à direita com overflow:hidden corta o texto
+   pelo COMEÇO: "Construção de muros de divisa" chegava na tela como
+   "trução de muros de divisa", e é o começo que diz qual serviço é. O nome
+   agora vive num span que corta pelo fim, com reticências. */
 .hm-row-label{
   font-size:var(--fs-2xs);font-weight:600;color:var(--muted);
   padding:0 8px 0 4px;display:flex;align-items:center;justify-content:flex-end;
@@ -1341,6 +1438,7 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
   position:sticky;left:0;z-index:2;background:var(--surface);
 }
 /* a faixa de valor daquela linha — cada linha tem escala própria */
+.hm-row-nome{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .hm-row-label small{font-weight:400;opacity:.75;margin-left:6px;flex-shrink:0}
 .hm-col-label{
   font-size:var(--fs-2xs);color:var(--muted);font-family:'JetBrains Mono',monospace;
@@ -1958,13 +2056,16 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 
 /* ===================== GRUPOS TÉCNICOS (3D PREMIUM) ===================== */
 .tech-card-3d { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; display: flex; flex-direction: column; transition: all 0.4s cubic-bezier(0.2, 0.8, 0.2, 1); cursor: pointer; box-shadow: var(--sh); }
-.tech-card-3d:hover { transform: translateY(-6px) scale(1.02); box-shadow: var(--sh-lg); border-color: var(--pri); }
+.tech-card-3d:hover { transform: translateY(-3px); box-shadow: var(--sh-md); border-color: var(--f-cor, var(--pri)); }
 .tech-card-3d.active { border-color: var(--pri); box-shadow: 0 0 0 3px var(--pri-l); }
 /* Cabeçalho do cartão de frente: painel grafite com uma malha discreta e o
    ícone da frente em traço. Substituiu as ilustrações 3D — pesavam ~500 KB
    cada, mudavam de estilo a cada frente e não acompanhavam o tema. */
 .tech-card-image {
-  height: 160px; position: relative; overflow: hidden;
+  /* 118px, não 160: a capa ilustra o cartão, o número é que o justifica.
+     Com 160 a arte ocupava mais altura que o dado que o cartão existe
+     para mostrar. */
+  height: 118px; position: relative; overflow: hidden;
   border-bottom: 1px solid var(--border);
   /* o halo herda a cor da frente (--f-halo), a mesma do gráfico Tempo ×
      Estaca: o cartão e a linha do gráfico passam a falar da mesma frente
@@ -1983,23 +2084,58 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 }
 .tech-card-3d:hover .tech-card-image::before { opacity: .55; }
 .tech-card-image::after { content: ''; position: absolute; inset: 0; background: linear-gradient(0deg, rgba(0,0,0,0.68) 0%, rgba(0,0,0,0) 62%); }
+/* A MESMA planta do login, agora dentro do cartão e na cor da frente.
+   Continua sendo máscara: um arquivo, colorido pelo CSS. É a diferença
+   entre isto e as ilustrações 3D que saíram daqui — lá eram nove PNGs de
+   ~500 KB, cada um com um estilo, nenhum acompanhando o tema. */
+.tech-card-planta{
+  position:absolute; inset:0; pointer-events:none;
+  background-color: var(--f-cor, var(--acc)); opacity:.17;
+  -webkit-mask-image:url('assets/planta-trama.webp'); mask-image:url('assets/planta-trama.webp');
+  -webkit-mask-size:230% auto; mask-size:230% auto;
+  -webkit-mask-repeat:no-repeat; mask-repeat:no-repeat;
+  -webkit-mask-position:var(--mx, 30%) 55%; mask-position:var(--mx, 30%) 55%;
+}
+
+/* A marca fica à DIREITA e o título à esquerda: com os dois na esquerda,
+   baixar a capa para 118px punha um em cima do outro. E .82 de opacidade
+   porque o ícone é a assinatura da frente, não uma placa de neon — o halo
+   já diz de quem é o cartão. */
 .tech-card-marca {
-  position: absolute; left: 20px; top: 50%; transform: translateY(-56%);
-  color: var(--f-cor, var(--acc)); line-height: 0; z-index: 1;
-  filter: drop-shadow(0 3px 14px rgba(0,0,0,.55));
+  position: absolute; right: 16px; top: 46%; transform: translateY(-50%);
+  color: var(--f-cor, var(--acc)); line-height: 0; z-index: 1; opacity: .82;
+  filter: drop-shadow(0 2px 10px rgba(0,0,0,.5));
   transition: transform .4s cubic-bezier(0.2,0.8,0.2,1);
 }
+
+/* ------------------------------------------------------------------
+   UMA COR POR CARTÃO
+   ------------------------------------------------------------------
+   O halo e o ícone já vinham da frente (--f-cor), mas a barra de avanço
+   era amarela nos nove cartões. Eram duas linguagens de cor dentro do
+   mesmo componente: a barra dizia "atenção" onde a frente dizia outra
+   coisa. Agora a barra e o trilho herdam --f-cor — o cartão inteiro fala
+   de uma frente só, e continua batendo com a linha dela no gráfico
+   Tempo × Estaca. Por isso --f-cor subiu para o .tech-card-3d: do
+   cabeçalho ele não alcançava a barra, que fica no conteúdo. */
+.tech-card-3d .prog-bar.parcial,
+.tech-card-3d .prog-bar.zero,
+.linha-frente .prog-bar.parcial { background: var(--f-cor, var(--acc)); }
+/* .completo fica de fora de propósito: o verde de 100% é informação
+   ("essa acabou"), não enfeite — pintá-lo da cor da frente apagaria o
+   único estado que o cartão precisa gritar. */
+.tech-card-3d .prog-bar-wrap { background: color-mix(in oklch, var(--f-cor, var(--acc)) 14%, transparent); }
 /* traço mais grosso do que no resto do conjunto: aqui o ícone é o
    elemento principal do cartão, não um adorno ao lado de um rótulo */
 .tech-card-marca .ic { stroke-width: 1.45; vertical-align: 0; }
 .tech-card-marca .ic .ic-fill { fill-opacity: .22; }
-.tech-card-3d:hover .tech-card-marca { transform: translateY(-54%) scale(1.06); }
+.tech-card-3d:hover .tech-card-marca { transform: translateY(-50%) scale(1.05); opacity: .95; }
 .tech-card-title-overlay { position: absolute; bottom: 14px; left: 16px; right: 16px; color: #fff; z-index: 2; display: flex; justify-content: space-between; align-items: flex-end; }
-.tech-card-title { font-size:var(--fs-2xl); font-weight: 800; letter-spacing: -0.02em; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+.tech-card-title { font-size:var(--fs-xl); font-weight: 800; letter-spacing: -0.015em; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 .tech-card-content { padding:16px; display: flex; flex-direction: column; gap:12px; }
 .tech-card-metric { display: flex; justify-content: space-between; align-items: baseline; }
-.tech-card-val { font-size: 26px; font-weight: 800; color: var(--text); line-height: 1; }
-.tech-card-label { font-size:var(--fs-2xs); color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.tech-card-val { font-size: 30px; font-weight: 800; color: var(--text); line-height: 1; letter-spacing: -0.025em; }
+.tech-card-label { font-size:var(--fs-2xs); color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; }
 .tech-card-stats { font-size:var(--fs-xs); color: var(--muted); background: var(--surface-2); padding: 8px 12px; border-radius: 6px; display: flex; align-items: center; gap:6px; border: 1px solid var(--border); }
 
 /* ====================================================================
@@ -2029,6 +2165,24 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
   background: radial-gradient(circle, oklch(0.62 0.18 38 / 0.16) 0%, transparent 70%);
   pointer-events: none;
 }
+/* A MESMA planta do login e dos cartões, aqui pintada de acento. Antes o
+   hero tinha uma segunda arte só dele — um WebP laranja de 54 KB. Duas
+   imagens para dizer a mesma coisa: agora é uma, e o app inteiro fala a
+   mesma língua visual. A máscara vive à direita, longe do "50,1%". */
+.hero-trama{
+  position:absolute; inset:0; pointer-events:none; z-index:0;
+  background-color: var(--acc); opacity:.19;
+  /* DUAS máscaras compostas: a planta, e um gradiente que apaga a metade
+     esquerda. Sem o gradiente a trama passa por trás do "50,1%" e da
+     leitura da semana e come o contraste do que importa ler. */
+  -webkit-mask-image:url('assets/planta-trama.webp'), linear-gradient(90deg, transparent 0%, transparent 34%, #000 72%, #000 100%);
+          mask-image:url('assets/planta-trama.webp'), linear-gradient(90deg, transparent 0%, transparent 34%, #000 72%, #000 100%);
+  -webkit-mask-size:auto 190%, 100% 100%;      mask-size:auto 190%, 100% 100%;
+  -webkit-mask-position:right -10% center, 0 0; mask-position:right -10% center, 0 0;
+  -webkit-mask-repeat:no-repeat, no-repeat;     mask-repeat:no-repeat, no-repeat;
+  -webkit-mask-composite:source-in;             mask-composite:intersect;
+}
+@media (max-width: 768px) { .hero-trama{ display:none; } }
 .hero-main { position: relative; z-index: 1; display: flex; flex-direction: column; min-width: 0; }
 .hero-label {
   font-size:var(--fs-2xs); font-weight: 700; letter-spacing: 0.16em;
@@ -2225,8 +2379,15 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 
 /* ===== Exec secondary KPIs ===== */
 .exec-kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap:14px; }
-@media(max-width:900px){ .exec-kpi-grid { grid-template-columns: repeat(2,1fr); } }
-@media(max-width:560px){ .exec-kpi-grid { grid-template-columns: 1fr; } }
+/* O Cronograma tem cinco indicadores, não quatro. É uma CLASSE e não um
+   style inline porque inline ganha das media queries abaixo — e o mesmo
+   grid que fica bom em cinco colunas no desktop vira cinco tirinhas
+   ilegíveis no celular. */
+.exec-kpi-grid.cinco { grid-template-columns: repeat(5, 1fr); }
+.exec-kpi-grid.auto { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+@media(max-width:1100px){ .exec-kpi-grid.cinco { grid-template-columns: repeat(3,1fr); } }
+@media(max-width:900px){ .exec-kpi-grid, .exec-kpi-grid.cinco { grid-template-columns: repeat(2,1fr); } }
+@media(max-width:560px){ .exec-kpi-grid, .exec-kpi-grid.cinco { grid-template-columns: 1fr; } }
 .exec-kpi {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r); padding: 16px 18px;
@@ -2246,11 +2407,22 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 .exec-kpi-val {
   font-family: 'JetBrains Mono', monospace;
   font-size: 30px; font-weight: 700; letter-spacing: -0.03em;
-  line-height: 1.05; color: var(--text); font-variant-numeric: tabular-nums;
+  line-height: 1.05; font-variant-numeric: tabular-nums;
   margin-top:2px;
+  /* --kpi-cor deixa o cartão servir também ao Cronograma, onde a cor do
+     número é INFORMAÇÃO (atrasado, crítico, no prazo) e não enfeite.
+     Sem o token, cada tela reinventava o próprio cartão de indicador. */
+  color: var(--kpi-cor, var(--text));
 }
 .exec-kpi-val .unit { font-size:var(--fs-lg); color: var(--muted); font-weight: 500; letter-spacing: 0; margin-left:4px; }
-.exec-kpi-sub { font-size:var(--fs-xs); color: var(--muted); line-height: 1.4; margin-top:4px; }
+/* margin-top:auto cola o apoio na BASE do cartão. Os rótulos têm alturas
+   diferentes ("Frentes sem lançamento há 7+ dias" quebra em duas linhas
+   onde "RDOs no período" não quebra), e sem isso a última linha de cada
+   cartão parava numa altura diferente da vizinha. */
+.exec-kpi-sub { font-size:var(--fs-xs); color: var(--muted); line-height: 1.4; margin-top:auto; padding-top:6px; }
+/* O alerta vive no próprio número. Antes era um selo laranja no rótulo
+   repetindo o mesmo algarismo dois centímetros acima dele. */
+.exec-kpi-val.alerta { color: var(--acc); }
 .exec-kpi-sub strong { color: var(--text-2); font-weight: 600; }
 
 /* ===== Row 2:1 ===== */
@@ -2278,6 +2450,12 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 .exec-list-body { flex: 1; min-width: 0; }
 .exec-list-name { font-size:var(--fs-md); font-weight: 600; color: var(--text); line-height: 1.25; }
 .exec-list-meta { font-size:var(--fs-xs); color: var(--muted); margin-top:4px; }
+/* O título de seção existia só como style inline numa div. Vira classe:
+   o próximo bloco do painel herda o mesmo peso e o mesmo respiro em vez
+   de repetir os quatro atributos no olho. */
+.section-title { font-size:var(--fs-2xl); font-weight: 800; letter-spacing: -0.02em;
+  color: var(--text); margin: 28px 0 16px; }
+
 .exec-list-val { font-family: 'JetBrains Mono', monospace; font-size:var(--fs-md); font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .exec-list-val.up { color: var(--grn); }
 .exec-list-val.down { color: var(--red); }
@@ -2373,13 +2551,22 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 .bar3d {
   position: absolute;
   width: 4px; margin-left: -2px;
-  background: linear-gradient(180deg, oklch(0.82 0.18 50) 0%, oklch(0.62 0.18 38) 55%, oklch(0.42 0.16 38) 100%);
+  /* A luminosidade sobe com --r (0..1): estaca cheia queima, estaca fraca
+     recua. É o segundo canal de leitura, ao lado da altura — que a
+     perspectiva achata. */
+  background: linear-gradient(180deg,
+    oklch(calc(0.70 + var(--r, .5) * 0.18) 0.18 50) 0%,
+    oklch(calc(0.52 + var(--r, .5) * 0.14) 0.18 38) 55%,
+    oklch(calc(0.36 + var(--r, .5) * 0.10) 0.16 38) 100%);
   border-radius: 1px;
   transform-origin: bottom center;
   transform: rotateX(-52deg);
   box-shadow: 0 0 8px oklch(0.62 0.18 38 / 0.5);
   animation: bar3dGrow 0.9s cubic-bezier(.34, 1.4, .64, 1) backwards;
 }
+/* A estaca de pico é citada no cabeçalho ("pico em E227"); agora dá para
+   achá-la na cena sem contar barra por barra. */
+.bar3d.pico { width: 6px; margin-left: -3px; box-shadow: 0 0 16px oklch(0.78 0.19 55 / 0.85); }
 .bar3d.dim { background: linear-gradient(180deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0.06) 100%); box-shadow: none; width: 3px; margin-left: -1.5px; }
 .bar3d.cb { bottom: 72%; }
 .bar3d.bc { bottom: 14%; }
@@ -2446,34 +2633,6 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .road-3d { width: 90%; height: 90px; }
 }
 
-/* ===== CALENDÁRIO 90d ===== */
-.cal-card .card-body { padding: 16px 22px; }
-.cal-wrap { display: flex; gap:24px; align-items: center; flex-wrap: wrap; }
-.cal-stats { display: flex; gap:28px; min-width: 220px; }
-.cal-stat { display: flex; flex-direction: column; gap:4px; }
-.cal-stat-num { font-family: 'JetBrains Mono', monospace; font-size: 28px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
-.cal-stat-num.acc { color: var(--acc); }
-.cal-stat-lbl { font-size:var(--fs-2xs); font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top:6px; line-height: 1.3; }
-.cal-stat-sub { font-size:var(--fs-xs); color: var(--muted); margin-top:2px; }
-.cal-heatmap { display: flex; gap:18px; align-items: center; flex: 1; min-width: 320px; }
-.cal-grid-wrap { flex: 1; min-width: 0; }
-.cal-grid { display: grid; grid-template-columns: repeat(13, 1fr); grid-template-rows: repeat(7, 1fr); grid-auto-flow: column; gap:4px; height: 96px; }
-.cal-cell { border-radius: 2px; background: var(--bg-2); transition: transform 0.15s, box-shadow 0.15s; position: relative; min-width: 9px; cursor: default; }
-.cal-cell:hover { transform: scale(1.6); z-index: 3; box-shadow: var(--sh-md); }
-.cal-cell.lv0 { background: var(--bg-2); border: 1px solid var(--border); }
-.cal-cell.lv1 { background: oklch(0.88 0.07 38); }
-.cal-cell.lv2 { background: oklch(0.76 0.13 38); }
-.cal-cell.lv3 { background: oklch(0.62 0.17 38); }
-.cal-cell.lv4 { background: oklch(0.48 0.18 38); }
-.cal-cell.future { background: transparent; border: 1px dashed var(--border); }
-.cal-cell.today { box-shadow: 0 0 0 2px var(--text); }
-.cal-legend { display: flex; gap:4px; align-items: center; font-size:var(--fs-2xs); color: var(--muted); margin-top:10px; }
-.cal-legend-cell { width: 11px; height: 11px; border-radius: 2px; }
-.cal-axis { display: flex; justify-content: space-between; margin-top:8px; padding: 0 2px; font-size:var(--fs-2xs); color: var(--muted); font-family: 'JetBrains Mono', monospace; letter-spacing: 0.05em; }
-@media (max-width: 900px) {
-  .cal-wrap { flex-direction: column; align-items: stretch; }
-  .cal-stats { flex-direction: row; min-width: 0; justify-content: space-around; }
-}
 
 /* ====================================================================
    MOBILE PASS — otimizações universais para celular/tablet
@@ -2717,18 +2876,6 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .tech-card-val { font-size:var(--fs-3xl); }
 }
 
-/* ===== Calendário 90d ===== */
-@media (max-width: 768px) {
-  .cal-card .card-body { padding: 12px 14px; }
-  .cal-wrap { gap:14px; }
-  .cal-stats { gap:16px; }
-  .cal-stat-num { font-size:var(--fs-3xl); }
-  .cal-heatmap { gap:10px; min-width: 0; }
-  .cal-grid { gap:2px; height: 84px; }
-  .cal-cell { min-width: 7px; border-radius: 1.5px; }
-  .cal-cell.lv0 { border-width: 0.5px; }
-  .cal-axis, .cal-legend { font-size:var(--fs-2xs); }
-}
 
 /* ===== Avenida 3D mobile ===== */
 @media (max-width: 768px) {
@@ -2847,10 +2994,9 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 @media (max-width: 768px) {
   .main, .page { min-width: 0; }
   .main { overflow-x: clip; overscroll-behavior-x: none; }
-  .card, .exec-kpi, .exec-hero, .cal-card, .avenue-card { min-width: 0; max-width: 100%; }
+  .card, .exec-kpi, .exec-hero, .avenue-card { min-width: 0; max-width: 100%; }
   .hero-main, .hero-side { min-width: 0; }
   .card-body.flush { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .cal-grid-wrap { min-width: 0; max-width: 100%; }
 }
 
 /* ===== Tap feedback (substitui hover em touch) ===== */
@@ -7608,7 +7754,10 @@ function render() {
   if (STATE.currentPage !== 'projetos' && VISOR.folha) visorFechar();
   
   const pageEl = document.getElementById('page');
-  
+  // O CSS precisa saber QUAL tela está aberta para dar a marca d'água certa
+  // a cada uma (ver "A MARCA DE CADA TELA", no bloco de estilo).
+  if (pageEl) pageEl.dataset.tela = STATE.currentPage || '';
+
   const titles = {
     executivo: ['Painel Executivo', 'Visão consolidada da obra · KPIs interativos'],
     avancofisico: ['Avanço Físico', 'Pacotes, mapa de estacas e produtividade'],
@@ -9925,91 +10074,6 @@ window.refreshIA = function() {
   carregarRecomendacaoIA(metrics, fa, totalPac, iniciados, gap || 0, true);
 };
 
-function renderCalendarioHeatmap(rdosAtivos) {
-  const today = new Date(); today.setHours(0,0,0,0);
-  const dias = 91;
-  const counts = {};
-  rdosAtivos.forEach(r => {
-    const d = parseISODate(getCSVField(r, 'Data'));
-    if (!d) return;
-    d.setHours(0,0,0,0);
-    const diff = Math.floor((today - d) / 86400000);
-    if (diff < 0 || diff >= dias) return;
-    const k = ymd(d);
-    counts[k] = (counts[k] || 0) + 1;
-  });
-  const startDate = new Date(today.getTime() - (dias - 1) * 86400000);
-  startDate.setDate(startDate.getDate() - startDate.getDay());
-  const cells = [];
-  const cellCount = 13 * 7;
-  for (let i = 0; i < cellCount; i++) {
-    const d = new Date(startDate.getTime() + i * 86400000);
-    const dStr = ymd(d);
-    const isFuture = d > today;
-    const isToday = d.getTime() === today.getTime();
-    const c = counts[dStr] || 0;
-    let lv = 'lv0';
-    if (c > 0 && c <= 1) lv = 'lv1';
-    else if (c <= 3) lv = 'lv2';
-    else if (c <= 6) lv = 'lv3';
-    else if (c > 6) lv = 'lv4';
-    if (isFuture) lv = 'future';
-    const cls = ['cal-cell', lv];
-    if (isToday) cls.push('today');
-    const title = isFuture ? d.toLocaleDateString('pt-BR') + ' · futuro'
-                : `${d.toLocaleDateString('pt-BR')} · ${c} RDO${c!==1?'s':''}`;
-    cells.push(`<div class="${cls.join(' ')}" title="${title}"></div>`);
-  }
-  const totalNoPeriodo = Object.values(counts).reduce((a,b) => a+b, 0);
-  const diasAtivos = Object.values(counts).filter(c => c > 0).length;
-  const mediaDia = totalNoPeriodo / dias;
-  const inicio = startDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-  const fim    = today.toLocaleDateString('pt-BR',     { day: '2-digit', month: 'short' });
-  return `
-    <div class="card stagger-item cal-card" style="animation-delay:.22s">
-      <div class="card-header">
-        <div>
-          <div class="card-title-lg">Pulsação dos últimos 90 dias</div>
-          <div class="card-title-sub">Calendário de RDOs · cada célula = 1 dia · células mais escuras = mais lançamentos</div>
-        </div>
-      </div>
-      <div class="card-body">
-        <div class="cal-wrap">
-          <div class="cal-stats">
-            <div class="cal-stat">
-              <div class="cal-stat-num acc">${totalNoPeriodo}</div>
-              <div class="cal-stat-lbl">RDOs em 90 dias</div>
-              <div class="cal-stat-sub">média ${mediaDia.toFixed(1)}/dia</div>
-            </div>
-            <div class="cal-stat">
-              <div class="cal-stat-num">${diasAtivos}</div>
-              <div class="cal-stat-lbl">Dias com lançamentos</div>
-              <div class="cal-stat-sub">${(diasAtivos/dias*100).toFixed(0)}% dos dias</div>
-            </div>
-          </div>
-          <div class="cal-heatmap">
-            <div class="cal-grid-wrap">
-              <div class="cal-grid">${cells.join('')}</div>
-              <div class="cal-axis">
-                <span>${inicio}</span>
-                <span>hoje · ${fim}</span>
-              </div>
-              <div class="cal-legend">
-                <span>menos</span>
-                <span class="cal-legend-cell lv0" style="background:var(--bg-2);border:1px solid var(--border)"></span>
-                <span class="cal-legend-cell" style="background:oklch(0.88 0.07 38)"></span>
-                <span class="cal-legend-cell" style="background:oklch(0.76 0.13 38)"></span>
-                <span class="cal-legend-cell" style="background:oklch(0.62 0.17 38)"></span>
-                <span class="cal-legend-cell" style="background:oklch(0.48 0.18 38)"></span>
-                <span>mais</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  `;
-}
 
 function calcAvancoPorEstaca(rdosAtivos, pacotesAtivos) {
   const estacas = {};
@@ -10052,7 +10116,12 @@ function renderAvenida3D(rdosAtivos, pacotesAtivos) {
     const dim    = e.lancamentos === 0 ? 'dim' : '';
     const delay  = 500 + Math.floor(i * 15) + atraso;
     const title  = `${e.rot} · ${e.lancamentos} RDO${e.lancamentos!==1?'s':''} · ${e.pacotes.size} pacote${e.pacotes.size!==1?'s':''}`;
-    return `<div class="bar3d ${pista} ${dim}" style="left:${left.toFixed(2)}%;height:${height}px;animation-delay:${delay}ms" title="${title}"></div>`;
+    // --r leva a intensidade para o CSS. A altura sozinha não bastava: a
+    // cena está deitada em rotateX(52deg), que comprime justamente a altura,
+    // e duas estacas bem diferentes chegavam ao olho quase iguais. Com a cor
+    // junto, o pico se lê mesmo achatado pelo ângulo.
+    const pico = e === topEstaca && e.lancamentos > 0 ? ' pico' : '';
+    return `<div class="bar3d ${pista} ${dim}${pico}" style="left:${left.toFixed(2)}%;height:${height}px;--r:${ratio.toFixed(3)};animation-delay:${delay}ms" title="${title}"></div>`;
   }
 
   /* Uma cena por VIA — e via não é a mesma coisa que eixo (ver
@@ -10094,7 +10163,7 @@ function renderAvenida3D(rdosAtivos, pacotesAtivos) {
             <div class="road-3d">${lados.map(l => l.barras).join('')}</div>
           </div>
           <div class="scene-legend">
-            <span class="scene-legend-item"><span class="scene-legend-swatch"></span>altura = nº de RDOs</span>
+            <span class="scene-legend-item"><span class="scene-legend-swatch"></span>altura e brilho = nº de RDOs</span>
             <span class="scene-legend-item"><span class="scene-legend-swatch dim"></span>sem atividade</span>
           </div>
         </div>`);
@@ -10424,6 +10493,7 @@ function renderExecutivo() {
 
     <!-- ============ HERO EXECUTIVO ============ -->
     <div class="exec-hero stagger-item" style="animation-delay:.04s">
+      <span class="hero-trama"></span>
       <div class="hero-main">
         <div>
           <span class="hero-label">Avanço Ponderado · escopo em dias-equivalentes${STATE.filtros.mes ? ` · acumulado até ${fmtData(dataRef)}` : ''}</span>
@@ -10526,8 +10596,8 @@ function renderExecutivo() {
         <!-- "Frentes em risco: 2" era lido em voz alta na reunião sem o
              critério junto, e "risco" cada um entende de um jeito. O rótulo
              passa a SER o critério; a linha de apoio fica para o detalhe. -->
-        <div class="exec-kpi-lbl">Frentes sem lançamento há 7+ dias ${frentesParadas > 0 ? '<span class="badge-mini">'+frentesParadas+'</span>' : ''}</div>
-        <div class="exec-kpi-val">${frentesParadas}<span class="unit">de ${totalFrentesNoFiltro}</span></div>
+        <div class="exec-kpi-lbl">Frentes sem lançamento há 7+ dias</div>
+        <div class="exec-kpi-val${frentesParadas > 0 ? ' alerta' : ''}">${frentesParadas}<span class="unit">de ${totalFrentesNoFiltro}</span></div>
         <div class="exec-kpi-sub">${frentesParadas === 0 ? 'Todas as frentes lançaram nos últimos 7 dias' : 'Contadas as frentes do filtro atual, pela data do último RDO'}</div>
       </div>
       <div class="exec-kpi stagger-item" style="animation-delay:.20s">
@@ -10540,12 +10610,10 @@ function renderExecutivo() {
     <!-- ============ VISUALIZAÇÃO 3D DO TRECHO ============ -->
     ${renderAvenida3D(rdosAtivos, pacotesAtivos)}
 
-    <!-- ============ CALENDÁRIO 90D ============ -->
-    ${renderCalendarioHeatmap(rdosAtivos)}
 
     <!-- ============ CURVA S + DESTAQUES ============ -->
     <div class="exec-row-21">
-      <div class="card stagger-item" style="animation-delay:.24s">
+      <div class="card curva-card stagger-item" style="animation-delay:.24s">
         <div class="card-header">
           <div>
             <div class="card-title-lg">Curva S — Realizado vs. Previsto</div>
@@ -10557,7 +10625,7 @@ function renderExecutivo() {
         </div>
         <div class="card-body">
           ${rdosOrdenados.length > 0 ? `
-            <div style="position:relative;height:260px"><canvas id="curvaS"></canvas></div>
+            <div class="curva-canvas"><canvas id="curvaS"></canvas></div>
             <!-- preenchido por montarGraficos(): a leitura depende das séries -->
             <div class="curva-leitura" id="curvaLeitura"></div>
           ` : `<div class="empty"><div class="empty-icon">${ic('relogio')}</div><div class="empty-title">Sem dados no filtro</div><div class="empty-sub">Altere o filtro de mês ou frente.</div></div>`}
@@ -10594,7 +10662,7 @@ function renderExecutivo() {
                   <div class="exec-list-name">${escHtml(a.frente)}</div>
                   <div class="exec-list-meta">${a.dias === null ? 'Nunca recebeu RDO' : 'Última: ' + fmtData(a.ultData)}${a.pacotes ? ' · ' + a.pacotes + ' pacote' + (a.pacotes>1?'s':'') : ''}</div>
                 </div>
-                <div class="exec-list-val warn">${a.dias === null ? '— d' : a.dias + ' d'}</div>
+                <div class="exec-list-val warn">${a.dias === null ? '—' : a.dias + ' d'}</div>
               </div>
             `).join('') : `<div class="exec-list-empty">${ic('check')} Todas as frentes com atividade recente</div>`}
           </div>
@@ -10602,16 +10670,19 @@ function renderExecutivo() {
       </div>
     </div>
 
-    <div class="section-title stagger-item" style="animation-delay:.2s; font-size:var(--fs-2xl); font-weight:800; margin: 24px 0 16px; color: var(--text);">Infraestrutura & Avanço Físico</div>
+    <div class="section-title stagger-item" style="animation-delay:.2s">Infraestrutura & Avanço Físico</div>
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px;">
        ${Object.entries(porFrente).sort((a,b) => b[1].pctPond - a[1].pctPond).map(([f, d], i) => {
           // O ícone da frente sai do conjunto do app (icFrente lê o nome da
           // frente), no lugar das ilustrações 3D: mesma linguagem do resto do
           // sistema e frente nova já entra desenhada, sem cadastrar arquivo.
           return `
-          <div class="tech-card-3d ${STATE.filtros.frente === f ? 'active' : ''} stagger-item" style="animation-delay:.${25 + i*5}s" onclick="atualizarFiltro('frente', '${f}')">
-            <div class="tech-card-image" style="--f-cor:${corDaFrente(f)};--f-halo:${corDaFrente(f, 0.22)}">
-               <span class="tech-card-marca">${ic(icFrente(f), 84)}</span>
+          <div class="tech-card-3d ${STATE.filtros.frente === f ? 'active' : ''} stagger-item" style="animation-delay:.${25 + i*5}s;--f-cor:${corDaFrente(f)};--f-halo:${corDaFrente(f, 0.22)}" onclick="atualizarFiltro('frente', '${f}')">
+            <div class="tech-card-image">
+               <!-- --mx desloca o recorte da planta: mesma imagem, trecho
+                    diferente em cada frente. Nove texturas sem nove arquivos. -->
+               <span class="tech-card-planta" style="--mx:${(i*23)%100}%"></span>
+               <span class="tech-card-marca">${ic(icFrente(f), 66)}</span>
                <div class="tech-card-title-overlay">
                   <div class="tech-card-title">${escHtml(f)}</div>
                </div>
@@ -10649,9 +10720,9 @@ function renderExecutivo() {
             </thead>
             <tbody>
               ${ativosOrdenados.map(a => `
-                <tr>
+                <tr class="linha-frente" style="--f-cor:${corDaFrente(getCSVField(a.pacote, 'Frente'))}">
                   <td><strong>${escHtml(getCSVField(a.pacote, 'Pacote'))}</strong></td>
-                  <td><span class="f-tag f-${frenteSlug(getCSVField(a.pacote, 'Frente'))}">${escHtml(getCSVField(a.pacote, 'Frente')||'')}</span></td>
+                  <td><span class="f-tag">${escHtml(getCSVField(a.pacote, 'Frente')||'')}</span></td>
                   <td class="t-num">${fmtNum(a.qtdExecutada)} <span style="color:var(--muted);font-size:var(--fs-xs)">/ ${fmtNum(a.qtdEstimada,0)} ${getCSVField(a.pacote, 'Unidade Física')||''}</span></td>
                   <td>
                     <div style="display:flex;align-items:center;gap:8px">
@@ -11462,7 +11533,11 @@ async function montarGraficos() {
           ticks: {
             font: { size: 10, family: 'JetBrains Mono, monospace' },
             color: 'oklch(0.55 0.02 60)',
-            maxRotation: 0, autoSkip: true, maxTicksLimit: 8,
+            /* Oito rótulos cabem no desktop; no celular, "mai. de 24" oito
+               vezes soma mais largura do que a tela tem e eles encostam uns
+               nos outros ("mai. de 24nov. de 24jun. de 25"). Quatro é o que
+               cabe em 375px sem virar borrão. */
+            maxRotation: 0, autoSkip: true, maxTicksLimit: window.innerWidth < 700 ? 4 : 8,
             callback: function(val) {
               const d = parseISODate(this.getLabelForValue(val));
               if (!d) return '';
@@ -11864,7 +11939,7 @@ function renderAvancoFisico() {
                    que não diz nada sobre o andamento: oito pacotes podem ser
                    5% ou 95% da frente. Entra o avanço ponderado, a mesma
                    régua de dias-equivalentes do Painel. -->
-              <tr class="summary"><td colspan="7">${escHtml(f)} — ${lista.length} pacote${lista.length>1?'s':''}
+              <tr class="summary" style="--f-cor:${corDaFrente(f)}"><td colspan="7">${escHtml(f)} — ${lista.length} pacote${lista.length>1?'s':''}
                 <span class="summary-pct">${fmtPct(pctPondDaFrente(lista))} da frente</span>
                 <span class="summary-nota">avanço ponderado, em dias-equivalentes</span></td></tr>
               ${lista.map(a => `
@@ -12060,7 +12135,7 @@ function renderHeatmap(av) {
                ao lado do nome é o que torna a leitura possível. */
             const un = getCSVField(a.pacote, 'Unidade Física') || '';
             return `
-              <div class="hm-row-label" title="Nesta linha, o tom mais escuro vale ${fmtNum(max, 1)} ${escHtml(un)} numa estaca">${escHtml(getCSVField(a.pacote, 'Pacote'))}<small>0–${fmtNum(max, 0)} ${escHtml(un)}</small></div>
+              <div class="hm-row-label" title="${escHtml(getCSVField(a.pacote, 'Pacote'))} — nesta linha, o tom mais escuro vale ${fmtNum(max, 1)} ${escHtml(un)} numa estaca"><span class="hm-row-nome">${escHtml(getCSVField(a.pacote, 'Pacote'))}</span><small>0–${fmtNum(max, 0)} ${escHtml(un)}</small></div>
               ${lista.map(e => {
                 const v = a.porEstaca[e.id] || 0;
                 const intensity = max > 0 ? Math.min(v / max, 1) : 0;
@@ -12396,14 +12471,20 @@ function renderCronogramaReverso() {
   const proximos   = linhas.filter(l => l.inicioNec && !l.concluido).sort((a,b) => a.inicioNec - b.inicioNec);
   const urgente    = proximos.find(l => l.status !== 'atrasado'); // próximo início que ainda dá tempo
 
+  /* O MESMO cartão do Painel Executivo (.exec-kpi). Antes esta tela tinha
+     o seu: outro tamanho de número, outro espaçamento, a cor por style
+     inline e o padding escrito à mão na chamada. Três telas, três cartões
+     de indicador — e nenhuma razão para isso, porque dizem a mesma coisa.
+     A cor do número continua vindo de fora, que aqui é informação: quem
+     está atrasado é vermelho, quem tem folga é azul. */
   const kpiCard = (label, valor, sub, accent) =>
-    `<div class="kpi-card" style="--kpi-size:30px;padding:14px 16px">
-       <div class="kpi-label">${label}</div>
-       <div class="kpi-value" style="color:${accent||'var(--text)'}">${valor}</div>
-       <div class="kpi-sub">${sub}</div>
+    `<div class="exec-kpi">
+       <div class="exec-kpi-lbl">${label}</div>
+       <div class="exec-kpi-val" style="--kpi-cor:${accent||'var(--text)'}">${valor}</div>
+       <div class="exec-kpi-sub">${sub}</div>
      </div>`;
 
-  const kpis = `<div class="kpi-grid stagger-item" style="margin-bottom:14px">
+  const kpis = `<div class="exec-kpi-grid cinco stagger-item" style="margin-bottom:14px">
     ${kpiCard('Atrasados', nAtrasado, 'já deveriam ter começado', nAtrasado ? 'var(--red)' : 'var(--grn)')}
     ${kpiCard('Críticos', nCritico, `folga ≤ ${PLAN_CRITICO_DIAS} dias úteis`, nCritico ? 'var(--ylw-d)' : 'var(--muted)')}
     ${kpiCard('No prazo', nNoPrazo, 'com folga confortável', 'var(--blu)')}
@@ -12465,7 +12546,7 @@ function renderCronogramaReverso() {
   // ─── Tabela ──────────────────────────────────────────────────────────────
   let body = '';
   Object.entries(porFrente).forEach(([frente, arr]) => {
-    body += `<tr class="summary"><td colspan="7">${escHtml(frente)}</td></tr>`;
+    body += `<tr class="summary" style="--f-cor:${corDaFrente(frente)}"><td colspan="7">${escHtml(frente)}</td></tr>`;
 
     arr.forEach(l => {
       const { pid, unid, qtdTotal, qtdExec, saldo, pct, prodPadrao, plan, concluido } = l;
@@ -12865,22 +12946,26 @@ function renderMedicao(){
     ? lista.filter(x => !x.estourou && x.pctContrato !== null && x.pctContrato >= 0.9).length
     : 0;
   const resumoMedicao = !lista.length ? '' : `
-    <div class="medicao-resumo stagger-item">
-      <div class="med-kpi">
-        <span class="med-kpi-lbl">Período</span>
-        <span class="med-kpi-val">${escHtml(MEDICAO_MES ? nomeMesAno(MEDICAO_MES) : 'Obra inteira')}</span>
+    <div class="exec-kpi-grid auto stagger-item" style="margin-bottom:16px">
+      <div class="exec-kpi">
+        <div class="exec-kpi-lbl">Período</div>
+        <div class="exec-kpi-val texto">${escHtml(MEDICAO_MES ? nomeMesAno(MEDICAO_MES) : 'Obra inteira')}</div>
+        <div class="exec-kpi-sub">recorte aplicado à prévia abaixo</div>
       </div>
-      <div class="med-kpi">
-        <span class="med-kpi-lbl">Itens medidos</span>
-        <span class="med-kpi-val">${lista.length}</span>
+      <div class="exec-kpi">
+        <div class="exec-kpi-lbl">Itens medidos</div>
+        <div class="exec-kpi-val">${lista.length}</div>
+        <div class="exec-kpi-sub">itens contratuais com consumo no período</div>
       </div>
-      <div class="med-kpi${estourados.length ? ' alerta' : ''}">
-        <span class="med-kpi-lbl">Acima do contrato</span>
-        <span class="med-kpi-val">${estourados.length}${estourados.length ? '' : ' <span class="med-kpi-ok">nenhum</span>'}</span>
+      <div class="exec-kpi">
+        <div class="exec-kpi-lbl">Acima do contrato</div>
+        <div class="exec-kpi-val" style="--kpi-cor:${estourados.length ? 'var(--red)' : 'var(--text)'}">${estourados.length}${estourados.length ? '' : ' <span class="exec-kpi-ok">nenhum</span>'}</div>
+        <div class="exec-kpi-sub">${estourados.length ? 'consumo passou da quantidade contratada' : 'nenhum item passou da quantidade contratada'}</div>
       </div>
-      ${temContrato ? `<div class="med-kpi${emAlerta ? ' atencao' : ''}">
-        <span class="med-kpi-lbl">Saldo abaixo de 10%</span>
-        <span class="med-kpi-val">${emAlerta}</span>
+      ${temContrato ? `<div class="exec-kpi">
+        <div class="exec-kpi-lbl">Saldo abaixo de 10%</div>
+        <div class="exec-kpi-val" style="--kpi-cor:${emAlerta ? 'var(--ylw-d)' : 'var(--text)'}">${emAlerta}</div>
+        <div class="exec-kpi-sub">itens perto de esgotar o contratado</div>
       </div>` : ''}
     </div>`;
 
