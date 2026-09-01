@@ -721,6 +721,11 @@ html,body{
 
 .sidebar{
   width:240px;flex-shrink:0;
+  /* Rede de segurança para tela baixa: o rodapé é flex-shrink:0 e a
+     lista agora tem piso, então numa janela curta a soma pode passar da
+     altura. Sem isto o que sobra fica inalcançável — que foi exatamente
+     o defeito que a logo expôs. Só rola quando precisa. */
+  overflow-y:auto;
   background:var(--sidebar-bg);
   border-right:1px solid var(--sidebar-border);
   display:flex;flex-direction:column;
@@ -738,7 +743,7 @@ html,body{
    texto creme: uma imagem só, sem troca por tema.
    O arquivo tem largura e altura declaradas para o texto abaixo não
    pular enquanto ela carrega. */
-.marca-gestor{ display:block; width:126px; height:auto; margin:2px 0 14px; }
+.marca-gestor{ display:block; width:92px; height:auto; margin:0 0 10px; }
 
 /* Na tela de entrada o fundo MUDA com o tema, então ali são duas
    versões — a de texto escuro e a de texto creme — trocadas pelo mesmo
@@ -814,7 +819,22 @@ html,body{
 /* A lista de telas rola sozinha: com o menu cheio (9 telas) mais o rodapé
    de acesso e o seletor de tema, a barra passava da altura da janela e o
    rodapé sumia. Agora logo e rodapé ficam fixos e só o meio rola. */
-.sidebar-nav{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+/* ------------------------------------------------------------------
+   A LISTA DE TELAS TEM PRIORIDADE NA ALTURA
+   ------------------------------------------------------------------
+   A barra lateral é uma coluna flex: topo (marca + obra), lista de
+   telas e rodapé de acesso. Sem piso, a lista é a única que cede — e
+   numa janela de ~700px ela chegou a 81px de altura para 811px de
+   conteúdo, deixando o menu inalcançável: clicar em qualquer item não
+   abria nada, porque o item estava fora da fresta visível.
+   Foi o que a logo causou ao entrar (o topo passou de ~110px para
+   190px). A logo encolheu, mas o piso fica: é ele que impede que
+   qualquer coisa que se acrescente ao topo ou ao rodapé volte a comer
+   a navegação. O min-height era 0 — o valor que deixa um filho flex
+   encolher abaixo do próprio conteúdo, e era ele que permitia a lista
+   virar uma fresta. Em tela baixa demais quem rola agora é a barra
+   inteira (ver overflow-y em .sidebar). */
+.sidebar-nav{flex:1 1 auto;min-height:200px;overflow-y:auto;overscroll-behavior:contain}
 .sidebar-nav::-webkit-scrollbar{width:6px}
 .sidebar-nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,.14);border-radius:3px}
 
