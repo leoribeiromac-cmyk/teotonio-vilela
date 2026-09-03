@@ -58,6 +58,15 @@ const NF_UF = {11:'RO',12:'AC',13:'AM',14:'RR',15:'PA',16:'AP',17:'TO',21:'MA',2
 const NF_UN = ['UN','PC','CX','SC','KG','TON','M','M2','M3','L','MIL','CJ','BR','RL','GL','PAR'];
 const NF_MAX_LADO = 1600;    // resolucao guardada da nota (o OCR precisa enxergar)
 const NF_PAGINA = 24;        // quantas notas a lista mostra por vez
+/* A copia que SOBE para a leitura por IA nao e a mesma que fica guardada.
+   O tamanho e o mesmo (a tabela de itens da DANFE tem letra miuda e 1600 px
+   e o minimo para ela sair legivel), mas a qualidade do JPEG cai: a foto
+   guardada e prova e vale o peso, a que vai para a IA e descartada assim que
+   a resposta chega. Medido numa DANFE de 12 MP: 613 KB guardados contra 445 KB
+   subindo (~27% a menos, e ainda ha o base64 inflando os dois em 1/3), sem
+   mudar uma virgula do que a IA le. No 3G do canteiro o que demora e
+   justamente a subida. */
+const NF_IA_Q = .72;
 
 /* ---------- cores ----------
    O MESMO arquivo roda nos dois apps, e eles batizam as variáveis de CSS de
@@ -255,7 +264,7 @@ function nfChaveDeTexto(txt) {
    ============================================================ */
 function nfTemLeitorCodigo() { return typeof window !== 'undefined' && 'BarcodeDetector' in window; }
 
-async function nfLerCodigos(fonte) {
+async function nfLerCodigos(fonte, jaReduzida) {
   const res = { chave: '', codigos: [], suportado: nfTemLeitorCodigo() };
   if (!res.suportado) return res;
   try {
@@ -268,9 +277,13 @@ async function nfLerCodigos(fonte) {
     const det = new window.BarcodeDetector({ formats: formatos });
 
     // 1a tentativa na imagem original; 2a numa versao reduzida (detector
-    // costuma falhar em foto de 12 MP e acertar na mesma foto menor)
+    // costuma falhar em foto de 12 MP e acertar na mesma foto menor).
+    // Quem chama ja costuma ter a reducao pronta (o canvas de 1600 px de
+    // `nfPrepararFoto`): aproveitar aquele canvas poupa mais uma abertura da
+    // foto inteira, que era exatamente o que sobrecarregava o aparelho.
     const fontes = [fonte];
-    try { fontes.push(await nfBitmapReduzido(fonte, 1400)); } catch (e) { /* segue com a original */ }
+    if (jaReduzida) fontes.push(jaReduzida);
+    else { try { fontes.push(await nfBitmapReduzido(fonte, 1400)); } catch (e) { /* segue com a original */ } }
 
     for (const f of fontes) {
       if (!f) continue;
@@ -316,10 +329,19 @@ function nfBitmapReduzido(fonte, maxLado) {
    digital (consultadanfe, meudanfe, nfe.io...). Quando funciona é o melhor
    caminho de todos: os dados vêm do XML que o fornecedor emitiu, não de
    leitura de imagem. */
+/* A consulta so existe onde ha servico com certificado digital contratado.
+   Onde nao ha, o servidor responde 'sem_api' — mas responde DEPOIS da ida ao
+   Apps Script, que e a viagem mais cara do app (o Google ainda acorda o
+   script antes de atender). Toda nota com codigo de barras legivel pagava
+   essa espera para ouvir a mesma coisa. Ouvido uma vez, vale para a sessao;
+   quem ligar a consulta na planilha a tem de volta no proximo carregamento. */
+let _nfSemConsultaChave = false;
 async function nfConsultarPelaChave(chave) {
   if (!BACKEND || isDemo()) return { ok: false, motivo: 'local' };
+  if (_nfSemConsultaChave) return { ok: false, motivo: 'sem_api' };
   try {
     const r = await postAcao({ action: 'nfConsultarChave', chave: chave, obra: (obra() || {}).id || '' });
+    if (r && r.motivo === 'sem_api') _nfSemConsultaChave = true;
     return r || { ok: false, motivo: 'sem_resposta' };
   } catch (e) {
     return { ok: false, motivo: 'rede' };
@@ -471,20 +493,36 @@ function nfEmitenteAlerta(cnpj) {
 
 async function nfLerImagemIA(dataUrl, chave, texto) {
   if (!BACKEND || isDemo()) return { ok: false, motivo: 'local' };
-  try {
-    // com o texto do PDF em mãos, mandar a imagem junto só atrapalha (e é
-    // 10x mais caro): o texto já é a nota inteira, sem OCR no meio
-    const temTexto = texto && texto.length > 200;
-    const r = await postAcao({
-      action: 'nfLerIA',
-      foto: temTexto ? '' : dataUrl,
-      texto: temTexto ? String(texto).slice(0, 24000) : '',
-      chave: chave || ''
-    });
-    return r || { ok: false, motivo: 'sem_resposta' };
-  } catch (e) {
-    return { ok: false, motivo: 'rede' };
+  // com o texto do PDF em mãos, mandar a imagem junto só atrapalha (e é
+  // 10x mais caro): o texto já é a nota inteira, sem OCR no meio
+  const temTexto = texto && texto.length > 200;
+  const params = {
+    action: 'nfLerIA',
+    foto: temTexto ? '' : dataUrl,
+    texto: temTexto ? String(texto).slice(0, 24000) : '',
+    chave: chave || ''
+  };
+  /* UMA SEGUNDA TENTATIVA, e so uma.
+     Rede de canteiro derruba pedido no meio — e a foto da DANFE é o maior
+     pedido que este app faz. Uma falha dessas dava "Não consegui falar com o
+     servidor" na cara do apontador, que ia digitar a nota inteira à mão por
+     causa de um tropeço de segundos.
+     Nao se repete o que ESGOTOU O TEMPO: ali o servidor provavelmente
+     trabalhou (e a leitura foi cobrada), e repetir so faz esperar em dobro. */
+  let ultima = null;
+  for (let tentativa = 0; tentativa < 2; tentativa++) {
+    try {
+      const r = await postAcao(Object.assign({}, params));
+      if (r) return r;
+      ultima = { ok: false, motivo: 'sem_resposta' };
+    } catch (e) {
+      const msg = String((e && e.message) || e || '');
+      if (/tempo esgotado/i.test(msg)) return { ok: false, motivo: 'demorou' };
+      ultima = { ok: false, motivo: 'rede' };
+    }
+    if (tentativa === 0) await new Promise(r => setTimeout(r, 1200));
   }
+  return ultima;
 }
 
 /* junta o que veio da chave com o que veio da IA.
@@ -1083,6 +1121,57 @@ function nfReduzirUri(uri, maxLado, q) {
   });
 }
 
+/* ---------- a foto e decodificada UMA VEZ ----------
+   Ate aqui a mesma foto era aberta QUATRO vezes: `comprimirImg` duas (a
+   miniatura e a copia guardada, e ainda em paralelo, o que dobra o pico de
+   memoria), e o leitor de codigo de barras mais duas (o arquivo original e
+   uma reducao dele). Uma foto de 12 MP vira ~48 MB de bitmap cada vez, fora
+   os dois FileReader que passam o arquivo inteiro para base64 antes.
+
+   E dai que vinha o "as vezes da erro nesse aparelho": no celular simples do
+   canteiro o navegador derruba a aba ou devolve canvas em branco quando o
+   pico de memoria estoura — e o erro nao aparece sempre, aparece quando a
+   foto e grande e o aparelho ja esta cheio.
+
+   Agora o arquivo e decodificado uma vez so (`createImageBitmap`, que ainda
+   decodifica FORA da thread da tela, entao o app nao congela) e desenhado num
+   canvas de 1600 px. Miniatura, copia guardada e copia da IA saem desse mesmo
+   canvas, e o canvas ainda serve de segunda fonte para o leitor de codigo.
+   Navegador sem `createImageBitmap` continua pelo caminho antigo. */
+async function nfPrepararFoto(file) {
+  let base = null;
+  if (typeof createImageBitmap === 'function') {
+    try {
+      const bm = await createImageBitmap(file);
+      const m = Math.max(bm.width, bm.height);
+      const k = m > NF_MAX_LADO ? NF_MAX_LADO / m : 1;
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(bm.width * k));
+      c.height = Math.max(1, Math.round(bm.height * k));
+      const cx = c.getContext('2d');
+      cx.imageSmoothingQuality = 'high';
+      cx.drawImage(bm, 0, 0, c.width, c.height);
+      try { bm.close(); } catch (e) { /* nem todo navegador tem close() */ }
+      base = c;
+    } catch (e) { base = null; }   // HEIC que o navegador nao abre, memoria...
+  }
+  if (!base) {
+    const full = await comprimirImg(file, NF_MAX_LADO, .88);
+    return {
+      thumb: await comprimirImg(file, 320, .55),
+      full: full,
+      paraIA: await nfReduzirUri(full, NF_MAX_LADO, NF_IA_Q),
+      canvas: null
+    };
+  }
+  return {
+    thumb: nfCanvasJpeg(base, 320, .55),
+    full: nfCanvasJpeg(base, NF_MAX_LADO, .88),
+    paraIA: nfCanvasJpeg(base, NF_MAX_LADO, NF_IA_Q),
+    canvas: base
+  };
+}
+
 function nfPDFdeBase64(b64) {
   const bin = atob(String(b64).replace(/\s/g, ''));
   const bytes = new Uint8Array(bin.length);
@@ -1094,8 +1183,19 @@ function nfPDFdeBase64(b64) {
    errado de 80 folhas nao virar 80 idas ao Drive. */
 const NF_MAX_PAGINAS = 8;
 
-async function nfLerPDF(file) {
-  const out = { texto: '', thumb: '', full: '', paginas: 0, extras: [] };
+/* O PDF e lido em DOIS tempos, e a ordem importa para o tempo de espera.
+
+   O TEXTO sai em milissegundos e e ele que a IA le. As folhas viradas em
+   imagem sao pesadas — renderizar 1600 px por folha e o passo mais lento de
+   toda a tela num celular simples — e servem so para guardar a prova.
+
+   Antes as duas coisas vinham juntas, num `await` so: a nota ficava parada
+   desenhando folha por folha ANTES de a leitura sequer comecar. Agora quem
+   chama pega o texto, dispara a leitura, e as folhas viram imagem em paralelo.
+   `nfLerPDF` continua existindo, com o comportamento de sempre, para os
+   lugares em que a imagem e tudo o que importa. */
+async function nfAbrirPDF(file) {
+  const out = { doc: null, texto: '', paginas: 0 };
   // O PDF.js e pesado (313 KB) e so faz falta quando chega uma DANFE em PDF.
   // O app carrega sob demanda; aqui pedimos e seguimos sem ele se falhar —
   // a leitura cai para OCR na imagem, que e o plano B de sempre.
@@ -1105,6 +1205,7 @@ async function nfLerPDF(file) {
   if (!window.pdfjsLib) return out;
   const buf = await file.arrayBuffer();
   const doc = await window.pdfjsLib.getDocument({ data: buf }).promise;
+  out.doc = doc;
   out.paginas = doc.numPages;
   // a DANFE cabe em poucas folhas; ler tudo de uma nota de 40 páginas é desperdício
   const lim = Math.min(doc.numPages, 4);
@@ -1114,6 +1215,12 @@ async function nfLerPDF(file) {
     out.texto += tc.items.map(it => it.str).join(' ') + '\n';
   }
   out.texto = out.texto.replace(/[ \t]+/g, ' ').trim();
+  return out;
+}
+
+async function nfPDFImagens(doc, comCopiaIA) {
+  const out = { thumb: '', full: '', paraIA: '', extras: [] };
+  if (!doc) return out;
   /* TODAS as folhas viram imagem, nao so a primeira. Antes o PDF de duas
      paginas era lido inteiro (o texto), mas so a folha 1 era guardada: a
      comprovacao da nota ficava pela metade e ninguem era avisado disso.
@@ -1134,12 +1241,22 @@ async function nfLerPDF(file) {
   const c1 = await paraJpeg(1);
   out.full = nfCanvasJpeg(c1, NF_MAX_LADO, .85);
   out.thumb = nfCanvasJpeg(c1, 320, .6);
+  // PDF digitalizado (sem texto) tambem sobe para a IA: vale a copia leve.
+  // O que tem texto nao sobe imagem nenhuma, e ai nem se gasta a codificacao.
+  if (comCopiaIA) out.paraIA = nfCanvasJpeg(c1, NF_MAX_LADO, NF_IA_Q);
   const ate = Math.min(doc.numPages, NF_MAX_PAGINAS);
   for (let i = 2; i <= ate; i++) {
     try { out.extras.push(nfCanvasJpeg(await paraJpeg(i), NF_MAX_LADO, .85)); }
     catch (e) { break; }   // uma folha ilegivel nao pode derrubar a nota toda
   }
   return out;
+}
+
+/* PDF inteiro de uma vez: texto e folhas. */
+async function nfLerPDF(file) {
+  const a = await nfAbrirPDF(file);
+  const im = await nfPDFImagens(a.doc);
+  return { texto: a.texto, paginas: a.paginas, thumb: im.thumb, full: im.full, extras: im.extras };
 }
 
 async function nfArquivoSelecionado(inp) {
@@ -1160,14 +1277,28 @@ async function nfArquivoSelecionado(inp) {
   ];
   nfPassoUI(passos);
 
-  let thumb = '', full = '', textoPDF = '', extras = [], totalPDF = 0;
+  /* AS FOLHAS SEGUINTES NAO SEGURAM A LEITURA.
+     Preparar imagem e o passo mais lento da tela (uma folha de PDF em 1600 px,
+     ou uma foto de 12 MP) e nao serve para nada na leitura: o que a IA le e a
+     folha 1 — ou nem isso, quando o PDF traz texto. Antes tudo era preparado
+     antes de a leitura comecar, e o apontador esperava as duas coisas em fila.
+     Agora `prontoPaginas` roda em segundo plano e so e esperado onde o
+     resultado dele e realmente usado: antes de trocar a imagem pela oficial da
+     SEFAZ e antes de abrir o formulario. */
+  let thumb = '', full = '', paraIA = '', textoPDF = '', extras = [], totalPDF = 0, reduzida = null;
+  let prontoPaginas = Promise.resolve();
   if (ehPDF) {
-    try {
-      const p = await nfLerPDF(f);
-      thumb = p.thumb; full = p.full; textoPDF = p.texto;
-      extras = p.extras || []; totalPDF = p.paginas || 1;
-    } catch (e) { toast('Não consegui abrir esse PDF'); nfAbrirNova(); return; }
-    const quantas = 1 + extras.length;
+    let aberto;
+    try { aberto = await nfAbrirPDF(f); }
+    catch (e) { toast('Não consegui abrir esse PDF'); nfAbrirNova(); return; }
+    textoPDF = aberto.texto; totalPDF = aberto.paginas || 1;
+    const quantas = Math.min(totalPDF, NF_MAX_PAGINAS);
+    const virarImagens = nfPDFImagens(aberto.doc, aberto.texto.length <= 200).then(im => {
+      thumb = im.thumb; full = im.full; paraIA = im.paraIA; extras = im.extras || [];
+      _nfRascunho.thumb = thumb; _nfFull = full; _nfPags = extras;
+    }).catch(() => { /* sem imagem a nota ainda vale: os dados vieram do texto */ });
+    if (textoPDF.length > 200) prontoPaginas = virarImagens;   // a IA le o texto: nao espera
+    else await virarImagens;                                   // digitalizado: a IA precisa da folha
     passos[0] = { ic: 'check', st: 'ok',
       t: (quantas > 1 ? quantas + ' páginas guardadas — ' : '') +
          (textoPDF.length > 200 ? 'texto lido do PDF' : 'PDF aberto (parece ser digitalizado)') };
@@ -1176,14 +1307,20 @@ async function nfArquivoSelecionado(inp) {
     }
   } else {
     try {
-      const r = await Promise.all([comprimirImg(f, 320, .55), comprimirImg(f, NF_MAX_LADO, .88)]);
-      thumb = r[0]; full = r[1];
-      for (const x of outrasFotos.slice(0, NF_MAX_PAGINAS - 1)) {
-        try { extras.push(await comprimirImg(x, NF_MAX_LADO, .88)); } catch (e) { /* pula a que nao abriu */ }
-      }
+      const prep = await nfPrepararFoto(f);
+      thumb = prep.thumb; full = prep.full; paraIA = prep.paraIA; reduzida = prep.canvas;
     } catch (e) { toast('Não consegui ler essa imagem'); nfAbrirNova(); return; }
+    const seguintes = outrasFotos.slice(0, NF_MAX_PAGINAS - 1);
+    if (seguintes.length) {
+      prontoPaginas = (async () => {
+        for (const x of seguintes) {
+          try { extras.push((await nfPrepararFoto(x)).full); } catch (e) { /* pula a que nao abriu */ }
+        }
+        _nfPags = extras;
+      })();
+    }
     passos[0] = { ic: 'check', st: 'ok',
-      t: extras.length ? (1 + extras.length) + ' páginas prontas' : 'Imagem pronta' };
+      t: seguintes.length ? (1 + seguintes.length) + ' páginas prontas' : 'Imagem pronta' };
   }
   passos[1].ic = 'ampulheta'; nfPassoUI(passos);
 
@@ -1198,11 +1335,18 @@ async function nfArquivoSelecionado(inp) {
   }
   let cod = { codigos: [], suportado: nfTemLeitorCodigo() };
   if (!chaveAchada && !ehPDF) {
-    cod = await nfLerCodigos(f);
+    cod = await nfLerCodigos(f, reduzida);
     chaveAchada = cod.chave;
     if (chaveAchada) comoAchou = 'Chave de acesso lida do código de barras';
   }
   const daChave = chaveAchada ? nfDaChave(chaveAchada) : null;
+  /* A CHAVE JA TRAZ O CNPJ — a consulta na Receita pode ir andando.
+     Ela nao depende de nada do que vem depois, e o cadastro publico as vezes
+     demora (sao duas fontes, 7 s cada, quando a primeira nao responde). Antes
+     ela so comecava depois que a IA terminava, e as duas esperas somavam.
+     Aqui e so aquecer o cache do aparelho: quem usa o resultado continua
+     sendo `nfCompletarEmitente`, mais abaixo, que le do cache num piscar. */
+  if (daChave && daChave.cnpj) { try { nfConsultarCNPJ(daChave.cnpj); } catch (e) {} }
   passos[1] = daChave
     ? { ic: 'check', t: comoAchou, st: 'ok' }
     : { ic: 'traco', t: ehPDF ? 'Sem chave de acesso legível no arquivo' : (cod.suportado ? 'Sem código legível na foto' : 'Este aparelho não lê código de barras'), st: '' };
@@ -1225,20 +1369,34 @@ async function nfArquivoSelecionado(inp) {
     if (consulta.pdf) {
       try {
         const oficial = await nfLerPDF(nfPDFdeBase64(consulta.pdf));
+        // espera o que ficou virando imagem em segundo plano, senao ele
+        // termina depois e sobrescreve a folha oficial com a foto do barracão
+        await prontoPaginas;
         if (oficial.full) { thumb = oficial.thumb; full = oficial.full; _nfRascunho.thumb = thumb; _nfFull = full; }
       } catch (e) { /* fica com a imagem que o apontador enviou */ }
     }
   } else {
     passos[2] = { ic: 'ampulheta', t: textoPDF.length > 200 ? 'Lendo os dados do texto do PDF' : 'Lendo os dados da imagem', st: '' };
     nfPassoUI(passos);
-    ia = await nfLerImagemIA(full, daChave ? daChave.chave : '', textoPDF);
-    if (ia && ia.ok) passos[2] = { ic: 'check', t: textoPDF.length > 200 ? 'Dados extraídos do PDF' : 'Dados extraídos da imagem', st: 'ok' };
+    /* Passar da meia dúzia de segundos aqui e quase sempre sinal ruim, nao a
+       IA pensando. Dizer isso muda o que a pessoa faz: quem acha que travou
+       fecha a tela e perde a nota; quem sabe que e o sinal, espera. */
+    const demora = setTimeout(() => {
+      passos[2].t = (textoPDF.length > 200 ? 'Lendo os dados do texto do PDF' : 'Lendo os dados da imagem') +
+                    ' — está demorando, o sinal deve estar fraco';
+      nfPassoUI(passos);
+    }, 12000);
+    ia = await nfLerImagemIA(paraIA || full, daChave ? daChave.chave : '', textoPDF);
+    clearTimeout(demora);
+    if (ia && ia.ok) passos[2] = { ic: 'check', st: 'ok',
+      t: ia.semItens ? 'Dados da nota extraídos — a lista de itens é longa demais e ficou de fora'
+                     : (textoPDF.length > 200 ? 'Dados extraídos do PDF' : 'Dados extraídos da imagem') };
     else passos[2] = { ic: 'traco', t: nfMotivoTxt(ia), st: '' };
   }
   nfPassoUI(passos);
   const fonte = (consulta && consulta.ok) ? consulta : ia;
   // falha do lado do servidor: guarda para o botão de teste explicar direito
-  if (ia && !ia.ok && ['api', 'autorizacao', 'chave_invalida', 'chave_sem_acesso', 'modelo', 'limite', 'vazia', 'resposta', 'bloqueado'].indexOf(ia.motivo) > -1) {
+  if (ia && !ia.ok && ['api', 'autorizacao', 'chave_invalida', 'chave_sem_acesso', 'modelo', 'limite', 'sobrecarga', 'vazia', 'resposta', 'bloqueado'].indexOf(ia.motivo) > -1) {
     _nfUltimaFalhaIA = ia;
   }
 
@@ -1278,6 +1436,10 @@ async function nfArquivoSelecionado(inp) {
   if (!nota.dataEntrada) nota.dataEntrada = hoje();
   nfRegistrar(nota, 'leitura automática', nota.leitura.metodo);
   nfAutoVincular(o.id, nota);
+  // as folhas que ficaram virando imagem em segundo plano precisam estar
+  // prontas antes do formulario: e ele que mostra e grava a contagem delas
+  await prontoPaginas;
+  nota.thumb = _nfRascunho.thumb || nota.thumb;
   _nfRascunho = nota;
   setTimeout(() => nfConferir(), 450);
 }
@@ -1354,11 +1516,13 @@ function nfMotivoTxt(ia) {
     chave_invalida: 'A chave da IA foi recusada pelo Google',
     chave_sem_acesso: 'A chave da IA não tem acesso à API',
     modelo: 'O modelo de IA configurado não existe',
+    sobrecarga: 'A IA do Google está sobrecarregada agora — tente de novo em um minuto',
     longa: 'Nota comprida demais para uma leitura só',
     bloqueado: 'A IA recusou a imagem',
     vazia: 'A IA não devolveu os dados',
     resposta: 'A IA respondeu num formato inesperado',
     rede: 'Não consegui falar com o servidor',
+    demorou: 'O servidor demorou demais para responder — tente de novo com sinal melhor',
     sem_resposta: 'O servidor não respondeu',
     // consulta da nota pela chave
     sem_api: 'Consulta por chave não está ligada',
