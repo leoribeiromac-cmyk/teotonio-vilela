@@ -4619,11 +4619,18 @@ function nfLerIA(p) {
     // Aqui a tarefa é copiar campo de imagem, não raciocinar: desliga o pensamento
     // e sobra teto para o JSON inteiro.
     generationConfig: {
-      temperature: 0, maxOutputTokens: 8192, responseMimeType: 'application/json',
+      // O TETO E ALTO DE PROPOSITO. Com o pensamento desligado so se paga o
+      // que sai, entao um teto folgado nao custa nada — e um teto curto custa
+      // caro: nota de obra com 40 itens estourava os 8192 e voltava
+      // "MAX_TOKENS", ou seja, a leitura inteira perdida por causa da cauda
+      // da lista. Modelo que nao aceite este teto cai no pedido simplificado
+      // de `nfChamarGemini`.
+      temperature: 0, maxOutputTokens: 32768, responseMimeType: 'application/json',
       thinkingConfig: { thinkingBudget: 0 }
     }
   };
 
+  var semItens = false;   // vira true quando a nota so coube sem a lista de itens
   var resp = nfChamarGeminiComReserva(modelo, key, payload);
   if (!resp.ok) return resp;
   modelo = resp.modelo || modelo;
@@ -4636,15 +4643,32 @@ function nfLerIA(p) {
   if (!cand && j.promptFeedback && j.promptFeedback.blockReason) {
     return { ok: false, motivo: 'bloqueado', detalhe: String(j.promptFeedback.blockReason) };
   }
+  /* NOTA COMPRIDA: SALVA-SE O CABECALHO.
+     Quem estourou o teto foi a lista de itens — sempre ela. Devolver "nota
+     comprida demais" e mandar digitar tudo de novo, inclusive fornecedor,
+     numero, data e valor, que ja tinham sido lidos. Aqui a leitura e refeita
+     UMA vez pedindo so o cabecalho: a pessoa digita os itens, que e o que
+     realmente nao coube, e nao a nota inteira. */
   if (motivoFim === 'MAX_TOKENS') {
-    return { ok: false, motivo: 'longa', detalhe: 'A nota tem itens demais para uma leitura só.' };
+    var so = JSON.parse(JSON.stringify(payload));
+    so.contents[0].parts[0].text = prompt +
+      '\n- ATENÇÃO: esta nota é longa. NÃO traga a lista de itens (devolva "itens": []). ' +
+      'Interessam apenas os campos do cabeçalho e os valores totais.\n';
+    var r2 = nfChamarGeminiComReserva(modelo, key, so);
+    var c2 = r2.ok && r2.json && r2.json.candidates && r2.json.candidates[0];
+    if (c2 && String(c2.finishReason || '') !== 'MAX_TOKENS') {
+      resp = r2; j = r2.json; cand = c2; motivoFim = String(c2.finishReason || '');
+      semItens = true;
+    } else {
+      return { ok: false, motivo: 'longa', detalhe: 'A nota tem itens demais para uma leitura só.' };
+    }
   }
   if (motivoFim === 'SAFETY' || motivoFim === 'PROHIBITED_CONTENT') {
     return { ok: false, motivo: 'bloqueado', detalhe: motivoFim };
   }
 
-  var partes = cand && cand.content && cand.content.parts;
-  var txt = (partes || []).map(function (x) { return x.text || ''; }).join('');
+  var partesResp = cand && cand.content && cand.content.parts;
+  var txt = (partesResp || []).map(function (x) { return x.text || ''; }).join('');
   txt = String(txt).replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '').trim();
   if (!txt) return { ok: false, motivo: 'vazia', detalhe: motivoFim || 'o modelo não devolveu texto' };
 
@@ -4662,6 +4686,7 @@ function nfLerIA(p) {
   return {
     ok: true, modelo: modelo,
     dados: out.dados,
+    semItens: semItens,
     confianca: out.confianca || {},
     confiancaGeral: typeof out.confiancaGeral === 'number' ? out.confiancaGeral : 0.6
   };
@@ -4752,16 +4777,41 @@ function nfChamarGemini(modelo, key, payload) {
     }
   }
 
+  var emUso = payload;      // o pedido que de fato foi aceito pelo modelo
   var t = tentar(payload);
   if (t.erro) return t.erro;
   var res = t.res;
 
-  if (res.getResponseCode() === 400 && payload.generationConfig && payload.generationConfig.thinkingConfig) {
+  // 400 aqui quase sempre e o modelo configurado nao aceitar um dos ajustes:
+  // `thinkingConfig` nao existe antes do 2.5, e o teto de 32k de saida e mais
+  // alto do que os modelos antigos permitem. Refaz o pedido no basicao, que
+  // qualquer versao entende, em vez de devolver "o modelo nao existe".
+  if (res.getResponseCode() === 400 && payload.generationConfig &&
+      (payload.generationConfig.thinkingConfig || payload.generationConfig.maxOutputTokens > 8192) &&
+      // chave recusada tambem e 400, e ali repetir e so fazer o apontador
+      // esperar: nenhum ajuste no pedido conserta credencial
+      !/API key not valid|API_KEY_INVALID/i.test(String(res.getContentText()))) {
     var copia = JSON.parse(JSON.stringify(payload));
     delete copia.generationConfig.thinkingConfig;
+    if (copia.generationConfig.maxOutputTokens > 8192) copia.generationConfig.maxOutputTokens = 8192;
     var t2 = tentar(copia);
     if (t2.erro) return t2.erro;
     res = t2.res;
+    emUso = copia;   // se der 503 agora, repete o pedido que ESTE modelo aceita
+  }
+
+  /* SOBRECARGA DO GOOGLE NAO E ERRO DA NOTA.
+     O 503 ("model is overloaded") e o 500 aparecem sozinhos, sem nada de
+     errado na imagem, e passam em segundos. Sem esta repeticao eles chegavam
+     ao apontador como "Não consegui ler a imagem" — a nota parecia ilegivel
+     quando o problema era do outro lado do fio, e era esse o erro que "as
+     vezes acontece" sem explicacao. Uma repeticao so: se o Google estiver
+     mesmo fora, insistir e fazer o apontador esperar por nada. */
+  var codigoInicial = res.getResponseCode();
+  if (codigoInicial === 500 || codigoInicial === 502 || codigoInicial === 503 || codigoInicial === 504) {
+    Utilities.sleep(1500);
+    var t3 = tentar(emUso);
+    if (!t3.erro) res = t3.res;
   }
 
   var codigo = res.getResponseCode();
@@ -4777,6 +4827,7 @@ function nfChamarGemini(modelo, key, payload) {
     else if (codigo === 403) motivo = 'chave_sem_acesso';
     else if (codigo === 404) motivo = 'modelo';
     else if (codigo === 429) motivo = 'limite';
+    else if (codigo >= 500) motivo = 'sobrecarga';
     var falha = { ok: false, motivo: motivo, codigo: codigo, detalhe: detalhe };
     // 429 vem em dois sabores e a resposta certa muda: cota POR MINUTO passa
     // sozinha em instantes; a DIARIA so renova de madrugada. O corpo inteiro
@@ -4802,7 +4853,9 @@ function nfChamarGemini(modelo, key, payload) {
 function nfChamarGeminiComReserva(modelo, key, payload) {
   var r = nfChamarGemini(modelo, key, payload);
   if (r.ok) { r.modelo = modelo; return r; }
-  if (r.motivo !== 'limite' || modelo === NF_MODELO_RESERVA) return r;
+  // sobrecarga do Google raramente pega os dois modelos ao mesmo tempo: vale
+  // a mesma troca que a cota estourada ja fazia
+  if ((r.motivo !== 'limite' && r.motivo !== 'sobrecarga') || modelo === NF_MODELO_RESERVA) return r;
   var r2 = nfChamarGemini(NF_MODELO_RESERVA, key, payload);
   if (r2.ok) { r2.modelo = NF_MODELO_RESERVA; r2.reserva = true; return r2; }
   // reserva tambem falhou: o erro do modelo principal segue sendo o retrato

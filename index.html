@@ -72,22 +72,22 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=58"></script>
-<script src="dados/ruas-de-terra.js?v=58"></script>
+<script src="dados/ranario.js?v=59"></script>
+<script src="dados/ruas-de-terra.js?v=59"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=58"></script>
+<script src="dados/teotonio-muros.js?v=59"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=58"></script>
-<script src="js/nf/adaptador.js?v=58"></script>
-<script src="js/nf/notas.js?v=58"></script>
-<script src="js/equip/equipamentos.js?v=58"></script>
+<script src="js/ui/icones.js?v=59"></script>
+<script src="js/nf/adaptador.js?v=59"></script>
+<script src="js/nf/notas.js?v=59"></script>
+<script src="js/equip/equipamentos.js?v=59"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=58"></script>
+<script src="js/bf/bota-fora.js?v=59"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -3827,14 +3827,35 @@ async function fetchCSV(url) {
 
 const LIMITE_URL = 6000;   // margem confortável abaixo do teto do navegador
 
-async function enviarPost(params) {
+/* QUANTO SE ESPERA POR UM POST.
+   O JSONP sempre teve teto de 30 s; o POST não tinha nenhum. Quando o sinal
+   do canteiro cai no meio da subida, o `fetch` não volta nunca — e quem está
+   lendo a nota fica olhando "Lendo os dados da imagem…" até desistir e fechar
+   a tela. Sem resposta e sem erro, o app não tinha como nem avisar.
+   90 s é folgado de propósito: a leitura por IA soma a subida da foto (que no
+   3G do canteiro leva dezenas de segundos) com o tempo do Google respondendo.
+   O que se corta aqui é a espera infinita, não a espera longa. */
+const POST_TEMPO = 90000;
+
+async function enviarPost(params, ms = POST_TEMPO) {
   const fd = new FormData();
   Object.keys(params).forEach(k => fd.append(k, params[k] == null ? '' : params[k]));
   if (!fd.has('token')) {
     const t = tokenSessao();
     if (t) fd.append('token', t);
   }
-  const r = await fetch(CONFIG.appsScript, { method: 'POST', body: fd });
+  let ctl = null, relogio = 0;
+  try { ctl = new AbortController(); } catch (e) { ctl = null; }
+  if (ctl && ms) relogio = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, ms);
+  let r;
+  try {
+    r = await fetch(CONFIG.appsScript, { method: 'POST', body: fd, signal: ctl ? ctl.signal : undefined });
+  } catch (e) {
+    // "Falha de rede" no texto é o que manda o lançamento para a fila de
+    // envio, em vez de o apontador levar "falhou" e perder o que digitou
+    if (e && e.name === 'AbortError') throw new Error('Falha de rede: tempo esgotado (' + Math.round(ms / 1000) + 's)');
+    throw e;
+  } finally { if (relogio) clearTimeout(relogio); }
   if (!r.ok) throw new Error('Falha de rede: HTTP ' + r.status);
   const txt = await r.text();
   try {

@@ -153,6 +153,37 @@ lido como 2226. Todo valor que nasce número (`Qtd Estimada`, `Produtividade`,
 `Coef`) passa por `ptNum()` antes. `tests/muros-contencao.test.js` cobre o
 ida-e-volta.
 
+## A nota fiscal é lida em quatro tentativas, nessa ordem
+
+Código de barras → chave de acesso → IA (`nfLerIA`, no `Code.gs`, com o
+Gemini) → digitação. Nada bloqueia: o que não foi lido, se digita.
+
+O que segura o tempo dessa tela, e as travas que não podem cair:
+
+- **A foto é decodificada UMA vez** (`nfPrepararFoto`). Miniatura, cópia
+  guardada, cópia da IA e a segunda fonte do leitor de código saem todas do
+  mesmo canvas de 1600 px. Era aí que o celular simples do canteiro estourava
+  a memória e devolvia tela em branco "às vezes".
+- **Sobem DUAS qualidades da mesma imagem**: a guardada (0.88) é prova e não
+  encolhe; a que vai para a IA (`NF_IA_Q`) é mais leve e é descartada quando a
+  resposta chega. A subida é o passo mais lento no 3G do canteiro.
+- **Preparar folha não segura a leitura.** PDF com texto embutido dispensa a
+  imagem: a IA lê o texto (`nfAbrirPDF`) enquanto as folhas viram imagem em
+  segundo plano (`nfPDFImagens`). Quem mexer aí tem de esperar `prontoPaginas`
+  antes de gravar ou de trocar a imagem pela oficial da SEFAZ — senão a folha
+  chega depois e sobrescreve, ou a nota é gravada sem prova.
+- **O POST tem prazo** (`POST_TEMPO`, no index.html). Sem ele um pedido
+  pendurado ficava para sempre e a tela dizia "Lendo os dados…" até a pessoa
+  desistir. Estourado o prazo vira erro de rede, então o lançamento vai para a
+  fila em vez de se perder.
+- **Sobrecarga do Google (503) não é nota ilegível**: o `Code.gs` repete uma
+  vez e depois troca para o modelo reserva, como já fazia com a cota estourada.
+  Nota comprida que estoura o teto de saída é relida só no cabeçalho
+  (`semItens`), em vez de se perder inteira.
+
+`tests/nf-leitura-ia.ui.test.js` (o aparelho, no app de verdade) e
+`tests/nf-leitura-ia-servidor.test.js` (o servidor, com o Gemini falso).
+
 ## App irmão
 
 `leoribeiromac-cmyk/gestor-obras` ("Gestor — Controle de Obras") é o sistema
