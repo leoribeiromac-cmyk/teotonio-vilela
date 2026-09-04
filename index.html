@@ -15088,9 +15088,32 @@ function _exportarRDOsXLS() {
   toast(`Excel exportado (${n} RDO${n > 1 ? 's' : ''}, modelo do PDF)${sel ? ' — apenas selecionados' : ''}!`, 'success');
 };
 
+/* A LISTA SAI POR DATA, NAO PELA ORDEM EM QUE CAIU NA PLANILHA.
+   `reverse()` devolvia a planilha de tras para frente — isto e, ordem de
+   LANCAMENTO. Basta alguem lancar hoje o RDO de uma quinta atrasada para a
+   lista embaralhar: o dia 16/08 aparecia ACIMA do 01/09 so porque foi digitado
+   depois. Quem confere RDO le por data — e e o buraco no meio da lista que
+   denuncia o dia que faltou; fora de ordem, nao denuncia nada.
+   Mais recente em cima, como sempre foi o topo desta tela. Empate na data
+   (as duplicatas, que a propria tela marca em vermelho) desempata pelo ID,
+   para os dois relatorios do mesmo dia ficarem lado a lado. E RDO sem data
+   legivel vai para o FIM: nao ha onde encaixa-lo na linha do tempo, e no fim
+   ele fica visivel em vez de escondido no meio. */
+function rdoDiarioChaveData(r) {
+  const d = parseISODate(getCSVField(r, 'Data'));
+  return d ? getLocalISODate(d) : '';
+}
+function ordenarRDOsPorData(lista) {
+  return [...(lista || [])].sort((a, b) => {
+    const da = rdoDiarioChaveData(a), db = rdoDiarioChaveData(b);
+    if (da !== db) return (da && db) ? db.localeCompare(da) : (da ? -1 : 1);
+    return String(getCSVField(b, 'ID') || '').localeCompare(String(getCSVField(a, 'ID') || ''));
+  });
+}
+
 function renderHistoricoDiarios() {
   SELECTED_RDO_DATAS = new Set();
-  const diariosTodos = [...(STATE.rdodiario||[])].reverse();
+  const diariosTodos = ordenarRDOsPorData(STATE.rdodiario);
 
   // Meses disponíveis (derivados dos próprios RDOs) para o filtro.
   const mesesDiarioSet = new Set();
