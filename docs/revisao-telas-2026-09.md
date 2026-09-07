@@ -208,12 +208,12 @@ Turno é `<select>` aqui e segmentado lá; "Horas apuradas 0.00 h" com ponto dec
 
 ### 3.13 Bota-Fora
 
-**B1 · Frete com ponto decimal vira 100× maior** · `bota-fora.js:126-129` · alto · P
+**BF1 · Frete com ponto decimal vira 100× maior** · `bota-fora.js:126-129` · alto · P
 `valorFrete()` usa `num()` (ponto é milhar): "900.50", que é o que o teclado `inputmode=decimal` de vários Androids produz, vira 90.050 na conferência, na planilha e em `guardarPadroes` (repete na próxima viagem). O `numCampo()` do app (`index.html:4443`) existe para isso. Acrescentar o caso "900.50 → 900,5" ao teste.
-**B2 · Planilha pode sair com período diferente dos dados** · `bota-fora.js:606-613`, `700` · baixo · P
+**BF2 · Planilha pode sair com período diferente dos dados** · `bota-fora.js:606-613`, `700` · baixo · P
 `montarPlanilha` usa `VIAGENS` da última consulta, o nome do arquivo usa `bfDe/bfAte` atuais.
-**B3 · Não há "corrigir viagem"**: placa ou valor errado só se conserta apagando e refazendo as três provas · médio (processo) · G
-**B4 · Fornecedor e motorista são texto livre todo dia** · baixo · P
+**BF3 · Não há "corrigir viagem"**: placa ou valor errado só se conserta apagando e refazendo as três provas · médio (processo) · G
+**BF4 · Fornecedor e motorista são texto livre todo dia** · baixo · P
 Um `<datalist>` com os últimos valores da obra (o valor do frete já é lembrado; placa, motorista e transportador merecem o mesmo).
 
 ### 3.14 Notas Fiscais
@@ -353,10 +353,10 @@ Olhando o dia do apontador e do engenheiro, e não tela por tela:
 2. **Sair em dois lugares** (topo e rodapé do menu), **atualizar** em um só (bom, foi consolidado).
 3. **O que acabou de ser gravado não aparece** (L2). Para quem lança, a única confirmação é o toast; o Histórico e o banner do dia continuam dizendo que não há nada. É a maior fonte de duplicata que não é bug de código.
 4. **Comportamento diferente com o mesmo sinal**: RDO e Bota-Fora entram na fila offline; Equipamentos dá erro e pede para tentar de novo (Q2). O apontador não sabe qual tela "aguenta" o 3G.
-5. **Nome redigitado**: Apontador em Lançar Serviço, Operador em Equipamentos, Motorista/Fornecedor em Bota-Fora, todos vazios mesmo com a pessoa logada (L8, B4).
+5. **Nome redigitado**: Apontador em Lançar Serviço, Operador em Equipamentos, Motorista/Fornecedor em Bota-Fora, todos vazios mesmo com a pessoa logada (L8, BF4).
 6. **Mês escolhido em uma tela não vale na outra** (K6).
 7. **RDO gravado offline não vai por e-mail** (D2), e o turno aparece como "já enviado" antes de o servidor aceitar (D3).
-8. **Corrigir uma viagem de bota-fora** exige apagar e refazer as três provas (B3); Equipamentos já tem "Corrigir".
+8. **Corrigir uma viagem de bota-fora** exige apagar e refazer as três provas (BF3); Equipamentos já tem "Corrigir".
 9. **Mensagens para o desenvolvedor na tela do usuário** (I2, N5).
 10. **Notas tem um seletor de obra próprio** (N3) que compete com o da barra lateral.
 
@@ -384,11 +384,11 @@ Olhando o dia do apontador e do engenheiro, e não tela por tela:
 
 ## 10. Plano sugerido
 
-**Onda 1 — uma semana, tudo esforço P.** Segurança e dinheiro: B1, B2, B3, B4 (backend); B1 do Bota-Fora, Q1 (datas UTC). Estado por obra: D1, M1, E6. Formulário: K1, K3, L1, L8. Painel: E1, E2, E4, E5. Celular: S2, G1, P3, D5, V1, V3, V4. Teste do muro já corrigido; proteger a `main` com o workflow.
+**Onda 1 — uma semana, tudo esforço P.** Segurança e dinheiro: B1, B2, B3, B4 (backend); BF1, Q1 (datas UTC). Estado por obra: D1, M1, E6. Formulário: K1, K3, L1, L8. Painel: E1, E2, E4, E5. Celular: S2, G1, P3, D5, V1, V3, V4. Teste do muro já corrigido; proteger a `main` com o workflow.
 
 **Onda 2 — duas semanas, esforço M.** L2 (espelho local do que foi gravado), K2 (última carga boa no IndexedDB), Q2 (fila offline no Equipamentos), E3 (uma normalização para as quatro contas), E7/F1/L7 (índice de pacotes e memoização), K6 (um período para o app), C2/M2 (KPIs em duas colunas), S1 (rodapé da barra lateral), H1 (cabeçalho de tabela), V2 (contraste), V5/V6 (um cartão, um botão), N1/N3.
 
-**Onda 3 — quando couber.** B3 do Bota-Fora ("corrigir viagem"), B5/B6/B7 (obra na auditoria, trava mais curta, `TextFinder`), extração de módulos do `index.html`, `js/ui/assinatura.js` e `js/ui/xlsx.js`, build mínimo sem comentários, V7/V8/V9.
+**Onda 3 — quando couber.** BF3 ("corrigir viagem"), B5/B6/B7 (obra na auditoria, trava mais curta, `TextFinder`), extração de módulos do `index.html`, `js/ui/assinatura.js` e `js/ui/xlsx.js`, build mínimo sem comentários, V7/V8/V9.
 
 ## Anexo — números medidos
 
