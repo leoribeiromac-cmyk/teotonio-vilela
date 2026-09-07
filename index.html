@@ -1136,7 +1136,7 @@ body.proj-cheia-ativa{overflow:hidden}
   font-size:var(--fs-lg); color:var(--muted); line-height:1.5;
 }
 .curva-leitura:empty{display:none}
-/* Este número é a conclusão do gráfico inteiro — "39,2 p.p. atrás do
+/* Este número é a conclusão do gráfico inteiro — "39,2% atrás do
    cronograma" é o que se repete na reunião. Estava no mesmo corpo da
    legenda de eixo. */
 .cl-forte{font-weight:750; font-size:var(--fs-xl); letter-spacing:-.01em}
@@ -9802,7 +9802,7 @@ function datasPlanejadasPorPacote() {
 function fmtPctDelta(v, decimals = 2) {
   const pct = v * 100;
   const sign = pct > 0 ? '+' : pct < 0 ? '' : '';
-  return sign + pct.toFixed(decimals).replace('.', ',') + ' p.p.';
+  return sign + pct.toFixed(decimals).replace('.', ',') + '%';
 }
 function ymd(d) { return getLocalISODate(d); }
 
@@ -9979,7 +9979,7 @@ function gerarNarrativaSemana(metrics, fa, totalPac, iniciados) {
   const parts = [];
   if (metrics.delta7d > 0.0001) {
     const dPct = (metrics.delta7d * 100).toFixed(2).replace('.', ',');
-    let frase = `Nesta semana a obra avançou <strong class="pos">+${dPct} p.p.</strong>`;
+    let frase = `Nesta semana a obra avançou <strong class="pos">+${dPct}%</strong>`;
     if (fa.destaques[0]) frase += `, com <strong>${escHtml(fa.destaques[0].frente)}</strong> liderando o ritmo`;
     parts.push(frase + '.');
   } else if (metrics.delta7d <= 0.0001 && metrics.rdos7d > 0) {
@@ -10113,9 +10113,9 @@ async function carregarRecomendacaoIA(metrics, fa, totalPac, iniciados, gap, for
 
 DADOS:
 - Avanço ponderado realizado: ${(metrics.current * 100).toFixed(1)}%
-- Gap vs plano hoje: ${(gap * 100).toFixed(1)} p.p. ${gap < 0 ? '(ATRASADO)' : gap > 0 ? '(ADIANTADO)' : '(NO PRAZO)'}
-- Variação 7 dias: ${(metrics.delta7d * 100).toFixed(2)} p.p.
-- Velocidade média 14d: ${(metrics.velocity * 100).toFixed(2)} p.p./dia
+- Gap vs plano hoje: ${(gap * 100).toFixed(1)}% ${gap < 0 ? '(ATRASADO)' : gap > 0 ? '(ADIANTADO)' : '(NO PRAZO)'}
+- Variação 7 dias: ${(metrics.delta7d * 100).toFixed(2)}%
+- Velocidade média 14d: ${(metrics.velocity * 100).toFixed(2)}%/dia
 - Pacotes em execução: ${iniciados}/${totalPac}
 - Frente que mais avançou: ${fa.destaques[0]?.frente || '—'}
 - Frente em maior atenção: ${fa.atencao[0]?.frente || '—'}${fa.atencao[0]?.dias ? ' (sem RDO há '+fa.atencao[0].dias+' dias)' : ''}
@@ -10580,7 +10580,7 @@ function renderExecutivo() {
           <div class="hero-value">${(pctPondAcum*100).toFixed(1).replace('.', ',')}<span class="pp">%</span></div>
           <div class="hero-gap">
             <div class="hero-gap-title">Status vs Cronograma</div>
-            <div class="hero-gap-num ${statusCls}">${statusArr} ${gapAbs.toFixed(1).replace('.', ',')}<span style="font-size:0.45em;color:rgba(255,255,255,0.4);font-weight:600;letter-spacing:0;margin-left:2px"> p.p.</span></div>
+            <div class="hero-gap-num ${statusCls}">${statusArr} ${gapAbs.toFixed(1).replace('.', ',')}<span style="font-size:0.45em;color:rgba(255,255,255,0.4);font-weight:600;letter-spacing:0;margin-left:2px">%</span></div>
             <div class="hero-gap-direction ${statusCls}">${statusText}</div>
             <div class="hero-gap-lbl">meta do cronograma: <strong style="color:rgba(255,255,255,0.75)">${(todayPlanned*100).toFixed(1).replace('.', ',')}%</strong> até ${STATE.filtros.mes ? fmtData(dataRef) : 'hoje'}</div>
           </div>
@@ -10602,7 +10602,7 @@ function renderExecutivo() {
             ${ganhoNoPeriodo !== null ? `
             <div class="hero-delta flat">
               <span class="hero-delta-arr">→</span>
-              <span class="hero-delta-num">${(pctPondAcum*100 - ganhoNoPeriodo*100).toFixed(1).replace('.', ',')}<span class="small"> p.p.</span></span>
+              <span class="hero-delta-num">${(pctPondAcum*100 - ganhoNoPeriodo*100).toFixed(1).replace('.', ',')}<span class="small">%</span></span>
               <span class="hero-delta-lbl">antes do mês</span>
             </div>` : `
             <div class="hero-delta ${cls30}">
@@ -10633,7 +10633,7 @@ function renderExecutivo() {
         </div>
         <div class="hero-stats">
           <div>
-            <div class="hero-stat-num">${(metrics.velocity*100).toFixed(2).replace('.', ',')}<span class="small"> p.p./dia${metrics.diasUteis?' útil':''}</span></div>
+            <div class="hero-stat-num">${(metrics.velocity*100).toFixed(2).replace('.', ',')}<span class="small">%/dia${metrics.diasUteis?' útil':''}</span></div>
             <div class="hero-stat-lbl">${metrics.diasUteis ? `Velocidade · ${metrics.janela}d · por dia útil` : `Velocidade · média ${metrics.janela}d`}</div>
           </div>
           <div>
@@ -10726,7 +10726,7 @@ function renderExecutivo() {
                   <div class="exec-list-name">${escHtml(d.frente)}</div>
                   <div class="exec-list-meta">Última atividade: ${fmtData(d.ultData)}</div>
                 </div>
-                <div class="exec-list-val up">+${(d.valor*100).toFixed(2).replace('.', ',')} p.p.</div>
+                <div class="exec-list-val up">+${(d.valor*100).toFixed(2).replace('.', ',')}%</div>
               </div>
             `).join('') : '<div class="exec-list-empty">Nenhuma frente avançou nos últimos 7 dias</div>'}
           </div>
@@ -10970,7 +10970,7 @@ function _exportarRelatorioExecutivoPDF() {
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
   doc.setTextColor(...gapTextCol);
-  doc.text(gapAbsStr + ' p.p.', 96, y + 21, { align: 'center' });
+  doc.text(gapAbsStr + '%', 96, y + 21, { align: 'center' });
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(6);
@@ -11150,7 +11150,7 @@ function _exportarRelatorioExecutivoPDF() {
   const destaquesRows = fa.destaques.map(d => [
     d.frente,
     fmtData(d.ultData),
-    '+' + (d.valor * 100).toFixed(2).replace('.', ',') + ' p.p.'
+    '+' + (d.valor * 100).toFixed(2).replace('.', ',') + '%'
   ]);
   if (!destaquesRows.length) destaquesRows.push(['Nenhuma frente com avanço expressivo nos últimos 7 dias', '—', '—']);
 
@@ -11436,7 +11436,7 @@ async function montarGraficos() {
       const folga = Math.max(4, (hi - lo) * 0.25);
       yMin = Math.max(0, Math.floor((lo - folga) / 5) * 5);
       yMax = Math.min(100, Math.ceil((hi + folga) / 5) * 5);
-      // faixa muito estreita vira ruído: nunca menos de 10 p.p. de régua
+      // faixa muito estreita vira ruído: nunca menos de 10% de régua
       if (yMax - yMin < 10) yMax = Math.min(100, yMin + 10);
       if (yMax - yMin < 10) yMin = Math.max(0, yMax - 10);
     }
@@ -11472,16 +11472,16 @@ async function montarGraficos() {
       cxLeitura.innerHTML = '';
     } else if (!janelaRecortada) {
       const atras = deltaJanela.fim < 0;
-      cxLeitura.innerHTML = `<span class="cl-forte ${atras ? 'cl-neg' : 'cl-pos'}">${pp(deltaJanela.fim)} p.p.</span>
+      cxLeitura.innerHTML = `<span class="cl-forte ${atras ? 'cl-neg' : 'cl-pos'}">${pp(deltaJanela.fim)}%</span>
         <span>${atras ? 'atrás do' : 'à frente do'} cronograma hoje</span>`;
     } else {
       const m = deltaJanela.mudanca;
       const parado = Math.abs(m) < 0.05;
       const cls = parado ? 'cl-neutro' : (m > 0 ? 'cl-pos' : 'cl-neg');
-      const verbo = parado ? 'manteve a distância' : (m > 0 ? `recuperou ${pp(m)} p.p.` : `perdeu ${pp(m)} p.p.`);
+      const verbo = parado ? 'manteve a distância' : (m > 0 ? `recuperou ${pp(m)}%` : `perdeu ${pp(m)}%`);
       cxLeitura.innerHTML = `<span class="cl-forte ${cls}">No período, a obra ${verbo}</span>
         <span>· distância para o cronograma: ${deltaJanela.ini < 0 ? '−' : '+'}${pp(deltaJanela.ini)}
-        → ${deltaJanela.fim < 0 ? '−' : '+'}${pp(deltaJanela.fim)} p.p.</span>`;
+        → ${deltaJanela.fim < 0 ? '−' : '+'}${pp(deltaJanela.fim)}%</span>`;
     }
   }
 
@@ -19411,7 +19411,7 @@ function apSlideHTML(sl, d) {
         realmente consome de obra, não o número de linhas da planilha.</div>
       <div class="ap-kpis">
         ${K('Contra o cronograma',
-            `<span class="${cls}">${Math.abs(d.gap * 100).toFixed(1).replace('.', ',')} p.p.</span>`, txt)}
+            `<span class="${cls}">${Math.abs(d.gap * 100).toFixed(1).replace('.', ',')}%</span>`, txt)}
         ${K('Meta até hoje', apPct(d.prevHoje), 'baseline do contrato')}
         ${K('Últimos 7 dias',  fmtPctDelta(d.metrics.delta7d))}
         ${K('Últimos 30 dias', fmtPctDelta(d.metrics.delta30d))}
