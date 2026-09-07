@@ -108,7 +108,9 @@ ok('o cadastro por arquivo passa a quantidade por ptNum()',
 ok('a prévia de medição separa por nº de item',
   html.includes("getCSVField(c, 'Item Planilha')"));
 ok('etapaAnteriorDe() existe', html.includes('function etapaAnteriorDe('));
-ok('a frente tem cor própria', html.includes('.f-Muro{'));
+// A cor da frente deixou de ser uma classe escrita à mão (.f-Muro{...}) e passou a
+// sair de corDaFrente(): toda frente da aba Pacotes ganha a sua, inclusive esta.
+ok('a frente tem cor própria', html.includes('function corDaFrente('));
 
 // A produtividade está em DOIS lugares: no complemento (que é o que vale
 // hoje) e no PRODUTIVIDADE_PADRAO (que é a rede de segurança para quando as
