@@ -432,5 +432,95 @@ t('hora sem sentido volta para o padrão', () => {
   eq(ctx.rdoEmailHora(), 8);
 });
 
+
+/* O BOTÃO DE MANDAR AGORA
+   ------------------------------------------------------------------
+   O gatilho olha para ONTEM, uma vez. O domingo e o feriado sem serviço só
+   são lançados depois — quando o gatilho daquele dia já passou e não achou
+   depósito nenhum. Sem este botão, mandá-los exige abrir o editor do Apps
+   Script, o que na prática quer dizer que a folha fica sem as firmas. */
+console.log('\nMandar agora, do app (rdoEnviarParaAssinatura)');
+
+const mandarAgora = (extra) => ctx.rdoEnviarParaAssinatura(
+  Object.assign({ action: 'rdoEnviarParaAssinatura', obra: 'teotonio', data: HOJE }, extra || {}));
+
+t('manda o dia que ficou para trás — um e-mail por pessoa, com o PDF em anexo', () => {
+  depositar();
+  const r = mandarAgora();
+  verdade(r.ok, 'não mandou: ' + JSON.stringify(r));
+  eq(paraFiscalizacao().length, 4, 'um e-mail por destinatário');
+  eq(paraFiscalizacao()[0].attachments.length, 1, 'anexo');
+  eq(r.para.length, 4, 'devolve para quem foi — é o que o app mostra na tela');
+});
+t('abre os convites de assinatura do dia, e o link pessoal vai só no e-mail do dono', () => {
+  depositar();
+  mandarAgora();
+  const convites = ctx.rdoAssinLinhasDoDia_('teotonio', HOJE);
+  eq(convites.length, 2, 'engenheiro e fiscalização');
+  const doFiscal = convites.filter(c => c.papel === 'fiscalizacao')[0];
+  const link = ctx.rdoAssinaturaLink_(doFiscal.token);
+  const comLink = paraFiscalizacao().filter(e => e.body.indexOf(link) !== -1);
+  eq(comLink.length, 1, 'o link do fiscal apareceu em ' + comLink.length + ' e-mails');
+  eq(comLink[0].to.toLowerCase(), String(doFiscal.email).toLowerCase(), 'foi para outra pessoa');
+});
+t('dia SEM depósito não sai — e a resposta diz o caminho de repor', () => {
+  const r = mandarAgora();
+  verdade(!r.ok, 'mandou e-mail sem RDO em anexo');
+  verdade(r.error.indexOf('PDF Oficial') !== -1, 'não explicou como repor: ' + r.error);
+  eq(paraFiscalizacao().length, 0);
+});
+t('dia que ainda não chegou é recusado — firma em documento provisório', () => {
+  depositar({ data: '2099-01-01' });
+  const r = mandarAgora({ data: '2099-01-01' });
+  verdade(!r.ok, 'mandou o RDO de um dia futuro');
+  eq(paraFiscalizacao().length, 0);
+});
+t('data torta é recusada', () => { verdade(!mandarAgora({ data: 'domingo' }).ok); });
+t('outra obra é recusada — o e-mail é só da Teotônio', () => {
+  depositar();
+  verdade(!mandarAgora({ obra: 'ranario' }).ok);
+  eq(paraFiscalizacao().length, 0);
+});
+/* O gatilho não manda o mesmo dia duas vezes; o botão manda de propósito —
+   é ele que leva o RDO corrigido depois de o e-mail da manhã ter saído. */
+t('manda mesmo que aquele dia já tenha saído: quem aperta o botão sabe o dia', () => {
+  depositar();
+  ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
+  eq(paraFiscalizacao().length, 4);
+  verdade(mandarAgora().ok, 'o botão foi barrado pelo registro do gatilho');
+  eq(paraFiscalizacao().length, 8, 'o reenvio não saiu');
+});
+
+console.log('\nQuem pode mandar');
+const sessao = (token, perfil) => PROPS.setProperty('SES_' + token,
+  JSON.stringify({ u: 'Fulano', p: perfil, o: '*', criadoEm: Date.now(), usoEm: Date.now() }));
+
+t('sem EXIGIR_TOKEN nada muda — o backend está aberto no modo de implantação', () => {
+  depositar();
+  verdade(mandarAgora({ token: 'seja-o-que-for' }).ok);
+});
+t('o apontador preenche o dia, mas não o manda para a fiscalização', () => {
+  PROPS.setProperty('EXIGIR_TOKEN', 'true');
+  sessao('tk-campo', 'campo');
+  depositar();
+  const r = mandarAgora({ token: 'tk-campo' });
+  eq(r.error, 'SEM_PERMISSAO');
+  eq(paraFiscalizacao().length, 0, 'saiu e-mail de quem não podia mandar');
+});
+t('engenharia e admin mandam', () => {
+  PROPS.setProperty('EXIGIR_TOKEN', 'true');
+  sessao('tk-eng', 'engenharia');
+  sessao('tk-adm', 'admin');
+  depositar();
+  verdade(mandarAgora({ token: 'tk-eng' }).ok, 'engenharia foi barrada');
+  verdade(mandarAgora({ token: 'tk-adm' }).ok, 'admin foi barrado');
+});
+t('quem só acompanha a obra não manda', () => {
+  PROPS.setProperty('EXIGIR_TOKEN', 'true');
+  sessao('tk-dir', 'diretoria');
+  depositar();
+  eq(mandarAgora({ token: 'tk-dir' }).error, 'SEM_PERMISSAO');
+});
+
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');
 process.exit(falhas ? 1 : 0);

@@ -440,6 +440,9 @@ async function comOAppDeVerdade() {
     }
     capturadas.push(params);
     let corpo = { ok: true, fileId: 'arquivo-falso' };
+    if (params.action === 'rdoEnviarParaAssinatura') {
+      corpo = { ok: true, data: params.data, para: ['a@x.com', 'b@y.com'] };
+    }
     if (params.action === 'rdoAssinaturasDoDia') {
       corpo = firmasLigadas
         ? { ok: true, assinaturas: FIRMAS, assinadas: 1, noDeposito: 0 }
@@ -502,8 +505,54 @@ async function comOAppDeVerdade() {
   ok('a supervisão não aparece no painel — não é ela que assina pelo link',
      !painel.includes('Supervisão'), painel);
   ok('e o botão de copiar o link só aparece para quem ainda não assinou',
-     (await s.p.locator('#rdoAssinaturasPainel button').count()) === 1,
-     await s.p.locator('#rdoAssinaturasPainel button').count());
+     (await s.p.locator('#rdoAssinaturasPainel button[onclick^="copiarLinkAssinatura"]').count()) === 1,
+     await s.p.locator('#rdoAssinaturasPainel button[onclick^="copiarLinkAssinatura"]').count());
+
+  /* MANDAR AGORA. O e-mail das 8h leva o RDO de ONTEM, uma vez: o domingo e
+     o feriado sem serviço, lançados depois, já perderam o gatilho deles.
+     Sem este botão, mandá-los exige o editor do Apps Script — e a folha
+     fica sem as firmas que o contrato exige. */
+  ok('o escritório tem, na tela do dia, o botão de mandar o RDO para assinatura',
+     (await s.p.locator('#btnEnviarAssinatura').count()) === 1);
+
+  s.p.on('dialog', d => d.accept());
+  const antes = capturadas.length;
+  await s.p.locator('#btnEnviarAssinatura').click();
+  // desenhar o PDF e subi-lo leva tempo: espera o pedido aparecer, não um prazo fixo
+  for (let i = 0; i < 60 &&
+       !capturadas.slice(antes).some(c => c.action === 'rdoEnviarParaAssinatura'); i++) {
+    await s.p.waitForTimeout(500);
+  }
+  await s.p.waitForTimeout(800);
+  const depois = capturadas.slice(antes);
+  const envio = depois.filter(c => c.action === 'rdoEnviarParaAssinatura');
+  ok('apertar o botão manda o dia que está na tela',
+     envio.length === 1 && envio[0].data === HOJE_ISO && envio[0].obra === 'teotonio',
+     JSON.stringify(envio.map(e => ({ data: e.data, obra: e.obra }))));
+  /* O servidor não desenha o RDO — quem desenha é este navegador. Mandar sem
+     repor o depósito anexaria o PDF velho, ou nenhum. */
+  const iDep = depois.findIndex(c => c.action === 'rdoPdfDoDia');
+  const iEnv = depois.findIndex(c => c.action === 'rdoEnviarParaAssinatura');
+  ok('e repõe o PDF do dia ANTES de mandar — o anexo é o desenho de agora',
+     iDep !== -1 && iDep < iEnv, 'depósito=' + iDep + ' envio=' + iEnv);
+  ok('manda uma vez só: pedido demorado não pode virar dois e-mails para a fiscalização',
+     envio.length === 1, envio.length + ' envios');
+
+  // Quem preenche o dia no canteiro não é quem o manda para a fiscalização.
+  await s.p.evaluate(() => {
+    // marca o painel de agora: a espera abaixo é pelo painel NOVO, não por
+    // este, que já está pintado e passaria na conferência sem nada ter mudado
+    document.getElementById('rdoAssinaturasPainel').dataset.velho = '1';
+    STATE.perfilLogado = 'campo';
+    _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
+    STATE.currentPage = ''; navigate('rdodiario');
+  });
+  await s.p.waitForFunction(
+    () => { const e = document.getElementById('rdoAssinaturasPainel');
+            return e && !e.dataset.velho && e.textContent.indexOf('Consultando') === -1; },
+    null, { timeout: 20000 }).catch(() => {});
+  ok('o apontador não vê o botão de mandar — ele preenche o dia, não o envia',
+     (await s.p.locator('#btnEnviarAssinatura').count()) === 0);
 
   ok('nenhum erro de página durante o teste', s.erros.length === 0, s.erros.join(' | '));
   await s.fechar();

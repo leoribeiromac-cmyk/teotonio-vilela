@@ -100,6 +100,7 @@ function rotear(e) {
                       'addBatchRDO', 'addRDODiario', 'updateRDODiario', 'deleteRDODiario',
                       'usuariosListar', 'usuarioSalvar', 'usuarioExcluir',
                       'rdoFoto', 'obterFoto', 'rdoPdfDoDia', 'rdoAssinaturasDoDia',
+                      'rdoEnviarParaAssinatura',
                       'equipListar', 'equipCadastrar', 'equipDesativar', 'locadoraCadastrar',
                       'equipApontar', 'equipApagar', 'equipEditar', 'equipApontamentos', 'equipUltimos',
                       'nfListar', 'nfSalvar', 'nfExcluir', 'nfImagem', 'nfLerIA', 'nfDiag',
@@ -120,7 +121,7 @@ function rotear(e) {
     // essas duas são do bloco compartilhado com o app "Gestor", que precisa
     // continuar idêntico dos dois lados.
     var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar', 'bfSalvar', 'rdoPdfDoDia',
-                    'rdoAssinaturasDoDia'];
+                    'rdoAssinaturasDoDia', 'rdoEnviarParaAssinatura'];
     if (POR_OBRA.indexOf(action) !== -1) {
       var sessObraR = sessaoDoToken(p.token);
       if (sessObraR && !sessaoPodeNaObra(sessObraR, p.obra)) {
@@ -144,6 +145,13 @@ function rotear(e) {
        tipo de coisa que só se descobre em produção. */
     var SEM_TRAVA_PROPRIA = ['deleteRDO', 'updateRDO', 'rdoFoto', 'rdoPdfDoDia', 'equipApagar', 'equipEditar',
                              'rdoAssinaturaGravar', 'rdoAssinaturasDoDia',
+                             /* O envio pelo botão do app entra aqui porque ele CRIA os
+                                convites de assinatura (uma linha por assinante) antes de
+                                mandar: dois toques no mesmo segundo, num 4G que demora,
+                                dariam dois links para a mesma pessoa. Segurar a trava
+                                durante os e-mails é o preço — é um gesto raro, de
+                                escritório, e não o salvamento do turno no canteiro. */
+                             'rdoEnviarParaAssinatura',
                              'nfSalvar', 'nfExcluir', 'saidaSalvar', 'saidaExcluir', 'bfExcluir'];
     var travaRoteador = null;
     if (SEM_TRAVA_PROPRIA.indexOf(action) !== -1) {
@@ -209,6 +217,10 @@ function rotear(e) {
       case 'rdoAssinaturaAbrir':  resp = rdoAssinaturaAbrir(p); break;
       case 'rdoAssinaturaGravar': resp = rdoAssinaturaGravar(p); break;
       case 'rdoAssinaturasDoDia': resp = rdoAssinaturasDoDia(p); break;
+      /* Mandar o RDO de um dia AGORA, sem esperar o gatilho da manhã — é
+         como o dia que ficou para trás (domingo, feriado, turno que ninguém
+         fechou) chega à fiscalização e ganha as firmas. */
+      case 'rdoEnviarParaAssinatura': resp = rdoEnviarParaAssinatura(p); break;
       case 'obterFoto':       resp = obterFotoPrivada(p.fileId, p.mini); break;
       case 'usuariosListar':  resp = usuariosListar(p.token); break;
       case 'usuarioSalvar':   resp = usuarioSalvar(p); break;
@@ -2742,6 +2754,75 @@ function enviarRDODeOntemPorEmail() {
    Uso:  reenviarRDOPorEmail('2026-08-24')  */
 function reenviarRDOPorEmail(dataISO) {
   return rdoEnviarPorEmail_(normData(dataISO), OBRA_ID, true);
+}
+
+/* MANDAR O RDO DE UM DIA AGORA — o botão do app.
+   ------------------------------------------------------------------
+   O gatilho da manhã olha para ONTEM, uma vez, e vai embora. O dia que
+   ficou para trás não tem segunda chance: domingo e feriado sem serviço,
+   que o apontador só lança depois; o turno fechado tarde; o RDO corrigido
+   quando o e-mail já saiu. Até aqui, mandar qualquer um deles exigia abrir
+   o editor do Apps Script e rodar `reenviarRDOPorEmail('...')` à mão — o
+   que na prática quer dizer que ninguém do escritório manda, e a folha
+   fica sem as firmas que o contrato exige.
+   É o MESMO envio do gatilho: o PDF que o app depositou, um e-mail por
+   pessoa, e o link pessoal de quem assina dentro do dele. O que muda é só
+   quem puxa o gatilho.
+   ------------------------------------------------------------------ */
+function rdoEnviarParaAssinatura(p) {
+  var obra = normObra(p.obra) || OBRA_ID;
+  var dataISO = normData(p.data);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataISO)) return { ok: false, error: 'Data inválida' };
+  if (obra !== OBRA_ID) {
+    return { ok: false, error: 'O RDO por e-mail é só da Teotônio — nada foi enviado.' };
+  }
+
+  var barrado = exigirPodeEnviarRDO(p.token, 'rdoEnviarParaAssinatura');
+  if (barrado) return barrado;
+
+  /* Dia que ainda não terminou não vai para a fiscalização. Assinar o RDO
+     de um dia que ainda vai mudar é firma dada em documento provisório —
+     e o quadro assinado do PDF é o que sobra depois. */
+  var hoje = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd');
+  if (dataISO > hoje) {
+    return { ok: false, error: 'O RDO de ' + rdoDataBR_(dataISO) + ' é de um dia que ainda não chegou.' };
+  }
+
+  /* Sem depósito não há o que anexar, e um e-mail de RDO sem o RDO é pior
+     que e-mail nenhum. A mensagem diz o caminho, porque quem aperta o botão
+     está no app e não faz ideia de que existe depósito nenhum. */
+  if (!rdoPdfArquivo_(obra, dataISO)) {
+    return { ok: false,
+             error: 'Não há RDO de ' + rdoDataBR_(dataISO) + ' guardado no servidor. ' +
+                    'Abra esse dia no app e gere o PDF Oficial — isso repõe o arquivo — e mande de novo.' };
+  }
+
+  /* FORÇADO de propósito. O caso normal deste botão É o reenvio: o dia que
+     o gatilho já tentou mandar e não achou depósito, ou o RDO corrigido
+     depois de o e-mail ter saído. Quem aperta escolheu a data que está na
+     tela; quem mandou fica na auditoria. */
+  var r = rdoEnviarPorEmail_(dataISO, obra, true);
+  registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoEnviarParaAssinatura',
+                     obra, dataISO, '',
+                     (r && r.ok) ? (r.para || []).join(', ') : ('não saiu: ' + (r && r.error)));
+  return r;
+}
+
+/* Quem pode mandar o RDO para a fiscalização. Preencher e salvar o turno é
+   do canteiro; decidir que o dia está fechado e pode entrar na caixa do
+   fiscal é de quem responde pela obra — e o e-mail sai em nome da empresa,
+   com o link de assinatura dentro. Sem EXIGIR_TOKEN o backend está aberto
+   de propósito (modo de implantação), como nas demais checagens. */
+function exigirPodeEnviarRDO(token, acao) {
+  var exigir = PropertiesService.getScriptProperties().getProperty('EXIGIR_TOKEN');
+  if (String(exigir).toLowerCase() !== 'true') return null;
+  var perfil = perfilDoToken(token);
+  if (['engenharia', 'admin', ''].indexOf(perfil) !== -1) return null;
+  registrarAuditoria(usuarioDoToken(token) || 'desconhecido', perfil, acao + ' NEGADO', OBRA_ID,
+                     '', '', 'perfil sem permissão de mandar o RDO');
+  return { ok: false, error: 'SEM_PERMISSAO',
+           mensagem: 'O RDO vai para a fiscalização pelo escritório — o perfil ' +
+                     (perfil || 'sem perfil') + ' preenche o dia, mas não o manda.' };
 }
 
 function rdoEnviarPorEmail_(dataISO, obra, forcar) {
