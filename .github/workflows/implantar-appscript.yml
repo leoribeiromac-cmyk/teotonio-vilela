@@ -190,7 +190,19 @@ jobs:
 
       - name: Empurrar o código
         if: steps.cfg.outputs.pronto == 'sim'
-        run: clasp push -f
+        run: |
+          # A rede do Google cai no meio da chamada de vez em quando
+          # (`read ECONNRESET`), e a implantação inteira ia embora por causa
+          # de um soquete — ver a nota do passo seguinte.
+          tentar() {
+            for n in 1 2 3; do
+              "$@" && return 0
+              echo "::warning title=Tentativa $n falhou::$* — repetindo em ${n}0s"
+              sleep "${n}0"
+            done
+            return 1
+          }
+          tentar clasp push -f
 
       - name: Publicar a versão (mesma URL de sempre)
         if: steps.cfg.outputs.pronto == 'sim'
@@ -208,8 +220,25 @@ jobs:
           #
           # Sem -V, o clasp cria uma versão nova do código e aponta a
           # implantação existente para ela — que é exatamente o que se quer.
+          #
+          # E REPETE QUANDO A REDE CAI. Isto não é precaução teórica: o deploy
+          # do PR #75 empurrou o código e morreu aqui, em
+          # `read ECONNRESET` contra script.googleapis.com. O estrago desse
+          # meio-caminho é o pior possível de perceber — o código fica SALVO
+          # no editor, a implantação continua servindo a versão velha, e o
+          # app chama uma ação que "não existe" sem ninguém saber por quê.
+          # Repetir é seguro: criar a versão e apontar a implantação para ela
+          # é idempotente, e uma versão a mais na lista não faz mal a ninguém.
           desc="${DESCRICAO:-$(git log -1 --pretty=%s)}"
-          clasp redeploy "$DEPLOY_ID" -d "$desc"
+          tentar() {
+            for n in 1 2 3; do
+              "$@" && return 0
+              echo "::warning title=Tentativa $n falhou::$* — repetindo em ${n}0s"
+              sleep "${n}0"
+            done
+            return 1
+          }
+          tentar clasp redeploy "$DEPLOY_ID" -d "$desc"
           echo "Implantado na mesma URL, versão: $desc"
 
       - name: Limpar a credencial

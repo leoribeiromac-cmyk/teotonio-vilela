@@ -102,13 +102,27 @@ fi
 
 [ -n "$DESCRICAO" ] || DESCRICAO="$(git log -1 --pretty=%s 2>/dev/null || echo 'atualização manual')"
 
+# A rede do Google cai no meio da chamada de vez em quando
+# (`read ECONNRESET`). Parar aí deixa o pior dos estados: o código SALVO no
+# editor e a implantação servindo a versão velha — foi o que aconteceu no
+# fluxo do GitHub ao publicar o PR #75. Repetir é seguro: empurrar de novo e
+# republicar dão no mesmo resultado.
+tentar() {
+  for n in 1 2 3; do
+    "$@" && return 0
+    echo "  tentativa $n falhou ($*) — repetindo em ${n}0s"
+    sleep "${n}0"
+  done
+  return 1
+}
+
 passo "Empurrando o código…"
-clasp push -f
+tentar clasp push -f
 feito "Código no projeto."
 
 passo "Publicando a versão (mesma URL de sempre)…"
 # `redeploy` e não `deploy`: no redeploy o id é argumento obrigatório, então
 # sem ele o comando PARA. O `deploy` sem id cria uma implantação nova, com URL
 # /exec nova, e devolve sucesso.
-clasp redeploy "$ID_IMPL" -d "$DESCRICAO"
+tentar clasp redeploy "$ID_IMPL" -d "$DESCRICAO"
 feito "No ar: $DESCRICAO"
