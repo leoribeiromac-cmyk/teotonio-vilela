@@ -80,11 +80,17 @@ function fmtBRLc(n) {
 }
 function fmtQtd(n) { return (n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 }); }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-function hoje() { return new Date().toISOString().slice(0, 10); }
+/* Datas LOCAIS, não UTC. `toISOString()` devolve o dia em UTC, e das 21h às
+   23h59 (UTC−3) isso já é amanhã: a nota lançada à noite entrava com
+   dataEntrada do dia seguinte, e o vencimento calculado por isoAdd também. */
+function isoLocal(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function hoje() { return isoLocal(new Date()); }
 function isoAdd(iso, dias) {
   const d = new Date(iso + 'T00:00:00');
   d.setDate(d.getDate() + dias);
-  return d.toISOString().slice(0, 10);
+  return isoLocal(d);
 }
 function mesLabel(iso) {
   const MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];

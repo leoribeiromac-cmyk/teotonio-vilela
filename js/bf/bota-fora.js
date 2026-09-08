@@ -119,13 +119,18 @@
   const g = id => document.getElementById(id);
   const val = id => { const e = g(id); return e ? String(e.value || '').trim() : ''; };
 
-  /* O valor do frete é digitado à mão, em teclado pt-BR: "1.250,50". O
-     `num()` do app é quem entende isso (ponto é milhar). Nunca `type=number`
-     — o Chromium descarta o valor inteiro em silêncio, e frete errado é
-     dinheiro errado. É a mesma decisão já tomada no horímetro. */
+  /* O valor do frete é digitado à mão. Quem lê é o `numCampo()` do app, a
+     regra de CAMPO: "1.250,50" e "900,50" valem o que parecem, e "900.50" —
+     que é o que o teclado numérico de vários Androids produz, com ponto —
+     também. O `num()` é a regra do CSV, onde o ponto é milhar: com ele
+     "900.50" virava 90.050, e R$ 90.050,00 entrava na conferência, na
+     planilha e nos padrões da próxima viagem. Nunca `type=number` — o
+     Chromium descarta o valor inteiro em silêncio, e frete errado é dinheiro
+     errado. É a mesma decisão já tomada no horímetro. */
   function valorFrete() {
     const bruto = val('bfValor');
-    return bruto ? num(bruto) : 0;
+    if (!bruto) return 0;
+    return (typeof numCampo === 'function') ? numCampo(bruto) : num(bruto);
   }
 
   function dataBR(iso) {

@@ -1783,10 +1783,14 @@
     btnText = document.getElementById('btnText');
     if (!form) return;
 
+    /* Data LOCAL, não UTC. `valueAsDate = new Date()` grava o dia em UTC, e
+       das 21h às 23h59 (UTC−3) isso já é amanhã: o apontamento do turno
+       Noturno aberto às 21h30 nascia com a data errada. */
+    const isoLocal = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     const hoje = document.getElementById('data');
-    if (hoje && !hoje.value) hoje.valueAsDate = new Date();
+    if (hoje && !hoje.value) hoje.value = isoLocal(new Date());
     const mes = document.getElementById('medMes');
-    if (mes && !mes.value) mes.value = new Date().toISOString().slice(0, 7);
+    if (mes && !mes.value) mes.value = isoLocal(new Date()).slice(0, 7);
 
     ligarFormApontamento();
     ligarFormLoc();

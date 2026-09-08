@@ -194,6 +194,19 @@ function camposDoPost(corpo) {
   ok('o trajeto aparece na conferência', /Ijucapirama.*Itaquareia/.test(conf.trajeto), conf.trajeto);
   ok('e as três provas estão anunciadas', !/FALTA/.test(conf.provas), conf.provas);
 
+  /* O teclado numérico de vários Androids produz PONTO decimal: "900.50".
+     Lido com a regra do CSV (ponto = milhar) isso virava R$ 90.050,00 — na
+     conferência, na planilha e nos padrões da próxima viagem. */
+  await p.evaluate(() => {
+    BF.fechar('bfConfirmModal');
+    document.getElementById('bfValor').value = '900.50';
+    document.getElementById('bfForm').requestSubmit();
+  });
+  await p.waitForTimeout(400);
+  const confPonto = await p.evaluate(() => document.getElementById('bfcValor').textContent);
+  ok('"900.50" (ponto do teclado do Android) é R$ 900,50, não R$ 90.050,00',
+     /900,50/.test(confPonto) && !/90\.050/.test(confPonto), confPonto);
+
   // Antes de gravar de verdade: um valor que não é número não pode virar
   // R$ 0,00 em silêncio — o `num()` do app devolve 0 para qualquer lixo.
   await p.evaluate(() => {
