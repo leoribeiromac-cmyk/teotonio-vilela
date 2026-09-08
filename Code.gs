@@ -190,7 +190,10 @@ function rotear(e) {
       case 'nfExcluir':         resp = nfExcluir(p.obra, p.id, p.token); break;
       case 'nfImagem':          resp = nfImagem(p); break;
       case 'nfLerIA':           resp = nfLerIA(p); break;
-      case 'nfDiag':            resp = nfDiag(); break;
+      // O diagnóstico lista os NOMES das Propriedades do script — e é lá que
+      // moram as sessões (SES_<token>). Só o administrador vê, e nem ele vê
+      // essas: ver nfDiag.
+      case 'nfDiag':            resp = nfDiag(p.token); break;
       case 'nfConsultarChave':  resp = nfConsultarChave(p); break;
       case 'saidaSalvar':       resp = saidaSalvar(p); break;
       case 'bfListar':          resp = bfListar(p.obra, p.de, p.ate); break;
@@ -1612,6 +1615,8 @@ function equipApagar(carimbo, token) {
   return { ok: false, error: 'Apontamento não encontrado' };
 }
 
+var PASTA_ASSIN_EQUIP = 'Assinaturas Teotônio (Privado)';
+
 /* A assinatura chega como data:image e não pode ficar na célula: são dezenas
    de KB de base64 por linha. Vai para a pasta privada do Drive, e a planilha
    guarda só o ponteiro — mesmo desenho das fotos do serviço.
@@ -1623,8 +1628,8 @@ function assinaturaParaDrive(valor, carimbo) {
   try {
     var blob = Utilities.newBlob(Utilities.base64Decode(assin.split(',')[1]), 'image/png',
       'assinatura_' + (carimbo || Date.now()) + '.png');
-    var pastas = DriveApp.getFoldersByName('Assinaturas Teotônio (Privado)');
-    var pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder('Assinaturas Teotônio (Privado)');
+    var pastas = DriveApp.getFoldersByName(PASTA_ASSIN_EQUIP);
+    var pasta = pastas.hasNext() ? pastas.next() : DriveApp.createFolder(PASTA_ASSIN_EQUIP);
     var arq = pasta.createFile(blob);
     arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
     return 'drive_id:' + arq.getId();
@@ -1729,10 +1734,10 @@ function equipEditar(p) {
    A régua de obra é a de sempre — a coluna `obra` separa as linhas, e o
    roteador já barra quem não tem acesso a ela (POR_OBRA).
    ================================================================== */
+var PASTA_BF_PROVAS = 'Bota-Fora Teotônio (Privado)';
 function bfPastaProvas() {
-  var nome = 'Bota-Fora Teotônio (Privado)';
-  var pastas = DriveApp.getFoldersByName(nome);
-  return pastas.hasNext() ? pastas.next() : DriveApp.createFolder(nome);
+  var pastas = DriveApp.getFoldersByName(PASTA_BF_PROVAS);
+  return pastas.hasNext() ? pastas.next() : DriveApp.createFolder(PASTA_BF_PROVAS);
 }
 
 /* Mesma ideia de assinaturaParaDrive, com a pasta e o nome desta tela.
@@ -1860,10 +1865,47 @@ function equipUltimos(obra, n) {
    Se o Drive ainda não gerou a miniatura (acontece logo depois do envio),
    cai para a imagem cheia e AVISA no `mini`, para o app guardar no lugar
    certo do cache e não pedir de novo. */
+/* AS PASTAS QUE SÃO DO APP — a régua do obterFotoPrivada. O script roda como
+   o DONO da planilha, e `DriveApp.getFileById` abre qualquer arquivo do Drive
+   dele: com um token de sessão e um id, um usuário baixava o contrato, o
+   holerite, o que fosse. Só sai por ali o que está debaixo de uma destas.
+   São os mesmos nomes que cada tela usa para criar a sua pasta
+   (getFoldersByName): pasta nova para o app entra AQUI também, senão a foto
+   grava e não volta. A de backups fica de fora de propósito — é a planilha
+   inteira, e ninguém a pede por obterFoto. */
+function pastasDoApp_() {
+  return [PASTA_FOTOS, PASTA_ASSIN_EQUIP, PASTA_BF_PROVAS, PASTA_RDO_PDF, PASTA_RDO_ASSIN,
+          NF_PASTA_RAIZ];
+}
+
+/* Sobe a cadeia de pais do arquivo até encontrar uma pasta do app. Cada
+   `getParents()` é uma ida ao Drive, então para no primeiro acerto: a foto do
+   RDO está direto na pasta e custa uma chamada; a nota fiscal mora em
+   raiz/obra/ano/mês e custa quatro. Seis níveis é folga, não meta — arquivo
+   numa árvore mais funda que isso não é do app. */
+function arquivoEhDoApp_(arquivo) {
+  var nomes = pastasDoApp_();
+  var nivel = [arquivo];
+  for (var prof = 0; prof < 6 && nivel.length; prof++) {
+    var acima = [];
+    for (var i = 0; i < nivel.length; i++) {
+      var pais = nivel[i].getParents();
+      while (pais.hasNext()) {
+        var pai = pais.next();
+        if (nomes.indexOf(pai.getName()) !== -1) return true;
+        acima.push(pai);
+      }
+    }
+    nivel = acima;
+  }
+  return false;
+}
+
 function obterFotoPrivada(fileId, mini) {
   if (!fileId) return { ok: false, error: 'ID do arquivo não informado' };
   try {
     var f = DriveApp.getFileById(fileId);
+    if (!arquivoEhDoApp_(f)) return { ok: false, error: 'Arquivo fora das pastas do sistema' };
     var blob = null;
     if (String(mini) === '1' || mini === true) {
       try { blob = f.getThumbnail(); } catch (e) { blob = null; }
@@ -2699,6 +2741,23 @@ function rdoPdfDoDia(p) {
      último depósito — e que o arquivo guardado ainda tem o quadro em branco. */
   var comAssinaturas = parseInt(p.assinaturas, 10);
   if (isNaN(comAssinaturas) || comAssinaturas < 0) comAssinaturas = 0;
+  /* MAS O APP NÃO TEM A ÚLTIMA PALAVRA. Um aparelho com o app velho em cache
+     mandava 2 sem ter desenhado firma nenhuma — o servidor acreditava, a
+     fiscalização recebia um PDF de quadros em branco sob o assunto
+     "RDO ASSINADO", e o RDO_ASSINADO_LOG ainda barrava o envio do de verdade.
+     Quem sabe quantas firmas existem é a aba RDO_Assinaturas: o número do
+     app vale até onde ela confirma. Só se lê a aba quando o app diz que há
+     firma (zero não tem o que conferir); se a leitura falhar, vale zero —
+     PDF sem firma registrada não pode sair como assinado. */
+  if (comAssinaturas > 0) {
+    var naAba = 0;
+    try {
+      naAba = rdoAssinLinhasDoDia_(obra, dataISO).filter(function (x) {
+        return String(x.status) === 'assinada';
+      }).length;
+    } catch (e) { naAba = 0; }
+    if (comAssinaturas > naAba) comAssinaturas = naAba;
+  }
   try {
     arq.setDescription((p.numero_rdo ? 'RDO nº ' + p.numero_rdo + ' — ' : 'RDO ') + dataISO +
                        ' — assinaturas: ' + comAssinaturas);
@@ -2965,7 +3024,7 @@ function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha) {
   var listaAss = (assinaturas || []).map(function (a) {
     var assinada = String(a.status) === 'assinada';
     return { rotulo: String(a.rotulo || a.papel || ''), assinada: assinada,
-             quem: String(a.nomeAssinante || ''), quando: String(a.assinadoEm || '').slice(0, 16) };
+             quem: String(a.nomeAssinante || ''), quando: rdoDataHora_(a.assinadoEm) };
   });
   var linkMeu = minha && String(minha.status) !== 'assinada' ? rdoAssinaturaLink_(minha.token) : '';
   var jaAssinei = !!(minha && String(minha.status) === 'assinada');
@@ -3348,10 +3407,26 @@ function rdoAssinGravarCampo_(alvo, campo, valor) {
   alvo.obj[campo] = valor;
 }
 
+/* Data e hora de uma célula da aba de assinaturas, em 'yyyy-MM-dd HH:mm'.
+   `assinadoEm` e `convidadoEm` são gravados como texto ISO, mas a planilha
+   RECONHECE a data e o getValues() devolve Date — e String(Date) é
+   "Mon Sep 07 2026 09:12:00 GMT-0300…", que era o que ia para o e-mail do RDO
+   assinado e para o quadro do PDF. Aceita Date, o texto ISO completo e o
+   vazio (assinatura ainda não dada). */
+function rdoDataHora_(v) {
+  if (v == null || v === '') return '';
+  if (v instanceof Date) return Utilities.formatDate(v, fusoDoScript(), 'yyyy-MM-dd HH:mm');
+  return String(v).trim().slice(0, 16);
+}
+
 /* O convite venceu? Um link de assinatura que vale para sempre é uma chave
    permanente do RDO daquele dia circulando por caixa de e-mail. */
 function rdoAssinVencida_(linha) {
-  var quando = String(linha.convidadoEm || linha.data || '').slice(0, 10);
+  /* A mesma armadilha do rdoDataHora_: `convidadoEm` volta da planilha como
+     Date, String(Date) não casa com a regex abaixo, e a função respondia
+     "não venceu" para TODO convite — o link valia para sempre. normData
+     entende Date, o texto ISO e o dd/MM/yyyy de quem edita a célula à mão. */
+  var quando = normData(linha.convidadoEm || linha.data);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(quando)) return false;
   var p = quando.split('-');
   var nasceu = new Date(parseInt(p[0], 10), parseInt(p[1], 10) - 1, parseInt(p[2], 10));
@@ -3387,7 +3462,7 @@ function rdoAssinaturaAbrir(p) {
     numeroRdo: numero,
     papel: l.papel, rotulo: l.rotulo, nome: l.nome, email: l.email,
     assinada: String(l.status) === 'assinada',
-    assinadoEm: String(l.assinadoEm || ''),
+    assinadoEm: rdoDataHora_(l.assinadoEm),
     nomeAssinante: String(l.nomeAssinante || ''),
     codigo: rdoAssinCodigo_(l.token),
     resumo: corpo.texto,
@@ -3396,7 +3471,7 @@ function rdoAssinaturaAbrir(p) {
     outras: rdoAssinLinhasDoDia_(obra, dataISO).map(function (x) {
       return { papel: x.papel, rotulo: x.rotulo,
                assinada: String(x.status) === 'assinada',
-               assinadoEm: String(x.assinadoEm || ''),
+               assinadoEm: rdoDataHora_(x.assinadoEm),
                nomeAssinante: String(x.nomeAssinante || '') };
     })
   };
@@ -3432,7 +3507,7 @@ function rdoAssinaturaGravar(p) {
      o que já existe e pronto. Assinatura errada se cancela no escritório
      (rdoAssinaturaCancelar), com rastro. */
   if (String(l.status) === 'assinada') {
-    return { ok: true, jaAssinada: true, assinadoEm: String(l.assinadoEm || ''),
+    return { ok: true, jaAssinada: true, assinadoEm: rdoDataHora_(l.assinadoEm),
              codigo: rdoAssinCodigo_(l.token) };
   }
   if (rdoAssinVencida_(l)) {
@@ -3475,7 +3550,7 @@ function rdoAssinaturaGravar(p) {
   var faltam = doDia.filter(function (x) { return String(x.status) !== 'assinada'; }).length;
   rdoAssinAvisarEscritorio_(obra, dataISO, l, nome, faltam);
 
-  return { ok: true, assinadoEm: agora, codigo: rdoAssinCodigo_(l.token),
+  return { ok: true, assinadoEm: rdoDataHora_(agora), codigo: rdoAssinCodigo_(l.token),
            faltam: faltam, nomeAssinante: nome };
 }
 
@@ -3517,7 +3592,7 @@ function rdoAssinaturasDoDia(p) {
       papel: String(l.papel || ''), rotulo: String(l.rotulo || ''),
       nome: String(l.nome || ''), email: String(l.email || ''),
       status: String(l.status || 'pendente'),
-      assinadoEm: String(l.assinadoEm || ''),
+      assinadoEm: rdoDataHora_(l.assinadoEm),
       nomeAssinante: String(l.nomeAssinante || ''),
       documento: String(l.documento || ''),
       codigo: rdoAssinCodigo_(l.token),
@@ -3563,7 +3638,7 @@ function rdoAssinaturaCancelar(dataISO, papel, motivo) {
 
   registrarAuditoria(Session.getEffectiveUser().getEmail(), 'admin', 'rdoAssinaturaCancelar',
                      OBRA_ID, d, pp + ' · ' + String(alvo.obj.nomeAssinante || '') + ' · ' +
-                     String(alvo.obj.assinadoEm || ''), String(motivo || ''));
+                     rdoDataHora_(alvo.obj.assinadoEm), String(motivo || ''));
 
   var novo = rdoAssinToken_();
   rdoAssinGravarCampo_(alvo, 'status', 'cancelada');
@@ -3651,7 +3726,7 @@ function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
   var assinantes = rdoAssinLinhasDoDia_(obra, dataISO);
   var quem = assinantes.map(function (x) {
     return '• ' + (x.rotulo || x.papel) + ': ' + (x.nomeAssinante || '—') +
-           ' — ' + (x.assinadoEm || '') + ' (cód. ' + rdoAssinCodigo_(x.token) + ')';
+           ' — ' + rdoDataHora_(x.assinadoEm) + ' (cód. ' + rdoAssinCodigo_(x.token) + ')';
   }).join('\n');
 
   var anexo = arq.getBlob().setName(
@@ -4065,15 +4140,21 @@ function contarAdmins(mapa, ignorar) {
   return n;
 }
 
-function exigirAdmin(token) {
+/* `oQue` é o que a ação faz, para a mensagem dizer a coisa certa: a porta
+   nasceu para o cadastro de usuários, mas o diagnóstico da leitura por IA
+   passa por ela também, e "só o administrador gerencia usuários" na tela de
+   teste da nota fiscal não explica nada a quem foi barrado. */
+function exigirAdmin(token, oQue) {
+  var faz = oQue || 'gerenciar usuários';
   var props = PropertiesService.getScriptProperties();
   if (String(props.getProperty('EXIGIR_TOKEN')).toLowerCase() !== 'true') {
     return { ok: false, error: 'ADMIN_REQUER_TOKEN',
-      mensagem: 'Para gerenciar usuários, a propriedade EXIGIR_TOKEN precisa estar como true. Sem ela o backend fica aberto.' };
+      mensagem: 'Para ' + faz + ', a propriedade EXIGIR_TOKEN precisa estar como true. Sem ela o backend fica aberto.' };
   }
   if (!sessaoDoToken(token)) return { ok: false, error: 'TOKEN_INVALIDO' };
   if (perfilDoToken(token) !== 'admin') {
-    return { ok: false, error: 'SEM_PERMISSAO', mensagem: 'Só o administrador gerencia usuários.' };
+    return { ok: false, error: 'SEM_PERMISSAO',
+      mensagem: oQue ? 'Só o administrador pode ' + oQue + '.' : 'Só o administrador gerencia usuários.' };
   }
   return null;
 }
@@ -4878,7 +4959,23 @@ function autorizarInternet() {
   return true;
 }
 
-function nfDiag() {
+/* As chaves das Propriedades que PODEM aparecer num diagnóstico: as de
+   configuração. Ficam de fora as sessões (SES_<token>) e a fila da auditoria
+   (AUDQ_…), cujo próprio NOME é o segredo — o nome da sessão é o token. */
+function nfPropriedadesDeConfig_(props) {
+  return props.getKeys().filter(function (k) {
+    return k.indexOf(SESSAO_PREFIXO) !== 0 && k.indexOf(AUDITORIA_FILA_PREFIXO) !== 0;
+  }).sort();
+}
+
+function nfDiag(token) {
+  /* SÓ O ADMINISTRADOR. A lista de propriedades abaixo saía para qualquer
+     usuário logado — e nas Propriedades do script moram as SESSÕES: a
+     resposta entregava o token de sessão de todo mundo, inclusive o do
+     administrador, a quem só tinha perfil de apontador. */
+  var negado = exigirAdmin(token, 'ver o diagnóstico da leitura por IA');
+  if (negado) return negado;
+
   var props = PropertiesService.getScriptProperties();
   var key = props.getProperty('GEMINI_API_KEY');
   var modelo = props.getProperty('GEMINI_MODEL') || 'gemini-2.5-flash';
@@ -4888,7 +4985,10 @@ function nfDiag() {
     chaveConfigurada: !!key,
     tamanhoChave: key ? String(key).length : 0,
     modelo: modelo,
-    propriedades: props.getKeys().sort().join(', '),
+    // Só os NOMES, e só os de configuração: a chave da IA e as senhas
+    // (USUARIOS) aparecem pelo nome, nunca pelo valor; sessão e fila da
+    // auditoria nem pelo nome.
+    propriedades: nfPropriedadesDeConfig_(props).join(', '),
     consultaChaveConfigurada: !!nfeApiConfig().url
   };
   // o próprio Apps Script sabe dizer se ainda falta autorização — e devolve o

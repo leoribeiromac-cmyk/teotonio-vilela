@@ -49,6 +49,19 @@ const SO_CABECALHO = {
   confiancaGeral: 0.9
 };
 
+/* Propriedades do script de verdade (um mapa): o nfDiag lista os NOMES do
+   que está lá, e o teste do diagnóstico precisa enxergar o que ele lista —
+   e o que ele deixa de fora. */
+const PROPS_MAPA = { GEMINI_API_KEY: 'chave-de-teste' };
+const PROPS = {
+  getProperty: (k) => (k in PROPS_MAPA ? PROPS_MAPA[k] : null),
+  setProperty(k, v) { PROPS_MAPA[k] = String(v); },
+  deleteProperty(k) { delete PROPS_MAPA[k]; },
+  getKeys: () => Object.keys(PROPS_MAPA),
+  getProperties: () => ({ ...PROPS_MAPA }),
+};
+let _uuid = 0;
+
 const ctx = {
   console, JSON, String, Number, Object, Array, Math, Date, isNaN, parseFloat, parseInt, RegExp,
   encodeURIComponent,
@@ -56,12 +69,11 @@ const ctx = {
   LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
   Utilities: {
     formatDate: (d) => new Date(d).toISOString().slice(0, 19),
-    sleep: (ms) => { DORMIU += ms; }
+    sleep: (ms) => { DORMIU += ms; },
+    getUuid: () => 'uuid-' + (++_uuid)
   },
   Session: { getScriptTimeZone: () => 'UTC' },
-  PropertiesService: { getScriptProperties: () => ({
-    getProperty: (k) => (k === 'GEMINI_API_KEY' ? 'chave-de-teste' : null),
-    setProperty() {}, deleteProperty() {} }) },
+  PropertiesService: { getScriptProperties: () => PROPS },
   CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
   Logger: { log: () => {} },
   ContentService: { createTextOutput: () => ({ setMimeType: () => ({}) }), MimeType: {} },
@@ -185,6 +197,41 @@ t('com texto em mãos, o que sobe é o texto — não a foto (10x mais cara)', (
   const partes = CHAMADAS[0].payload.contents[0].parts;
   assert.ok(partes.every(x => !x.inline_data), 'mandou imagem junto com o texto');
   assert.ok(partes.some(x => /DANFE/.test(x.text || '')), JSON.stringify(partes).slice(0, 200));
+});
+
+console.log('\nO DIAGNÓSTICO É DO ADMINISTRADOR — E NÃO ENTREGA SESSÃO');
+/* nfDiag listava TODAS as Propriedades do script para qualquer usuário
+   logado — e é lá que moram as sessões (SES_<token>): a lista entregava o
+   token de todo mundo, inclusive o do administrador, a quem só tinha perfil
+   de apontador. */
+t('sem perfil de administrador, o diagnóstico é recusado — sem a lista', () => {
+  PROPS_MAPA.EXIGIR_TOKEN = 'true';
+  const r = ctx.nfDiag(ctx.sessaoCriar('Carlos', 'apontador', []));
+  assert.ok(!r.ok, 'abriu para o apontador');
+  assert.strictEqual(r.error, 'SEM_PERMISSAO');
+  assert.ok(!('propriedades' in r), 'vazou a lista de propriedades');
+});
+t('sem token, idem', () => {
+  PROPS_MAPA.EXIGIR_TOKEN = 'true';
+  assert.strictEqual(ctx.nfDiag('').error, 'TOKEN_INVALIDO');
+});
+t('para o administrador a lista sai — sem as sessões nem a fila da auditoria', () => {
+  preparar([]);
+  PROPS_MAPA.EXIGIR_TOKEN = 'true';
+  PROPS_MAPA.USUARIOS = '{"Leonardo":{"senha":"hash-da-senha","perfil":"admin"}}';
+  PROPS_MAPA.AUDQ_1725000000000_1_abc = '{"acao":"LOGIN"}';
+  const doOutro = ctx.sessaoCriar('Wallace', 'engenharia', []);
+  const meu = ctx.sessaoCriar('Leonardo', 'admin', []);
+  const r = ctx.nfDiag(meu);
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.ok(r.propriedades.indexOf('GEMINI_API_KEY') !== -1, r.propriedades);
+  assert.ok(r.propriedades.indexOf('USUARIOS') !== -1, r.propriedades);
+  assert.ok(r.propriedades.indexOf('SES_') === -1, 'vazou sessão: ' + r.propriedades);
+  assert.ok(r.propriedades.indexOf(doOutro) === -1 && r.propriedades.indexOf(meu) === -1, 'vazou token');
+  assert.ok(r.propriedades.indexOf('AUDQ_') === -1, 'vazou a fila da auditoria: ' + r.propriedades);
+  const inteiro = JSON.stringify(r);
+  assert.ok(inteiro.indexOf('chave-de-teste') === -1, 'vazou o VALOR da chave da IA');
+  assert.ok(inteiro.indexOf('hash-da-senha') === -1, 'vazou a senha');
 });
 
 console.log(falhas ? '\n' + falhas + ' FALHA(S)' : '\nTudo certo.');

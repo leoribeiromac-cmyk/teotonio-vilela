@@ -53,12 +53,20 @@ const ABAS = {
 // ---------------- Drive falso ----------------
 // Guarda bytes e nome de verdade: sem isso não dá para provar que a limpa é
 // OUTRO arquivo, nem que o reenvio reaproveitou em vez de criar.
-const PASTAS = {};
+const PASTAS = {};              // as pastas de raiz, por nome (getFoldersByName)
+const ARQUIVOS_POR_ID = {};     // todo arquivo criado, por id (getFileById)
 let _seq = 0, FALHAR_A_PARTIR_DE = null;
-function pastaFalsa(nome) {
+const iterador = (lista) => { let i = 0; return { hasNext: () => i < lista.length, next: () => lista[i++] }; };
+/* Pasta e arquivo sabem quem é o PAI (getParents): é por essa cadeia que o
+   obterFoto decide se o arquivo é do app ou é qualquer outra coisa do Drive
+   do dono da planilha. */
+function pastaFalsa(nome, pai) {
   const p = {
-    nome, arquivos: [],
+    nome, arquivos: [], pai: pai || null,
     getName: () => nome,
+    getParents: () => iterador(p.pai ? [p.pai] : []),
+    createFolder: (n) => pastaFalsa(n, p),
+    getFoldersByName: () => iterador([]),
     createFile(blob) {
       if (FALHAR_A_PARTIR_DE && blob.nome.indexOf(FALHAR_A_PARTIR_DE) !== -1) {
         throw new Error('cota do Drive estourada');
@@ -66,15 +74,14 @@ function pastaFalsa(nome) {
       const a = { id: 'drv' + (++_seq), nome: blob.nome, bytes: blob.bytes, lixo: false,
                   getId() { return this.id; }, getName() { return this.nome; },
                   getSize() { return this.bytes.length; }, isTrashed() { return this.lixo; },
-                  setSharing() { return this; } };
+                  setSharing() { return this; },
+                  getParents: () => iterador([p]),
+                  getBlob: () => ({ getContentType: () => blob.tipo || 'image/jpeg', getBytes: () => a.bytes }) };
       p.arquivos.push(a);
+      ARQUIVOS_POR_ID[a.id] = a;
       return a;
     },
-    getFilesByName(n) {
-      const achados = p.arquivos.filter(a => a.nome === n);
-      let i = 0;
-      return { hasNext: () => i < achados.length, next: () => achados[i++] };
-    }
+    getFilesByName: (n) => iterador(p.arquivos.filter(a => a.nome === n))
   };
   return p;
 }
@@ -87,6 +94,7 @@ const ctx = {
   Utilities: {
     formatDate: (d) => new Date(d).toISOString().slice(0, 10),
     base64Decode: (b64) => Buffer.from(String(b64), 'base64'),
+    base64Encode: (bytes) => Buffer.from(bytes).toString('base64'),
     newBlob: (bytes, tipo, nome) => ({ bytes, tipo, nome }),
     sleep() {}
   },
@@ -101,7 +109,12 @@ const ctx = {
       let usado = false;
       return { hasNext: () => !!PASTAS[n] && !usado, next: () => { usado = true; return PASTAS[n]; } };
     },
-    createFolder: (n) => (PASTAS[n] = pastaFalsa(n))
+    createFolder: (n) => (PASTAS[n] = pastaFalsa(n)),
+    getFileById(id) {
+      const a = ARQUIVOS_POR_ID[id];
+      if (!a) throw new Error('arquivo não existe');
+      return a;
+    }
   },
   UrlFetchApp: {}, MailApp: {}, ScriptApp: {}, XmlService: {}
 };
@@ -198,6 +211,38 @@ t('o ponteiro novo continua legível pelo leitor do app ANTIGO', () => {
     return m ? m[1] : '';
   };
   assert.strictEqual(comoOAppAntigoLia(r1.url), r1.fileId);
+});
+
+console.log('\nO QUE VOLTA PELO obterFoto — só o que está nas pastas do app');
+/* O script roda como o DONO da planilha, e getFileById abre qualquer arquivo
+   do Drive dele: com um token de sessão e um id, um usuário baixava o
+   contrato, o holerite, o que fosse. */
+t('a foto gravada pelo rdoFoto volta pelo obterFoto', () => {
+  const r = ctx.obterFotoPrivada(r1.fileId);
+  assert.ok(r.ok, JSON.stringify(r));
+  assert.ok(String(r.dataUri).indexOf('data:image/jpeg;base64,') === 0, r.dataUri);
+  assert.strictEqual(Buffer.from(String(r.dataUri).split(',')[1], 'base64').toString(),
+                     'foto-com-carimbo-queimado');
+});
+t('a nota fiscal, que mora em raiz/obra/ano/mês, também volta', () => {
+  const raiz = ctx.DriveApp.createFolder(ctx.NF_PASTA_RAIZ);
+  const mes = raiz.createFolder('teotonio').createFolder('2026').createFolder('Agosto');
+  const nf = mes.createFile({ nome: 'NF-1.jpg', bytes: Buffer.from('danfe'), tipo: 'image/jpeg' });
+  assert.ok(ctx.obterFotoPrivada(nf.getId()).ok, 'recusou a nota fiscal');
+});
+t('arquivo FORA das pastas do app é recusado — mesmo com o id certo', () => {
+  const pessoal = ctx.DriveApp.createFolder('Contratos e holerites');
+  const a = pessoal.createFile({ nome: 'contrato.pdf', bytes: Buffer.from('sigilo'), tipo: 'application/pdf' });
+  const r = ctx.obterFotoPrivada(a.getId());
+  assert.ok(!r.ok, 'serviu arquivo de fora das pastas do app');
+  assert.strictEqual(r.error, 'Arquivo fora das pastas do sistema');
+  assert.ok(!r.dataUri, 'vazou o conteúdo junto com a recusa');
+});
+t('a pasta do app mais funda que seis níveis não conta — a subida tem teto', () => {
+  let p = ctx.DriveApp.createFolder(ctx.PASTA_RDO_PDF);
+  for (let i = 0; i < 7; i++) p = p.createFolder('n' + i);
+  const a = p.createFile({ nome: 'x.jpg', bytes: Buffer.from('x'), tipo: 'image/jpeg' });
+  assert.ok(!ctx.obterFotoPrivada(a.getId()).ok, 'subiu mais do que o teto de idas ao Drive');
 });
 
 console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');

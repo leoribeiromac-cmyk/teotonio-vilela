@@ -435,6 +435,23 @@ t('a Propriedade RDO_ASSINATURA_DIAS estica o prazo', () => {
   PLANILHA.RDO_Assinaturas.forEach(l => { l[iConv] = iso + ' 08:00:00'; });
   verdade(assinar('fiscalizacao').ok, 'não assinou com o prazo esticado');
 });
+/* A planilha RECONHECE a data: `convidadoEm` é gravado como texto ISO, mas o
+   getValues() devolve Date. String(Date) é "Mon Sep 07 2026 …", a regex de
+   antes não casava, e o convite nunca vencia — o link valia para sempre. */
+t('convite que a planilha devolve como DATE vence do mesmo jeito (61 dias)', () => {
+  convites();
+  const iConv = CAB_ASSIN.indexOf('convidadoEm');
+  PLANILHA.RDO_Assinaturas.forEach(l => { l[iConv] = new Date(Date.now() - 61 * 24 * 3600 * 1000); });
+  const r = assinar('fiscalizacao');
+  verdade(!r.ok && r.vencido, 'assinou com link de 61 dias: ' + JSON.stringify(r));
+  verdade(!ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') }).ok, 'o link vencido ainda abre');
+});
+t('e o convite DATE de 10 dias continua valendo', () => {
+  convites();
+  const iConv = CAB_ASSIN.indexOf('convidadoEm');
+  PLANILHA.RDO_Assinaturas.forEach(l => { l[iConv] = new Date(Date.now() - 10 * 24 * 3600 * 1000); });
+  verdade(assinar('fiscalizacao').ok, 'venceu um convite de 10 dias');
+});
 
 console.log('\nO link pessoal no e-mail das 8h');
 t('cada assinante recebe o SEU link, e só o dele', () => {
@@ -490,6 +507,7 @@ t('a Propriedade RDO_SITE_URL manda no endereço do link', () => {
 
 console.log('\nO PDF assinado de volta para a fiscalização');
 t('o depósito guarda quantas firmas o PDF já traz desenhadas', () => {
+  assinar('engenheiro'); assinar('fiscalizacao');
   depositar({ assinaturas: '2' });
   eq(ctx.rdoPdfAssinaturasNoDeposito_('teotonio', HOJE), 2);
 });
@@ -539,6 +557,66 @@ t('falha no e-mail do assinado não derruba o depósito do PDF', () => {
   const r = depositar({ assinaturas: '2' });
   verdade(r.ok, 'o depósito virou erro por causa do e-mail');
   verdade(!!ctx.rdoPdfArquivo_('teotonio', HOJE), 'o PDF não ficou guardado');
+});
+/* O NÚMERO DO APP NÃO É PALAVRA FINAL. Um aparelho com o app velho em cache
+   mandava assinaturas=2 sem ter desenhado firma nenhuma: a fiscalização
+   recebia um PDF de quadros em branco sob o assunto "ASSINADO", e o log
+   ainda barrava o envio do de verdade. Quem sabe é a aba RDO_Assinaturas. */
+t('o app diz 2 firmas e a aba tem 1: o "assinado" NÃO sai, e o depósito registra 1', () => {
+  assinar('engenheiro');
+  const r = depositar({ assinaturas: '2' });
+  verdade(r.ok, JSON.stringify(r));
+  verdade(!r.assinadoEnviado, 'mandou o "assinado" com um quadro em branco');
+  eq(paraLista().length, 0, 'e-mails para a lista');
+  eq(r.assinaturas, 1, 'acreditou no número do app');
+  eq(ctx.rdoPdfAssinaturasNoDeposito_('teotonio', HOJE), 1, 'a descrição do arquivo');
+  verdade(!ctx.rdoAssinadoLogLer_()['teotonio|' + HOJE], 'marcou como enviado o que não saiu');
+});
+t('e quando a segunda firma chega de verdade, o assinado sai normalmente', () => {
+  assinar('engenheiro');
+  depositar({ assinaturas: '2' });
+  assinar('fiscalizacao');
+  verdade(depositar({ assinaturas: '2' }).assinadoEnviado, 'o depósito mentiroso barrou o de verdade');
+  eq(paraLista().length, 1);
+});
+
+console.log('\nA hora da assinatura, quando a planilha a devolve como DATE');
+/* `assinadoEm` é gravado como texto 'yyyy-MM-dd HH:mm:ss'; a planilha
+   reconhece a data e o getValues() devolve Date, e String(Date) punha
+   "Mon Aug 24 2026 09:12:00 GMT-0300" no e-mail do RDO assinado, no quadro
+   do PDF e na página de assinar. Aqui as células viram Date DEPOIS de
+   assinadas — que é o que a planilha de verdade faz. */
+const horaComoDate = () => {
+  const iAss = CAB_ASSIN.indexOf('assinadoEm');
+  PLANILHA.RDO_Assinaturas.forEach(l => { if (l[iAss]) l[iAss] = new Date(2026, 7, 24, 9, 12, 0); });
+};
+t('o e-mail do RDO assinado mostra yyyy-MM-dd HH:mm', () => {
+  assinar('engenheiro'); assinar('fiscalizacao');
+  horaComoDate();
+  depositar({ assinaturas: '2' });
+  eq(paraLista().length, 1, 'e-mails');
+  const corpo = paraLista()[0].body;
+  verdade(corpo.indexOf('2026-08-24 09:12') !== -1, corpo);
+  verdade(corpo.indexOf('Aug 24 2026') === -1, 'String(Date) no corpo');
+});
+t('o andamento no e-mail das 8h também', () => {
+  assinar('engenheiro', { nome: 'Paulo Engenheiro' });
+  horaComoDate();
+  depositar();
+  ctx.reenviarRDOPorEmail(HOJE);
+  verdade(paraLista()[0].body.indexOf('Paulo Engenheiro em 2026-08-24 09:12') !== -1,
+          paraLista()[0].body);
+});
+t('e o que o app e a página de assinar leem', () => {
+  assinar('engenheiro');
+  horaComoDate();
+  const doApp = ctx.rdoAssinaturasDoDia({ obra: 'teotonio', data: HOJE, imagens: '0' });
+  eq(doApp.assinaturas.filter(x => x.papel === 'engenheiro')[0].assinadoEm, '2026-08-24 09:12', 'app');
+  const daPagina = ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') });
+  eq(daPagina.outras.filter(x => x.papel === 'engenheiro')[0].assinadoEm, '2026-08-24 09:12', 'página');
+  const deNovo = ctx.rdoAssinaturaGravar({ t: tokenDe('engenheiro'), assinatura: uriPng(),
+                                           nome: 'Outra Pessoa Qualquer' });
+  eq(deNovo.assinadoEm, '2026-08-24 09:12', 'segundo aperto no sinal ruim');
 });
 
 console.log('\nO que o app lê para desenhar as firmas');
