@@ -105,7 +105,16 @@ async function rabiscar(p) {
   for (let i = 1; i <= 12; i++) {
     await p.mouse.move(c.x + 20 + i * (c.width - 50) / 12,
                        c.y + c.height * (0.7 - 0.25 * Math.sin(i)));
+    await p.waitForTimeout(10);
   }
+  /* O ÚLTIMO PONTO, DE NOVO E EXPLÍCITO. Sob carga (a máquina da CI roda os
+     testes em série, com o Chromium disputando CPU) o navegador junta os
+     pointermove e a ponta direita do traço se perde: o rabisco sai estreito
+     e alto, e a conferência de recorte mede outra coisa — foi assim que este
+     teste ficou vermelho num PR que só mexia no fluxo de implantação. Aqui
+     não se afrouxa a medida: garante-se o traço que ela mede. */
+  await p.mouse.move(c.x + c.width - 25, c.y + c.height * 0.7);
+  await p.waitForTimeout(30);
   await p.mouse.up();
 }
 
