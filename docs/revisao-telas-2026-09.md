@@ -29,6 +29,20 @@ Além disso, **a CI da `main` está vermelha desde 01/09** (quatro merges sem po
 | 9 | Cabeçalho do celular: título com 45 px para um texto de 101 px | `index.html:5788` | P |
 | 10 | `obterFoto` entrega qualquer arquivo do Drive do dono por id | `Code.gs:1866` | P/M |
 
+## Andamento — 08/09/2026
+
+A **Onda 1** está implementada na branch (commits `9d202c2` backend, `2dd0333` módulos, `3bfed6c` app) e a suíte completa passa: **54 de 54 arquivos**, com 3 casos de regressão novos (frete "900.50", carga de fundo que falha, rascunho ao sair da tela) e 14 casos novos nos testes de servidor.
+
+- **Backend**: B1 (`nfDiag` só admin, sem `SES_`/`AUDQ_`), B2 (`obterFoto` só de pastas do app), B3 (prazo do link com `normData`; `assinadoEm` legível), B4 (contagem de firmas limitada pela aba).
+- **Módulos**: BF1 (frete via `numCampo`), Q1 (datas locais no Equipamentos e nas Notas).
+- **Estado por obra**: D1, M1, E6.
+- **Formulário**: K1, K3, L1, L8.
+- **Painel**: E1, E2, E4, E5.
+- **Celular e visual**: S2 (no celular "Sair" sai do topo e "+ Novo Serviço" vira só o "+"), G1, P3, D5, V1, V3, V4.
+- Antes disso: "p.p." → "%" e o teste do muro que deixava a CI vermelha.
+
+Ficou de fora da Onda 1, por não ser código: **proteger a `main`** com a regra de branch que exige o workflow "Testes" (Settings → Branches no GitHub). E um lembrete: o `nfDiag` é bloco compartilhado com o `gestor-obras`; a correção precisa ser espelhada lá, adaptando `exigirAdmin` e os prefixos de sessão.
+
 ## 1. Como a revisão foi feita
 
 - Leitura do código em seis frentes: núcleo do app, telas analíticas, telas de apontamento, módulos externos (`js/`), sistema visual (CSS) e backend (`Code.gs`). Cada achado foi conferido no código antes de entrar aqui.
