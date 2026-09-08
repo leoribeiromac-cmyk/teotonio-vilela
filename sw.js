@@ -25,7 +25,7 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v59'; // v59: o sistema passa a ser Gestor Engenharia — nome, logo da empresa e ícones novos. O balde TEM de virar: o v58 guarda os ícones antigos (a via em perspectiva) e o aparelho seguiria mostrando aquela marca na tela de início
+const VERSAO = 'teotonio-v60'; // v60: correções da revisão de setembro. Os módulos em js/ mudaram (frete lido como campo, datas locais no Equipamentos e nas Notas): sem virar o balde, o aparelho abriria o index novo com o js/ velho
 // As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
 // app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
 // Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no

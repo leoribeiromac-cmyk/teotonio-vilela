@@ -15,10 +15,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Sistema Gestor Engenharia</title>
-<!-- A marca é a própria avenida em perspectiva (ver favicon.svg). O data-URI
-     repete o desenho sem gradiente: é o que a aba mostra antes de o arquivo
-     externo carregar, e precisa ler bem a 16px. -->
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14.5' fill='%231a1612'/%3E%3Cpath d='M17.4 52.5 L27.2 15.4 H36.8 L46.6 52.5 Z' fill='%23d2682f'/%3E%3Cg fill='%23fdf6ef'%3E%3Crect x='29.4' y='43.6' width='5.2' height='7.2' rx='1.4'/%3E%3Crect x='30.05' y='32.4' width='3.9' height='5.6' rx='1.1'/%3E%3Crect x='30.6' y='23.6' width='2.8' height='4.2' rx='.9'/%3E%3Crect x='31.05' y='17.2' width='1.9' height='3' rx='.7'/%3E%3C/g%3E%3C/svg%3E">
+<!-- A marca da aba é a mesma do app instalado: o favicon.svg (símbolo da
+     órbita da Gestor Engenharia). Antes ficava aqui um data-URI da marca
+     antiga — a avenida em perspectiva — e a aba do desktop seguia mostrando
+     a obra enquanto o ícone da tela inicial já era a empresa. -->
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
 <!-- Fontes servidas pelo PRÓPRIO site. Antes vinham do Google Fonts, numa
@@ -72,22 +73,22 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=59"></script>
-<script src="dados/ruas-de-terra.js?v=59"></script>
+<script src="dados/ranario.js?v=60"></script>
+<script src="dados/ruas-de-terra.js?v=60"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=59"></script>
+<script src="dados/teotonio-muros.js?v=60"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=59"></script>
-<script src="js/nf/adaptador.js?v=59"></script>
-<script src="js/nf/notas.js?v=59"></script>
-<script src="js/equip/equipamentos.js?v=59"></script>
+<script src="js/ui/icones.js?v=60"></script>
+<script src="js/nf/adaptador.js?v=60"></script>
+<script src="js/nf/notas.js?v=60"></script>
+<script src="js/equip/equipamentos.js?v=60"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=59"></script>
+<script src="js/bf/bota-fora.js?v=60"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -1357,45 +1358,11 @@ body.proj-cheia-ativa{overflow:hidden}
 
 /* ===================== KPI ===================== */
 .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px}
-.kpi-card{
-  position:relative;overflow:hidden;
-  background:var(--surface);border:1px solid var(--border);border-radius:var(--r);
-  padding:18px 20px;display:flex;flex-direction:column;gap:6px; cursor: pointer;
-  transition:transform calc(.2s*var(--anim-speed)),box-shadow calc(.2s*var(--anim-speed)),border-color calc(.2s*var(--anim-speed));
-}
-.kpi-card::after{
-  content:'';position:absolute;top:0;left:0;right:0;height:3px;
-  background:linear-gradient(90deg,var(--pri),var(--pri-d));
-  transform:scaleX(0);transform-origin:left;
-  transition:transform calc(.4s * var(--anim-speed)) cubic-bezier(.2,0,0,1);
-}
-.kpi-card:hover{transform:translateY(-3px);box-shadow:var(--sh-md);border-color:var(--pri-l);}
-.kpi-card:hover::after{transform:scaleX(1);}
-.kpi-card.kpi-acc::after{background:linear-gradient(90deg,var(--acc),var(--acc-d));}
-.kpi-label{font-size:var(--fs-2xs);font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
-.kpi-value{font-size:var(--kpi-size,42px);font-weight:700;letter-spacing:-.04em;line-height:1.05;font-variant-numeric:tabular-nums;font-family:'JetBrains Mono',monospace;color:var(--text);}
-.kpi-value-small{font-size:.45em;color:var(--muted);font-weight:500;letter-spacing:0;}
+/* Da família .kpi-card (o cartão de indicador antigo, sem nenhum uso) sobrou
+   só o .kpi-sub, que o cartão atual ainda lê. O .kpi-hero grafite saiu junto:
+   as Notas usam a classe esperando só o tamanho da fonte (ver a camada de
+   compatibilidade no topo), e herdavam fundo escuro com rótulo a 3,2:1. */
 .kpi-sub{font-size:var(--fs-xs);color:var(--muted);margin-top:4px;line-height:1.4;}
-.kpi-trend{font-size:var(--fs-xs);font-weight:600;display:inline-flex;align-items:center;gap:4px}
-.kpi-trend.up{color:var(--grn)}
-.kpi-trend.warn{color:var(--ylw-d)}
-.kpi-trend.down{color:var(--red)}
-.kpi-bar-wrap{height:4px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden}
-.kpi-bar{height:100%;border-radius:2px;transition:width .6s ease}
-
-/* Special hero KPI */
-.kpi-hero{
-  grid-column:span 2;
-  background:var(--sidebar-bg);
-  color:#fff;border:none; cursor: default;
-}
-.kpi-hero:hover{transform:translateY(-3px);box-shadow:var(--sh-lg);}
-.kpi-hero::after{background:linear-gradient(90deg,var(--acc),oklch(0.72 0.18 60));}
-.kpi-hero .kpi-label{color:rgba(255,255,255,.5)}
-.kpi-hero .kpi-value{color:#fff;font-size:calc(var(--kpi-size,42px) * 1.1);}
-.kpi-hero .kpi-value-small{color:rgba(255,255,255,.5);}
-.kpi-hero .kpi-sub{color:rgba(255,255,255,.65)}
-@media(max-width:600px){.kpi-hero{grid-column:span 1}}
 
 .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
 .grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
@@ -2085,8 +2052,6 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
   margin-top:10px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r-sm);
 }
 .hist-manutencao-corpo p{font-size:var(--fs-sm);color:var(--muted);margin-top:4px;max-width:520px;line-height:1.5}
-.btn-turno-diurno:hover{border-color:#d4a810;background:#fff8e1}
-.btn-turno-noturno:hover{border-color:#326496;background:#e8f0f8}
 
 /* Buttons & IA Styles */
 .ai-content { line-height: 1.6; font-size:var(--fs-lg); color: var(--text); }
@@ -2322,16 +2287,20 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 .hero-delta.down { color: oklch(0.72 0.18 25); }
 .hero-delta.flat { color: rgba(255,255,255,0.45); }
 
+/* Rótulo em cima, gráfico embaixo — em FLUXO, não sobrepostos. O rótulo era
+   absoluto e o Chart.js estica o canvas para a altura toda do contêiner: a
+   sparkline passava por cima de "Avanço acumulado · últimos 30 dias". */
 .hero-spark {
-  margin-top:22px; height: 64px; position: relative;
+  margin-top:22px; height: 84px; position: relative;
   border-top: 1px solid rgba(255,255,255,0.08);
-  padding-top:10px;
+  padding-top:10px; display:flex; flex-direction:column; gap:6px;
 }
 .hero-spark-label {
-  position: absolute; top: 12px; left: 0;
+  flex:0 0 auto;
   font-size:var(--fs-xs); font-weight: 700; letter-spacing: 0.12em;
   text-transform: uppercase; color: rgba(255,255,255,0.62);
 }
+.hero-spark-canvas { flex:1 1 auto; min-height:0; position:relative; }
 .hero-spark canvas { display: block; }
 
 .hero-side {
@@ -2777,6 +2746,13 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   /* as ações têm o espaço de que precisam */
   #topbarActions { flex: 0 0 auto; }
   .topbar-acesso-txt { display: none; }
+  /* No celular o título tinha 45 px para um texto de 101 px ("Paine…"):
+     quatro botões levavam o resto. "Sair" some (a gaveta já tem SAIR e o nome
+     de quem entrou) e "+ Novo Serviço" vira só o "+", com alvo de 44 px — o
+     rótulo continua no title e no texto escondido, para o leitor de tela. */
+  .topbar-sair { display: none; }
+  .topbar-novo-txt { display: none; }
+  .topbar-novo { min-width: 44px; padding-left: 10px; padding-right: 10px; justify-content: center; }
   /* Sem rótulo, o botão vira um quadradinho de 30px. Alvo de toque no
      canteiro é 44×44 — de pé, com luva, no sol. */
   #topbarActions .btn { padding: 7px 9px; }
@@ -2851,7 +2827,7 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
     min-width: 0;
   }
   .hero-gap-num { font-size:var(--fs-3xl); }
-  .hero-spark { height: 50px; padding-top:8px; }
+  .hero-spark { height: 70px; padding-top:8px; }
   .hero-stats { gap:12px; padding-top:14px; margin-top:12px; }
   .hero-stat-num { font-size:var(--fs-2xl); }
   /* o rótulo do hero NÃO volta a 10px: é a legenda do número que
@@ -2870,7 +2846,7 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 @media (max-width: 768px) {
   .exec-kpi { padding: 12px 14px; }
   .exec-kpi-val { font-size:var(--fs-3xl); }
-  .exec-kpi-sub { font-size:var(--fs-2xs); }
+  .exec-kpi-sub { font-size:var(--fs-xs); }
 }
 
 /* ===== KPI clássico ===== */
@@ -2878,7 +2854,7 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .kpi-card { padding: 12px 14px; }
   .kpi-value { font-size:var(--fs-3xl); }
   .kpi-label { font-size:var(--fs-2xs); }
-  .kpi-sub { font-size:var(--fs-2xs); }
+  .kpi-sub { font-size:var(--fs-xs); }
 }
 
 /* ===== Card body mobile ===== */
@@ -2950,7 +2926,7 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 
 /* ===== Curva S + legenda ===== */
 @media (max-width: 768px) {
-  .curvas-legend { font-size:var(--fs-2xs); gap:10px; padding-bottom:6px; }
+  .curvas-legend { font-size:var(--fs-xs); gap:10px; padding-bottom:6px; }
   .exec-row-21 > .card .card-body > div[style*="height:240px"] { height: 200px !important; }
 }
 
@@ -2958,7 +2934,7 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 @media (max-width: 768px) {
   .exec-list-item { padding: 8px 2px; gap:10px; }
   .exec-list-name { font-size:var(--fs-sm); }
-  .exec-list-meta { font-size:var(--fs-2xs); }
+  .exec-list-meta { font-size:var(--fs-xs); }
   .exec-list-val { font-size:var(--fs-sm); }
   .exec-list-section { font-size:var(--fs-2xs); padding: 10px 2px 4px; }
 }
@@ -3229,7 +3205,7 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
     white-space:normal;overflow-wrap:anywhere;
     display:flex;gap:12px;align-items:baseline;justify-content:space-between}
   .t-cartoes td[data-rot]::before{content:attr(data-rot);flex:0 0 auto;text-align:left;
-    font-size:var(--fs-2xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+    font-size:var(--fs-xs);font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
   /* o que identifica o registro abre o cartão, sem rótulo */
   table.t.t-cartoes td.celula-titulo{display:block;text-align:left;font-size:var(--fs-lg);font-weight:700;
     padding:0 0 7px;margin-bottom:6px;border-bottom:1px solid var(--border)}
@@ -3250,6 +3226,10 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .hist-acoes{width:100%}
   .hist-acoes > .btn,.hist-acoes > select{flex:1 1 45%;justify-content:center;min-height:42px}
 }
+/* Galeria: no celular os filtros nascem recolhidos (ver renderGaleria) */
+.gal-filtros-toggle{display:none;margin-bottom:12px}
+.gal-filtros[hidden]{display:none}
+@media (max-width: 768px){ .gal-filtros-toggle{display:inline-flex} }
 </style>
 </head>
 <body>
@@ -3669,6 +3649,15 @@ function trocarObra(id, opcoes) {
   // obra anterior — e o cronograma dela saía calculado sobre dados de outra.
   GANTT_DADOS = null;
   PLAN_DADOS = null;
+  /* O RDO Diário aberto e as medições fechadas também são da obra que sai.
+     Sem zerar, abrir o RDO Diário da Teotônio e trocar para o Ranário mostrava
+     efetivo, equipamentos e apontador da Teotônio como se fossem do Ranário —
+     e "Salvar turno" gravava isso com obra: ranario. As medições fechadas
+     faziam o mesmo: a competência fechada de uma obra aparecia fechada na
+     outra, e a prévia era comparada com o snapshot errado. */
+  DIARIO_V4 = null;
+  DIARIO_TURNO_ATIVO = null;
+  MEDICOES_FECHADAS = null;
   // A janela do contrato (PROJETO_INICIO/PROJETO_FIM) também é da obra: sem
   // repor aqui, a obra nova era medida contra o prazo da anterior até a
   // primeira carga terminar.
@@ -4429,6 +4418,21 @@ function rascunhoDe(chave, coletar) {
 function rascunhoDescarregar() { if (_rascAtivo) _rascAtivo.agora(); }
 window.addEventListener('pagehide', rascunhoDescarregar);
 
+/* Ao trocar de tela, o gravador da tela que sai grava UMA última vez — com o
+   formulário ainda no DOM — e é solto. Sem isto ele continuava apontando para
+   um formulário que já não existia: no próximo pagehide (bloquear o celular na
+   Galeria, por exemplo), coletar() devolvia null, que quer dizer "nada
+   digitado", e o rascunho gravado era APAGADO. Preencheu a viagem, foi
+   conferir uma foto, bloqueou o aparelho: a viagem tinha ido embora.
+   Chamado no início de render(): a tela de formulário que se redesenha na
+   mesma página também passa por aqui, e o boot dela restaura o que gravou. */
+function rascunhoSoltar() {
+  if (!_rascAtivo) return;
+  const r = _rascAtivo;
+  _rascAtivo = null;
+  try { r.agora(); } catch (e) { }
+}
+
 function num(s) {
   if (s === null || s === undefined || s === '') return 0;
   /* Número JS já é número: reparsá-lo como texto pt-BR apaga o ponto e
@@ -4919,7 +4923,7 @@ window.salvarChaveIA = function() {
     if (!confirm('Essa chave não parece estar no formato esperado (AIza...). Salvar mesmo assim?')) return;
   }
   localStorage.setItem(GEMINI_KEY_LS, v);
-  localStorage.removeItem('teotonio_ia_rec_v1'); // invalida cache para forçar nova chamada
+  iaCacheLimpar(); // invalida cache para forçar nova chamada
   toast('Chave salva. Gerando recomendação…', 'success');
   fecharConfigIA();
   if (typeof refreshIA === 'function') refreshIA();
@@ -4927,7 +4931,7 @@ window.salvarChaveIA = function() {
 
 window.removerChaveIA = function() {
   localStorage.removeItem(GEMINI_KEY_LS);
-  localStorage.removeItem('teotonio_ia_rec_v1');
+  iaCacheLimpar();
   toast('Chave removida. IA desativada.', 'info');
   fecharConfigIA();
   // Atualiza o card no painel
@@ -5725,6 +5729,10 @@ window.fazerLogin = async function() {
 function concluirLogin(u, perfil) {
   STATE.usuarioLogado = u;
   STATE.perfilLogado = String(perfil || '').toLowerCase();
+  /* Sem login, medicaoGarantirFechadas() devolve [] e marca "já buscou": quem
+     entrava depois via um mês fechado como aberto até recarregar a página.
+     Zerar aqui faz a tela de Medição buscar de novo, agora com token. */
+  MEDICOES_FECHADAS = null;
   localStorage.setItem('teotonio_user', u);
   if (!USUARIOS_UI.includes(u)) {
     USUARIOS_UI.push(u);
@@ -5763,6 +5771,9 @@ window.fazerLogout = function() {
 
   STATE.usuarioLogado = null;
   STATE.perfilLogado = '';
+  // As medições fechadas foram buscadas com o token que está sendo revogado;
+  // quem entrar depois busca de novo, com o seu.
+  MEDICOES_FECHADAS = null;
   localStorage.removeItem('teotonio_user');
   localStorage.removeItem(CONFIG.ls.token);
   localStorage.removeItem(CONFIG.ls.perfil);
@@ -5785,14 +5796,14 @@ window.atualizarBotoesTopo = function() {
      numa janela de 390px, fora do alcance justamente de quem só tem celular.
      Quem está logado continua sabendo quem é pelo rodapé do menu lateral. */
   const acesso = STATE.usuarioLogado
-    ? `<button class="btn btn-ghost btn-sm" onclick="fazerLogout()" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">${ic('sair')} <span class="topbar-acesso-txt">Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</span></button>`
+    ? `<button class="btn btn-ghost btn-sm topbar-sair" onclick="fazerLogout()" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">${ic('sair')} <span class="topbar-acesso-txt">Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</span></button>`
     : `<button class="btn btn-outline btn-sm" onclick="irParaLogin()" title="Entrar para lançar serviços e RDOs">${ic('entrar')} <span class="topbar-acesso-txt">Entrar</span></button>`;
   /* "Novo Serviço" não aparece na PRÓPRIA tela de lançamento: ali ele é um
      botão que não leva a lugar nenhum, e o preço é caro — em 390 px os quatro
      botões deixavam ~70 px para o bloco do título, e é o subtítulo que diz
      onde o lançamento grava. Um botão a menos devolve a linha ao título. */
   const novo = (pode('lancarServico') && STATE.currentPage !== 'rdo')
-    ? `<button class="btn btn-primary btn-sm" onclick="navigate('rdo')">${ic('mais')} Novo Serviço</button>`
+    ? `<button class="btn btn-primary btn-sm topbar-novo" onclick="navigate('rdo')" title="Novo Serviço" aria-label="Novo Serviço">${ic('mais')} <span class="topbar-novo-txt">Novo Serviço</span></button>`
     : '';
   tb.innerHTML = acesso +
     '<button class="btn btn-outline btn-sm btn-icone" onclick="buscaAbrir()" title="Buscar estaca, pacote, lançamento ou RDO (Ctrl+K)" aria-label="Buscar">' + ic('lupa') + '</button>' +
@@ -6861,6 +6872,22 @@ let _epocaCarga = 0;
    Tela nova que peça preenchimento entra AQUI. */
 const TELAS_DE_FORMULARIO = ['rdo', 'rdodiario', 'equip', 'botafora'];
 
+/* Há alguém preenchendo alguma coisa na tela? Tela de formulário, campo com
+   foco em qualquer tela, ou linha do Histórico aberta em edição (re-renderizar
+   por baixo fecharia a linha e a prévia da foto no meio do trabalho, sem nada
+   focado — o apontador estava na câmera, não no teclado). É a pergunta que a
+   carga de fundo faz antes de redesenhar — tanto quando dá certo quanto quando
+   FALHA: o catch chamava render() sem perguntar, e era exatamente o caso do
+   Ranário — volta da câmera, visibilitychange, sem sinal, a viagem sumia. */
+function formularioAbertoNaTela() {
+  const emFormulario = TELAS_DE_FORMULARIO.includes(STATE.currentPage);
+  const digitando = !!document.activeElement &&
+    ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
+  const editandoLinha = [...document.querySelectorAll('[id^="hist-edit-row-"]')]
+    .some(el => el.style.display !== 'none');
+  return emFormulario || digitando || editandoLinha;
+}
+
 async function carregarTudo(opts = {}) {
   const fundo = opts && opts.fundo === true;
   const minhaEpoca = ++_epocaCarga;
@@ -6898,15 +6925,7 @@ async function carregarTudo(opts = {}) {
     // Refresh de fundo em página de formulário (ou com campo focado em qualquer
     // página): NÃO re-renderiza — derrubaria foco/teclado do apontador no meio
     // da digitação. Os dados novos já estão no STATE; só os contadores mudam.
-    const emFormulario = TELAS_DE_FORMULARIO.includes(STATE.currentPage);
-    const digitando = document.activeElement &&
-      ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
-    // Linha do Histórico aberta em edição também é formulário: re-renderizar
-    // por baixo fecharia a linha (e a prévia da foto) no meio do trabalho,
-    // sem nada focado — o apontador estava na câmera, não no teclado.
-    const editandoLinha = [...document.querySelectorAll('[id^="hist-edit-row-"]')]
-      .some(el => el.style.display !== 'none');
-    if (fundo && (emFormulario || digitando || editandoLinha)) {
+    if (fundo && formularioAbertoNaTela()) {
       const rc = document.getElementById('rdoCount');
       if (rc) rc.textContent = STATE.rdoavanco.length;
       const dc = document.getElementById('diarioCount');
@@ -6924,8 +6943,9 @@ async function carregarTudo(opts = {}) {
     STATE.cargaFalhou = true;
     setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar novamente</span>');
     // Sem nenhuma carga boa antes, a tela é a mensagem: `render()` pinta a
-    // falha em vez de sair sem desenhar nada.
-    render();
+    // falha em vez de sair sem desenhar nada. Com dado bom na tela e alguém
+    // preenchendo, a falha de fundo NÃO redesenha — o status já avisou.
+    if (!(fundo && STATE.loaded && formularioAbertoNaTela())) render();
     // Com dado velho na tela o toast passa em 6 s e não atrapalha. Sem dado
     // nenhum ele é a rede de segurança da mensagem — fica até ser fechado.
     if (!STATE.loaded) toast('Sem conexão com Google Sheets. O lançamento continua funcionando: entra na fila do aparelho.', 'error', 0);
@@ -7816,6 +7836,7 @@ function toggleSidebar(open) {
 }
 
 function render() {
+  rascunhoSoltar();   // a tela que sai grava o rascunho enquanto ainda existe
   // Sem dados ainda: a página DIZ o que está acontecendo. Sair daqui sem
   // pintar deixava o app com o cabeçalho e o corpo em branco — a falha de
   // carga era indistinguível de um app quebrado (ver telaFalhaCarga).
@@ -8855,6 +8876,23 @@ function galeriaParaRelatorio() {
   return fs.filter(f => GAL_SELECAO.has(f.fileId));
 }
 
+/* No celular os oito filtros ocupavam a primeira tela inteira: a primeira
+   foto só aparecia depois de uma rolagem completa. Ali eles nascem recolhidos
+   atrás de "Filtros"; no desktop ficam abertos como sempre. null = o padrão
+   da largura; a pessoa que abre ou fecha manda dali em diante. */
+let GAL_FILTROS_ABERTOS = null;
+function galFiltrosAbertos() {
+  const celular = typeof matchMedia === 'function' && matchMedia('(max-width: 768px)').matches;
+  return GAL_FILTROS_ABERTOS === null ? !celular : GAL_FILTROS_ABERTOS;
+}
+window.galToggleFiltros = function() {
+  GAL_FILTROS_ABERTOS = !galFiltrosAbertos();
+  const g = document.querySelector('.gal-filtros');
+  const b = document.querySelector('.gal-filtros-toggle');
+  if (g) g.hidden = !GAL_FILTROS_ABERTOS;
+  if (b) b.setAttribute('aria-expanded', String(GAL_FILTROS_ABERTOS));
+};
+
 function renderGaleria() {
   const todas = fotosDaObra();
   if (!todas.length) {
@@ -8879,8 +8917,14 @@ function renderGaleria() {
     return l.charAt(0).toUpperCase() + l.slice(1);
   };
 
+  const nFiltros = (STATE.galMes && STATE.galMes !== 'Todos' ? 1 : 0)
+    + (STATE.galPacote && STATE.galPacote !== 'Todos' ? 1 : 0)
+    + Object.values(GAL_FILTRO).filter(Boolean).length;
+  const filtrosAbertos = galFiltrosAbertos();
   const filtros = `<div class="card" style="margin-bottom:16px"><div class="card-body">
-    <div class="form-grid" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end">
+    <button type="button" class="btn btn-outline btn-sm gal-filtros-toggle" onclick="galToggleFiltros()" aria-expanded="${filtrosAbertos}">
+      ${ic('filtro')} Filtros${nFiltros ? ' · ' + nFiltros + ' ativo' + (nFiltros > 1 ? 's' : '') : ''}</button>
+    <div class="form-grid gal-filtros"${filtrosAbertos ? '' : ' hidden'} style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:end">
       <div class="field"><label>Mês</label>
         <select onchange="STATE.galMes=this.value;setGalFiltro('_','')">
           <option value="Todos">Todos os meses</option>
@@ -9909,7 +9953,13 @@ function calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados, opts) {
   const pctJanela = pctAteDia(cum, sortedDays, ymd(dInicioJanela));
   const diasBase = diasUteis ? Math.max(1, contarDiasUteis(dInicioJanela, today)) : janela;
   const velocity = (currentToday - pctJanela) / diasBase;
-  const remaining = Math.max(0, 1 - total);
+  /* O que falta é medido contra o ACUMULADO da obra, não contra o que esta
+     série enxerga: com filtro de mês, `total` é só o ganho do mês, e
+     `1 − total` dava ~97% de saldo — a data de término saía centenas de dias
+     além da que a Curva S projeta na mesma tela. Quem chama passa o acumulado
+     (`opts.acumulado`); sem ele, a série é a obra inteira e `total` serve. */
+  const acumulado = (opts.acumulado != null && isFinite(opts.acumulado)) ? opts.acumulado : total;
+  const remaining = Math.max(0, 1 - acumulado);
   const daysToComplete = velocity > 0 ? Math.ceil(remaining / velocity) : null;
 
   // Data prevista de término + comparação com o prazo contratual (PROJETO_FIM)
@@ -9930,8 +9980,9 @@ function calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados, opts) {
   return { sparkPts, cumulative: cum, sortedDays, current: total, delta7d, delta30d, velocity, daysToComplete, dataPrevista, diasVsPrazo, janela, diasUteis, rdos7d, rdos30d };
 }
 
-function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
+function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados, concluidas) {
   const today = new Date(); today.setHours(0,0,0,0);
+  concluidas = concluidas || new Set();
   const d7 = today.getTime() - 7*86400000;
   const por = {};
   pacotesAtivos.forEach(p => {
@@ -9965,13 +10016,20 @@ function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
       const diasSemRDO = d.ultData ? Math.floor((today - d.ultData) / 86400000) : null;
       return { frente: f, dias: diasSemRDO, ultData: d.ultData, pacotes: d.pacotes };
     })
-    .filter(x => x.dias === null || x.dias >= 7)
+    /* Frente CONCLUÍDA não merece atenção por não ter RDO: ela terminou. Antes
+       ela ficava no topo da lista para sempre (a mais "parada" de todas) e
+       expulsava a frente ativa que parou há nove dias — da tela, da narrativa,
+       do prompt da IA e do PDF. */
+    .filter(x => (x.dias === null || x.dias >= 7) && !concluidas.has(x.frente))
+    /* Primeiro quem PAROU (tinha ritmo e perdeu), a mais parada na frente;
+       depois quem nunca começou — também vale o aviso, mas é outra conversa. */
     .sort((a,b) => {
-      if (a.dias === null && b.dias !== null) return -1;
-      if (b.dias === null && a.dias !== null) return 1;
+      if (a.dias === null && b.dias !== null) return 1;
+      if (b.dias === null && a.dias !== null) return -1;
       return (b.dias || 0) - (a.dias || 0);
-    })
-    .slice(0, 3);
+    });
+  // A lista vai inteira: quem mostra recorta. O KPI "frentes paradas" contava
+  // depois do recorte e dizia "3 de 9" com seis paradas.
   return { destaques, atencao, total: Object.keys(por).length };
 }
 
@@ -10064,11 +10122,28 @@ function calcCurvaPrevista(pacotesAtivos, totalDiasEstimados) {
   return { byDay: result, cum, sortedDays, total: acc };
 }
 
-const IA_CACHE_KEY = 'teotonio_ia_rec_v1';
+const IA_CACHE_BASE = 'teotonio_ia_rec_v1';
 const IA_CACHE_TTL = 6 * 3600 * 1000;
+/* A recomendação é escrita sobre a OBRA e o FILTRO que estavam na tela na hora
+   da chamada. Com uma chave só, trocar de obra (ou de mês, ou de frente)
+   mostrava por 6 h a recomendação da outra situação, com a segurança de quem
+   leu o contrato certo. A chave leva a obra (lsObra) e o filtro. */
+function iaCacheKey() {
+  const f = STATE.filtros || {};
+  return lsObra(IA_CACHE_BASE) + ':' + (f.mes || '') + ':' + (f.frente || '');
+}
+/* Trocar ou remover a chave da API invalida TODAS as recomendações guardadas,
+   de qualquer obra e filtro. */
+function iaCacheLimpar() {
+  try {
+    Object.keys(localStorage)
+      .filter(k => k.indexOf(IA_CACHE_BASE) === 0)
+      .forEach(k => localStorage.removeItem(k));
+  } catch (e) {}
+}
 function getIACached() {
   try {
-    const raw = localStorage.getItem(IA_CACHE_KEY);
+    const raw = localStorage.getItem(iaCacheKey());
     if (!raw) return null;
     const obj = JSON.parse(raw);
     if (!obj || !obj.ts || !obj.text) return null;
@@ -10126,7 +10201,7 @@ Responda APENAS com a recomendação.`;
     const text = await callGeminiAPI(prompt);
     const cleaned = (text || '').replace(/^["'\s]+|["'\s]+$/g, '').replace(/\n+/g, ' ').trim();
     if (cleaned) {
-      localStorage.setItem(IA_CACHE_KEY, JSON.stringify({ ts: Date.now(), text: cleaned }));
+      localStorage.setItem(iaCacheKey(), JSON.stringify({ ts: Date.now(), text: cleaned }));
       el.classList.remove('loading');
       txtEl.textContent = cleaned;
     } else {
@@ -10493,15 +10568,17 @@ function renderExecutivo() {
   };
 
   // ====== Métricas executivas V2 ======
-  const metrics = calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados);
+  const metrics = calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados, { acumulado: pctPondAcum });
   /* A Curva S lê daqui. Com filtro de mês, `metrics` enxerga só o mês e o
      acumulado dela recomeça do zero; `metricsAcum` vem do escopo inteiro até a
      data de referência, que é o que se compara com o cronograma. Sem filtro os
      dois são o mesmo objeto — nenhum cálculo a mais na tela de sempre. */
   const metricsAcum = STATE.filtros.mes
-    ? calcExecMetrics(rdosAcum, pacotesAtivos, totalDiasEstimados)
+    ? calcExecMetrics(rdosAcum, pacotesAtivos, totalDiasEstimados, { acumulado: pctPondAcum })
     : metrics;
-  const fa      = calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados);
+  // Frente com tudo executado não entra em "merecem atenção" (ver calcFrentesAnalise).
+  const frentesConcluidas = new Set(Object.entries(porFrente).filter(([, f]) => f.pctPond >= 0.999).map(([n]) => n));
+  const fa      = calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados, frentesConcluidas);
   const baseline = calcCurvaPrevista(pacotesAtivos, totalDiasEstimados);
   const todayHoje = new Date(); todayHoje.setHours(0,0,0,0);
   /* A meta do cronograma é lida na MESMA data do acumulado. Era sempre "hoje",
@@ -10517,6 +10594,7 @@ function renderExecutivo() {
   STATE.dashData.baseline = baseline;
   STATE.dashData.todayPlanned = todayPlanned;
   STATE.dashData.gap = gap;
+  STATE.dashData.pctPondAcum = pctPondAcum;
   STATE.dashData.totalPac = totalPac;
   STATE.dashData.iniciados = iniciados;
 
@@ -10614,7 +10692,7 @@ function renderExecutivo() {
         </div>
         <div class="hero-spark">
           <span class="hero-spark-label">Avanço acumulado · últimos 30 dias</span>
-          <canvas id="heroSpark" height="50"></canvas>
+          <div class="hero-spark-canvas"><canvas id="heroSpark" height="50"></canvas></div>
         </div>
       </div>
       <div class="hero-side">
@@ -10732,7 +10810,7 @@ function renderExecutivo() {
           </div>
           <div class="exec-list-section"><span class="dot warn"></span>Merecem atenção</div>
           <div class="exec-list">
-            ${fa.atencao.length > 0 ? fa.atencao.map((a, i) => `
+            ${fa.atencao.length > 0 ? fa.atencao.slice(0, 5).map((a, i) => `
               <div class="exec-list-item">
                 <div class="exec-list-rank">${i+1}</div>
                 <div class="exec-list-body">
@@ -10741,7 +10819,7 @@ function renderExecutivo() {
                 </div>
                 <div class="exec-list-val warn">${a.dias === null ? '—' : a.dias + ' d'}</div>
               </div>
-            `).join('') : `<div class="exec-list-empty">${ic('check')} Todas as frentes com atividade recente</div>`}
+            `).join('') + (fa.atencao.length > 5 ? `<div class="exec-list-empty">+ ${fa.atencao.length - 5} frente(s) sem atividade recente · a lista inteira sai no PDF</div>` : '') : `<div class="exec-list-empty">${ic('check')} Todas as frentes com atividade recente</div>`}
           </div>
         </div>
       </div>
@@ -10845,7 +10923,11 @@ function _exportarRelatorioExecutivoPDF() {
   const totalPac = data.totalPac || 0;
   const iniciados = data.iniciados || 0;
   const gap = data.gap || 0;
-  const pctPond = metrics.current || 0;
+  /* O número grande é o MESMO da tela: o avanço ponderado acumulado por
+     pacote. `metrics.current` é o acumulado da série do filtro — com mês
+     selecionado, o ganho do mês — e saía impresso como "avanço realizado" ao
+     lado de um gap calculado sobre o acumulado. */
+  const pctPond = (data.pctPondAcum != null) ? data.pctPondAcum : (metrics.current || 0);
   const todayPlanned = data.todayPlanned || 0;
 
   function stripHtml(html) {
@@ -11251,7 +11333,7 @@ function _exportarRelatorioExecutivoPDF() {
   }
 
   const idObra = String(OBRA.id || 'obra').replace(/[^a-z0-9-]/gi, '_');
-  const filename = `Relatorio_Executivo_${idObra}_${today.toISOString().slice(0, 10)}.pdf`;
+  const filename = `Relatorio_Executivo_${idObra}_${getLocalISODate(today)}.pdf`; // data LOCAL: às 22h o toISOString já é amanhã
   doc.save(filename);
   toast('Relatório Executivo PDF exportado com sucesso!', 'success');
 };
@@ -15330,7 +15412,9 @@ function clearDraft() {
 }
 
 function defaultDraft() {
-  const apontador = localStorage.getItem(CONFIG.ls.apontador) || '';
+  // Último nome digitado neste aparelho; sem ele, quem entrou no app. Antes o
+  // campo nascia vazio ("Seu nome") mesmo com a pessoa logada.
+  const apontador = localStorage.getItem(CONFIG.ls.apontador) || STATE.usuarioLogado || '';
   return {
     data: getLocalISODate(new Date()),
     turno: 'Diurno',
@@ -16139,6 +16223,17 @@ function validarRDO(d) {
     erros.push('Adicione pelo menos 1 serviço com pacote e quantidade > 0, ou 1 outro serviço descrito');
     return erros;
   }
+  /* Serviço COMEÇADO e não terminado não some em silêncio. Antes, bastava um
+     serviço válido para os outros — pacote escolhido e quantidade vazia, ou
+     quantidade digitada sem pacote — serem descartados na gravação: o
+     `confirm` dizia "2 serviços" com 3 na tela, e o sucesso limpava o
+     formulário e as fotos daquele serviço junto. Linha em branco (sem pacote
+     E sem quantidade) continua sendo só uma linha a mais, ignorada. */
+  d.servicos.forEach((s, i) => {
+    const temQtd = qtdDoServico(s) > 0;
+    if (s.pacoteId && !temQtd) erros.push(`Serviço ${i+1}: informe a quantidade`);
+    else if (!s.pacoteId && temQtd) erros.push(`Serviço ${i+1}: escolha o pacote`);
+  });
   // Estaca só é obrigatória onde existe estaqueamento: obra sem eixos
   // cadastrados não mostra o campo, e exigi-lo travaria o lançamento.
   if (temEstacas()) {
@@ -16188,7 +16283,10 @@ function destacarCamposRDO(d) {
   if (!d.apontador || !d.apontador.trim()) marcar('[data-draft="apontador"]');
   for (let i = 0; i < d.servicos.length; i++) {
     const s = d.servicos[i];
-    if (temEstacas() && s.pacoteId && qtdDoServico(s) > 0) {
+    const temQtd = qtdDoServico(s) > 0;
+    if (s.pacoteId && !temQtd) marcar(`[data-svc="${i}"][data-field="quantidade"]`);
+    if (!s.pacoteId && temQtd) marcar(`[data-svc="${i}"][data-field="pacoteId"]`);
+    if (temEstacas() && s.pacoteId && temQtd) {
       if (!s.estacaIni) marcar(`[data-svc="${i}"][data-field="estacaIni"]`);
       if (!s.estacaFim) marcar(`[data-svc="${i}"][data-field="estacaFim"]`);
       if ((CONFIG.lados || []).length && !s.lado) marcar(`[data-svc="${i}"][data-field="lado"]`);
@@ -16765,6 +16863,8 @@ function loadDiarioV4(data) {
    rascunho aberto no celular — justamente quem não pode perder o turno. */
 function normalizarDiarioV4(d) {
   if (!d) return d;
+  // O rascunho é lido da chave DA OBRA ATIVA (lsObra), então é dela.
+  d.obra = OBRA.id;
   ['diurno', 'noturno'].forEach(t => {
     if (!d[t]) return;
     if (!Array.isArray(d[t].paralisacoes)) d[t].paralisacoes = [];
@@ -16781,18 +16881,24 @@ function clearDiarioV4(data) {
 }
 
 function defaultDiarioV4(data) {
+  // Quem preenche o turno é, por padrão, quem entrou no app: o nome vem do
+  // login em vez de nascer em branco para ser digitado todo dia.
+  const apontador = STATE.usuarioLogado || '';
   return {
     data: data,
+    // A obra fica gravada no próprio diário: é o que permite a tela perceber
+    // um diário que ficou de outra obra (ver renderRDODiarioV4).
+    obra: OBRA.id,
     clima_manha: 'Bom',
     clima_tarde: 'Bom',
     clima_noite: 'Bom',
     diurno: {
-      apontador: '', efetivo: {}, equipamentos: {}, customIndireto: [], customDireto: [], customEquip: [],
+      apontador, efetivo: {}, equipamentos: {}, customIndireto: [], customDireto: [], customEquip: [],
       paralisacoes: [],
       visitas: '', ocorrencias: '', observacoes: '', preenchido: false,
     },
     noturno: {
-      apontador: '', efetivo: {}, equipamentos: {}, customIndireto: [], customDireto: [], customEquip: [],
+      apontador, efetivo: {}, equipamentos: {}, customIndireto: [], customDireto: [], customEquip: [],
       paralisacoes: [],
       visitas: '', ocorrencias: '', observacoes: '', preenchido: false,
     },
@@ -16864,6 +16970,12 @@ window.editarRDODiario = function(data) {
 
 function renderRDODiarioV4() {
   const dataHoje = getLocalISODate(new Date());
+  // Diário que ficou de outra obra não serve: trocarObra() já zera, e esta é
+  // a segunda trava, para o caso de o objeto chegar aqui por outro caminho.
+  if (DIARIO_V4 && DIARIO_V4.obra && DIARIO_V4.obra !== OBRA.id) {
+    DIARIO_V4 = null;
+    DIARIO_TURNO_ATIVO = null;
+  }
   if (!DIARIO_V4) {
     /* PRECEDÊNCIA: o rascunho local vem PRIMEIRO.
        Antes a planilha vencia, e `carregarDiarioDaSheet` só reaproveitava do

@@ -43,7 +43,12 @@ const ok = (nome, cond, extra) => {
     const r = await s.p.evaluate(() => {
       const tb = document.querySelector('.topbar');
       const acts = document.getElementById('topbarActions');
-      const botoes = [...(acts ? acts.children : [])].map(b => {
+      // Só o que está NA TELA conta: no celular o "Sair" do topo é escondido
+      // de propósito (a gaveta já tem SAIR), e um botão que não se vê não
+      // precisa de alvo de 44px — nem cabe na conta de largura.
+      const botoes = [...(acts ? acts.children : [])]
+        .filter(b => getComputedStyle(b).display !== 'none')
+        .map(b => {
         const c = b.getBoundingClientRect();
         return { rotulo: (b.getAttribute('title') || b.textContent).trim().slice(0, 20),
                  w: Math.round(c.width), h: Math.round(c.height),

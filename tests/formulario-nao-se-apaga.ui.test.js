@@ -130,6 +130,48 @@ async function voltarParaOApp(p) {
   }
 
   // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // A guarda acima só existia no caminho em que a carga de fundo DÁ CERTO. O
+  // catch chamava render() sem perguntar — e o caso comum do canteiro é
+  // justamente a volta da câmera SEM sinal: a carga falha, e a viagem sumia.
+  console.log('\nBOTA-FORA — a carga de fundo que FALHA também não apaga a viagem');
+  {
+    const { p, erros } = await abrir(b);
+    await p.evaluate(() => { STATE.cargaFalhou = false; STATE.loaded = true; navigate('botafora'); });
+    await p.waitForSelector('#bfForm', { timeout: 15000 });
+    await p.waitForTimeout(500);
+    await p.evaluate(() => {
+      const s = (i, v) => { const e = document.getElementById(i); if (e) e.value = v; };
+      s('bfPlaca', 'EFU-7H47'); s('bfMotorista', 'ARI'); s('bfObs', 'carga cheia');
+    });
+    await p.setInputFiles('#bfArqcargaCam', { name: 'carga.png', mimeType: 'image/png', buffer: PNG });
+    await p.waitForTimeout(700);
+    /* O rascunho (a outra trava) devolveria os campos mesmo que a tela fosse
+       redesenhada — com a faixa "recuperamos o preenchimento" e o foco perdido.
+       O que se cobra aqui é que a tela NÃO seja redesenhada: o formulário tem
+       de ser o MESMO nó do DOM de antes, e nenhuma faixa de recuperação. */
+    await p.evaluate(() => { document.getElementById('bfForm').dataset.mesmoNo = 'sim'; });
+    // Sem sinal: a planilha não responde. A rota registrada por último vence.
+    await p.context().route('**docs.google.com/**', r => r.abort('internetdisconnected'));
+    await voltarParaOApp(p);
+    const depois = await p.evaluate(() => ({
+      falhou: STATE.cargaFalhou === true,
+      mesmoNo: !!document.getElementById('bfForm') && document.getElementById('bfForm').dataset.mesmoNo === 'sim',
+      faixa: !!document.getElementById('bfRascunho') && document.getElementById('bfRascunho').style.display !== 'none',
+      placa: document.getElementById('bfPlaca') ? document.getElementById('bfPlaca').value : '(formulário sumiu)',
+      motorista: document.getElementById('bfMotorista') ? document.getElementById('bfMotorista').value : '',
+      foto: !!document.querySelector('#bfPrevcarga img'),
+    }));
+    ok('a carga de fundo falhou de verdade', depois.falhou);
+    ok('o formulário NÃO foi redesenhado (é o mesmo nó)', depois.mesmoNo);
+    ok('e não apareceu faixa de recuperação — não havia o que recuperar', !depois.faixa);
+    ok('a placa continua lá', depois.placa === 'EFU-7H47', depois.placa);
+    ok('o motorista continua lá', depois.motorista === 'ARI', depois.motorista);
+    ok('e a foto continua anexada', depois.foto === true, depois.foto);
+    ok('sem erro de página', erros.length === 0, erros.slice(0, 3).join(' ; '));
+    await p.context().close();
+  }
+
   console.log('\nEQUIPAMENTOS — o apontamento sobrevive ao mesmo caminho');
   {
     const { p, erros } = await abrir(b);

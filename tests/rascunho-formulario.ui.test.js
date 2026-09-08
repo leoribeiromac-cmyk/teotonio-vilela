@@ -151,6 +151,43 @@ async function aparelhoDescartaEReabre(p) {
   }
 
   // ------------------------------------------------------------------
+  // ------------------------------------------------------------------
+  // O gravador da tela ficava apontando para um formulário que já não
+  // existia: sair para a Galeria e bloquear o celular disparava o pagehide,
+  // coletar() devolvia null ("nada digitado") e o rascunho era APAGADO.
+  console.log('\nBOTA-FORA — passear por outra tela e bloquear o aparelho não apaga a viagem');
+  {
+    const ctx = await novoContexto(b);
+    const { p, erros } = await abrir(ctx, 'botafora');
+    await p.waitForSelector('#bfForm', { timeout: 15000 });
+    await p.waitForTimeout(600);
+    await p.evaluate(() => {
+      const s = (i, v) => { const e = document.getElementById(i); if (e) { e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); } };
+      s('bfPlaca', 'EFU-7H47'); s('bfMotorista', 'ARI'); s('bfObs', 'carga cheia');
+    });
+    await p.waitForTimeout(800);
+    await p.evaluate(() => navigate('galeria'));            // tela sem formulário
+    await p.waitForTimeout(500);
+    await p.evaluate(() => {                                  // bloqueou o celular ali
+      document.dispatchEvent(new Event('visibilitychange'));
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    await p.waitForTimeout(500);
+    await p.evaluate(() => navigate('botafora'));
+    await p.waitForSelector('#bfForm', { timeout: 15000 });
+    await p.waitForTimeout(1200);
+    const d = await p.evaluate(() => ({
+      placa: document.getElementById('bfPlaca').value,
+      motorista: document.getElementById('bfMotorista').value,
+      obs: document.getElementById('bfObs').value,
+    }));
+    ok('a placa voltou', d.placa === 'EFU-7H47', d.placa);
+    ok('o motorista voltou', d.motorista === 'ARI', d.motorista);
+    ok('as observações voltaram', d.obs === 'carga cheia', d.obs);
+    ok('sem erro de página', erros.length === 0, erros.slice(0, 3).join(' ; '));
+    await ctx.close();
+  }
+
   console.log('\nEQUIPAMENTOS — o apontamento volta pelo mesmo caminho');
   {
     const ctx = await novoContexto(b);
