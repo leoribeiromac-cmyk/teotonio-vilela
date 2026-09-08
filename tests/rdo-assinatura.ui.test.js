@@ -436,6 +436,8 @@ async function comOAppDeVerdade() {
   const s = await H.abrir({ diario: CSV_DIARIO, logar: { usuario: 'Leonardo', perfil: 'admin' } });
   const capturadas = [];
   let firmasLigadas = false;
+  let depositoFalha = false;      // o servidor recusando o depósito do PDF
+  let noDeposito = 0;             // -1 = o servidor não tem RDO nenhum daquele dia
 
   await s.p.route('**://script.google.com/**', async rota => {
     const req = rota.request();
@@ -449,15 +451,18 @@ async function comOAppDeVerdade() {
     }
     capturadas.push(params);
     let corpo = { ok: true, fileId: 'arquivo-falso' };
+    if (params.action === 'rdoPdfDoDia' && depositoFalha) {
+      corpo = { ok: false, error: 'Servidor ocupado gravando outro lançamento. Tente de novo.' };
+    }
     if (params.action === 'rdoEnviarParaAssinatura') {
       corpo = { ok: true, data: params.data, para: ['a@x.com', 'b@y.com'] };
     }
     if (params.action === 'rdoAssinaturasDoDia') {
       corpo = firmasLigadas
-        ? { ok: true, assinaturas: FIRMAS, assinadas: 1, noDeposito: 0 }
+        ? { ok: true, assinaturas: FIRMAS, assinadas: 1, noDeposito: noDeposito }
         : { ok: true, assinaturas: FIRMAS.map(f => Object.assign({}, f,
               { status: 'pendente', assinadoEm: '', nomeAssinante: '', imagem: undefined })),
-            assinadas: 0, noDeposito: 0 };
+            assinadas: 0, noDeposito: noDeposito };
     }
     rota.fulfill(cb
       ? { status: 200, contentType: 'application/javascript', body: cb + '(' + JSON.stringify(corpo) + ')' }
@@ -546,6 +551,39 @@ async function comOAppDeVerdade() {
      iDep !== -1 && iDep < iEnv, 'depósito=' + iDep + ' envio=' + iEnv);
   ok('manda uma vez só: pedido demorado não pode virar dois e-mails para a fiscalização',
      envio.length === 1, envio.length + ' envios');
+
+  /* O DEPÓSITO QUE FALHA NÃO PODE TRANCAR O DIA QUE JÁ ESTÁ GUARDADO.
+     Subir 300 KB do 4G do canteiro é o passo mais frágil do caminho; travar
+     o envio nele deixava parado justamente o RDO que o servidor já tinha —
+     e a mensagem mandava conferir o sinal quando o problema era outro. */
+  depositoFalha = true;
+  const antesFalha = capturadas.length;
+  await s.p.locator('#btnEnviarAssinatura').click();
+  for (let i = 0; i < 60 &&
+       !capturadas.slice(antesFalha).some(c => c.action === 'rdoEnviarParaAssinatura'); i++) {
+    await s.p.waitForTimeout(500);
+  }
+  await s.p.waitForTimeout(800);
+  const depoisFalha = capturadas.slice(antesFalha);
+  ok('depósito recusado não impede o envio quando o servidor já tem o RDO do dia',
+     depoisFalha.filter(c => c.action === 'rdoEnviarParaAssinatura').length === 1,
+     JSON.stringify(depoisFalha.map(c => c.action)));
+
+  // Sem NADA guardado no servidor, o e-mail sairia sem anexo: aí não vai.
+  noDeposito = -1;
+  await s.p.evaluate(() => {
+    _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
+  });
+  await s.p.evaluate(d => pintarAssinaturasRDO(d), HOJE_ISO);
+  await s.p.waitForFunction(() => _ASSIN_RDO.noDeposito === -1, null, { timeout: 20000 }).catch(() => {});
+  const antesSemNada = capturadas.length;
+  await s.p.locator('#btnEnviarAssinatura').click();
+  await s.p.waitForTimeout(4000);
+  ok('mas SEM depósito nenhum o envio é barrado — e-mail de RDO sem o RDO não vale nada',
+     capturadas.slice(antesSemNada).every(c => c.action !== 'rdoEnviarParaAssinatura'),
+     JSON.stringify(capturadas.slice(antesSemNada).map(c => c.action)));
+  depositoFalha = false;
+  noDeposito = 0;
 
   // Quem preenche o dia no canteiro não é quem o manda para a fiscalização.
   await s.p.evaluate(() => {
