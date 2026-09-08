@@ -108,7 +108,15 @@ ok('o cadastro por arquivo passa a quantidade por ptNum()',
 ok('a prévia de medição separa por nº de item',
   html.includes("getCSVField(c, 'Item Planilha')"));
 ok('etapaAnteriorDe() existe', html.includes('function etapaAnteriorDe('));
-ok('a frente tem cor própria', html.includes('.f-Muro{'));
+/* A cor da frente deixou de ser uma classe por nome (`.f-Muro{`) e passou a
+   sair de `corDaFrente()`, que sorteia um matiz por frente do contrato (ver
+   "uma cor por frente, do cartão ao selo da tabela"). Frente nova ganha cor
+   sozinha — o que este teste tem de provar é que o Muro de Contenção passa
+   pelo mesmo caminho das outras, e não que existe um CSS com o nome dele. */
+ok('a frente tem cor própria', html.includes('function corDaFrente(') &&
+  /--f-cor:\$\{corDaFrente\(/.test(html));
+ok('e ela entra na lista de frentes do contrato, que é de onde a cor sai',
+  C.pacotes.every(p => p.frente === 'Muro de Contenção'));
 
 // A produtividade está em DOIS lugares: no complemento (que é o que vale
 // hoje) e no PRODUTIVIDADE_PADRAO (que é a rede de segurança para quando as
