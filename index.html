@@ -18386,11 +18386,23 @@ function _gerarPDFDiario(data, opcoes) {
    entra nesta lista — e no OBRA_ID do gatilho, no Code.gs. */
 const OBRAS_COM_RDO_POR_EMAIL = ['teotonio'];
 
+/* POR QUE o último depósito falhou. O depósito é silencioso de propósito —
+   é manutenção, não tarefa do apontador — e por isso devolve só sim ou não.
+   Mas quem aperta "Enviar para assinatura" está esperando um resultado, e
+   "confira o sinal" quando o servidor disse "ocupado, tente de novo" manda a
+   pessoa procurar o problema no lugar errado. O motivo fica aqui, para o
+   botão contar. */
+let _DEPOSITO_FALHA = '';
+
 async function depositarRDOPdf(data, pacotePronto) {
   if (OBRAS_COM_RDO_POR_EMAIL.indexOf(OBRA.id) === -1) return false;
+  _DEPOSITO_FALHA = '';
   try {
     const pdf = pacotePronto || await gerarPDFDiario(data, { entregar: 'base64' });
-    if (!pdf || !pdf.base64) return false;
+    if (!pdf || !pdf.base64) {
+      _DEPOSITO_FALHA = 'o PDF do dia não chegou a ser desenhado';
+      return false;
+    }
     const r = await enviarAcao({
       action: 'rdoPdfDoDia',
       obra: OBRA.id,
@@ -18400,8 +18412,12 @@ async function depositarRDOPdf(data, pacotePronto) {
       assinaturas: pdf.assinaturas || 0,
       ...authParams(),
     }, 1, 3000);
+    if (!(r && r.ok)) {
+      _DEPOSITO_FALHA = erroLegivel((r && (r.mensagem || r.error)) || 'o servidor recusou o depósito');
+    }
     return !!(r && r.ok);
   } catch (e) {
+    _DEPOSITO_FALHA = (e && e.message) ? e.message : 'falha de rede';
     return false;   // silêncio proposital: ver o comentário acima
   }
 }
@@ -18557,12 +18573,30 @@ async function enviarRDOParaAssinatura(data) {
   const devolverBotao = () => { if (btn) { btn.disabled = false; btn.innerHTML = original; } };
 
   try {
-    // 1. o PDF de agora, com o que já foi assinado desenhado dentro
+    /* 1. o PDF de agora, com o que já foi assinado desenhado dentro.
+       Repor é o certo, mas NÃO é condição para mandar: subir 300 KB do 4G do
+       canteiro é o passo mais frágil de todos, e travar o envio nele deixava
+       parado justamente o dia que já estava guardado no servidor e só
+       precisava sair. Quando há depósito, quem decide é quem aperta — com o
+       motivo da falha na frente, e sabendo qual documento vai no anexo. */
     const depositado = await depositarRDOPdf(data);
     if (!depositado) {
-      devolverBotao();
-      return toast('Não consegui subir o PDF deste dia — o e-mail sairia sem o RDO em anexo. ' +
-                   'Confira o sinal e tente de novo.', 'error', 0);
+      const guardado = _ASSIN_RDO.obra === OBRA.id && _ASSIN_RDO.data === data &&
+                       _ASSIN_RDO.noDeposito >= 0;
+      const porque = _DEPOSITO_FALHA ? ' (' + _DEPOSITO_FALHA + ')' : '';
+      if (!guardado) {
+        devolverBotao();
+        return toast('Não consegui subir o PDF deste dia' + porque + ', e o servidor não tem ' +
+                     'nenhum RDO guardado desta data — o e-mail sairia sem anexo. ' +
+                     'Confira o sinal e tente de novo.', 'error', 0);
+      }
+      if (!confirm(`Não consegui subir o PDF de agora${porque}.\n\n` +
+                   `Mas o servidor JÁ TEM o RDO de ${fmtData(data)} guardado, e é ele que vai ` +
+                   'no anexo — o mesmo documento, se o RDO não mudou desde a última vez que ' +
+                   'foi gerado.\n\nMandar assim mesmo?')) {
+        devolverBotao();
+        return;
+      }
     }
     // 2. o envio. `retries: 0` — reenvio automático viraria e-mail repetido.
     const r = await enviarAcao({ action: 'rdoEnviarParaAssinatura', obra: OBRA.id, data,
