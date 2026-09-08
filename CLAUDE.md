@@ -36,9 +36,18 @@ só, e este é um papel que a fiscalização assina.
 Então são dois tempos: o app **deposita** (`depositarRDOPdf` → ação
 `rdoPdfDoDia`, um PDF por data numa pasta privada do Drive) e o gatilho
 **envia** o que foi depositado. Só da **Teotônio** — as outras obras nem
-depositam (`OBRAS_COM_RDO_POR_EMAIL`), e o servidor recusa se depositarem. Mexeu no gerador do PDF, confira que o
-depósito continua saindo; mexeu no envio, lembre que o servidor só tem o que o
-app deixou lá. `tests/rdo-email.ui.test.js` (o depósito, no app de verdade) e
+depositam (`OBRAS_COM_RDO_POR_EMAIL`), e o servidor recusa se depositarem.
+
+O gatilho olha para ONTEM, uma vez, e vai embora — o dia que ficou para trás
+(domingo e feriado lançados depois, turno fechado tarde, RDO corrigido) não
+tem segunda chance sozinho. Para ele existe o botão **Enviar para assinatura**,
+na tela do RDO (`enviarRDOParaAssinatura` no index.html →
+`rdoEnviarParaAssinatura` no `Code.gs`): repõe o depósito com o PDF de agora e
+manda o MESMO e-mail do gatilho, forçado. É do escritório — admin e engenharia,
+não o apontador.
+
+Mexeu no gerador do PDF, confira que o depósito continua saindo; mexeu no
+envio, lembre que o servidor só tem o que o app deixou lá. `tests/rdo-email.ui.test.js` (o depósito, no app de verdade) e
 `tests/rdo-email-servidor.test.js` (o envio, com Drive e Gmail falsos).
 
 ## A assinatura do RDO é online, e o link é a credencial

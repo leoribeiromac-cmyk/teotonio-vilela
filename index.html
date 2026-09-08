@@ -460,6 +460,7 @@ table.t.nf-tbl tfoot tr:hover td{background:var(--surface-2)}
 .ass-quem strong{font-size:var(--fs-sm); font-weight:600}
 .ass-quem small{font-size:var(--fs-xs); color:var(--muted); overflow-wrap:anywhere}
 .ass-rodape{margin-top:var(--sp-4); font-size:var(--fs-xs); color:var(--muted)}
+.ass-enviar{margin-top:var(--sp-5)}
 .ass-vazio{display:flex; align-items:center; gap:var(--sp-4); font-size:var(--fs-sm); color:var(--muted)}
 .dia-linha{
   display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -18477,10 +18478,18 @@ async function reporDepositoSeAssinado(data) {
 }
 
 // ---------------------------------------------------------------- painel
+/* Quem manda o RDO para a fiscalização — a mesma regra do `exigirPodeEnviarRDO`,
+   no Code.gs. O apontador preenche e salva o dia; quem decide que ele está
+   fechado e pode entrar na caixa do fiscal é o escritório. Botão que só
+   existe para dar "sem permissão" ao ser tocado não deve aparecer. */
+function podeEnviarRDOParaAssinatura() {
+  return ['admin', 'engenharia'].indexOf(perfilAtual()) !== -1;
+}
+
 /* O painel na tela do RDO. Existe por um motivo prático: quando o fiscal
    diz "não me chegou nada", o escritório precisa do link dele à mão, sem
    esperar o e-mail das 8h do dia seguinte. */
-function painelAssinaturasHtml(lista, noDeposito) {
+function painelAssinaturasHtml(lista, noDeposito, data) {
   if (!lista || !lista.length) {
     return `<div class="ass-vazio">${ic('info', 14)} A assinatura online deste dia ainda não foi aberta.</div>`;
   }
@@ -18502,11 +18511,79 @@ function painelAssinaturasHtml(lista, noDeposito) {
         >${ic('copiar', 13)} Link</button>`}
     </div>`;
   }).join('');
+  /* MANDAR AGORA. O e-mail das 8h leva o RDO de ONTEM, uma vez — o dia que
+     ficou para trás (o domingo e o feriado que só foram lançados depois, o
+     turno fechado tarde, o RDO corrigido) não tem segunda chance sozinho.
+     Este botão é essa segunda chance, sem ninguém precisar abrir o editor
+     do Apps Script para rodar `reenviarRDOPorEmail` à mão. */
+  const enviar = (data && podeEnviarRDOParaAssinatura())
+    ? `<button type="button" class="btn btn-sm btn-outline ass-enviar" id="btnEnviarAssinatura"
+         onclick="enviarRDOParaAssinatura('${data}')"
+         >${ic('enviar', 14)} ${assinadas === lista.length ? 'Reenviar o RDO deste dia' : 'Enviar para assinatura agora'}</button>`
+    : '';
+
   return `${linhas}
     <div class="ass-rodape">${assinadas} de ${lista.length} assinada(s).
       ${atrasado
         ? 'Repondo o PDF assinado no servidor…'
-        : 'O link pessoal de cada um vai no e-mail diário das 8h.'}</div>`;
+        : 'O link pessoal de cada um vai no e-mail diário das 8h.'}</div>
+    ${enviar}`;
+}
+
+/* Manda o RDO daquele dia AGORA para a lista da obra — o mesmo e-mail do
+   gatilho da manhã, com o link pessoal de quem assina dentro do dele.
+
+   Dois passos, nesta ordem, e o primeiro não é enfeite: REPÕE o depósito
+   antes de mandar. O dia lançado com atraso pode nunca ter tido PDF
+   depositado (o servidor não desenha o RDO — quem desenha é este
+   navegador), e o dia corrigido tem um depósito velho lá. Mandar sem
+   repor anexaria o RDO errado, ou nenhum.
+
+   Sem repetição automática de propósito: um pedido que demora não pode
+   virar dois e-mails para a fiscalização. */
+async function enviarRDOParaAssinatura(data) {
+  if (OBRAS_COM_ASSINATURA_ONLINE.indexOf(OBRA.id) === -1) return;
+  if (!data) return;
+  if (!podeEnviarRDOParaAssinatura()) {
+    return toast('O RDO vai para a fiscalização pelo escritório — o seu perfil preenche o dia, mas não o manda.', 'error', 6000);
+  }
+  if (!confirm(`Mandar o RDO de ${fmtData(data)} agora?\n\n` +
+               'Cada um da lista da obra recebe o PDF por e-mail; o engenheiro e a ' +
+               'fiscalização recebem também o link pessoal para assinar.')) return;
+
+  const btn = document.getElementById('btnEnviarAssinatura');
+  const original = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = ic('ampulheta', 14, 'ic-gira') + ' Enviando…'; }
+  const devolverBotao = () => { if (btn) { btn.disabled = false; btn.innerHTML = original; } };
+
+  try {
+    // 1. o PDF de agora, com o que já foi assinado desenhado dentro
+    const depositado = await depositarRDOPdf(data);
+    if (!depositado) {
+      devolverBotao();
+      return toast('Não consegui subir o PDF deste dia — o e-mail sairia sem o RDO em anexo. ' +
+                   'Confira o sinal e tente de novo.', 'error', 0);
+    }
+    // 2. o envio. `retries: 0` — reenvio automático viraria e-mail repetido.
+    const r = await enviarAcao({ action: 'rdoEnviarParaAssinatura', obra: OBRA.id, data,
+                                 ...authParams() }, 0, 0);
+    devolverBotao();
+    if (r && r.ok) {
+      const n = (r.para || []).length;
+      toast(`RDO de ${fmtData(data)} enviado${n ? ' para ' + n + ' destinatário(s)' : ''}. ` +
+            'Quem assina recebeu o link pessoal dele.', 'success', 7000);
+      pintarAssinaturasRDO(data);
+    } else {
+      toast('O RDO não saiu: ' + erroLegivel((r && (r.mensagem || r.error)) || 'falha no servidor'), 'error', 0);
+    }
+  } catch (e) {
+    devolverBotao();
+    /* Pedido que estourou o prazo pode ter saído do mesmo jeito — mandar de
+       novo às cegas é o jeito de a fiscalização receber o mesmo RDO duas
+       vezes. Quem decide é quem olha a caixa de entrada. */
+    toast('Não deu para confirmar o envio (' + (e && e.message ? e.message : 'sem resposta') + '). ' +
+          'Confira a caixa de entrada antes de mandar de novo — o RDO pode ter saído.', 'error', 0);
+  }
 }
 
 function pintarAssinaturasRDO(data) {
@@ -18517,12 +18594,12 @@ function pintarAssinaturasRDO(data) {
     // Trocou de dia enquanto a resposta vinha: o painel do dia velho não
     // pode sobrescrever o do dia que está na tela.
     if (!atual || atual.dataset.data !== data) return;
-    atual.innerHTML = painelAssinaturasHtml(lista, _ASSIN_RDO.noDeposito);
+    atual.innerHTML = painelAssinaturasHtml(lista, _ASSIN_RDO.noDeposito, data);
     reporDepositoSeAssinado(data).then(reposto => {
       if (reposto) {
         const dep = document.getElementById('rdoAssinaturasPainel');
         if (dep && dep.dataset.data === data) {
-          dep.innerHTML = painelAssinaturasHtml(_ASSIN_RDO.lista, _ASSIN_RDO.noDeposito);
+          dep.innerHTML = painelAssinaturasHtml(_ASSIN_RDO.lista, _ASSIN_RDO.noDeposito, data);
         }
       }
     }).catch(() => {});
@@ -18543,6 +18620,7 @@ function copiarLinkAssinatura(i) {
 }
 
 window.copiarLinkAssinatura = copiarLinkAssinatura;
+window.enviarRDOParaAssinatura = enviarRDOParaAssinatura;
 window.carregarAssinaturasRDO = carregarAssinaturasRDO;
 window.assinaturasDoRDO = assinaturasDoRDO;
 window.pintarAssinaturasRDO = pintarAssinaturasRDO;
