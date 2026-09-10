@@ -46,6 +46,12 @@ na tela do RDO (`enviarRDOParaAssinatura` no index.html →
 manda o MESMO e-mail do gatilho, forçado. É do escritório — admin e engenharia,
 não o apontador.
 
+O envio é UM E-MAIL POR PESSOA, e cada um é tentado por conta própria: um
+endereço que estoura (caixa cheia, domínio fora do ar) não pode levar os
+outros junto — o escritório é o primeiro da lista, e o sintoma disso era
+"chegou para mim e para mais ninguém". Quem ficou de fora é nomeado no
+aviso ao dono do script e volta em `falharam` para a tela contar.
+
 Mexeu no gerador do PDF, confira que o depósito continua saindo; mexeu no
 envio, lembre que o servidor só tem o que o app deixou lá. `tests/rdo-email.ui.test.js` (o depósito, no app de verdade) e
 `tests/rdo-email-servidor.test.js` (o envio, com Drive e Gmail falsos).

@@ -18604,8 +18604,17 @@ async function enviarRDOParaAssinatura(data) {
     devolverBotao();
     if (r && r.ok) {
       const n = (r.para || []).length;
-      toast(`RDO de ${fmtData(data)} enviado${n ? ' para ' + n + ' destinatário(s)' : ''}. ` +
-            'Quem assina recebeu o link pessoal dele.', 'success', 7000);
+      /* "Enviado" quando um dos endereços recusou seria mentira do tamanho
+         de um fiscal sem o RDO. O servidor devolve quem ficou de fora; a
+         tela conta. */
+      const faltou = (r.falharam || []).map(f => f && f.para).filter(Boolean);
+      if (faltou.length) {
+        toast(`RDO de ${fmtData(data)} enviado para ${n}, mas NÃO chegou a ` +
+              faltou.join(', ') + '. Confira o endereço e mande de novo.', 'error', 0);
+      } else {
+        toast(`RDO de ${fmtData(data)} enviado${n ? ' para ' + n + ' destinatário(s)' : ''}. ` +
+              'Quem assina recebeu o link pessoal dele.', 'success', 7000);
+      }
       pintarAssinaturasRDO(data);
     } else {
       toast('O RDO não saiu: ' + erroLegivel((r && (r.mensagem || r.error)) || 'falha no servidor'), 'error', 0);
