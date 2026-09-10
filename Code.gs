@@ -2893,22 +2893,65 @@ function rdoEnviarPorEmail_(dataISO, obra, forcar) {
     if (e) minhaPorEmail[e] = a;
   });
 
+  /* UM ENDEREÇO QUE FALHA NÃO LEVA OS OUTROS JUNTO.
+     ---------------------------------------------------------------
+     Este laço não tinha proteção nenhuma: o primeiro `sendEmail` que
+     estourasse — caixa cheia, domínio fora do ar, cota que virou no meio,
+     endereço que o Gmail recusa — interrompia a lista, e quem vinha depois
+     simplesmente não recebia. Sem erro em lugar nenhum que dissesse isso: o
+     gatilho morria no meio, o dia não ficava marcado como enviado e a
+     fiscalização ficava sem o RDO.
+     E como o escritório é o PRIMEIRO da lista, o sintoma era o mais
+     enganoso possível — "chegou para mim, não chegou para mais ninguém".
+     Agora cada envio é tentado por conta própria, e quem não recebeu é
+     nomeado no aviso que vai para o dono do script. */
+  var enviados = [], falharam = [];
   destinos.forEach(function (destino) {
     var minha = minhaPorEmail[String(destino).toLowerCase()] || null;
     var corpo = rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha);
-    MailApp.sendEmail({
-      to: destino,
-      subject: assunto,
-      body: corpo.texto,
-      htmlBody: corpo.html,
-      name: 'Gestor Engenharia — RDO ' + rdoObraNome_(obra),
-      attachments: [anexo]
-    });
+    try {
+      MailApp.sendEmail({
+        to: destino,
+        subject: assunto,
+        body: corpo.texto,
+        htmlBody: corpo.html,
+        name: 'Gestor Engenharia — RDO ' + rdoObraNome_(obra),
+        attachments: [anexo]
+      });
+      enviados.push(destino);
+    } catch (e) {
+      falharam.push({ para: destino, erro: String(e && e.message ? e.message : e) });
+      Logger.log('RDO de ' + dataISO + ' NÃO saiu para ' + destino + ': ' + e);
+    }
   });
 
-  rdoEmailMarcar_(obra, dataISO, destinos);
-  Logger.log('RDO de ' + dataISO + ' enviado para: ' + destinos.join(', '));
-  return { ok: true, data: dataISO, para: destinos, anexo: anexo.getName() };
+  /* O aviso vai para o dono, não para a lista: quem recebeu não precisa
+     saber que o vizinho não recebeu, e quem não recebeu não está lendo
+     e-mail nenhum sobre isso. Traz o comando do reenvio pronto. */
+  if (falharam.length) {
+    rdoEmailAvisarDono_('RDO ' + rdoDataBR_(dataISO) + ' — não chegou a ' +
+      falharam.length + ' destinatário(s)',
+      'O RDO de ' + rdoDataBR_(dataISO) + ' (' + rdoDiaSemana_(dataISO) + ') saiu para:\n' +
+      (enviados.length ? '  ' + enviados.join('\n  ') : '  (ninguém)') + '\n\n' +
+      'E NÃO saiu para:\n' +
+      falharam.map(function (f) { return '  ' + f.para + ' — ' + f.erro; }).join('\n') + '\n\n' +
+      'Os que receberam não precisam de nada. Para mandar de novo (vai para a lista ' +
+      'inteira, então quem já recebeu recebe duas vezes):\n\n' +
+      "    reenviarRDOPorEmail('" + dataISO + "')\n");
+  }
+
+  /* Nenhum saiu: isso é falha do envio, não "enviado com pendências" — e o
+     dia NÃO fica marcado, para o reenvio não achar que já foi. */
+  if (!enviados.length) {
+    return { ok: false, error: 'Nenhum e-mail saiu para ' + dataISO, falharam: falharam };
+  }
+
+  rdoEmailMarcar_(obra, dataISO, enviados);
+  Logger.log('RDO de ' + dataISO + ' enviado para: ' + enviados.join(', ') +
+             (falharam.length ? ' | NÃO saiu para: ' +
+              falharam.map(function (f) { return f.para; }).join(', ') : ''));
+  return { ok: true, data: dataISO, para: enviados, falharam: falharam,
+           anexo: anexo.getName() };
 }
 
 // ------------------------------------------------------------
@@ -3187,6 +3230,12 @@ function conferirEnvioRDOEmail() {
     ok: true,
     proximo_envio_leva_o_RDO_de: alvo + ' (' + rdoDiaSemana_(alvo) + ')',
     destinatarios: destinos,
+    /* DE ONDE a lista veio. A Propriedade RDO_EMAILS, quando existe, manda
+       na lista do Code.gs — e uma Propriedade esquecida com um endereço só
+       é indistinguível, olhando o e-mail que chegou, de um envio que falhou
+       no meio da lista. */
+    lista_vem_de: PropertiesService.getScriptProperties().getProperty('RDO_EMAILS')
+      ? 'Propriedade RDO_EMAILS' : 'lista RDO_EMAIL_DESTINOS do Code.gs',
     hora_do_envio: rdoEmailHora() + 'h',
     gatilho_instalado: gatilho,
     pdf_desse_dia_depositado: !!arq,

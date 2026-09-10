@@ -106,10 +106,16 @@ const SpreadsheetApp = {
 };
 
 // ---------------- Gmail falso ----------------
-const CORREIO = { enviados: [], cota: 100 };
+const CORREIO = { enviados: [], cota: 100, recusar: {} };
 const MailApp = {
   getRemainingDailyQuota: () => CORREIO.cota,
   sendEmail(a, b, c) {
+    const para = typeof a === 'object' ? a.to : a;
+    // Caixa cheia, domínio fora do ar, endereço que o Gmail recusa: o
+    // `sendEmail` ESTOURA, e é isso que o teste precisa poder forçar.
+    if (CORREIO.recusar[String(para).toLowerCase()]) {
+      throw new Error(CORREIO.recusar[String(para).toLowerCase()]);
+    }
     CORREIO.enviados.push(typeof a === 'object' ? a : { to: a, subject: b, body: c, simples: true });
   },
 };
@@ -185,7 +191,7 @@ function limpar() {
     ['A3', '2026-08-23', 'teotonio', 'P01', 8],
     ['A4', HOJE, 'ranario', 'P01', 3],
   ];
-  CORREIO.enviados = []; CORREIO.cota = 100;
+  CORREIO.enviados = []; CORREIO.cota = 100; CORREIO.recusar = {};
 }
 
 let falhas = 0;
@@ -520,6 +526,86 @@ t('quem só acompanha a obra não manda', () => {
   sessao('tk-dir', 'diretoria');
   depositar();
   eq(mandarAgora({ token: 'tk-dir' }).error, 'SEM_PERMISSAO');
+});
+
+
+/* UM ENDEREÇO QUE FALHA NÃO LEVA OS OUTROS JUNTO
+   ------------------------------------------------------------------
+   O laço de envio não tinha proteção: o primeiro sendEmail que estourasse
+   interrompia a lista, e quem vinha depois não recebia — sem erro em lugar
+   nenhum. Como o escritório é o PRIMEIRO da lista, o sintoma era o mais
+   enganoso possível: "chegou para mim e para mais ninguém". */
+console.log('\nQuando um destinatário recusa o e-mail');
+
+t('os outros recebem do mesmo jeito', () => {
+  depositar();
+  const lista = ctx.rdoEmailDestinatarios();
+  CORREIO.recusar[lista[1].toLowerCase()] = 'Invalid email: caixa cheia';
+  const r = ctx.reenviarRDOPorEmail(HOJE);
+  verdade(r.ok, 'devolveu falha: ' + JSON.stringify(r));
+  eq(paraFiscalizacao().length, lista.length - 1, 'quem recebeu');
+  verdade(paraFiscalizacao().every(e => e.to.toLowerCase() !== lista[1].toLowerCase()),
+          'mandou para quem recusou');
+});
+t('e o que voltou diz quem recebeu e quem não recebeu', () => {
+  depositar();
+  const lista = ctx.rdoEmailDestinatarios();
+  CORREIO.recusar[lista[1].toLowerCase()] = 'Invalid email';
+  const r = ctx.reenviarRDOPorEmail(HOJE);
+  eq(r.para.length, lista.length - 1, 'para');
+  eq(r.falharam.length, 1, 'falharam');
+  eq(r.falharam[0].para, lista[1]);
+});
+t('o dono é avisado, com o nome de quem ficou sem o RDO', () => {
+  depositar();
+  const lista = ctx.rdoEmailDestinatarios();
+  CORREIO.recusar[lista[2].toLowerCase()] = 'Domínio inexistente';
+  ctx.reenviarRDOPorEmail(HOJE);
+  const aviso = paraDono();
+  eq(aviso.length, 1, 'avisos ao dono');
+  verdade(aviso[0].body.indexOf(lista[2]) !== -1, 'não nomeou quem ficou sem: ' + aviso[0].body);
+  verdade(aviso[0].body.indexOf("reenviarRDOPorEmail('2026-08-24')") !== -1,
+          'não ensinou o reenvio');
+});
+t('o dia fica marcado com quem REALMENTE recebeu', () => {
+  depositar();
+  const lista = ctx.rdoEmailDestinatarios();
+  CORREIO.recusar[lista[1].toLowerCase()] = 'Invalid email';
+  ctx.reenviarRDOPorEmail(HOJE);
+  const log = JSON.parse(PROPS.getProperty('RDO_EMAIL_LOG'));
+  const reg = log['teotonio|' + HOJE];
+  verdade(!!reg, 'o dia não ficou registrado');
+  verdade(JSON.stringify(reg).indexOf(lista[1]) === -1,
+          'registrou como enviado para quem não recebeu: ' + JSON.stringify(reg));
+});
+t('ninguém recebeu é FALHA, e o dia não fica marcado como enviado', () => {
+  depositar();
+  ctx.rdoEmailDestinatarios().forEach(e => { CORREIO.recusar[e.toLowerCase()] = 'Serviço indisponível'; });
+  const r = ctx.reenviarRDOPorEmail(HOJE);
+  verdade(!r.ok, 'disse que enviou: ' + JSON.stringify(r));
+  eq(r.falharam.length, 4);
+  verdade(!ctx.rdoEmailJaEnviado_('teotonio', HOJE), 'marcou como enviado sem ter enviado');
+});
+t('e o gatilho da manhã segue a mesma regra', () => {
+  const ontem = new Date(Date.now() - 24 * 3600 * 1000);
+  const p2 = n => String(n).padStart(2, '0');
+  const iso = ontem.getFullYear() + '-' + p2(ontem.getMonth() + 1) + '-' + p2(ontem.getDate());
+  PLANILHA.RDO_Diario = [linhaDiario({ data: iso })];
+  depositar({ data: iso });
+  const lista = ctx.rdoEmailDestinatarios();
+  CORREIO.recusar[lista[1].toLowerCase()] = 'Invalid email';
+  const r = ctx.enviarRDODeOntemPorEmail();
+  verdade(r.ok, 'o gatilho parou no primeiro erro: ' + JSON.stringify(r));
+  eq(paraFiscalizacao().length, lista.length - 1);
+});
+
+console.log('\nA conferência do editor');
+t('diz de onde vem a lista de destinatários — Propriedade esquecida engana', () => {
+  eq(ctx.conferirEnvioRDOEmail().lista_vem_de, 'lista RDO_EMAIL_DESTINOS do Code.gs');
+  PROPS.setProperty('RDO_EMAILS', 'so-eu@x.com');
+  const d = ctx.conferirEnvioRDOEmail();
+  eq(d.lista_vem_de, 'Propriedade RDO_EMAILS');
+  eq(d.destinatarios.join(','), 'so-eu@x.com');
 });
 
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');
