@@ -52,6 +52,13 @@ outros junto — o escritório é o primeiro da lista, e o sintoma disso era
 "chegou para mim e para mais ninguém". Quem ficou de fora é nomeado no
 aviso ao dono do script e volta em `falharam` para a tela contar.
 
+"Para quem esse RDO foi, afinal?" se responde na própria tela do RDO, no
+botão **Conferir o envio** (`conferirEnvioRDO` → ação `rdoDiagEmail`): quem
+está na lista, se ela veio da Propriedade `RDO_EMAILS` ou do código, se o
+PDF daquele dia está guardado, para quem ele saiu e quando, e quantos
+e-mails a conta ainda pode mandar hoje. Só lê. O irmão de editor é
+`conferirEnvioRDOEmail()`.
+
 Mexeu no gerador do PDF, confira que o depósito continua saindo; mexeu no
 envio, lembre que o servidor só tem o que o app deixou lá. `tests/rdo-email.ui.test.js` (o depósito, no app de verdade) e
 `tests/rdo-email-servidor.test.js` (o envio, com Drive e Gmail falsos).

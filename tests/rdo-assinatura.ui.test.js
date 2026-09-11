@@ -457,6 +457,13 @@ async function comOAppDeVerdade() {
     if (params.action === 'rdoEnviarParaAssinatura') {
       corpo = { ok: true, data: params.data, para: ['a@x.com', 'b@y.com'] };
     }
+    if (params.action === 'rdoDiagEmail') {
+      corpo = { ok: true, data: params.data,
+                destinatarios: ['obra@x.com', 'eng@x.com', 'fis@y.com'],
+                listaVemDe: 'Propriedade RDO_EMAILS', cotaRestante: 87,
+                pdfDepositado: true, assinaturasNoDeposito: 1,
+                saiuEm: '2026-09-10 08:00', saiuPara: ['obra@x.com'], horaDoEnvio: 8 };
+    }
     if (params.action === 'rdoAssinaturasDoDia') {
       corpo = firmasLigadas
         ? { ok: true, assinaturas: FIRMAS, assinadas: 1, noDeposito: noDeposito }
@@ -551,6 +558,24 @@ async function comOAppDeVerdade() {
      iDep !== -1 && iDep < iEnv, 'depósito=' + iDep + ' envio=' + iEnv);
   ok('manda uma vez só: pedido demorado não pode virar dois e-mails para a fiscalização',
      envio.length === 1, envio.length + ' envios');
+
+  /* "PARA QUEM ESSE RDO FOI, AFINAL?" — a pergunta que aparece quando o RDO
+     chega a uns e não a outros. Até aqui só o editor do Apps Script
+     respondia, e ninguém abre o editor do celular no meio do dia. */
+  await s.p.locator('#rdoAssinaturasPainel button[onclick^="conferirEnvioRDO"]').click();
+  await s.p.waitForFunction(
+    () => { const e = document.getElementById('rdoEnvioDiag');
+            return e && e.textContent.indexOf('Conferindo') === -1 && e.textContent.trim() !== ''; },
+    null, { timeout: 20000 }).catch(() => {});
+  const diag = await s.p.textContent('#rdoEnvioDiag').catch(() => '');
+  ok('a conferência pede o dia que está na tela',
+     capturadas.some(c => c.action === 'rdoDiagEmail' && c.data === HOJE_ISO));
+  ok('e mostra para quem o RDO daquele dia REALMENTE saiu',
+     diag.includes('obra@x.com') && diag.includes('2026-09-10 08:00'), diag);
+  ok('com a lista de destinatários e de onde ela veio — Propriedade esquecida engana',
+     diag.includes('fis@y.com') && diag.includes('Propriedade RDO_EMAILS'), diag);
+  ok('e diz se o PDF do dia está guardado no servidor',
+     /guardado/.test(diag), diag);
 
   /* O DEPÓSITO QUE FALHA NÃO PODE TRANCAR O DIA QUE JÁ ESTÁ GUARDADO.
      Subir 300 KB do 4G do canteiro é o passo mais frágil do caminho; travar

@@ -460,7 +460,15 @@ table.t.nf-tbl tfoot tr:hover td{background:var(--surface-2)}
 .ass-quem strong{font-size:var(--fs-sm); font-weight:600}
 .ass-quem small{font-size:var(--fs-xs); color:var(--muted); overflow-wrap:anywhere}
 .ass-rodape{margin-top:var(--sp-4); font-size:var(--fs-xs); color:var(--muted)}
-.ass-enviar{margin-top:var(--sp-5)}
+.ass-acoes{display:flex; flex-wrap:wrap; gap:var(--sp-4); margin-top:var(--sp-5)}
+.ass-enviar{margin:0}
+.ass-conferir{margin:0}
+.ass-diag{margin-top:var(--sp-5); display:flex; flex-direction:column; gap:var(--sp-3);
+  font-size:var(--fs-xs); color:var(--muted)}
+.ass-diag > div{display:flex; flex-direction:column; gap:2px}
+.ass-diag strong{color:var(--text); font-weight:600}
+.ass-diag span{overflow-wrap:anywhere}
+.ass-diag small{color:var(--muted)}
 .ass-vazio{display:flex; align-items:center; gap:var(--sp-4); font-size:var(--fs-sm); color:var(--muted)}
 .dia-linha{
   display:flex; align-items:center; justify-content:space-between; gap:12px;
@@ -18538,12 +18546,60 @@ function painelAssinaturasHtml(lista, noDeposito, data) {
          >${ic('enviar', 14)} ${assinadas === lista.length ? 'Reenviar o RDO deste dia' : 'Enviar para assinatura agora'}</button>`
     : '';
 
+  /* CONFERIR O ENVIO. "Para quem esse RDO foi, afinal?" é a pergunta que
+     aparece justamente quando algo deu errado — e até aqui só o editor do
+     Apps Script respondia, que ninguém abre do celular no meio do dia. */
+  const conferir = (data && podeEnviarRDOParaAssinatura())
+    ? `<button type="button" class="btn btn-sm btn-outline ass-conferir"
+         onclick="conferirEnvioRDO('${data}')"
+         >${ic('lupa', 14)} Conferir o envio</button>`
+    : '';
+
   return `${linhas}
     <div class="ass-rodape">${assinadas} de ${lista.length} assinada(s).
       ${atrasado
         ? 'Repondo o PDF assinado no servidor…'
         : 'O link pessoal de cada um vai no e-mail diário das 8h.'}</div>
-    ${enviar}`;
+    <div class="ass-acoes">${enviar}${conferir}</div>
+    <div id="rdoEnvioDiag"></div>`;
+}
+
+/* O que o servidor sabe sobre o e-mail DAQUELE dia: quem está na lista, de
+   onde a lista veio, se o PDF está guardado e — o que ninguém mais responde
+   — para quem ele realmente saiu, e quando. Só lê. */
+async function conferirEnvioRDO(data) {
+  if (!data || !podeEnviarRDOParaAssinatura()) return;
+  const caixa = () => document.getElementById('rdoEnvioDiag');
+  const alvo = caixa();
+  if (alvo) alvo.innerHTML = `<div class="ass-vazio">${ic('ampulheta', 14, 'ic-gira')} Conferindo…</div>`;
+  try {
+    const r = await enviarAcao({ action: 'rdoDiagEmail', obra: OBRA.id, data, ...authParams() }, 0, 0);
+    const onde = caixa();
+    if (!onde) return;
+    if (!r || !r.ok) {
+      onde.innerHTML = `<div class="ass-vazio">${ic('alerta', 14)} ${escHtml(
+        erroLegivel((r && (r.mensagem || r.error)) || 'não consegui conferir'))}</div>`;
+      return;
+    }
+    const saiu = (r.saiuPara || []).length
+      ? `saiu ${escHtml(r.saiuEm || '')} para ${(r.saiuPara || []).map(escHtml).join(', ')}`
+      : 'ainda não saiu por e-mail';
+    const linhas = [
+      ['Para quem vai', `${(r.destinatarios || []).map(escHtml).join(', ') || '— ninguém —'}` +
+        `<small> (${escHtml(r.listaVemDe || '')})</small>`],
+      ['Este dia', saiu],
+      ['PDF no servidor', r.pdfDepositado
+        ? `guardado, com ${r.assinaturasNoDeposito} assinatura(s) desenhada(s)`
+        : 'NÃO está guardado — sem ele o e-mail sai sem anexo'],
+      ['Envio automático', `${r.horaDoEnvio}h, com o RDO do dia anterior`],
+      ['E-mails que a conta ainda pode mandar hoje', r.cotaRestante < 0 ? '—' : String(r.cotaRestante)],
+    ];
+    onde.innerHTML = `<div class="ass-diag">${linhas.map(([k, v]) =>
+      `<div><strong>${k}</strong><span>${v}</span></div>`).join('')}</div>`;
+  } catch (e) {
+    const onde = caixa();
+    if (onde) onde.innerHTML = `<div class="ass-vazio">${ic('alerta', 14)} Sem resposta do servidor.</div>`;
+  }
 }
 
 /* Manda o RDO daquele dia AGORA para a lista da obra — o mesmo e-mail do
@@ -18664,6 +18720,7 @@ function copiarLinkAssinatura(i) {
 
 window.copiarLinkAssinatura = copiarLinkAssinatura;
 window.enviarRDOParaAssinatura = enviarRDOParaAssinatura;
+window.conferirEnvioRDO = conferirEnvioRDO;
 window.carregarAssinaturasRDO = carregarAssinaturasRDO;
 window.assinaturasDoRDO = assinaturasDoRDO;
 window.pintarAssinaturasRDO = pintarAssinaturasRDO;
