@@ -100,7 +100,7 @@ function rotear(e) {
                       'addBatchRDO', 'addRDODiario', 'updateRDODiario', 'deleteRDODiario',
                       'usuariosListar', 'usuarioSalvar', 'usuarioExcluir',
                       'rdoFoto', 'obterFoto', 'rdoPdfDoDia', 'rdoAssinaturasDoDia',
-                      'rdoEnviarParaAssinatura',
+                      'rdoEnviarParaAssinatura', 'rdoDiagEmail',
                       'equipListar', 'equipCadastrar', 'equipDesativar', 'locadoraCadastrar',
                       'equipApontar', 'equipApagar', 'equipEditar', 'equipApontamentos', 'equipUltimos',
                       'nfListar', 'nfSalvar', 'nfExcluir', 'nfImagem', 'nfLerIA', 'nfDiag',
@@ -121,7 +121,7 @@ function rotear(e) {
     // essas duas são do bloco compartilhado com o app "Gestor", que precisa
     // continuar idêntico dos dois lados.
     var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar', 'bfSalvar', 'rdoPdfDoDia',
-                    'rdoAssinaturasDoDia', 'rdoEnviarParaAssinatura'];
+                    'rdoAssinaturasDoDia', 'rdoEnviarParaAssinatura', 'rdoDiagEmail'];
     if (POR_OBRA.indexOf(action) !== -1) {
       var sessObraR = sessaoDoToken(p.token);
       if (sessObraR && !sessaoPodeNaObra(sessObraR, p.obra)) {
@@ -221,6 +221,8 @@ function rotear(e) {
          como o dia que ficou para trás (domingo, feriado, turno que ninguém
          fechou) chega à fiscalização e ganha as firmas. */
       case 'rdoEnviarParaAssinatura': resp = rdoEnviarParaAssinatura(p); break;
+      /* A conferência do envio, pela tela do RDO. Só lê — não manda nada. */
+      case 'rdoDiagEmail':    resp = rdoDiagEmail(p); break;
       case 'obterFoto':       resp = obterFotoPrivada(p.fileId, p.mini); break;
       case 'usuariosListar':  resp = usuariosListar(p.token); break;
       case 'usuarioSalvar':   resp = usuarioSalvar(p); break;
@@ -2806,6 +2808,54 @@ function rdoEnviarParaAssinatura(p) {
                      obra, dataISO, '',
                      (r && r.ok) ? (r.para || []).join(', ') : ('não saiu: ' + (r && r.error)));
   return r;
+}
+
+/* A CONFERÊNCIA DO ENVIO, PELA TELA DO RDO.
+   ------------------------------------------------------------------
+   `conferirEnvioRDOEmail()` responde isso desde sempre — mas só no editor
+   do Apps Script, que ninguém abre do celular no meio do dia. E a pergunta
+   que ela responde é a que aparece justamente quando algo deu errado:
+   "para quem esse RDO foi, afinal?".
+   As duas explicações de um RDO que chega a uns e não a outros são
+   indistinguíveis olhando a caixa de entrada — um endereço que recusou, ou
+   uma lista que já saiu errada daqui (a Propriedade RDO_EMAILS manda na
+   lista do código, e uma Propriedade esquecida é invisível). Esta ação
+   mostra as duas de uma vez, com quem de fato recebeu naquele dia.
+   Só LÊ: não manda e-mail nem grava nada. Mesmo perfil do envio — a lista
+   de destinatários é dado de dentro de casa. */
+function rdoDiagEmail(p) {
+  var obra = normObra(p.obra) || OBRA_ID;
+  if (obra !== OBRA_ID) return { ok: false, error: 'O RDO por e-mail é só da Teotônio.' };
+
+  var barrado = exigirPodeEnviarRDO(p.token, 'rdoDiagEmail');
+  if (barrado) return barrado;
+
+  var dataISO = normData(p.data);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dataISO)) {
+    // Sem data, vale o dia que o gatilho da manhã leva: ONTEM.
+    dataISO = Utilities.formatDate(new Date(Date.now() - 24 * 3600 * 1000),
+                                   fusoDoScript(), 'yyyy-MM-dd');
+  }
+
+  var saiu = rdoEmailLogLer_()[obra + '|' + dataISO] || null;
+  var temPropriedade = !!PropertiesService.getScriptProperties().getProperty('RDO_EMAILS');
+  /* Cota é chamada de rede: se falhar, a conferência inteira não pode cair
+     junto — o resto das respostas continua valendo. */
+  var cota = -1;
+  try { cota = MailApp.getRemainingDailyQuota(); } catch (e) {}
+
+  return {
+    ok: true,
+    data: dataISO,
+    destinatarios: rdoEmailDestinatarios(),
+    listaVemDe: temPropriedade ? 'Propriedade RDO_EMAILS' : 'lista do Code.gs',
+    cotaRestante: cota,
+    pdfDepositado: !!rdoPdfArquivo_(obra, dataISO),
+    assinaturasNoDeposito: rdoPdfAssinaturasNoDeposito_(obra, dataISO),
+    saiuEm: saiu ? String(saiu.em || '') : '',
+    saiuPara: (saiu && saiu.para) ? saiu.para : [],
+    horaDoEnvio: rdoEmailHora()
+  };
 }
 
 /* Quem pode mandar o RDO para a fiscalização. Preencher e salvar o turno é
