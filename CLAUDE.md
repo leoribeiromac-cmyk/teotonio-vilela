@@ -82,6 +82,41 @@ branco, com a linha para a caneta. Daí "todas as assinaturas" querer dizer as
 ONLINE previstas, e não os quadros da folha: quem espera pela firma da caneta
 espera para sempre.
 
+### O engenheiro não assina um por um: a firma dele fica arquivada
+
+O engenheiro responsável assina TODO RDO — é o relatório da própria
+contratada, e a firma é a mesma todo dia. Então ela fica ARQUIVADA no
+servidor (Propriedade `RDO_FIRMA_ARQUIVADA`, imagem na mesma pasta privada
+das assinaturas) e o `rdoAssinaturasGarantir_` a aplica sozinho na linha do
+papel dele, no nascimento do convite e também no dia que ficou para trás.
+Quem arquiva é o escritório, pelo botão **Firma arquivada** da tela do RDO
+(`abrirFirmaArquivada` no index.html → `rdoFirmaArquivar` no `Code.gs`).
+
+Com isso a **fiscalização é a única que ainda assina por link** — que é o
+ponto. As travas que não podem cair:
+
+- `RDO_FIRMA_PAPEIS` só aceita `engenheiro`. A firma do fiscal é o aceite de
+  quem RECEBE a obra: arquivá-la seria a contratada assinando pelo cliente,
+  e o documento inteiro deixaria de valer.
+- A origem fica escrita: coluna `origem` na aba das assinaturas (`arquivada`,
+  `link` ou `manual`), a observação nomeia quem autorizou e quando, e a
+  Auditoria registra cada aplicação. Documento pré-assinado que se apresenta
+  como assinado no dia é o que ninguém defende depois.
+- `rdoAssinaturaCancelar` marca a linha como `manual`, e linha `manual` nunca
+  mais é pré-assinada sozinha — senão o cancelamento se desfazia na chamada
+  seguinte.
+- Tirar a firma vale para os PRÓXIMOS RDOs. Os que já saíram ficam como
+  estão: reescrever documento que já foi para a fiscalização é outra
+  decisão, e não se faz por um botão.
+
+A FOTO DA FIRMA É LIMPA NO APARELHO (`firmaLimparFoto`, no index.html): a
+firma chega como foto de papel, e solta no quadro do PDF isso é um retângulo
+cinzento por cima da linha. O branco é MEDIDO na própria foto — o mesmo papel
+fotografado na sombra do canteiro e no escritório tem dois brancos, e um
+limiar fixo apaga o traço num caso e deixa o fundo sujo no outro. E a imagem
+**não entra no repositório**: o site é público pelo GitHub Pages, e firma de
+engenheiro com CREA ali é a firma dele na mão de quem quiser.
+
 E vale a mesma regra do RDO inteiro: quem DESENHA é o navegador. O servidor
 guarda o traço, o nome e a hora; o app os põe dentro dos quadros ao gerar o PDF
 oficial e REDEPOSITA — e é o depósito com todas as firmas que dispara o e-mail
