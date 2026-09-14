@@ -3502,6 +3502,129 @@ function rdoFirmaAuditar_(obra, dataISO, linha) {
   } catch (e) {}
 }
 
+/* ------------------------------------------------------------
+   ARQUIVAR SEM FOTO NENHUMA
+   ------------------------------------------------------------
+   Fotografar a firma, mesmo uma vez só, é trabalho — e é justamente o
+   trabalho que o titular não quer ter. Só que o sistema quase sempre JÁ TEM
+   a firma dele: todo RDO que ele assinou pelo link deixou o traço guardado
+   na pasta privada. Então há duas portas sem câmera:
+
+   1. PEGAR UMA FIRMA QUE ELE JÁ DEU. Um toque, e o traço que já está no
+      Drive passa a valer para todos os RDOs. Não cria arquivo novo: aponta
+      para o mesmo, que é o que ele desenhou.
+   2. ARMAR PARA A PRÓXIMA. Obra em que ele nunca assinou online não tem o
+      que reaproveitar — mas ele vai assinar uma vez, um dia desses. Armado,
+      esse dia é o ÚLTIMO: o servidor guarda aquela firma na hora e nunca
+      mais pede.
+
+   A foto continua existindo, para quem prefere. Deixou de ser o caminho. */
+
+/* As firmas que aquele papel já deu, da mais nova para a mais velha. Varre
+   a aba uma vez: a tela pede isto só quando alguém abre o arquivamento. */
+function rdoFirmasJaDadas_(papel, limite) {
+  var pp = String(papel || '').trim().toLowerCase();
+  var out = linhasObj(ABA_RDO_ASSIN, '').filter(function (x) {
+    return String(x.papel || '').toLowerCase() === pp &&
+           String(x.status || '') === 'assinada' &&
+           String(x.assinatura || '').indexOf('drive_id:') === 0 &&
+           /* Firma arquivada não se reaproveita de si mesma: a lista é do
+              que a PESSOA desenhou, não do que o sistema já aplicou. */
+           String(x.origem || '') !== 'arquivada';
+  });
+  /* Da mais nova para a mais velha, pela hora da assinatura — e, quando
+     ela empata (duas firmas dadas no mesmo minuto, que é o dia em que ele
+     senta e assina a semana atrasada), pelo DIA do RDO. Sem o desempate a
+     ordem era a da planilha, que não quer dizer nada para quem escolhe. */
+  out.sort(function (a, b) {
+    var h = String(b.assinadoEm || '').localeCompare(String(a.assinadoEm || ''));
+    return h !== 0 ? h : String(normData(b.data)).localeCompare(String(normData(a.data)));
+  });
+  return out.slice(0, Math.max(1, limite || 6)).map(function (x) {
+    return { data: normData(x.data), obra: normObra(x.obra),
+             ponteiro: String(x.assinatura || ''),
+             nome: String(x.nomeAssinante || x.nome || ''),
+             documento: String(x.documento || ''),
+             assinadoEm: String(x.assinadoEm || '') };
+  });
+}
+
+/* O ponteiro pedido é mesmo de uma firma daquele papel? Sem esta conferência,
+   `dePonteiro` seria um jeito de mandar o RDO sair assinado com QUALQUER
+   arquivo do Drive do escritório — inclusive a firma do fiscal. */
+function rdoFirmaJaDadaPorPonteiro_(papel, ponteiro) {
+  var alvo = String(ponteiro || '');
+  var achadas = rdoFirmasJaDadas_(papel, 500).filter(function (x) { return x.ponteiro === alvo; });
+  return achadas.length ? achadas[0] : null;
+}
+
+// ------------------------------------------------------------
+// ARMAR PARA A PRÓXIMA ASSINATURA
+// ------------------------------------------------------------
+var RDO_FIRMA_ARMADA_PROP = 'RDO_FIRMA_ARMADA';
+
+function rdoFirmasArmadas_() {
+  try {
+    var j = JSON.parse(PropertiesService.getScriptProperties()
+                         .getProperty(RDO_FIRMA_ARMADA_PROP) || '{}');
+    return (j && typeof j === 'object') ? j : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function rdoFirmaArmadaGravar_(armadas) {
+  PropertiesService.getScriptProperties()
+    .setProperty(RDO_FIRMA_ARMADA_PROP, JSON.stringify(armadas || {}));
+}
+
+/* Acabou de chegar uma assinatura pelo link. Se o papel estava armado e não
+   há firma arquivada ainda, ESTA é a firma — e o titular não assina mais
+   nenhum RDO. Roda depois da gravação, nunca antes: firma que não chegou a
+   ser gravada não pode virar a firma de todos os dias.
+
+   Falhar aqui não derruba a assinatura: ela está gravada, o dia está
+   assinado, e o arquivamento se tenta de novo na próxima. */
+function rdoFirmaGuardarSeArmada_(alvo) {
+  try {
+    var l = alvo.obj;
+    var papel = String(l.papel || '').toLowerCase();
+    if (RDO_FIRMA_PAPEIS.indexOf(papel) === -1) return;
+    var armadas = rdoFirmasArmadas_();
+    var arma = armadas[papel];
+    if (!arma) return;
+    if (rdoFirmaArquivadaDe_(papel)) { delete armadas[papel]; rdoFirmaArmadaGravar_(armadas); return; }
+
+    var ponteiro = String(l.assinatura || '');
+    var nome = String(l.nomeAssinante || '').trim();
+    if (ponteiro.indexOf('drive_id:') !== 0 || nome.length < 3) return;
+
+    var guardadas = rdoFirmasArquivadas_();
+    guardadas[papel] = {
+      papel: papel, assinatura: ponteiro, nome: nome,
+      documento: String(l.documento || ''),
+      autorizadaPor: String(arma.autorizadaPor || ''),
+      autorizadaEm: String(arma.autorizadaEm || ''),
+      /* De onde saiu o traço. Um ano depois, "por que esta firma está em
+         todo RDO?" se responde aqui: foi a que ele mesmo deu no dia tal. */
+      veioDe: 'assinatura de ' + normData(l.data) + ' (' + String(l.assinadoEm || '').slice(0, 16) + ')'
+    };
+    PropertiesService.getScriptProperties()
+      .setProperty(RDO_FIRMA_PROP, JSON.stringify(guardadas));
+    delete armadas[papel];
+    rdoFirmaArmadaGravar_(armadas);
+
+    registrarAuditoria(String(arma.autorizadaPor || ''), 'escritório', 'rdoFirmaArquivadaDaAssinatura',
+                       normObra(l.obra), normData(l.data), papel, nome);
+    rdoEmailAvisarDono_('RDO — a firma de ' + nome + ' ficou arquivada',
+      nome + ' assinou o RDO de ' + rdoDataBR_(normData(l.data)) + ' pelo link, e essa firma ' +
+      'ficou ARQUIVADA: daqui para a frente ela entra sozinha em todo RDO, e ele não precisa ' +
+      'mais assinar.\n\nPara desfazer, use o botão "Firma arquivada" na tela do RDO.\n');
+  } catch (e) {
+    Logger.log('Não consegui arquivar a firma armada: ' + e);
+  }
+}
+
 // ------------------------------------------------------------
 // AÇÕES DO APP — arquivar, conferir e tirar a firma
 // ------------------------------------------------------------
@@ -3527,7 +3650,16 @@ function rdoFirmaArquivar(p) {
 
   if (String(p.remover) === '1') {
     var antiga = guardadas[papel];
-    if (!antiga) return { ok: false, error: 'Não há firma arquivada para tirar.' };
+    /* ARMADO SEM FIRMA AINDA também se desfaz por aqui — é o mesmo botão na
+       tela, e quem armou por engano não tem outro jeito de voltar atrás. */
+    if (!antiga) {
+      var soArmada = rdoFirmasArmadas_();
+      if (!soArmada[papel]) return { ok: false, error: 'Não há firma arquivada para tirar.' };
+      delete soArmada[papel];
+      rdoFirmaArmadaGravar_(soArmada);
+      registrarAuditoria(quem, perfilDoToken(p.token), 'rdoFirmaDesarmada', OBRA_ID, '', papel, agora);
+      return { ok: true, desarmada: true, papel: papel };
+    }
     /* O ARQUIVO DA FIRMA FICA NO DRIVE, de propósito. As linhas dos RDOs que
        já saíram pré-assinados apontam para ele; mandá-lo para a lixeira aqui
        faria o app redesenhar aqueles dias com o quadro vazio — apagando a
@@ -3539,17 +3671,60 @@ function rdoFirmaArquivar(p) {
     /* Os RDOs que JÁ saíram pré-assinados continuam como estão: tirar a
        firma daqui para a frente é uma decisão; reescrever documento que já
        foi para a fiscalização é outra, e não se faz por um botão. */
+    /* Tirar a firma desarma junto: quem acabou de dizer "não quero mais"
+       não quer que a próxima assinatura dele vire firma de todo dia. */
+    var armadasFora = rdoFirmasArmadas_();
+    if (armadasFora[papel]) { delete armadasFora[papel]; rdoFirmaArmadaGravar_(armadasFora); }
     return { ok: true, removida: true, papel: papel };
   }
 
   /* A AUTORIZAÇÃO DO TITULAR É OBRIGATÓRIA, e fica escrita. Quem arquivou
      e quando é o que responde, um ano depois, à única pergunta que importa
-     sobre uma firma aplicada por máquina: quem mandou. */
+     sobre uma firma aplicada por máquina: quem mandou. É um toque, e é o
+     único que nenhuma das portas dispensa. */
   if (String(p.autorizado) !== '1') {
     return { ok: false, error: 'Falta a confirmação de que o titular da firma autorizou o uso dela nos RDOs.' };
   }
 
+  /* PORTA 2 — ARMAR PARA A PRÓXIMA. Obra em que ele nunca assinou online
+     não tem firma para reaproveitar, e ninguém quer fotografar papel. Então
+     a PRÓXIMA assinatura que ele der pelo link fica guardada na hora: aquele
+     dia é o último em que ele assina. Nada a desfazer se ele não assinar. */
+  if (String(p.armar) === '1') {
+    var armadas = rdoFirmasArmadas_();
+    armadas[papel] = { autorizadaPor: quem, autorizadaEm: agora };
+    rdoFirmaArmadaGravar_(armadas);
+    registrarAuditoria(quem, perfilDoToken(p.token), 'rdoFirmaArmada', OBRA_ID, '', papel, agora);
+    return { ok: true, armada: true, papel: papel, autorizadaPor: quem, autorizadaEm: agora };
+  }
+
   var nome = String(p.nome || '').trim().slice(0, 120);
+
+  /* PORTA 1 — UMA FIRMA QUE ELE JÁ DEU. O traço já está na pasta privada,
+     desenhado por ele num RDO. Aponta para o MESMO arquivo: cópia nova seria
+     um segundo original do mesmo traço, e é o tipo de coisa que ninguém
+     consegue explicar depois. */
+  var dePonteiro = String(p.dePonteiro || '').trim();
+  if (dePonteiro) {
+    var jaDada = rdoFirmaJaDadaPorPonteiro_(papel, dePonteiro);
+    if (!jaDada) {
+      return { ok: false, error: 'Essa firma não é uma assinatura de ' + papel + ' guardada no sistema.' };
+    }
+    if (!nome) nome = String(jaDada.nome || '');
+    if (nome.length < 3) return { ok: false, error: 'Escreva o nome do titular da firma.' };
+    guardadas[papel] = {
+      papel: papel, assinatura: jaDada.ponteiro, nome: nome,
+      documento: String(p.documento || jaDada.documento || '').trim().slice(0, 60),
+      autorizadaPor: quem, autorizadaEm: agora,
+      veioDe: 'assinatura de ' + jaDada.data + ' (' + String(jaDada.assinadoEm || '').slice(0, 16) + ')'
+    };
+    PropertiesService.getScriptProperties().setProperty(RDO_FIRMA_PROP, JSON.stringify(guardadas));
+    registrarAuditoria(quem, perfilDoToken(p.token), 'rdoFirmaArquivada', OBRA_ID, '',
+                       papel, nome + ' · da assinatura de ' + jaDada.data);
+    return { ok: true, papel: papel, nome: nome, autorizadaPor: quem, autorizadaEm: agora,
+             veioDe: guardadas[papel].veioDe };
+  }
+
   if (nome.length < 3) return { ok: false, error: 'Escreva o nome do titular da firma.' };
 
   var img = String(p.assinatura || '');
@@ -3589,6 +3764,7 @@ function rdoFirmasArquivadasLer(p) {
   if (barrado) return barrado;
 
   var guardadas = rdoFirmasArquivadas_();
+  var armadas = rdoFirmasArmadas_();
   var assinantes = {};
   rdoAssinantes().forEach(function (a) { assinantes[a.papel] = a; });
   var comImagem = String(p.imagens) !== '0';
@@ -3604,8 +3780,33 @@ function rdoFirmasArquivadasLer(p) {
       nome: f ? String(f.nome || '') : '',
       documento: f ? String(f.documento || '') : '',
       autorizadaPor: f ? String(f.autorizadaPor || '') : '',
-      autorizadaEm: f ? String(f.autorizadaEm || '') : ''
+      autorizadaEm: f ? String(f.autorizadaEm || '') : '',
+      veioDe: f ? String(f.veioDe || '') : '',
+      /* Armado para a próxima: a tela tem de dizer que já está resolvido,
+         senão alguém arma duas vezes achando que não pegou. */
+      armada: !!armadas[papel],
+      armadaPor: armadas[papel] ? String(armadas[papel].autorizadaPor || '') : '',
+      /* AS FIRMAS QUE ELE JÁ DEU — a porta sem câmera. Vêm com a imagem
+         porque ninguém escolhe uma firma por data: escolhe olhando. */
+      anteriores: []
     };
+    if (!reg.arquivada) {
+      reg.anteriores = rdoFirmasJaDadas_(papel, 6).map(function (a) {
+        var item = { data: a.data, obra: a.obra, nome: a.nome,
+                     assinadoEm: a.assinadoEm, ponteiro: a.ponteiro };
+        if (comImagem) {
+          try {
+            var bb = DriveApp.getFileById(a.ponteiro.slice(9)).getBlob();
+            item.imagem = 'data:' + (bb.getContentType() || 'image/png') + ';base64,' +
+                          Utilities.base64Encode(bb.getBytes());
+          } catch (e) {
+            // arquivo sumido: some da lista, não vira opção que não funciona
+            item.sumida = true;
+          }
+        }
+        return item;
+      }).filter(function (a) { return !a.sumida; });
+    }
     if (reg.arquivada && comImagem) {
       try {
         var b = DriveApp.getFileById(String(f.assinatura).slice(9)).getBlob();
@@ -3929,6 +4130,11 @@ function rdoAssinaturaGravar(p) {
 
   registrarAuditoria(nome, 'assinante', 'rdoAssinar', obra, dataISO, l.papel,
                      rdoAssinCodigo_(l.token) + ' · ' + agora);
+
+  /* Armado? Então ESTA é a última vez que ele assina: a firma que acabou de
+     chegar fica arquivada e passa a entrar sozinha em todo RDO. Depois da
+     gravação, nunca antes. */
+  rdoFirmaGuardarSeArmada_(alvo);
 
   var doDia = rdoAssinLinhasDoDia_(obra, dataISO);
   var faltam = doDia.filter(function (x) { return String(x.status) !== 'assinada'; }).length;

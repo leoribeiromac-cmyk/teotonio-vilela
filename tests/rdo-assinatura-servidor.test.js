@@ -729,6 +729,10 @@ const arquivar = (extra) => ctx.rdoFirmaArquivar(Object.assign(
    nenhuma" justamente nos dias em que o app ainda não tocou naquele dia —
    que são os dias que este bloco existe para cobrir. */
 const linhaDe = (papel, data) => convites(data).filter(x => x.papel === papel)[0];
+const rdoFirmaGuardada = (papel) => {
+  try { return JSON.parse(PROPS.getProperty('RDO_FIRMA_ARQUIVADA') || '{}')[papel || 'engenheiro'] || null; }
+  catch (e) { return null; }
+};
 const sessao = (token, perfil) => PROPS.setProperty('SES_' + token,
   JSON.stringify({ u: 'Leonardo', p: perfil, o: '*', criadoEm: Date.now(), usoEm: Date.now() }));
 
@@ -962,6 +966,174 @@ t('e quem arquivou fica escrito na firma, não some', () => {
   sessao('tk-eng', 'engenharia');
   arquivar({ token: 'tk-eng' });
   eq(JSON.parse(PROPS.getProperty('RDO_FIRMA_ARQUIVADA')).engenheiro.autorizadaPor, 'Leonardo');
+});
+
+/* --------------------------------------------------------------------
+   AS DUAS PORTAS SEM CÂMERA
+   --------------------------------------------------------------------
+   Fotografar a firma, mesmo uma vez, é o trabalho que o titular não quer
+   ter. E quase sempre não é preciso: o traço dele já está guardado, ou vai
+   estar na próxima vez que ele assinar. Estas são as duas portas — e as
+   travas delas, que são o mesmo perigo de antes por outro caminho: um
+   ponteiro solto vira "o RDO sai assinado com qualquer arquivo do Drive".
+   -------------------------------------------------------------------- */
+console.log('\nArquivar sem foto nenhuma');
+
+t('as firmas que ele já deu ficam à mão, da mais nova para a mais velha', () => {
+  ctx.rdoAssinaturaGravar({ t: tokenDe('engenheiro', '2026-08-21'), assinatura: uriPng(),
+                            nome: 'Marcio Santana dos Santos' });
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });   // HOJE, 24/08
+  const l = ctx.rdoFirmasJaDadas_('engenheiro', 6);
+  eq(l.length, 2, JSON.stringify(l.map(x => x.data)));
+  eq(l[0].data, HOJE, 'a mais nova não veio primeiro');
+  eq(l[1].data, '2026-08-21');
+});
+t('e são só as DELE — a firma do fiscal não entra na lista', () => {
+  assinar('fiscalizacao', { nome: 'Willian Botelho' });
+  eq(ctx.rdoFirmasJaDadas_('engenheiro', 6).length, 0, 'a firma do fiscal virou opção do engenheiro');
+});
+/* Uma firma arquivada aplicada a um dia não pode reaparecer como "firma que
+   ele deu": seria o sistema oferecendo de volta o que ele mesmo aplicou. */
+t('firma aplicada pelo sistema não vira opção para arquivar de novo', () => {
+  arquivar();
+  convites();
+  eq(linhaDe('engenheiro').origem, 'arquivada');
+  eq(ctx.rdoFirmasJaDadas_('engenheiro', 6).length, 0, JSON.stringify(ctx.rdoFirmasJaDadas_('engenheiro', 6)));
+});
+
+t('arquivar a partir de uma firma já dada aponta para o MESMO arquivo', () => {
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  const dada = ctx.rdoFirmasJaDadas_('engenheiro', 6)[0];
+  const antes = Object.keys(DRIVE.arquivosPorId).length;
+  const r = ctx.rdoFirmaArquivar({ papel: 'engenheiro', autorizado: '1', dePonteiro: dada.ponteiro });
+  verdade(r.ok, JSON.stringify(r));
+  eq(Object.keys(DRIVE.arquivosPorId).length, antes, 'criou um segundo original do mesmo traço');
+  eq(JSON.parse(PROPS.getProperty('RDO_FIRMA_ARQUIVADA')).engenheiro.assinatura, dada.ponteiro);
+});
+t('e o nome vem da própria assinatura quando não é digitado', () => {
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  const dada = ctx.rdoFirmasJaDadas_('engenheiro', 6)[0];
+  ctx.rdoFirmaArquivar({ papel: 'engenheiro', autorizado: '1', dePonteiro: dada.ponteiro });
+  eq(JSON.parse(PROPS.getProperty('RDO_FIRMA_ARQUIVADA')).engenheiro.nome, 'Marcio Santana dos Santos');
+});
+t('e fica escrito de qual assinatura ela saiu', () => {
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  const dada = ctx.rdoFirmasJaDadas_('engenheiro', 6)[0];
+  ctx.rdoFirmaArquivar({ papel: 'engenheiro', autorizado: '1', dePonteiro: dada.ponteiro });
+  const veio = JSON.parse(PROPS.getProperty('RDO_FIRMA_ARQUIVADA')).engenheiro.veioDe;
+  verdade(String(veio).indexOf(HOJE) !== -1, veio);
+});
+
+/* A TRAVA DESTA PORTA. Sem ela, `dePonteiro` seria um jeito de fazer o RDO
+   sair assinado com QUALQUER arquivo do Drive do escritório — a começar
+   pela firma do fiscal, que é exatamente o que não pode acontecer. */
+t('ponteiro que não é assinatura daquele papel é recusado', () => {
+  assinar('fiscalizacao', { nome: 'Willian Botelho' });
+  const doFiscal = ctx.rdoAssinLinhasDoDia_('teotonio', HOJE)
+    .filter(x => x.papel === 'fiscalizacao')[0].assinatura;
+  const r = ctx.rdoFirmaArquivar({ papel: 'engenheiro', autorizado: '1', dePonteiro: doFiscal });
+  verdade(!r.ok, 'arquivou a firma do FISCAL no lugar da do engenheiro');
+  eq(PROPS.getProperty('RDO_FIRMA_ARQUIVADA'), null);
+});
+t('e um arquivo qualquer do Drive também', () => {
+  const r = ctx.rdoFirmaArquivar({ papel: 'engenheiro', autorizado: '1',
+                                   nome: 'Marcio Santana dos Santos',
+                                   dePonteiro: 'drive_id:file999' });
+  verdade(!r.ok, 'aceitou um arquivo solto do Drive como firma');
+});
+t('sem a autorização do titular não arquiva nem pela firma já dada', () => {
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  const dada = ctx.rdoFirmasJaDadas_('engenheiro', 6)[0];
+  verdade(!ctx.rdoFirmaArquivar({ papel: 'engenheiro', dePonteiro: dada.ponteiro }).ok);
+});
+
+console.log('Armar para a próxima assinatura');
+const armar = (extra) => ctx.rdoFirmaArquivar(Object.assign(
+  { papel: 'engenheiro', autorizado: '1', armar: '1' }, extra || {}));
+
+t('armado, a PRÓXIMA firma que ele der pelo link fica guardada', () => {
+  verdade(armar().ok, 'não armou');
+  verdade(!rdoFirmaGuardada(), 'guardou sem ele ter assinado nada');
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  const g = rdoFirmaGuardada();
+  verdade(!!g, 'a assinatura dele não virou firma arquivada');
+  eq(g.nome, 'Marcio Santana dos Santos');
+  verdade(String(g.veioDe).indexOf(HOJE) !== -1, g.veioDe);
+});
+t('e o dia em que ele assinou continua sendo assinatura DELE, não firma aplicada', () => {
+  armar();
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  eq(linhaDe('engenheiro').origem, 'link', 'reescreveu a origem do dia que ele assinou');
+});
+t('e o dia seguinte já sai pré-assinado — esse foi o último que ele assinou', () => {
+  armar();
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  eq(linhaDe('engenheiro', '2026-08-25').status, 'assinada');
+  eq(linhaDe('engenheiro', '2026-08-25').origem, 'arquivada');
+});
+t('o armado se desfaz sozinho depois de pegar — não fica rearmando', () => {
+  armar();
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  eq(JSON.stringify(JSON.parse(PROPS.getProperty('RDO_FIRMA_ARMADA') || '{}')), '{}');
+});
+t('armar e ele não assinar não muda nada', () => {
+  armar();
+  convites();
+  eq(linhaDe('engenheiro').status, 'pendente');
+  verdade(!rdoFirmaGuardada());
+});
+/* Armar a firma do fiscal seria a mesma coisa de arquivá-la, por outro
+   caminho — e por isso passa pela MESMA porta. */
+t('não se arma a firma da fiscalização', () => {
+  verdade(!armar({ papel: 'fiscalizacao' }).ok);
+  assinar('fiscalizacao', { nome: 'Willian Botelho' });
+  verdade(!rdoFirmaGuardada('fiscalizacao'));
+});
+t('nem sem a autorização do titular', () => {
+  verdade(!ctx.rdoFirmaArquivar({ papel: 'engenheiro', armar: '1' }).ok);
+});
+t('nem quem só preenche o dia', () => {
+  PROPS.setProperty('EXIGIR_TOKEN', 'true');
+  sessao('tk-campo', 'campo');
+  eq(armar({ token: 'tk-campo' }).error, 'SEM_PERMISSAO');
+});
+t('quem já tem firma arquivada não é rearmado por uma assinatura antiga', () => {
+  arquivar();
+  armar();
+  ctx.rdoAssinaturaCancelar(HOJE, 'engenheiro', 'para assinar à mão');
+  assinar('engenheiro', { nome: 'Outro Engenheiro Substituto' });
+  eq(rdoFirmaGuardada().nome, 'Marcio Santana dos Santos',
+     'a firma do substituto tomou o lugar da que estava arquivada');
+});
+t('tirar a firma desarma junto', () => {
+  armar();
+  verdade(ctx.rdoFirmaArquivar({ papel: 'engenheiro', remover: '1' }).ok);
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  verdade(!rdoFirmaGuardada(), 'guardou depois de ter sido desarmado');
+});
+t('e o escritório é avisado de que a firma ficou arquivada', () => {
+  armar();
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  verdade(paraDono().some(e => String(e.subject || '').indexOf('ficou arquivada') !== -1),
+          JSON.stringify(paraDono().map(e => e.subject)));
+});
+
+t('a tela recebe as firmas já dadas, com a imagem para escolher olhando', () => {
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });
+  const f = ctx.rdoFirmasArquivadasLer({}).firmas[0];
+  eq(f.anteriores.length, 1);
+  verdade(String(f.anteriores[0].imagem || '').indexOf('data:image/png') === 0, 'sem imagem');
+  verdade(!f.armada);
+});
+t('e não oferece nada para escolher quando já está arquivada', () => {
+  arquivar();
+  const f = ctx.rdoFirmasArquivadasLer({}).firmas[0];
+  verdade(f.arquivada);
+  eq(f.anteriores.length, 0);
+});
+t('e diz quando está armado', () => {
+  armar();
+  verdade(ctx.rdoFirmasArquivadasLer({}).firmas[0].armada);
 });
 
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');
