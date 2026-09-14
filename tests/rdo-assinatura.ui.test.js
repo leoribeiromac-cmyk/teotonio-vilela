@@ -97,24 +97,64 @@ async function abrirPagina(navegador, guiao, query) {
 async function rabiscar(p) {
   /* Rolar até o quadro antes de mexer o mouse não é firula: as coordenadas
      do Playwright são da JANELA, e com o PDF na tela o quadro de assinar
-     nasce abaixo da dobra — o traço iria parar em cima de outra coisa. */
+     nasce abaixo da dobra — o traço iria parar em cima de outra coisa.
+
+     E ESPERAR A FOLHA DESENHAR ANTES DE COMEÇAR. O PDF.js desenha a folha
+     em segundo plano; quando ela entra, tudo o que está abaixo DESCE. Numa
+     máquina disputada isso acontecia no meio do rabisco: as coordenadas
+     lidas no começo já não eram as do quadro, o mouse passava a arrastar
+     fora dele, e o traço ficava pela metade — a largura saía sempre no
+     mesmo 0,615, e às vezes não havia traço nenhum e o botão não acendia.
+     Por isso a caixa é RELIDA a cada ponto: o que não pode é medir um
+     traço que a página moveu embaixo do mouse. */
+  await p.waitForFunction(() => document.querySelectorAll('#folhas canvas').length > 0,
+                          null, { timeout: 15000 }).catch(() => {});
   await p.locator('#tela').scrollIntoViewIfNeeded();
-  const c = await p.locator('#tela').boundingBox();
+  const caixa = () => p.locator('#tela').boundingBox();
+  let c = await caixa();
   await p.mouse.move(c.x + 20, c.y + c.height * 0.7);
   await p.mouse.down();
   for (let i = 1; i <= 12; i++) {
+    c = await caixa();
     await p.mouse.move(c.x + 20 + i * (c.width - 50) / 12,
                        c.y + c.height * (0.7 - 0.25 * Math.sin(i)));
     await p.waitForTimeout(10);
   }
-  /* O ÚLTIMO PONTO, DE NOVO E EXPLÍCITO. Sob carga (a máquina da CI roda os
+  /* O ÚLTIMO PONTO, ATÉ A TINTA APARECER. Sob carga (a máquina da CI roda os
      testes em série, com o Chromium disputando CPU) o navegador junta os
      pointermove e a ponta direita do traço se perde: o rabisco sai estreito
      e alto, e a conferência de recorte mede outra coisa — foi assim que este
-     teste ficou vermelho num PR que só mexia no fluxo de implantação. Aqui
-     não se afrouxa a medida: garante-se o traço que ela mede. */
-  await p.mouse.move(c.x + c.width - 25, c.y + c.height * 0.7);
-  await p.waitForTimeout(30);
+     teste ficou vermelho num PR que só mexia no fluxo de implantação, e de
+     novo num que só mexia na firma arquivada. Aqui não se afrouxa a medida:
+     garante-se o traço que ela mede.
+
+     Esperar um punhado de milissegundos era apostar que os eventos chegaram.
+     Agora se OLHA O CANVAS e se mede A MESMA COISA que a conferência mede:
+     a largura do traço. Enquanto ela não encher o quadro, o laço vai e volta
+     entre as duas pontas com o botão apertado. Máquina lenta leva mais
+     voltas; nenhuma leva o teste a medir um traço que não foi desenhado.
+
+     Conferir só a ponta direita não bastava: o navegador engolia os pontos
+     do COMEÇO, o traço nascia no meio do quadro e a largura saía em 0,6. */
+  const larguraDoTraco = () => p.evaluate(() => {
+    const t = document.getElementById('tela');
+    const d = t.getContext('2d').getImageData(0, 0, t.width, t.height).data;
+    let x1 = t.width, x2 = -1;
+    for (let y = 0; y < t.height; y++) {
+      for (let x = 0; x < t.width; x++) {
+        if (d[(y * t.width + x) * 4] < 200) { if (x < x1) x1 = x; if (x > x2) x2 = x; }
+      }
+    }
+    return x2 < 0 ? 0 : (x2 - x1) / t.width;
+  });
+  for (let volta = 0; volta < 30; volta++) {
+    if (await larguraDoTraco() > 0.85) break;
+    c = await caixa();
+    // alterna as pontas: o que falta tanto pode ser o começo quanto o fim
+    const alvoX = (volta % 2) ? c.x + 12 : c.x + c.width - 12;
+    await p.mouse.move(alvoX, c.y + c.height * (0.7 - (volta % 3) * 0.06));
+    await p.waitForTimeout(60);
+  }
   await p.mouse.up();
 }
 
@@ -166,6 +206,14 @@ async function rabiscar(p) {
        await p.isDisabled('#btAssinar'));
 
     await p.check('#concordo');
+    /* Esperar o botão ACENDER, em vez de perguntar no instante seguinte ao
+       clique: quem liga o botão é o `change` do checkbox, e numa máquina
+       disputada ele ainda não rodou quando a pergunta chega. A trava
+       continua de pé — se o botão nunca acender, o teste falha igual. */
+    await p.waitForFunction(() => {
+      const b = document.getElementById('btAssinar');
+      return b && !b.disabled;
+    }, null, { timeout: 10000 }).catch(() => {});
     ok('com os três, libera', await p.isEnabled('#btAssinar'));
 
     await p.click('#btLimpar');
