@@ -438,6 +438,10 @@ async function comOAppDeVerdade() {
   let firmasLigadas = false;
   let depositoFalha = false;      // o servidor recusando o depósito do PDF
   let noDeposito = 0;             // -1 = o servidor não tem RDO nenhum daquele dia
+  /* De onde veio a firma do engenheiro: 'link' (ele abriu e assinou) ou
+     'arquivada' (o servidor aplicou a firma guardada). É o que o painel
+     tem de distinguir na tela. */
+  let origemEngenheiro = 'link';
 
   await s.p.route('**://script.google.com/**', async rota => {
     const req = rota.request();
@@ -464,9 +468,16 @@ async function comOAppDeVerdade() {
                 pdfDepositado: true, assinaturasNoDeposito: 1,
                 saiuEm: '2026-09-10 08:00', saiuPara: ['obra@x.com'], horaDoEnvio: 8 };
     }
+    if (params.action === 'rdoFirmasArquivadas') {
+      corpo = { ok: true, firmas: [{ papel: 'engenheiro',
+        rotulo: 'Engenheiro — Gestor Engenharia', nomeCadastro: 'Marcio Santana dos Santos',
+        arquivada: false, nome: '', autorizadaPor: '', autorizadaEm: '' }] };
+    }
     if (params.action === 'rdoAssinaturasDoDia') {
+      const comOrigem = FIRMAS.map(f => Object.assign({}, f,
+        f.papel === 'engenheiro' ? { origem: origemEngenheiro } : { origem: '' }));
       corpo = firmasLigadas
-        ? { ok: true, assinaturas: FIRMAS, assinadas: 1, noDeposito: noDeposito }
+        ? { ok: true, assinaturas: comOrigem, assinadas: 1, noDeposito: noDeposito }
         : { ok: true, assinaturas: FIRMAS.map(f => Object.assign({}, f,
               { status: 'pendente', assinadoEm: '', nomeAssinante: '', imagem: undefined })),
             assinadas: 0, noDeposito: noDeposito };
@@ -625,6 +636,141 @@ async function comOAppDeVerdade() {
     null, { timeout: 20000 }).catch(() => {});
   ok('o apontador não vê o botão de mandar — ele preenche o dia, não o envia',
      (await s.p.locator('#btnEnviarAssinatura').count()) === 0);
+
+  /* ================================================================
+     A FIRMA ARQUIVADA DO ENGENHEIRO
+     ----------------------------------------------------------------
+     O engenheiro responsável assina TODO RDO. A firma dele fica guardada
+     no servidor, com a autorização do titular registrada, e é aplicada
+     sozinha — para a FISCALIZAÇÃO ser a única que ainda assina por link.
+
+     Do lado do app, duas coisas têm de valer:
+
+     1. A FOTO DA FIRMA É LIMPA AQUI, no aparelho. Ela chega como foto de
+        papel — fundo de papel, sombra da mão, tinta azul. Solta dentro do
+        quadro do PDF isso vira um retângulo cinzento por cima da linha da
+        assinatura. Então o papel vira branco, a tinta fica, e o recorte é
+        do traço. É código de pixel: só prova no navegador de verdade.
+     2. QUEM OLHA O PAINEL TEM DE VER A ORIGEM. Um traço aplicado por
+        autorização não pode se apresentar como o traço que a pessoa deu
+        naquele dia.
+     ================================================================ */
+  console.log('\nA firma arquivada do engenheiro');
+
+  /* A "foto" da firma: papel acinzentado com sombra de um lado (o celular
+     no canteiro nunca fotografa iluminado por igual) e o traço escuro num
+     canto — nunca no meio, nunca ocupando a folha, que é o caso real. */
+  const limpar = (desenho) => s.p.evaluate(async (d) => {
+    const cv = document.createElement('canvas');
+    cv.width = 1000; cv.height = 1400;
+    const c = cv.getContext('2d');
+    const g = c.createLinearGradient(0, 0, 1000, 1400);
+    g.addColorStop(0, '#efece4'); g.addColorStop(1, '#cfccc4');   // papel com sombra
+    c.fillStyle = g; c.fillRect(0, 0, 1000, 1400);
+    if (d === 'traco') {
+      c.strokeStyle = '#1f2a6b'; c.lineWidth = 9; c.lineCap = 'round';
+      c.beginPath();
+      c.moveTo(220, 620);
+      for (let i = 1; i <= 24; i++) {
+        c.lineTo(220 + i * 14, 620 + 70 * Math.sin(i / 1.7));
+      }
+      c.stroke();
+    }
+    const img = new Image();
+    await new Promise(r => { img.onload = r; img.src = cv.toDataURL('image/png'); });
+    const png = firmaLimparFoto(img);
+    if (!png) return null;
+
+    // Lê o resultado de volta: é o PNG que vai subir e sair no PDF.
+    const saida = new Image();
+    await new Promise(r => { saida.onload = r; saida.src = png; });
+    const cv2 = document.createElement('canvas');
+    cv2.width = saida.width; cv2.height = saida.height;
+    const c2 = cv2.getContext('2d', { willReadFrequently: true });
+    c2.drawImage(saida, 0, 0);
+    const px = c2.getImageData(0, 0, cv2.width, cv2.height).data;
+    let escuros = 0, x1 = cv2.width, x2 = -1, y1 = cv2.height, y2 = -1;
+    for (let y = 0; y < cv2.height; y++) {
+      for (let x = 0; x < cv2.width; x++) {
+        const i = (y * cv2.width + x) * 4;
+        if (px[i] < 120) {
+          escuros++;
+          if (x < x1) x1 = x; if (x > x2) x2 = x;
+          if (y < y1) y1 = y; if (y > y2) y2 = y;
+        }
+      }
+    }
+    const canto = (x, y) => { const i = (y * cv2.width + x) * 4; return [px[i], px[i + 1], px[i + 2]]; };
+    return { largura: cv2.width, altura: cv2.height, escuros,
+             cantoSE: canto(cv2.width - 2, cv2.height - 2), cantoNO: canto(1, 1),
+             largTraco: x2 - x1, altTraco: y2 - y1, prefixo: png.slice(0, 22) };
+  }, desenho);
+
+  const limpa = await limpar('traco');
+  ok('a foto da firma vira o PNG 600×200 do quadro do PDF',
+     !!limpa && limpa.largura === 600 && limpa.altura === 200 &&
+     limpa.prefixo === 'data:image/png;base64,', JSON.stringify(limpa && limpa.prefixo));
+  /* O papel tem de sair BRANCO PURO. Um cinza de 240 é invisível na tela e
+     um retângulo evidente dentro do quadro branco do PDF — foi por isso que
+     a limpeza mede o branco na própria foto em vez de usar um limiar fixo. */
+  ok('o papel some: o fundo sai branco puro, inclusive na parte sombreada',
+     !!limpa && limpa.cantoNO.every(v => v === 255) && limpa.cantoSE.every(v => v === 255),
+     JSON.stringify(limpa && [limpa.cantoNO, limpa.cantoSE]));
+  ok('e a tinta fica', !!limpa && limpa.escuros > 300, limpa && limpa.escuros);
+  /* Sem recorte, o traço chega ao PDF do tamanho de uma linha de texto: a
+     firma ocupa um canto da folha fotografada, não a folha. */
+  ok('o traço é recortado e ampliado até encher o quadro',
+     !!limpa && limpa.altTraco > 170 && limpa.largTraco > 400,
+     limpa && limpa.largTraco + '×' + limpa.altTraco);
+
+  ok('folha em branco não vira firma — nunca sobe um quadro vazio',
+     (await limpar('nada')) === null);
+
+  /* O painel: a origem da firma fica na tela. */
+  origemEngenheiro = 'arquivada';
+  noDeposito = 1;                   // o PDF guardado já traz a firma desenhada
+  await s.p.evaluate(() => {
+    STATE.perfilLogado = 'admin';
+    _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
+  });
+  await s.p.evaluate(d => pintarAssinaturasRDO(d), HOJE_ISO);
+  await s.p.waitForFunction(
+    () => { const e = document.getElementById('rdoAssinaturasPainel');
+            return e && e.textContent.indexOf('firma arquivada') !== -1; },
+    null, { timeout: 20000 }).catch(() => {});
+  const painelFirma = await s.p.textContent('#rdoAssinaturasPainel').catch(() => '');
+  ok('o painel marca quem está pré-assinado, em vez de deixar passar por firma do dia',
+     painelFirma.includes('firma arquivada'), painelFirma);
+  ok('e o rodapé diz que o link das 8h vai só para a fiscalização',
+     /link das 8h vai para Cliente \/ Fiscalização/.test(painelFirma), painelFirma);
+  ok('o escritório tem o botão de arquivar a firma',
+     (await s.p.locator('#rdoAssinaturasPainel button[onclick^="abrirFirmaArquivada"]').count()) === 1);
+
+  /* A trava que o servidor guarda, repetida na tela: a fiscalização não
+     aparece como opção de firma arquivada. Ela é o aceite de quem recebe a
+     obra — a contratada não assina por ela. */
+  await s.p.locator('#rdoAssinaturasPainel button[onclick^="abrirFirmaArquivada"]').click();
+  await s.p.waitForSelector('#firmaCorpo input#firmaNome', { timeout: 20000 }).catch(() => {});
+  const modal = await s.p.textContent('#firmaCorpo').catch(() => '');
+  ok('a tela de arquivar só oferece o engenheiro',
+     modal.includes('Engenheiro') && !modal.includes('SP OBRAS'), modal);
+  ok('e diz, na cara, que a fiscalização continua assinando pelo link',
+     /fiscaliza..o continua assinando pelo link/i.test(modal), modal);
+  ok('exige a autorização do titular antes de qualquer coisa',
+     (await s.p.locator('#firmaAutorizado').count()) === 1);
+  await s.p.evaluate(() => fecharModalRDO());
+  origemEngenheiro = 'link';
+
+  // Quem preenche o dia no canteiro não arquiva firma de engenheiro.
+  await s.p.evaluate(() => {
+    STATE.perfilLogado = 'campo';
+    _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
+  });
+  await s.p.evaluate(d => pintarAssinaturasRDO(d), HOJE_ISO);
+  await s.p.waitForTimeout(1500);
+  ok('o apontador não vê o botão da firma arquivada',
+     (await s.p.locator('#rdoAssinaturasPainel button[onclick^="abrirFirmaArquivada"]').count()) === 0);
+  await s.p.evaluate(() => { STATE.perfilLogado = 'admin'; });
 
   ok('nenhum erro de página durante o teste', s.erros.length === 0, s.erros.join(' | '));
   await s.fechar();

@@ -217,6 +217,12 @@ function rotear(e) {
       case 'rdoAssinaturaAbrir':  resp = rdoAssinaturaAbrir(p); break;
       case 'rdoAssinaturaGravar': resp = rdoAssinaturaGravar(p); break;
       case 'rdoAssinaturasDoDia': resp = rdoAssinaturasDoDia(p); break;
+      /* A FIRMA ARQUIVADA do engenheiro — a que o servidor aplica sozinho
+         em todo RDO, para a fiscalização ser a única a assinar por link.
+         Exige sessão do escritório: arquivar uma firma é decidir que aquele
+         traço vai sair em todo documento daqui para a frente. */
+      case 'rdoFirmaArquivar':   resp = rdoFirmaArquivar(p); break;
+      case 'rdoFirmasArquivadas': resp = rdoFirmasArquivadasLer(p); break;
       /* Mandar o RDO de um dia AGORA, sem esperar o gatilho da manhã — é
          como o dia que ficou para trás (domingo, feriado, turno que ninguém
          fechou) chega à fiscalização e ganha as firmas. */
@@ -2854,7 +2860,18 @@ function rdoDiagEmail(p) {
     assinaturasNoDeposito: rdoPdfAssinaturasNoDeposito_(obra, dataISO),
     saiuEm: saiu ? String(saiu.em || '') : '',
     saiuPara: (saiu && saiu.para) ? saiu.para : [],
-    horaDoEnvio: rdoEmailHora()
+    horaDoEnvio: rdoEmailHora(),
+    /* Quem está pré-assinado. Fica aqui porque "por que o engenheiro não
+       recebeu link?" é a mesma pergunta que esta tela já responde — e a
+       resposta é que ele não precisa de um. */
+    firmasArquivadas: RDO_FIRMA_PAPEIS.filter(function (papel) {
+      return !!rdoFirmaArquivadaDe_(papel);
+    }).map(function (papel) {
+      var f = rdoFirmasArquivadas_()[papel] || {};
+      return { papel: papel, nome: String(f.nome || ''),
+               autorizadaPor: String(f.autorizadaPor || ''),
+               autorizadaEm: String(f.autorizadaEm || '') };
+    })
   };
 }
 
@@ -3143,6 +3160,11 @@ function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha) {
   });
   var linkMeu = minha && String(minha.status) !== 'assinada' ? rdoAssinaturaLink_(minha.token) : '';
   var jaAssinei = !!(minha && String(minha.status) === 'assinada');
+  /* Quem tem firma arquivada não recebe "você já assinou": ele não assinou
+     nada hoje, o sistema aplicou a firma que ele deixou guardada. O e-mail
+     é o único lugar onde o titular vê isso acontecendo todo dia — se ele
+     mudar de ideia, é por aqui que vai saber que precisa avisar. */
+  var minhaArquivada = !!(minha && String(minha.origem || '') === 'arquivada');
 
   var textoAss = '';
   if (listaAss.length) {
@@ -3155,7 +3177,10 @@ function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha) {
     textoAss += '\nVocê assina este RDO. Abra o seu link pessoal (não repasse — ele ' +
                 'assina no seu nome):\n' + linkMeu + '\n';
   } else if (jaAssinei) {
-    textoAss += '\nVocê já assinou este RDO. Obrigado.\n';
+    textoAss += minhaArquivada
+      ? '\nSua firma arquivada foi aplicada a este RDO — você não precisa assinar.\n' +
+        'Para deixar de pré-assinar os RDOs, avise o escritório.\n'
+      : '\nVocê já assinou este RDO. Obrigado.\n';
   }
 
   var texto = titulo + '\n\n' +
@@ -3211,8 +3236,12 @@ function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha) {
         'O link é pessoal e assina no seu nome — não repasse. ' +
         'Abre no celular: dá para assinar com o dedo.</div></div>'
       : (jaAssinei
-          ? '<p style="font-size:13px;color:#1a7f45;margin:14px 0 4px">' +
-            '&#10003; Você já assinou este RDO. Obrigado.</p>'
+          ? (minhaArquivada
+              ? '<p style="font-size:13px;color:#1a7f45;margin:14px 0 4px">' +
+                '&#10003; <strong>Sua firma arquivada foi aplicada a este RDO</strong> — ' +
+                'você não precisa assinar. Para deixar de pré-assinar os RDOs, avise o escritório.</p>'
+              : '<p style="font-size:13px;color:#1a7f45;margin:14px 0 4px">' +
+                '&#10003; Você já assinou este RDO. Obrigado.</p>')
           : '')) +
     '<p style="font-size:13px;color:#333;margin:14px 0 4px">' +
     'O relatório completo vai <strong>em anexo</strong> neste e-mail (PDF).</p>' +
@@ -3385,6 +3414,216 @@ function rdoAssinantes() {
   return out;
 }
 
+/* ------------------------------------------------------------
+   A FIRMA ARQUIVADA — a pré-assinatura do responsável técnico
+   ------------------------------------------------------------
+   O engenheiro responsável assina TODO RDO da obra — é o relatório da
+   própria contratada, e a firma dele é a mesma todo dia. Abrir um link por
+   dia, trinta dias por mês, não acrescenta nada ao documento; e o dia em
+   que ele está em outra obra é o dia em que o RDO fica sem a firma e a
+   fiscalização recebe uma folha pela metade.
+
+   Então a firma dele fica ARQUIVADA aqui — uma vez, com a autorização do
+   titular registrada — e o servidor a aplica sozinho na linha do papel dele
+   assim que a linha do dia nasce. O que sai continua sendo o mesmo PDF, com
+   o traço dentro do quadro: quem desenha é o navegador, como no resto do
+   RDO. Some só o clique diário.
+
+   O QUE ISTO NÃO FAZ, E NÃO PODE PASSAR A FAZER:
+
+   - NÃO ARQUIVA A FIRMA DA FISCALIZAÇÃO. A firma do fiscal é o aceite de
+     quem recebe a obra; aplicá-la sozinho seria a contratada assinando pelo
+     cliente — e aí o documento inteiro deixa de valer. `RDO_FIRMA_PAPEIS` é
+     a trava, e ela é o motivo de este bloco existir em vez de um
+     "assinar tudo".
+   - NÃO ESCONDE A ORIGEM. A linha guarda `origem = arquivada`, a observação
+     diz quem autorizou e quando, e a Auditoria registra cada aplicação.
+     Documento pré-assinado que se apresenta como assinado no dia é o que
+     ninguém consegue defender depois.
+   - NÃO PASSA POR CIMA DE QUEM ASSINOU, nem volta onde foi cancelada.
+     `rdoAssinaturaCancelar` marca a linha como `manual`, e linha `manual`
+     nunca mais é pré-assinada sozinha: quem cancelou quer a firma dada de
+     novo, à mão.
+
+   A imagem fica na MESMA pasta privada das outras assinaturas, e a
+   Propriedade guarda o ponteiro — nunca o base64. */
+var RDO_FIRMA_PROP   = 'RDO_FIRMA_ARQUIVADA';   // Propriedade do script
+var RDO_FIRMA_PAPEIS = ['engenheiro'];          // quem PODE ter firma arquivada
+
+function rdoFirmasArquivadas_() {
+  var raw = PropertiesService.getScriptProperties().getProperty(RDO_FIRMA_PROP);
+  if (!raw) return {};
+  try {
+    var j = JSON.parse(raw);
+    return (j && typeof j === 'object') ? j : {};
+  } catch (e) {
+    /* JSON torto não pode virar firma aplicada a esmo: vale como se não
+       houvesse firma arquivada nenhuma, e o dono é avisado pelo Logger. */
+    Logger.log('RDO_FIRMA_ARQUIVADA não é um JSON válido — nenhuma firma será aplicada.');
+    return {};
+  }
+}
+
+function rdoFirmaArquivadaDe_(papel) {
+  var p = String(papel || '').trim().toLowerCase();
+  if (RDO_FIRMA_PAPEIS.indexOf(p) === -1) return null;
+  var f = rdoFirmasArquivadas_()[p];
+  if (!f || String(f.assinatura || '').indexOf('drive_id:') !== 0) return null;
+  if (String(f.nome || '').trim().length < 3) return null;
+  return f;
+}
+
+/* O que fica escrito na linha, e é o que alguém lendo a planilha daqui a um
+   ano precisa encontrar para entender por que aquela firma está ali. */
+function rdoFirmaTexto_(firma) {
+  return 'Firma arquivada do titular, aplicada pelo sistema. Autorizada por ' +
+         String(firma.autorizadaPor || '—') + ' em ' +
+         String(firma.autorizadaEm || '—').slice(0, 16) + '.';
+}
+
+function rdoFirmaCampos_(firma, agora) {
+  return {
+    assinatura: String(firma.assinatura || ''),
+    nomeAssinante: String(firma.nome || ''),
+    documento: String(firma.documento || ''),
+    assinadoEm: agora,
+    agente: 'firma arquivada',
+    observacao: rdoFirmaTexto_(firma),
+    origem: 'arquivada',
+    status: 'assinada'
+  };
+}
+
+function rdoFirmaAuditar_(obra, dataISO, linha) {
+  try {
+    registrarAuditoria(String(linha.nomeAssinante || ''), 'firma arquivada', 'rdoFirmaAplicada',
+                       obra, dataISO, String(linha.papel || ''),
+                       rdoAssinCodigo_(linha.token) + ' · ' + String(linha.assinadoEm || ''));
+  } catch (e) {}
+}
+
+// ------------------------------------------------------------
+// AÇÕES DO APP — arquivar, conferir e tirar a firma
+// ------------------------------------------------------------
+/* Arquivar uma firma é decidir que aquele traço vai sair em todo RDO daqui
+   para a frente. É do escritório — o mesmo perfil que manda o RDO para a
+   fiscalização, pelo mesmo motivo. */
+function rdoFirmaArquivar(p) {
+  var barrado = exigirPodeEnviarRDO(p.token, 'rdoFirmaArquivar');
+  if (barrado) return barrado;
+
+  var papel = String(p.papel || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+  if (RDO_FIRMA_PAPEIS.indexOf(papel) === -1) {
+    return { ok: false,
+             error: 'A firma arquivada é só do engenheiro responsável. A fiscalização assina ' +
+                    'o RDO dela, pelo link pessoal do e-mail — essa firma não se guarda aqui.' };
+  }
+
+  var quem = usuarioDoToken(p.token) || '';
+  if (!quem) { try { quem = Session.getEffectiveUser().getEmail(); } catch (e) {} }
+  quem = quem || 'escritório';
+  var agora = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss');
+  var guardadas = rdoFirmasArquivadas_();
+
+  if (String(p.remover) === '1') {
+    var antiga = guardadas[papel];
+    if (!antiga) return { ok: false, error: 'Não há firma arquivada para tirar.' };
+    /* O ARQUIVO DA FIRMA FICA NO DRIVE, de propósito. As linhas dos RDOs que
+       já saíram pré-assinados apontam para ele; mandá-lo para a lixeira aqui
+       faria o app redesenhar aqueles dias com o quadro vazio — apagando a
+       firma de documentos que a fiscalização já arquivou. */
+    delete guardadas[papel];
+    PropertiesService.getScriptProperties().setProperty(RDO_FIRMA_PROP, JSON.stringify(guardadas));
+    registrarAuditoria(quem, perfilDoToken(p.token), 'rdoFirmaArquivadaRemovida', OBRA_ID, '',
+                       papel, 'era de ' + String(antiga.nome || '—'));
+    /* Os RDOs que JÁ saíram pré-assinados continuam como estão: tirar a
+       firma daqui para a frente é uma decisão; reescrever documento que já
+       foi para a fiscalização é outra, e não se faz por um botão. */
+    return { ok: true, removida: true, papel: papel };
+  }
+
+  /* A AUTORIZAÇÃO DO TITULAR É OBRIGATÓRIA, e fica escrita. Quem arquivou
+     e quando é o que responde, um ano depois, à única pergunta que importa
+     sobre uma firma aplicada por máquina: quem mandou. */
+  if (String(p.autorizado) !== '1') {
+    return { ok: false, error: 'Falta a confirmação de que o titular da firma autorizou o uso dela nos RDOs.' };
+  }
+
+  var nome = String(p.nome || '').trim().slice(0, 120);
+  if (nome.length < 3) return { ok: false, error: 'Escreva o nome do titular da firma.' };
+
+  var img = String(p.assinatura || '');
+  if (img.indexOf('data:image/png;base64,') !== 0) {
+    return { ok: false, error: 'Firma inválida — o traço não chegou.' };
+  }
+  var bytes;
+  try { bytes = Utilities.base64Decode(img.split(',')[1]); } catch (e) { bytes = []; }
+  if (!bytes.length) return { ok: false, error: 'Firma vazia.' };
+  if (bytes.length > RDO_ASSIN_MAX_BYTES) return { ok: false, error: 'Firma grande demais.' };
+
+  var arq = rdoAssinPasta_().createFile(Utilities.newBlob(bytes, 'image/png',
+    'firma_arquivada_' + OBRA_ID + '_' + papel + '_' + agora.slice(0, 10).replace(/-/g, '') + '.png'));
+  arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+
+  guardadas[papel] = {
+    papel: papel,
+    assinatura: 'drive_id:' + arq.getId(),
+    nome: nome,
+    documento: String(p.documento || '').trim().slice(0, 60),
+    autorizadaPor: quem,
+    autorizadaEm: agora
+  };
+  PropertiesService.getScriptProperties().setProperty(RDO_FIRMA_PROP, JSON.stringify(guardadas));
+
+  registrarAuditoria(quem, perfilDoToken(p.token), 'rdoFirmaArquivada', OBRA_ID, '',
+                     papel, nome + ' · ' + agora);
+
+  return { ok: true, papel: papel, nome: nome, autorizadaPor: quem, autorizadaEm: agora };
+}
+
+/* O que está arquivado hoje — com a imagem, para a tela mostrar o que vai
+   sair no documento. Devolve os papéis que PODEM ter firma, arquivados ou
+   não: é a tela de quem decide, e ela precisa mostrar o vazio também. */
+function rdoFirmasArquivadasLer(p) {
+  var barrado = exigirPodeEnviarRDO(p.token, 'rdoFirmasArquivadasLer');
+  if (barrado) return barrado;
+
+  var guardadas = rdoFirmasArquivadas_();
+  var assinantes = {};
+  rdoAssinantes().forEach(function (a) { assinantes[a.papel] = a; });
+  var comImagem = String(p.imagens) !== '0';
+
+  var out = RDO_FIRMA_PAPEIS.map(function (papel) {
+    var a = assinantes[papel] || null;
+    var f = guardadas[papel] || null;
+    var reg = {
+      papel: papel,
+      rotulo: a ? a.rotulo : papel,
+      nomeCadastro: a ? a.nome : '',
+      arquivada: !!rdoFirmaArquivadaDe_(papel),
+      nome: f ? String(f.nome || '') : '',
+      documento: f ? String(f.documento || '') : '',
+      autorizadaPor: f ? String(f.autorizadaPor || '') : '',
+      autorizadaEm: f ? String(f.autorizadaEm || '') : ''
+    };
+    if (reg.arquivada && comImagem) {
+      try {
+        var b = DriveApp.getFileById(String(f.assinatura).slice(9)).getBlob();
+        reg.imagem = 'data:' + (b.getContentType() || 'image/png') + ';base64,' +
+                     Utilities.base64Encode(b.getBytes());
+      } catch (e) {
+        /* Imagem sumida do Drive é firma que não vai sair no PDF: a tela
+           precisa saber disso, e não mostrar um quadro vazio como se
+           estivesse tudo certo. */
+        reg.arquivada = false;
+        reg.aviso = 'O arquivo da firma não está mais no Drive — arquive de novo.';
+      }
+    }
+    return reg;
+  });
+  return { ok: true, firmas: out };
+}
+
 function rdoAssinValidadeDias() {
   var d = parseInt(PropertiesService.getScriptProperties().getProperty('RDO_ASSINATURA_DIAS'), 10);
   return (!isNaN(d) && d >= 1 && d <= 365) ? d : RDO_ASSIN_DIAS;
@@ -3460,7 +3699,13 @@ function rdoAssinLinhasDoDia_(obra, dataISO) {
 function rdoAssinaturasGarantir_(obra, dataISO) {
   var o = normObra(obra), d = normData(dataISO);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return [];
-  garantirColuna(getOrCreateAba(ABA_RDO_ASSIN), 'obra');
+  var abaAssin = getOrCreateAba(ABA_RDO_ASSIN);
+  garantirColuna(abaAssin, 'obra');
+  /* `origem` diz DE ONDE veio a firma daquela linha — link pessoal, firma
+     arquivada ou nada ainda. Nasce aqui porque é ela que segura a
+     pré-assinatura: linha de origem vazia é linha que ainda pode receber a
+     firma arquivada; linha 'manual' (cancelada) nunca mais recebe. */
+  garantirColuna(abaAssin, 'origem');
 
   var existentes = rdoAssinLinhasDoDia_(o, d);
   var porPapel = {};
@@ -3473,10 +3718,41 @@ function rdoAssinaturasGarantir_(obra, dataISO) {
       id: 'ASS_' + o + '_' + d.replace(/-/g, '') + '_' + a.papel,
       obra: o, data: d, papel: a.papel, rotulo: a.rotulo, nome: a.nome, email: a.email,
       token: rdoAssinToken_(), status: 'pendente', convidadoEm: agora,
-      assinadoEm: '', assinatura: '', nomeAssinante: '', documento: '', agente: '', observacao: ''
+      assinadoEm: '', assinatura: '', nomeAssinante: '', documento: '', agente: '',
+      observacao: '', origem: ''
     };
+    /* A linha do papel com firma arquivada JÁ NASCE ASSINADA. Aqui, e não
+       num passo depois: é uma gravação só, e o dia nunca chega a existir
+       com o quadro do engenheiro em branco — nem para o e-mail das 8h, que
+       é quem costuma chamar esta função primeiro. */
+    var firma = rdoFirmaArquivadaDe_(a.papel);
+    if (firma) {
+      var campos = rdoFirmaCampos_(firma, agora);
+      Object.keys(campos).forEach(function (k) { reg[k] = campos[k]; });
+    }
     appendObj(ABA_RDO_ASSIN, reg);
+    if (firma) rdoFirmaAuditar_(o, d, reg);
     porPapel[a.papel] = reg;
+  });
+
+  /* E a linha que JÁ EXISTIA pendente também recebe a firma. É o que faz o
+     dia que ficou para trás sair assinado sem ninguém tocar nele: o domingo
+     lançado na terça, o RDO aberto antes de a firma ser arquivada, o turno
+     que o apontador fechou tarde. Percorre só os papéis que podem ter firma
+     — a fiscalização não entra nesta volta. */
+  RDO_FIRMA_PAPEIS.forEach(function (papel) {
+    var l = porPapel[papel];
+    if (!l) return;
+    if (String(l.status || '') !== 'pendente') return;   // assinada ou cancelada: não se mexe
+    if (String(l.origem || '') !== '') return;           // 'manual': quem cancelou quer à mão
+    var firma = rdoFirmaArquivadaDe_(papel);
+    if (!firma) return;
+    var alvo = rdoAssinPorToken_(l.token);
+    if (!alvo) return;
+    var campos = rdoFirmaCampos_(firma, agora);
+    Object.keys(campos).forEach(function (k) { rdoAssinGravarCampo_(alvo, k, campos[k]); });
+    porPapel[papel] = alvo.obj;
+    rdoFirmaAuditar_(o, d, alvo.obj);
   });
 
   // Na ordem dos assinantes configurados — que é a ordem dos quadros do PDF.
@@ -3646,6 +3922,9 @@ function rdoAssinaturaGravar(p) {
   rdoAssinGravarCampo_(alvo, 'observacao', String(p.observacao || '').trim().slice(0, 500));
   rdoAssinGravarCampo_(alvo, 'agente', String(p.agente || '').slice(0, 200));
   rdoAssinGravarCampo_(alvo, 'assinadoEm', agora);
+  // De onde veio a firma: esta é a do LINK PESSOAL — a pessoa abriu, leu o
+  // RDO daquele dia e desenhou. É o que a distingue da firma arquivada.
+  rdoAssinGravarCampo_(alvo, 'origem', 'link');
   rdoAssinGravarCampo_(alvo, 'status', 'assinada');
 
   registrarAuditoria(nome, 'assinante', 'rdoAssinar', obra, dataISO, l.papel,
@@ -3697,6 +3976,7 @@ function rdoAssinaturasDoDia(p) {
       papel: String(l.papel || ''), rotulo: String(l.rotulo || ''),
       nome: String(l.nome || ''), email: String(l.email || ''),
       status: String(l.status || 'pendente'),
+      origem: String(l.origem || ''),
       assinadoEm: String(l.assinadoEm || ''),
       nomeAssinante: String(l.nomeAssinante || ''),
       documento: String(l.documento || ''),
@@ -3753,6 +4033,11 @@ function rdoAssinaturaCancelar(dataISO, papel, motivo) {
   rdoAssinGravarCampo_(alvo, 'assinadoEm', '');
   rdoAssinGravarCampo_(alvo, 'nomeAssinante', '');
   rdoAssinGravarCampo_(alvo, 'token', novo);
+  /* 'manual' TRANCA a firma arquivada nesta linha. Quem cancelou quer a
+     firma dada de novo, à mão, por quem abre o link — e uma pré-assinatura
+     que voltasse sozinha na chamada seguinte desfaria o cancelamento sem
+     ninguém perceber. */
+  rdoAssinGravarCampo_(alvo, 'origem', 'manual');
   rdoAssinGravarCampo_(alvo, 'status', 'pendente');
   rdoAssinGravarCampo_(alvo, 'convidadoEm',
                        Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss'));

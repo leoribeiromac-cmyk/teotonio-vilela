@@ -92,7 +92,7 @@ const CAB_DIARIO = ['id', 'data', 'obra', 'numero_rdo', 'clima_manha', 'clima_ta
 const CAB_AVANCO = ['id', 'data', 'obra', 'pacote_id', 'quantidade'];
 const CAB_ASSIN = ['id', 'obra', 'data', 'papel', 'rotulo', 'nome', 'email', 'token', 'status',
                    'convidadoEm', 'assinadoEm', 'assinatura', 'nomeAssinante', 'documento',
-                   'agente', 'observacao'];
+                   'agente', 'observacao', 'origem'];
 const CAB_AUDIT = ['carimbo', 'usuario', 'perfil', 'acao', 'obra', 'registroId',
                    'detalhesAnteriores', 'detalhesNovos'];
 
@@ -695,6 +695,273 @@ t('deixa rastro na auditoria', () => {
 });
 t('cancelar o que não existe é erro, não estrago', () => {
   verdade(!ctx.rdoAssinaturaCancelar(HOJE, 'ninguem', 'x').ok);
+});
+
+/* ====================================================================
+   A FIRMA ARQUIVADA — a pré-assinatura do engenheiro
+   --------------------------------------------------------------------
+   O engenheiro responsável assina TODO RDO: é o relatório da própria
+   contratada. A firma dele fica guardada, com a autorização do titular
+   registrada, e o servidor a aplica sozinho — para a FISCALIZAÇÃO ser a
+   única que ainda assina por link.
+
+   É o ponto mais delicado deste arquivo, porque aqui uma firma é aplicada
+   por máquina num documento que a fiscalização arquiva. As travas que este
+   bloco existe para segurar:
+
+   - a firma da FISCALIZAÇÃO nunca se arquiva (seria a contratada assinando
+     pelo cliente);
+   - a origem fica escrita na linha, na observação e na Auditoria — nada de
+     documento pré-assinado que se apresente como assinado no dia;
+   - linha CANCELADA nunca mais é pré-assinada sozinha, senão o
+     cancelamento se desfaz na chamada seguinte;
+   - quem já assinou pelo link não é reescrito;
+   - tirar a firma vale para os PRÓXIMOS RDOs; os que já saíram ficam.
+   ==================================================================== */
+console.log('\nA firma arquivada do engenheiro');
+
+const PNG_FIRMA = uriPng();
+const arquivar = (extra) => ctx.rdoFirmaArquivar(Object.assign(
+  { papel: 'engenheiro', assinatura: PNG_FIRMA, nome: 'Marcio Santana dos Santos',
+    autorizado: '1' }, extra || {}));
+/* Passa pelo `garantir` de propósito: é ele que cria o convite do dia e é
+   ele que aplica a firma arquivada. Ler a planilha crua diria "não há linha
+   nenhuma" justamente nos dias em que o app ainda não tocou naquele dia —
+   que são os dias que este bloco existe para cobrir. */
+const linhaDe = (papel, data) => convites(data).filter(x => x.papel === papel)[0];
+const sessao = (token, perfil) => PROPS.setProperty('SES_' + token,
+  JSON.stringify({ u: 'Leonardo', p: perfil, o: '*', criadoEm: Date.now(), usoEm: Date.now() }));
+
+t('sem firma arquivada, nada muda — o convite do engenheiro nasce pendente', () => {
+  const l = linhaDe('engenheiro');
+  eq(l.status, 'pendente');
+  eq(String(l.origem || ''), '');
+});
+
+t('arquivada, o convite do engenheiro JÁ NASCE assinado', () => {
+  verdade(arquivar().ok, 'não arquivou');
+  const l = linhaDe('engenheiro');
+  eq(l.status, 'assinada');
+  eq(l.origem, 'arquivada');
+  eq(l.nomeAssinante, 'Marcio Santana dos Santos');
+  verdade(String(l.assinatura).indexOf('drive_id:') === 0, 'a linha não aponta para o Drive');
+});
+
+/* A trava que dá sentido a tudo isto: se a firma do fiscal pudesse ser
+   arquivada, o RDO sairia "assinado por todos" sem ninguém de fora ter
+   lido uma linha — e o documento deixaria de valer. */
+t('a firma da FISCALIZAÇÃO não se arquiva — seria a contratada assinando pelo cliente', () => {
+  const r = arquivar({ papel: 'fiscalizacao' });
+  verdade(!r.ok, 'o servidor aceitou arquivar a firma do fiscal');
+  verdade(String(r.error).indexOf('fiscalização') !== -1, r.error);
+  eq(linhaDe('fiscalizacao').status, 'pendente');
+});
+t('nem por um papel inventado', () => {
+  verdade(!arquivar({ papel: 'supervisao' }).ok);
+  verdade(!arquivar({ papel: 'qualquer' }).ok);
+});
+
+t('sem a autorização do titular não arquiva', () => {
+  const r = arquivar({ autorizado: '' });
+  verdade(!r.ok, 'arquivou sem autorização');
+  verdade(String(r.error).indexOf('autoriz') !== -1, r.error);
+  eq(linhaDe('engenheiro').status, 'pendente', 'aplicou mesmo assim');
+});
+t('sem nome do titular não arquiva — é o nome que sai no documento', () => {
+  verdade(!arquivar({ nome: 'Jo' }).ok);
+});
+t('sem traço não arquiva', () => {
+  verdade(!arquivar({ assinatura: '' }).ok);
+  verdade(!arquivar({ assinatura: 'data:image/jpeg;base64,AAAA' }).ok, 'aceitou o que não é PNG');
+});
+
+/* O base64 numa Propriedade estoura o teto do projeto inteiro (500 KB) — e
+   a imagem é firma de pessoa, que mora na pasta fechada como as outras. */
+t('a imagem vai para a pasta privada; a Propriedade guarda só o ponteiro', () => {
+  arquivar();
+  const guardado = JSON.parse(PROPS.getProperty('RDO_FIRMA_ARQUIVADA'));
+  verdade(String(guardado.engenheiro.assinatura).indexOf('drive_id:') === 0, 'guardou o quê?');
+  verdade(PROPS.getProperty('RDO_FIRMA_ARQUIVADA').indexOf('base64') === -1,
+          'o base64 da firma foi parar na Propriedade');
+  verdade(!!DRIVE.pastas['Assinaturas do RDO (Teotônio Privado)'], 'não usou a pasta das assinaturas');
+});
+
+t('a observação diz quem autorizou e quando — é o que responde daqui a um ano', () => {
+  arquivar();
+  const obs = String(linhaDe('engenheiro').observacao);
+  verdade(obs.indexOf('Firma arquivada') !== -1, obs);
+  verdade(obs.indexOf('dono@gestorengenharia.com.br') !== -1, obs);
+});
+t('e cada aplicação deixa rastro na Auditoria', () => {
+  arquivar();
+  convites();
+  convites('2026-08-25');
+  const acoes = PLANILHA.Auditoria.map(l => l[CAB_AUDIT.indexOf('acao')]);
+  eq(acoes.filter(a => a === 'rdoFirmaArquivada').length, 1, 'o arquivamento');
+  verdade(acoes.filter(a => a === 'rdoFirmaAplicada').length >= 2, JSON.stringify(acoes));
+});
+t('o rastro NÃO leva o token junto — ele é credencial, não histórico', () => {
+  arquivar();
+  const tok = linhaDe('engenheiro').token;
+  verdade(JSON.stringify(PLANILHA.Auditoria).indexOf(tok) === -1, 'vazou o token na auditoria');
+});
+
+/* O dia que ficou para trás é o motivo de a aplicação não acontecer só no
+   nascimento da linha: o domingo lançado na terça, o RDO aberto antes de a
+   firma ser arquivada. */
+t('o dia que JÁ tinha convite pendente também recebe a firma', () => {
+  eq(linhaDe('engenheiro').status, 'pendente', 'o convite não nasceu pendente');
+  arquivar();
+  convites();
+  eq(linhaDe('engenheiro').status, 'assinada');
+  eq(linhaDe('engenheiro').origem, 'arquivada');
+});
+
+t('não reescreve quem já assinou pelo link', () => {
+  assinar('engenheiro', { nome: 'Substituto da Semana' });
+  eq(linhaDe('engenheiro').origem, 'link');
+  arquivar();
+  convites();
+  eq(linhaDe('engenheiro').nomeAssinante, 'Substituto da Semana', 'a firma arquivada passou por cima');
+  eq(linhaDe('engenheiro').origem, 'link');
+});
+
+/* Cancelar é o escritório dizendo "essa firma está errada, quero de novo".
+   Uma pré-assinatura que voltasse na chamada seguinte desfaria o
+   cancelamento sem ninguém perceber. */
+t('linha CANCELADA nunca mais é pré-assinada sozinha', () => {
+  arquivar();
+  convites();
+  eq(linhaDe('engenheiro').status, 'assinada');
+  verdade(ctx.rdoAssinaturaCancelar(HOJE, 'engenheiro', 'firma errada').ok);
+  eq(linhaDe('engenheiro').origem, 'manual');
+  convites();
+  convites();
+  eq(linhaDe('engenheiro').status, 'pendente', 'a firma arquivada voltou por cima do cancelamento');
+});
+t('e o link novo do cancelamento continua assinando à mão', () => {
+  arquivar();
+  convites();
+  ctx.rdoAssinaturaCancelar(HOJE, 'engenheiro', 'firma errada');
+  const r = ctx.rdoAssinaturaGravar({ t: linhaDe('engenheiro').token, assinatura: uriPng(),
+                                      nome: 'Marcio Santana dos Santos' });
+  verdade(r.ok, JSON.stringify(r));
+  eq(linhaDe('engenheiro').origem, 'link');
+});
+
+t('a fiscalização continua pendente — o RDO não fica assinado sozinho', () => {
+  arquivar();
+  convites();
+  eq(linhaDe('fiscalizacao').status, 'pendente');
+  depositar({ assinaturas: '1' });
+  eq(CORREIO.enviados.filter(e => String(e.subject || '').indexOf('ASSINADO') !== -1).length, 0,
+     'mandou o RDO ASSINADO com a fiscalização pendente');
+});
+t('e quando ela assina, o RDO assinado sai', () => {
+  arquivar();
+  convites();
+  assinar('fiscalizacao', { nome: 'Willian Botelho' });
+  depositar({ assinaturas: '2' });
+  verdade(paraLista().some(e => String(e.subject || '').indexOf('ASSINADO') !== -1),
+          JSON.stringify(paraLista().map(e => e.subject)));
+});
+
+/* O e-mail é o único lugar onde o titular vê a firma dele sendo aplicada
+   todo dia. Se ele mudar de ideia, é por ali que vai saber. */
+t('o e-mail do titular não traz link e diz que a firma arquivada foi aplicada', () => {
+  arquivar();
+  depositar();
+  ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
+  const meu = paraLista().filter(e => String(e.to) === 'msantana@gestorengenharia.com.br')[0];
+  verdade(!!meu, 'o titular não recebeu o RDO');
+  verdade(String(meu.body).indexOf('firma arquivada') !== -1, meu.body);
+  verdade(String(meu.body).indexOf('assinar.html') === -1, 'mandou link de assinatura para quem já está assinado');
+});
+t('e o do fiscal continua trazendo o link dele', () => {
+  arquivar();
+  depositar();
+  ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
+  const dele = paraLista().filter(e => String(e.to) === 'terceiro.wbotelho@spobras.sp.gov.br')[0];
+  verdade(!!dele, 'o fiscal não recebeu o RDO');
+  verdade(String(dele.body).indexOf('assinar.html') !== -1, dele.body);
+});
+
+t('tirar a firma vale para os PRÓXIMOS dias; o que já saiu fica', () => {
+  arquivar();
+  convites();
+  eq(linhaDe('engenheiro').status, 'assinada');
+  verdade(ctx.rdoFirmaArquivar({ papel: 'engenheiro', remover: '1' }).ok);
+  eq(linhaDe('engenheiro').status, 'assinada', 'reescreveu um RDO que já foi');
+  convites('2026-08-26');
+  eq(linhaDe('engenheiro', '2026-08-26').status, 'pendente', 'o dia novo saiu pré-assinado sem firma');
+});
+t('tirar o que não existe é erro, não estrago', () => {
+  verdade(!ctx.rdoFirmaArquivar({ papel: 'engenheiro', remover: '1' }).ok);
+});
+
+t('Propriedade com JSON torto não aplica firma nenhuma', () => {
+  PROPS.setProperty('RDO_FIRMA_ARQUIVADA', '{isto não é json');
+  eq(linhaDe('engenheiro').status, 'pendente');
+});
+t('ponteiro que não é do Drive não vira firma', () => {
+  PROPS.setProperty('RDO_FIRMA_ARQUIVADA', JSON.stringify({
+    engenheiro: { assinatura: 'data:image/png;base64,AAAA', nome: 'Alguém de Tal' } }));
+  eq(linhaDe('engenheiro').status, 'pendente');
+});
+
+t('a tela lê o que está guardado, com a prévia do que sai no PDF', () => {
+  arquivar();
+  const r = ctx.rdoFirmasArquivadasLer({});
+  verdade(r.ok, JSON.stringify(r));
+  eq(r.firmas.length, 1, 'só o engenheiro pode ter firma arquivada');
+  eq(r.firmas[0].papel, 'engenheiro');
+  verdade(r.firmas[0].arquivada);
+  verdade(String(r.firmas[0].imagem || '').indexOf('data:image/png') === 0, 'sem prévia');
+});
+t('sem nada guardado, a tela recebe o vazio — e não some da lista', () => {
+  const r = ctx.rdoFirmasArquivadasLer({});
+  eq(r.firmas.length, 1);
+  verdade(!r.firmas[0].arquivada);
+});
+t('imagem sumida do Drive é avisada, não escondida', () => {
+  arquivar();
+  const id = String(JSON.parse(PROPS.getProperty('RDO_FIRMA_ARQUIVADA')).engenheiro.assinatura).slice(9);
+  delete DRIVE.arquivosPorId[id];
+  const f = ctx.rdoFirmasArquivadasLer({}).firmas[0];
+  verdade(!f.arquivada, 'disse que está tudo certo com a firma que sumiu');
+  verdade(!!f.aviso, 'sem aviso nenhum');
+});
+
+t('a conferência do envio diz quem está pré-assinado', () => {
+  arquivar();
+  const r = ctx.rdoDiagEmail({ obra: 'teotonio', data: HOJE });
+  eq((r.firmasArquivadas || []).length, 1);
+  eq(r.firmasArquivadas[0].nome, 'Marcio Santana dos Santos');
+});
+
+console.log('Quem pode arquivar uma firma');
+t('sem EXIGIR_TOKEN o backend está aberto — modo de implantação', () => {
+  verdade(arquivar({ token: 'seja-o-que-for' }).ok);
+});
+t('o apontador não arquiva firma de engenheiro', () => {
+  PROPS.setProperty('EXIGIR_TOKEN', 'true');
+  sessao('tk-campo', 'campo');
+  eq(arquivar({ token: 'tk-campo' }).error, 'SEM_PERMISSAO');
+  eq(linhaDe('engenheiro').status, 'pendente');
+});
+t('engenharia e admin arquivam — é o escritório que responde por isso', () => {
+  PROPS.setProperty('EXIGIR_TOKEN', 'true');
+  sessao('tk-eng', 'engenharia');
+  verdade(arquivar({ token: 'tk-eng' }).ok);
+  verdade(ctx.rdoFirmaArquivar({ papel: 'engenheiro', remover: '1', token: 'tk-eng' }).ok);
+  sessao('tk-adm', 'admin');
+  verdade(arquivar({ token: 'tk-adm' }).ok);
+});
+t('e quem arquivou fica escrito na firma, não some', () => {
+  PROPS.setProperty('EXIGIR_TOKEN', 'true');
+  sessao('tk-eng', 'engenharia');
+  arquivar({ token: 'tk-eng' });
+  eq(JSON.parse(PROPS.getProperty('RDO_FIRMA_ARQUIVADA')).engenheiro.autorizadaPor, 'Leonardo');
 });
 
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');
