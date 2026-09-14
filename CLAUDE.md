@@ -130,9 +130,15 @@ A FOTO DA FIRMA É LIMPA NO APARELHO (`firmaLimparFoto`, no index.html): a
 firma chega como foto de papel, e solta no quadro do PDF isso é um retângulo
 cinzento por cima da linha. O branco é MEDIDO na própria foto — o mesmo papel
 fotografado na sombra do canteiro e no escritório tem dois brancos, e um
-limiar fixo apaga o traço num caso e deixa o fundo sujo no outro. E a imagem
-**não entra no repositório**: o site é público pelo GitHub Pages, e firma de
-engenheiro com CREA ali é a firma dele na mão de quem quiser.
+limiar fixo apaga o traço num caso e deixa o fundo sujo no outro — **e é
+medido POR REGIÃO**, numa grade grosseira interpolada de volta: foto de
+canteiro tem a sombra da própria mão, e com um limiar único o canto escuro
+da folha passa por tinta e o recorte estica até lá, entregando a firma do
+tamanho de uma formiga com meia folha cinzenta em volta. A `foto da firma`
+do teste tem sombra forte de propósito — papel claro demais ali e o teste
+passa sem nunca ter medido isso. E a imagem **não entra no repositório**: o
+site é público pelo GitHub Pages, e firma de engenheiro com CREA ali é a
+firma dele na mão de quem quiser.
 
 E vale a mesma regra do RDO inteiro: quem DESENHA é o navegador. O servidor
 guarda o traço, o nome e a hora; o app os põe dentro dos quadros ao gerar o PDF

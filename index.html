@@ -18777,8 +18777,19 @@ async function enviarRDOParaAssinatura(data) {
 /* O papel vira branco e a tinta fica. O corte não pode ser fixo: a mesma
    firma fotografada na sombra do canteiro e no escritório tem dois brancos
    diferentes, e um limiar de laboratório apaga o traço numa e deixa o
-   fundo sujo na outra. Então o branco é MEDIDO na própria foto — o tom que
-   domina a imagem é o papel — e a tinta é o que está bem abaixo dele. */
+   fundo sujo na outra.
+
+   E O PAPEL É MEDIDO POR REGIÃO, não uma vez para a foto inteira. Um limiar
+   único só corrige luz uniforme — e foto de canteiro não tem luz uniforme,
+   tem a SOMBRA da própria mão. Na foto que estreou este código, o canto
+   escuro da folha ficava mais escuro que o papel iluminado do outro lado,
+   passava por tinta, e o recorte esticava até lá: a firma chegava ao quadro
+   do PDF do tamanho de uma formiga, com meia folha cinzenta em volta.
+
+   Então o papel é estimado numa GRADE grosseira — o percentil 90 de cada
+   célula é papel, porque o traço é fino e escuro —, espalhado para as
+   vizinhas (célula tomada por um traço grosso herda o papel de quem está ao
+   lado) e interpolado de volta para cada pixel. */
 function firmaLimparFoto(imgEl) {
   const LARG = 1400;
   const escala = Math.min(1, LARG / Math.max(1, imgEl.naturalWidth || imgEl.width));
@@ -18794,20 +18805,65 @@ function firmaLimparFoto(imgEl) {
   try { d = cx.getImageData(0, 0, w, h); } catch (e) { return null; }
   const px = d.data;
 
-  // O papel é o tom claro que domina a foto: o percentil 85 do brilho.
-  const hist = new Uint32Array(256);
-  for (let i = 0; i < px.length; i += 4) {
-    hist[(px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000 | 0]++;
+  /* A GRADE DO PAPEL. Um histograma por célula, em vez de listas de pixels:
+     é uma varredura só da foto inteira e nada de memória que cresça com o
+     tamanho dela. */
+  const CEL = 40;
+  const gx = Math.max(1, Math.ceil(w / CEL)), gy = Math.max(1, Math.ceil(h / CEL));
+  const caixas = new Uint32Array(gx * gy * 256);
+  const quantos = new Uint32Array(gx * gy);
+  for (let y = 0; y < h; y++) {
+    const cj = Math.min(gy - 1, (y / CEL) | 0);
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const L = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000 | 0;
+      const c = cj * gx + Math.min(gx - 1, (x / CEL) | 0);
+      caixas[c * 256 + L]++;
+      quantos[c]++;
+    }
   }
-  const total = w * h;
-  let acum = 0, papel = 255;
-  for (let v = 0; v < 256; v++) {
-    acum += hist[v];
-    if (acum >= total * 0.85) { papel = v; break; }
+  const papelCel = new Float32Array(gx * gy);
+  for (let c = 0; c < gx * gy; c++) {
+    const alvo = quantos[c] * 0.90;           // 90 % da célula é papel
+    let acum = 0, v = 255;
+    for (let b = 0; b < 256; b++) {
+      acum += caixas[c * 256 + b];
+      if (acum >= alvo) { v = b; break; }
+    }
+    papelCel[c] = v;
   }
-  papel = Math.max(60, papel);
-  const claro = papel * 0.90;   // daqui para cima é papel: vira branco puro
-  const tinta = papel * 0.55;   // daqui para baixo é tinta cheia
+  // Célula tomada por um traço grosso herda o papel da vizinhança: sem isto,
+  // o meio de uma rubrica cheia viraria "papel escuro" e a tinta sumiria.
+  const papelGrade = new Float32Array(gx * gy);
+  for (let j = 0; j < gy; j++) {
+    for (let i = 0; i < gx; i++) {
+      let m = 0;
+      for (let b = Math.max(0, j - 1); b <= Math.min(gy - 1, j + 1); b++) {
+        for (let a = Math.max(0, i - 1); a <= Math.min(gx - 1, i + 1); a++) {
+          if (papelCel[b * gx + a] > m) m = papelCel[b * gx + a];
+        }
+      }
+      papelGrade[j * gx + i] = Math.max(60, m);
+    }
+  }
+  const papelEm = (x, y) => {
+    // bilinear entre os centros das células: degrau de grade viraria degrau
+    // de cinza no meio da firma
+    const fx = Math.min(gx - 1, Math.max(0, (x + 0.5) * gx / w - 0.5));
+    const fy = Math.min(gy - 1, Math.max(0, (y + 0.5) * gy / h - 0.5));
+    const i = fx | 0, j = fy | 0;
+    const i2 = Math.min(gx - 1, i + 1), j2 = Math.min(gy - 1, j + 1);
+    const u = fx - i, v = fy - j;
+    return (papelGrade[j * gx + i] * (1 - u) + papelGrade[j * gx + i2] * u) * (1 - v) +
+           (papelGrade[j2 * gx + i] * (1 - u) + papelGrade[j2 * gx + i2] * u) * v;
+  };
+
+  /* Quanto o pixel tem de ser mais escuro que o papel DALI para contar como
+     tinta. Sem este mínimo, a textura do papel e a borda macia da sombra
+     entram como traço fraquíssimo — invisível no branco, mas o bastante
+     para o recorte crescer até a folha inteira. */
+  const CONTRASTE = 18;
+  const PISO = 0.12;            // abaixo disto é textura, não tinta
 
   /* A limpeza e o recorte saem da MESMA varredura: são dois milhões de
      pixels no celular do escritório, e passar duas vezes é o dobro do
@@ -18817,14 +18873,18 @@ function firmaLimparFoto(imgEl) {
     for (let x = 0; x < w; x++) {
       const i = (y * w + x) * 4;
       const L = (px[i] * 299 + px[i + 1] * 587 + px[i + 2] * 114) / 1000;
-      if (L >= claro) { px[i] = px[i + 1] = px[i + 2] = 255; px[i + 3] = 255; continue; }
+      const p = papelEm(x, y);
+      const claro = Math.min(p * 0.90, p - CONTRASTE);
+      const tinta = p * 0.45;
+      let k = L >= claro ? 0 : (L <= tinta ? 1 : (claro - L) / (claro - tinta));
+      k = k < PISO ? 0 : (k - PISO) / (1 - PISO);
+      if (k <= 0) { px[i] = px[i + 1] = px[i + 2] = 255; px[i + 3] = 255; continue; }
       // Entre o papel e a tinta cheia, a força do traço é proporcional —
       // é o que salva o filete fino da rubrica de virar degrau serrilhado.
-      const k = L <= tinta ? 1 : (claro - L) / (claro - tinta);
       const v = Math.round(255 * (1 - k));
       px[i] = px[i + 1] = px[i + 2] = v;
       px[i + 3] = 255;
-      if (k > 0.25) {
+      if (k > 0.35) {
         if (x < x1) x1 = x;
         if (x > x2) x2 = x;
         if (y < y1) y1 = y;

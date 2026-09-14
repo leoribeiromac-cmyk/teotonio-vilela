@@ -710,15 +710,22 @@ async function comOAppDeVerdade() {
      ================================================================ */
   console.log('\nA firma arquivada do engenheiro');
 
-  /* A "foto" da firma: papel acinzentado com sombra de um lado (o celular
-     no canteiro nunca fotografa iluminado por igual) e o traço escuro num
-     canto — nunca no meio, nunca ocupando a folha, que é o caso real. */
+  /* A "foto" da firma: papel com SOMBRA DE VERDADE de um lado (o celular no
+     canteiro nunca fotografa iluminado por igual — a sombra é da própria
+     mão) e o traço escuro num canto, nunca no meio, nunca ocupando a folha.
+
+     A sombra é forte de propósito. Com um limiar único para a foto inteira,
+     o canto escuro fica mais escuro que o papel iluminado do outro lado,
+     passa por tinta, e o recorte estica até lá: a firma chega ao quadro do
+     PDF do tamanho de uma formiga, com meia folha cinzenta em volta. Foi o
+     que a primeira foto de verdade fez. Papel claro demais aqui e o teste
+     passa sem nunca ter medido isso. */
   const limpar = (desenho) => s.p.evaluate(async (d) => {
     const cv = document.createElement('canvas');
     cv.width = 1000; cv.height = 1400;
     const c = cv.getContext('2d');
-    const g = c.createLinearGradient(0, 0, 1000, 1400);
-    g.addColorStop(0, '#efece4'); g.addColorStop(1, '#cfccc4');   // papel com sombra
+    const g = c.createLinearGradient(1000, 0, 0, 1400);
+    g.addColorStop(0, '#f4f1ea'); g.addColorStop(1, '#8a8880');   // papel iluminado → sombra
     c.fillStyle = g; c.fillRect(0, 0, 1000, 1400);
     if (d === 'traco') {
       c.strokeStyle = '#1f2a6b'; c.lineWidth = 9; c.lineCap = 'round';
@@ -763,16 +770,20 @@ async function comOAppDeVerdade() {
   ok('a foto da firma vira o PNG 600×200 do quadro do PDF',
      !!limpa && limpa.largura === 600 && limpa.altura === 200 &&
      limpa.prefixo === 'data:image/png;base64,', JSON.stringify(limpa && limpa.prefixo));
-  /* O papel tem de sair BRANCO PURO. Um cinza de 240 é invisível na tela e
-     um retângulo evidente dentro do quadro branco do PDF — foi por isso que
-     a limpeza mede o branco na própria foto em vez de usar um limiar fixo. */
+  /* O papel tem de sair BRANCO PURO — inclusive o canto na sombra. Um cinza
+     de 240 é invisível na tela e um retângulo evidente dentro do quadro
+     branco do PDF; e a sombra inteira virando "tinta fraca" é o que fazia o
+     recorte engolir a folha. É por isso que o papel é medido POR REGIÃO, e
+     não uma vez para a foto toda. */
   ok('o papel some: o fundo sai branco puro, inclusive na parte sombreada',
      !!limpa && limpa.cantoNO.every(v => v === 255) && limpa.cantoSE.every(v => v === 255),
      JSON.stringify(limpa && [limpa.cantoNO, limpa.cantoSE]));
   ok('e a tinta fica', !!limpa && limpa.escuros > 300, limpa && limpa.escuros);
   /* Sem recorte, o traço chega ao PDF do tamanho de uma linha de texto: a
-     firma ocupa um canto da folha fotografada, não a folha. */
-  ok('o traço é recortado e ampliado até encher o quadro',
+     firma ocupa um canto da folha fotografada, não a folha. E é ESTA medida
+     que reprova quando a sombra volta a contar como tinta — o recorte passa
+     a ser da folha inteira e o traço encolhe dentro do quadro. */
+  ok('o traço é recortado e ampliado até encher o quadro — a sombra não conta como tinta',
      !!limpa && limpa.altTraco > 170 && limpa.largTraco > 400,
      limpa && limpa.largTraco + '×' + limpa.altTraco);
 
