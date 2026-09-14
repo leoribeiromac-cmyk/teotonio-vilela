@@ -495,6 +495,21 @@ table.t.nf-tbl tfoot tr:hover td{background:var(--surface-2)}
 .firma-ok{flex-direction:row; align-items:flex-start; gap:var(--sp-4)}
 .firma-ok input{margin-top:var(--sp-1); flex:none; width:18px; height:18px}
 .firma-msg{display:flex; align-items:center; gap:var(--sp-4); font-size:var(--fs-sm); color:var(--red)}
+/* As três portas do arquivamento, cada uma no seu bloco: a de reaproveitar
+   uma firma já dada, a de armar para a próxima, e a da foto — que é a
+   última porque fotografar papel é o trabalho que ninguém quer ter. */
+.firma-secao{display:flex; flex-direction:column; gap:var(--sp-4); padding:var(--sp-5);
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--bg-2)}
+.firma-secao-tit{display:flex; align-items:center; gap:var(--sp-4); font-size:var(--fs-sm);
+  font-weight:700; color:var(--text)}
+.firma-secao .btn{align-self:flex-start; margin:0}
+.firma-galeria{display:flex; flex-wrap:wrap; gap:var(--sp-4)}
+.firma-item{display:flex; flex-direction:column; gap:var(--sp-2); align-items:center;
+  padding:var(--sp-4); background:#fff; border:2px solid var(--border); border-radius:var(--r-sm);
+  cursor:pointer; font:inherit; color:var(--text); min-height:44px}
+.firma-item.sel{border-color:var(--acc); box-shadow:0 0 0 2px var(--acc-l)}
+.firma-item img{width:150px; aspect-ratio:3/1; object-fit:contain}
+.firma-item small{font-size:var(--fs-xs); color:var(--muted)}
 .dia-linha{
   display:flex; align-items:center; justify-content:space-between; gap:12px;
   width:100%; background:transparent; border:none; border-left:3px solid transparent;
@@ -18864,11 +18879,21 @@ function firmaDoArquivo(file) {
   });
 }
 
-let _FIRMA = { papel: 'engenheiro', png: '', lista: [] };
+/* É UMA VEZ SÓ, PARA SEMPRE — e há três portas, duas sem câmera nenhuma:
+
+   1. USAR UMA FIRMA QUE ELE JÁ DEU. O sistema quase sempre já tem o traço
+      dele: todo RDO assinado pelo link deixou a imagem guardada. Um toque.
+   2. GUARDAR A PRÓXIMA. Obra em que ele nunca assinou online não tem o que
+      reaproveitar — mas ele vai assinar um dia. Armado, esse dia é o ÚLTIMO.
+   3. A foto do papel, para quem não tem nem uma coisa nem outra.
+
+   A ordem na tela é essa de propósito: fotografar firma é o trabalho que o
+   titular não quer ter, e virou a última opção, não a primeira. */
+let _FIRMA = { papel: 'engenheiro', png: '', escolhida: '', lista: [], foto: false };
 
 async function abrirFirmaArquivada() {
   if (!podeEnviarRDOParaAssinatura()) return;
-  _FIRMA = { papel: 'engenheiro', png: '', lista: [] };
+  _FIRMA = { papel: 'engenheiro', png: '', escolhida: '', lista: [], foto: false };
   abrirModalRDO(`<div class="firma-modal">
       <div class="firma-titulo">${ic('assinatura', 18)} Firma arquivada</div>
       <div id="firmaCorpo"><div class="ass-vazio">${ic('ampulheta', 14, 'ic-gira')} Lendo o que está guardado…</div></div>
@@ -18878,6 +18903,9 @@ async function abrirFirmaArquivada() {
     if (!r || !r.ok) throw new Error(erroLegivel((r && (r.mensagem || r.error)) || 'falha no servidor'));
     _FIRMA.lista = r.firmas || [];
     if (_FIRMA.lista.length) _FIRMA.papel = _FIRMA.lista[0].papel;
+    const f = _FIRMA.lista[0];
+    // A firma mais recente já vem escolhida: o caso comum é "essa mesma".
+    if (f && !f.arquivada && (f.anteriores || []).length) _FIRMA.escolhida = f.anteriores[0].ponteiro;
     pintarFirmaArquivada();
   } catch (e) {
     const c = document.getElementById('firmaCorpo');
@@ -18893,28 +18921,111 @@ function pintarFirmaArquivada(msg) {
     c.innerHTML = `<div class="ass-vazio">${ic('info', 14)} Nenhum papel desta obra aceita firma arquivada.</div>`;
     return;
   }
-  const previa = _FIRMA.png || f.imagem || '';
-  c.innerHTML = `
+
+  const cabeca = `
     <p class="firma-texto">
       A firma guardada aqui é aplicada pelo servidor em <strong>todo RDO</strong> desta obra,
-      no quadro de <strong>${escHtml(f.rotulo)}</strong>, assim que o dia é aberto. A
-      <strong>fiscalização continua assinando pelo link pessoal dela</strong> — essa firma
+      no quadro de <strong>${escHtml(f.rotulo)}</strong> — os de agora, os seguintes e os dias
+      atrasados quando forem abertos. <strong>Guarda-se uma vez e acabou</strong>: ninguém
+      volta aqui a cada RDO.
+    </p>
+    <p class="firma-texto">
+      A <strong>fiscalização continua assinando pelo link pessoal dela</strong> — essa firma
       não se guarda, e o RDO só fica assinado quando ela entra.
     </p>
     <p class="firma-texto firma-aviso">
-      ${ic('alerta', 14)} Cada aplicação fica registrada como <em>firma arquivada</em> na planilha
-      de assinaturas e na Auditoria, com quem autorizou e quando. Use isto só com a autorização
-      do titular da firma.
-    </p>
-    ${f.arquivada ? `<div class="firma-estado">${ic('check', 14)}
-      Guardada em nome de <strong>${escHtml(f.nome)}</strong>${f.autorizadaPor
-        ? ` — autorizada por ${escHtml(f.autorizadaPor)} em ${escHtml(String(f.autorizadaEm || '').slice(0, 16))}`
-        : ''}.</div>` : ''}
-    ${f.aviso ? `<div class="ass-vazio">${ic('alerta', 14)} ${escHtml(f.aviso)}</div>` : ''}
-    ${previa ? `<div class="firma-previa"><img src="${previa}" alt="Prévia da firma">
-      <small>É assim que ela sai no quadro do PDF.</small></div>` : ''}
-    <label class="firma-campo"><span>Foto da firma (papel branco, tinta escura)</span>
-      <input type="file" id="firmaFoto" accept="image/*" onchange="firmaEscolherFoto(this)"></label>
+      ${ic('alerta', 14)} <span>Cada aplicação fica registrada como <em>firma arquivada</em> na
+      planilha de assinaturas e na Auditoria, com quem autorizou e quando. Use isto só com a
+      autorização do titular da firma.</span>
+    </p>`;
+
+  // ---------------------------------------------------------- já resolvido
+  if (f.arquivada) {
+    c.innerHTML = `${cabeca}
+      <div class="firma-estado">${ic('check', 14)}
+        Guardada em nome de <strong>${escHtml(f.nome)}</strong>${f.autorizadaPor
+          ? ` — autorizada por ${escHtml(f.autorizadaPor)} em ${escHtml(String(f.autorizadaEm || '').slice(0, 16))}`
+          : ''}${f.veioDe ? ` · ${escHtml(f.veioDe)}` : ''}.</div>
+      ${f.imagem ? `<div class="firma-previa"><img src="${f.imagem}" alt="A firma que sai no RDO">
+        <small>É assim que ela sai no quadro do PDF.</small></div>` : ''}
+      ${f.aviso ? `<div class="ass-vazio">${ic('alerta', 14)} ${escHtml(f.aviso)}</div>` : ''}
+      ${msg ? `<div class="firma-msg">${msg}</div>` : ''}
+      <div class="ass-acoes">
+        <button type="button" class="btn btn-sm btn-outline" onclick="removerFirmaArquivada()"
+          >${ic('lixeira', 14)} Deixar de pré-assinar</button>
+        <button type="button" class="btn btn-sm btn-outline" onclick="fecharModalRDO()"
+          >${ic('fechar', 14)} Fechar</button>
+      </div>`;
+    return;
+  }
+
+  if (f.armada) {
+    c.innerHTML = `${cabeca}
+      <div class="firma-estado">${ic('relogio', 14)}
+        Armado. A <strong>próxima firma</strong> que ${escHtml(f.nomeCadastro || 'o titular')} der
+        pelo link fica guardada sozinha — esse vai ser o último RDO que ele assina.</div>
+      ${msg ? `<div class="firma-msg">${msg}</div>` : ''}
+      <div class="ass-acoes">
+        <button type="button" class="btn btn-sm btn-outline" onclick="removerFirmaArquivada()"
+          >${ic('fechar', 14)} Cancelar o armado</button>
+        <button type="button" class="btn btn-sm btn-outline" onclick="fecharModalRDO()"
+          >${ic('check', 14)} Fechar</button>
+      </div>`;
+    return;
+  }
+
+  // ------------------------------------------------------------- escolher
+  const anteriores = f.anteriores || [];
+  const previa = _FIRMA.png;
+
+  const galeria = anteriores.length ? `
+    <div class="firma-secao">
+      <div class="firma-secao-tit">${ic('check', 14)} Usar uma firma que ele já deu</div>
+      <p class="firma-texto">Estas são assinaturas que ${escHtml(f.nomeCadastro || 'ele')} já
+        desenhou em RDOs desta obra. Toque na que deve valer daqui para a frente.</p>
+      <div class="firma-galeria">
+        ${anteriores.map(a => `
+          <button type="button" class="firma-item${_FIRMA.escolhida === a.ponteiro ? ' sel' : ''}"
+            onclick="firmaEscolherAnterior('${escHtml(a.ponteiro)}')">
+            <img src="${a.imagem}" alt="Firma de ${escHtml(a.data)}">
+            <small>${escHtml(fmtData ? fmtData(a.data) : a.data)}</small>
+          </button>`).join('')}
+      </div>
+    </div>` : `
+    <div class="firma-secao">
+      <div class="firma-secao-tit">${ic('info', 14)} Ele ainda não assinou nenhum RDO por aqui</div>
+      <p class="firma-texto">Não há firma dele guardada no sistema para reaproveitar. Use a
+        opção abaixo: ele assina UMA vez pelo link, e essa é a última.</p>
+    </div>`;
+
+  const armar = `
+    <div class="firma-secao">
+      <div class="firma-secao-tit">${ic('relogio', 14)} Guardar a próxima firma que ele der</div>
+      <p class="firma-texto">Sem foto e sem esperar por ninguém agora: no próximo RDO que ele
+        assinar pelo link, o sistema guarda aquela firma e não pede mais. É o último RDO que
+        ele assina.</p>
+      <button type="button" class="btn btn-sm btn-outline" onclick="armarFirmaArquivada()"
+        >${ic('relogio', 14)} Armar para a próxima</button>
+    </div>`;
+
+  const foto = `
+    <div class="firma-secao">
+      <div class="firma-secao-tit">${ic('camera', 14)} Ou enviar uma foto da firma</div>
+      ${_FIRMA.foto || previa ? `
+        <p class="firma-texto">Papel branco, tinta escura, só a firma no quadro. A foto é limpa
+          aqui no aparelho — o papel some e fica o traço.</p>
+        ${previa ? `<div class="firma-previa"><img src="${previa}" alt="Prévia da firma">
+          <small>É assim que ela sai no quadro do PDF.</small></div>` : ''}
+        <input type="file" id="firmaFoto" accept="image/*" onchange="firmaEscolherFoto(this)">`
+      : `<button type="button" class="btn btn-sm btn-outline" onclick="firmaAbrirFoto()"
+           >${ic('camera', 14)} Escolher uma foto</button>`}
+    </div>`;
+
+  const temAlgo = !!(_FIRMA.escolhida || previa);
+  c.innerHTML = `${cabeca}
+    ${galeria}
+    ${armar}
+    ${foto}
     <label class="firma-campo"><span>Nome do titular, como sai no documento</span>
       <input type="text" id="firmaNome" maxlength="120" value="${escHtml(f.nome || f.nomeCadastro || '')}"></label>
     <label class="firma-campo firma-ok">
@@ -18923,70 +19034,120 @@ function pintarFirmaArquivada(msg) {
     ${msg ? `<div class="firma-msg">${msg}</div>` : ''}
     <div class="ass-acoes">
       <button type="button" class="btn btn-sm btn-primary" onclick="salvarFirmaArquivada()"
-        >${ic('salvar', 14)} ${f.arquivada ? 'Substituir a firma' : 'Arquivar a firma'}</button>
-      ${f.arquivada ? `<button type="button" class="btn btn-sm btn-outline" onclick="removerFirmaArquivada()"
-        >${ic('lixeira', 14)} Deixar de pré-assinar</button>` : ''}
+        ${temAlgo ? '' : 'disabled'}>${ic('salvar', 14)} Arquivar a firma</button>
       <button type="button" class="btn btn-sm btn-outline" onclick="fecharModalRDO()"
         >${ic('fechar', 14)} Fechar</button>
     </div>`;
 }
 
+/* O que a pessoa já digitou não pode se perder no repintar: o nome e a
+   autorização sobrevivem a trocar de firma ou de foto. */
+function firmaGuardarCampos() {
+  const n = document.getElementById('firmaNome');
+  const a = document.getElementById('firmaAutorizado');
+  return { nome: n ? n.value : null, autorizado: a ? a.checked : null };
+}
+function firmaReporCampos(v) {
+  const n = document.getElementById('firmaNome');
+  if (n && v.nome) n.value = v.nome;
+  const a = document.getElementById('firmaAutorizado');
+  if (a && v.autorizado !== null) a.checked = v.autorizado;
+}
+
+function firmaEscolherAnterior(ponteiro) {
+  const v = firmaGuardarCampos();
+  // Escolher uma firma guardada descarta a foto: são dois caminhos, e o
+  // botão de arquivar precisa saber por qual ele vai.
+  _FIRMA.escolhida = ponteiro;
+  _FIRMA.png = '';
+  pintarFirmaArquivada();
+  firmaReporCampos(v);
+}
+
+function firmaAbrirFoto() {
+  const v = firmaGuardarCampos();
+  _FIRMA.foto = true;
+  pintarFirmaArquivada();
+  firmaReporCampos(v);
+  const el = document.getElementById('firmaFoto');
+  if (el) el.click();
+}
+
 async function firmaEscolherFoto(input) {
   const file = input && input.files && input.files[0];
   if (!file) return;
-  const nome = (document.getElementById('firmaNome') || {}).value || '';
-  const marcado = !!(document.getElementById('firmaAutorizado') || {}).checked;
+  const v = firmaGuardarCampos();
   try {
     _FIRMA.png = await firmaDoArquivo(file);
+    _FIRMA.escolhida = '';
     pintarFirmaArquivada();
   } catch (e) {
     _FIRMA.png = '';
     pintarFirmaArquivada(`${ic('alerta', 14)} ${escHtml(e.message || 'não consegui limpar essa foto')}`);
   }
-  // O que a pessoa já tinha digitado não se perde no repintar.
-  const nEl = document.getElementById('firmaNome');
-  if (nEl && nome) nEl.value = nome;
-  const aEl = document.getElementById('firmaAutorizado');
-  if (aEl) aEl.checked = marcado;
+  firmaReporCampos(v);
+}
+
+function firmaCamposValidos() {
+  const nome = ((document.getElementById('firmaNome') || {}).value || '').trim();
+  const autorizado = !!(document.getElementById('firmaAutorizado') || {}).checked;
+  if (nome.length < 3) { toast('Escreva o nome do titular da firma.', 'error'); return null; }
+  if (!autorizado) { toast('Confirme que o titular autorizou o uso da firma nos RDOs.', 'error'); return null; }
+  return { nome, autorizado };
+}
+
+async function firmaMandar(extra, mensagemOk) {
+  try {
+    const r = await enviarAcao({ action: 'rdoFirmaArquivar', papel: _FIRMA.papel,
+                                 autorizado: '1', ...extra, ...authParams() }, 0, 0);
+    if (!r || !r.ok) throw new Error(erroLegivel((r && (r.mensagem || r.error)) || 'falha no servidor'));
+    fecharModalRDO();
+    toast(mensagemOk, 'success', 8000);
+    if (DIARIO_V4 && DIARIO_V4.data) pintarAssinaturasRDO(DIARIO_V4.data);
+    return true;
+  } catch (e) {
+    toast('Não deu certo: ' + (e.message || 'sem resposta'), 'error', 0);
+    return false;
+  }
 }
 
 async function salvarFirmaArquivada() {
-  const nome = ((document.getElementById('firmaNome') || {}).value || '').trim();
-  const autorizado = !!(document.getElementById('firmaAutorizado') || {}).checked;
-  if (!_FIRMA.png) return toast('Escolha a foto da firma primeiro.', 'error');
-  if (nome.length < 3) return toast('Escreva o nome do titular da firma.', 'error');
-  if (!autorizado) return toast('Confirme que o titular autorizou o uso da firma nos RDOs.', 'error');
-  try {
-    const r = await enviarAcao({ action: 'rdoFirmaArquivar', papel: _FIRMA.papel,
-                                 assinatura: _FIRMA.png, nome, autorizado: '1',
-                                 ...authParams() }, 0, 0);
-    if (!r || !r.ok) throw new Error(erroLegivel((r && (r.mensagem || r.error)) || 'falha no servidor'));
-    fecharModalRDO();
-    toast('Firma arquivada. Daqui para a frente o RDO já sai com ela — só a fiscalização assina.',
-          'success', 7000);
-    if (DIARIO_V4 && DIARIO_V4.data) pintarAssinaturasRDO(DIARIO_V4.data);
-  } catch (e) {
-    toast('Não deu para arquivar: ' + (e.message || 'sem resposta'), 'error', 0);
+  const v = firmaCamposValidos();
+  if (!v) return;
+  if (!_FIRMA.escolhida && !_FIRMA.png) {
+    return toast('Escolha uma firma que ele já deu, arme para a próxima, ou envie uma foto.', 'error');
   }
+  await firmaMandar(
+    _FIRMA.escolhida ? { dePonteiro: _FIRMA.escolhida, nome: v.nome }
+                     : { assinatura: _FIRMA.png, nome: v.nome },
+    'Firma arquivada. Daqui para a frente o RDO já sai com ela — só a fiscalização assina.');
+}
+
+async function armarFirmaArquivada() {
+  const v = firmaCamposValidos();
+  if (!v) return;
+  await firmaMandar({ armar: '1', nome: v.nome },
+    'Armado. O próximo RDO que ele assinar pelo link é o último — aquela firma fica guardada ' +
+    'e entra sozinha em todos os outros.');
 }
 
 async function removerFirmaArquivada() {
-  if (!confirm('Tirar a firma arquivada? Os RDOs que já saíram com ela continuam como estão; ' +
-               'os próximos voltam a esperar a assinatura pelo link.')) return;
-  try {
-    const r = await enviarAcao({ action: 'rdoFirmaArquivar', papel: _FIRMA.papel, remover: '1',
-                                 ...authParams() }, 0, 0);
-    if (!r || !r.ok) throw new Error(erroLegivel((r && (r.mensagem || r.error)) || 'falha no servidor'));
-    fecharModalRDO();
-    toast('Firma retirada. Os próximos RDOs voltam a esperar a assinatura pelo link.', 'success', 6000);
-    if (DIARIO_V4 && DIARIO_V4.data) pintarAssinaturasRDO(DIARIO_V4.data);
-  } catch (e) {
-    toast('Não deu para tirar: ' + (e.message || 'sem resposta'), 'error', 0);
-  }
+  const f = _FIRMA.lista.find(x => x.papel === _FIRMA.papel) || {};
+  const pergunta = f.arquivada
+    ? 'Tirar a firma arquivada? Os RDOs que já saíram com ela continuam como estão; ' +
+      'os próximos voltam a esperar a assinatura pelo link.'
+    : 'Cancelar o armado? A próxima firma que ele der volta a valer só para aquele RDO.';
+  if (!confirm(pergunta)) return;
+  await firmaMandar({ remover: '1' }, f.arquivada
+    ? 'Firma retirada. Os próximos RDOs voltam a esperar a assinatura pelo link.'
+    : 'Armado cancelado.');
 }
 
 window.abrirFirmaArquivada = abrirFirmaArquivada;
 window.firmaEscolherFoto = firmaEscolherFoto;
+window.firmaEscolherAnterior = firmaEscolherAnterior;
+window.firmaAbrirFoto = firmaAbrirFoto;
+window.armarFirmaArquivada = armarFirmaArquivada;
 window.salvarFirmaArquivada = salvarFirmaArquivada;
 window.removerFirmaArquivada = removerFirmaArquivada;
 

@@ -109,6 +109,23 @@ ponto. As travas que não podem cair:
   estão: reescrever documento que já foi para a fiscalização é outra
   decisão, e não se faz por um botão.
 
+**Arquivar não exige foto, e é UMA VEZ SÓ.** Fotografar papel é justamente o
+trabalho que o titular não quer ter, então a câmera é a última opção da tela,
+não a primeira. Há três portas:
+
+1. **Usar uma firma que ele já deu** — todo RDO que ele assinou pelo link
+   deixou o traço na pasta privada (`rdoFirmasJaDadas_`). Um toque, e o
+   arquivamento aponta para o MESMO arquivo, não para uma cópia. A trava:
+   `rdoFirmaJaDadaPorPonteiro_` confere que o ponteiro é mesmo de uma
+   assinatura daquele papel — solto, `dePonteiro` faria o RDO sair assinado
+   com qualquer arquivo do Drive, a começar pela firma do fiscal.
+2. **Armar para a próxima** (`RDO_FIRMA_ARMADA`) — obra em que ele nunca
+   assinou online não tem o que reaproveitar. Armado, a próxima assinatura
+   que ele der pelo link é guardada na hora (`rdoFirmaGuardarSeArmada_`,
+   chamada DEPOIS da gravação): aquele RDO é o último que ele assina. O
+   armado se desfaz sozinho ao pegar, e o dono é avisado por e-mail.
+3. A foto, para quem não tem nem uma coisa nem outra.
+
 A FOTO DA FIRMA É LIMPA NO APARELHO (`firmaLimparFoto`, no index.html): a
 firma chega como foto de papel, e solta no quadro do PDF isso é um retângulo
 cinzento por cima da linha. O branco é MEDIDO na própria foto — o mesmo papel
