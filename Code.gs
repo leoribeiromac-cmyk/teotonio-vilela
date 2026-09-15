@@ -100,6 +100,7 @@ function rotear(e) {
                       'addBatchRDO', 'addRDODiario', 'updateRDODiario', 'deleteRDODiario',
                       'usuariosListar', 'usuarioSalvar', 'usuarioExcluir',
                       'rdoFoto', 'obterFoto', 'rdoPdfDoDia', 'rdoAssinaturasDoDia',
+                      'rdoAssinadosPendentes',
                       'rdoEnviarParaAssinatura', 'rdoDiagEmail',
                       'equipListar', 'equipCadastrar', 'equipDesativar', 'locadoraCadastrar',
                       'equipApontar', 'equipApagar', 'equipEditar', 'equipApontamentos', 'equipUltimos',
@@ -121,7 +122,8 @@ function rotear(e) {
     // essas duas são do bloco compartilhado com o app "Gestor", que precisa
     // continuar idêntico dos dois lados.
     var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar', 'bfSalvar', 'rdoPdfDoDia',
-                    'rdoAssinaturasDoDia', 'rdoEnviarParaAssinatura', 'rdoDiagEmail'];
+                    'rdoAssinaturasDoDia', 'rdoAssinadosPendentes',
+                    'rdoEnviarParaAssinatura', 'rdoDiagEmail'];
     if (POR_OBRA.indexOf(action) !== -1) {
       var sessObraR = sessaoDoToken(p.token);
       if (sessObraR && !sessaoPodeNaObra(sessObraR, p.obra)) {
@@ -217,6 +219,10 @@ function rotear(e) {
       case 'rdoAssinaturaAbrir':  resp = rdoAssinaturaAbrir(p); break;
       case 'rdoAssinaturaGravar': resp = rdoAssinaturaGravar(p); break;
       case 'rdoAssinaturasDoDia': resp = rdoAssinaturasDoDia(p); break;
+      /* Os dias já assinados cujo PDF guardado ficou para trás. O app varre
+         esta lista sozinho e redeposita — é o que faz o RDO assinado sair
+         para todos sem ninguém ter de lembrar de abrir a tela do dia. */
+      case 'rdoAssinadosPendentes': resp = rdoAssinadosPendentes(p); break;
       /* A FIRMA ARQUIVADA do engenheiro — a que o servidor aplica sozinho
          em todo RDO, para a fiscalização ser a única a assinar por link.
          Exige sessão do escritório: arquivar uma firma é decidir que aquele
@@ -4346,6 +4352,79 @@ function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
   return { ok: true, data: dataISO, para: destinos };
 }
 
+/* OS DIAS QUE JÁ ESTÃO ASSINADOS E AINDA NÃO SAÍRAM.
+   ------------------------------------------------------------
+   O e-mail do RDO ASSINADO nasce do DEPÓSITO, não da assinatura: quem
+   desenha a firma dentro do quadro é o navegador, e o servidor só manda o
+   que o app deixou lá. Só que a última firma chega quando o fiscal abre o
+   link dele — à tarde, no meio do expediente, com o app de casa fechado.
+   O dia ficava assim: assinado na planilha, e no Drive um PDF com o quadro
+   do fiscal ainda em branco. O RDO assinado só saía quando alguém do
+   escritório, por conta própria, abrisse a tela daquele dia — e é pedir
+   para alguém lembrar de um passo que ninguém vê.
+
+   Esta ação é a lista de serviço do app: os dias da janela recente em que
+   TODAS as firmas online já entraram mas o PDF depositado ainda traz menos
+   do que isso. O app redesenha esses dias e redeposita; o depósito dispara
+   o e-mail para a lista inteira, como sempre disparou. O servidor continua
+   sem desenhar nada.
+
+   Só LÊ. Quem manda e-mail é o depósito que vem depois.
+
+   A ida ao Drive fica DEPOIS do corte por assinatura: numa janela de duas
+   semanas são quinze buscas de arquivo para achar, quase sempre, nenhum
+   dia pendente — e esta chamada roda no boot de todo aparelho. */
+var RDO_PENDENTES_DIAS = 15;
+
+function rdoAssinadosPendentes(p) {
+  var obra = normObra(p && p.obra) || OBRA_ID;
+  if (obra !== OBRA_ID) {
+    // Mesma trava do depósito e do painel: a assinatura online é do contrato
+    // da Teotônio. Nada a varrer nas outras — e não é erro.
+    return { ok: true, pendentes: [], indisponivel: 'A assinatura online é só da Teotônio.' };
+  }
+
+  var dias = parseInt(p && p.dias, 10);
+  if (isNaN(dias) || dias < 1 || dias > 60) dias = RDO_PENDENTES_DIAS;
+
+  /* "Todas" são as assinaturas ONLINE previstas — as mesmas do
+     `rdoEnviarAssinadoSePronto_`. A supervisão assina a mão e não conta:
+     esperar pelo quadro dela seria esperar para sempre. */
+  var previstas = rdoAssinantes().length;
+  if (!previstas) return { ok: true, obra: obra, previstas: 0, pendentes: [] };
+
+  var hoje = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd');
+  var desde = Utilities.formatDate(new Date(Date.now() - dias * 24 * 3600 * 1000),
+                                   fusoDoScript(), 'yyyy-MM-dd');
+
+  // Uma leitura da aba só, agrupada por data: a alternativa era uma leitura
+  // por dia da janela, e esta aba cresce duas linhas por dia para sempre.
+  var porData = {};
+  linhasObj(ABA_RDO_ASSIN, obra).forEach(function (l) {
+    var d = normData(l.data);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
+    if (d < desde || d > hoje) return;
+    (porData[d] = porData[d] || []).push(l);
+  });
+
+  var log = rdoAssinadoLogLer_();
+  var out = [];
+  Object.keys(porData).sort().forEach(function (d) {
+    var assinadas = porData[d].filter(function (x) {
+      return String(x.status) === 'assinada';
+    }).length;
+    if (assinadas < previstas) return;                 // ainda falta alguém
+    var noDeposito = rdoPdfAssinaturasNoDeposito_(obra, d);
+    if (noDeposito >= assinadas) return;               // o depósito está em dia
+    out.push({ data: d, assinadas: assinadas, noDeposito: noDeposito,
+               /* Já saiu uma vez? Então o que falta é só pôr o arquivo
+                  guardado em dia — o log impede o segundo e-mail. */
+               enviado: !!log[obra + '|' + d] });
+  });
+
+  return { ok: true, obra: obra, previstas: previstas, pendentes: out };
+}
+
 /* Reenvio manual do RDO assinado, para rodar no editor.
    Uso:  reenviarRDOAssinado('2026-08-24')  */
 function reenviarRDOAssinado(dataISO) {
@@ -4397,6 +4476,15 @@ function reenviarRDODoDiaAlvo() {
 /* Remanda o RDO ASSINADO do dia alvo — o que leva o PDF com as firmas. */
 function reenviarRDOAssinadoDoDiaAlvo() {
   return reenviarRDOAssinado(dataAlvoAssinatura_());
+}
+
+/* Quais dias estão assinados com o PDF guardado para trás — o irmão de
+   editor da varredura que o app faz sozinho. Só lê: serve para responder
+   "o assinado desse dia saiu?" sem abrir o app. */
+function verRDOsAssinadosPendentes() {
+  var r = rdoAssinadosPendentes({ obra: OBRA_ID });
+  Logger.log(JSON.stringify(r, null, 2));
+  return r;
 }
 
 /* Cancela a assinatura de PAPEL_ALVO_ASSINATURA no dia alvo: apaga a firma,

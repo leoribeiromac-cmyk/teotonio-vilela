@@ -1136,5 +1136,138 @@ t('e diz quando está armado', () => {
   verdade(ctx.rdoFirmasArquivadasLer({}).firmas[0].armada);
 });
 
+// ------------------------------------------------------------------
+// A VARREDURA — como o RDO assinado sai sem ninguém abrir a tela do dia
+// ------------------------------------------------------------------
+/* O e-mail do RDO ASSINADO nasce do DEPÓSITO, e o depósito é desenho de
+   navegador. A última firma, porém, chega quando o fiscal abre o link dele
+   — à tarde, com o app do escritório fechado. `rdoAssinadosPendentes` é a
+   lista de serviço que o app varre sozinho: os dias já assinados cujo PDF
+   guardado ficou para trás.
+
+   As datas aqui são RELATIVAS AO DIA DE HOJE de propósito: a janela da
+   varredura é contada a partir de agora, e um teste preso a uma data fixa
+   passaria a falhar sozinho com o passar das semanas. */
+const diaRelativo = (n) => {
+  const d = new Date(Date.now() - n * 24 * 3600 * 1000);
+  const p = x => String(x).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+};
+const ONTEM = diaRelativo(1);
+const ANTIGO = diaRelativo(40);
+
+/* O dia precisa existir na aba do diário — é de lá que sai o número do RDO
+   que vai no convite. */
+const comDiario = (data, id) => {
+  PLANILHA.RDO_Diario.push(linhaDiario({ id: id || ('D' + data.replace(/-/g, '')), data }));
+};
+const assinarNoDia = (papel, data) => ctx.rdoAssinaturaGravar({
+  t: tokenDe(papel, data), assinatura: uriPng(), nome: 'Fulano de Tal Assinante' });
+const assinarTodosNoDia = (data) => {
+  convites(data);
+  assinarNoDia('engenheiro', data);
+  assinarNoDia('fiscalizacao', data);
+};
+const pendentes = (extra) => ctx.rdoAssinadosPendentes(
+  Object.assign({ obra: 'teotonio' }, extra || {})).pendentes;
+
+console.log('\nOs dias assinados que o app ainda tem de repor');
+
+t('dia assinado por todos com o depósito para trás entra na lista', () => {
+  comDiario(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 0 });   // o das 8h, com os quadros em branco
+  assinarTodosNoDia(ONTEM);
+  const l = pendentes();
+  eq(l.length, 1, JSON.stringify(l));
+  eq(l[0].data, ONTEM);
+  eq(l[0].assinadas, 2);
+  eq(l[0].noDeposito, 0, 'o PDF guardado ainda é o de antes das firmas');
+});
+
+t('dia em que ainda falta alguém NÃO entra — não é hora de mandar nada', () => {
+  comDiario(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 0 });
+  convites(ONTEM);
+  assinarNoDia('engenheiro', ONTEM);
+  eq(pendentes().length, 0);
+});
+
+t('dia sem depósito nenhum entra: é o atrasado que nunca foi desenhado', () => {
+  comDiario(ONTEM);
+  assinarTodosNoDia(ONTEM);
+  const l = pendentes();
+  eq(l.length, 1, JSON.stringify(l));
+  eq(l[0].noDeposito, -1);
+});
+
+t('depósito em dia sai da lista — é o que fecha a varredura', () => {
+  comDiario(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 0 });
+  assinarTodosNoDia(ONTEM);
+  eq(pendentes().length, 1, 'devia estar pendente antes de o app repor');
+  depositar({ data: ONTEM, assinaturas: 2 });   // o app redesenhou com as firmas
+  eq(pendentes().length, 0);
+});
+
+t('e é esse depósito que manda o RDO assinado para a lista inteira', () => {
+  comDiario(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 0 });
+  assinarTodosNoDia(ONTEM);
+  eq(paraLista().length, 0, 'nada podia ter saído antes do PDF com as firmas');
+  depositar({ data: ONTEM, assinaturas: 2 });
+  const enviados = paraLista().filter(e => String(e.subject || '').indexOf('ASSINADO') !== -1);
+  eq(enviados.length, 1, JSON.stringify(paraLista().map(e => e.subject)));
+  verdade(enviados[0].to.split(',').length > 1, 'o assinado tem de ir para a lista toda');
+});
+
+t('dia fora da janela não é varrido para sempre', () => {
+  comDiario(ANTIGO);
+  assinarTodosNoDia(ANTIGO);
+  eq(pendentes().length, 0, 'quarenta dias atrás não é mais serviço da varredura');
+  eq(pendentes({ dias: 60 }).length, 1, 'com a janela aberta à mão ele aparece');
+});
+
+t('a varredura só LÊ: não manda e-mail nenhum', () => {
+  comDiario(ONTEM);
+  assinarTodosNoDia(ONTEM);
+  const antes = CORREIO.enviados.length;
+  pendentes();
+  pendentes();
+  eq(CORREIO.enviados.length, antes);
+});
+
+t('o dia pendente diz se já chegou a sair alguma vez', () => {
+  comDiario(ONTEM);
+  assinarTodosNoDia(ONTEM);
+  verdade(!pendentes()[0].enviado, 'nunca saiu, e mesmo assim veio marcado como enviado');
+});
+
+/* O QUE A VARREDURA NÃO ENXERGA, e é de propósito: ela compara CONTAGEM de
+   firmas, não quais firmas são. Cancelar a assinatura de alguém e tomá-la de
+   novo devolve o mesmo número, e o dia não volta para a lista — o PDF
+   guardado continua com o traço cancelado desenhado.
+
+   Não é descuido. Reescrever sozinho um documento que já foi para a
+   fiscalização é outra decisão (a mesma do "tirar a firma arquivada vale
+   para os PRÓXIMOS RDOs"), e quem cancela uma assinatura é o escritório,
+   que está com a tela daquele dia aberta na mão. Este teste existe para
+   esse contrato ficar escrito, e não virar suposição de quem mexer aqui. */
+t('trocar uma firma pela outra não repõe o depósito sozinho', () => {
+  comDiario(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 0 });
+  assinarTodosNoDia(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 2 });
+  ctx.rdoAssinaturaCancelar(ONTEM, 'fiscalizacao', 'assinou no dia errado');
+  assinarNoDia('fiscalizacao', ONTEM);
+  eq(pendentes().length, 0, 'a varredura conta firmas, e a contagem não mudou');
+});
+
+t('outra obra não tem varredura — a assinatura online é da Teotônio', () => {
+  const r = ctx.rdoAssinadosPendentes({ obra: 'ranario' });
+  verdade(r.ok);
+  eq(r.pendentes.length, 0);
+  verdade(!!r.indisponivel);
+});
+
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');
 process.exit(falhas ? 1 : 0);
