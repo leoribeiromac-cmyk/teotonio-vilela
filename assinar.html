@@ -130,6 +130,10 @@
       <a id="baixar" class="b-sec" download>Baixar o PDF</a>
       <span class="dica" id="dicaFolhas"></span>
     </div>
+    <!-- QUAL VIA É ESTA. Quem acaba de assinar baixaria, sem saber, o PDF de
+         antes da própria firma: o depósito só é reposto quando o app
+         redesenha o dia, minutos depois. -->
+    <div class="dica" id="dicaVia" style="margin-top:8px"></div>
   </div>
 
   <div id="cartaoResumo" class="cartao oculto">
@@ -423,6 +427,22 @@ function listarQuem(lista) {
   mostrar('cartaoQuem', true);
 }
 
+/* Qual via do RDO está na tela. Fica separado porque a página REPERGUNTA
+   depois de assinar: até aquele instante o PDF depositado era o de antes da
+   firma, e a frase tem de mudar junto. */
+function pintarVia(r) {
+  var el = q('dicaVia');
+  if (!el) return;
+  el.textContent = r.pdfComFirmas
+    ? 'Esta é a via com as assinaturas. Este link entrega sempre a versão mais ' +
+      'recente do RDO deste dia — guarde-o para baixar quando precisar.'
+    : (r.assinada
+        ? 'Atenção: esta via ainda é a de antes da sua assinatura. A versão com as ' +
+          'firmas fica pronta em alguns minutos — volte por este mesmo link para baixá-la.'
+        : 'Guarde este link: ele abre o RDO deste dia a qualquer momento, e passa a ' +
+          'entregar a via assinada assim que todas as firmas entrarem.');
+}
+
 // -------------------------------------------------- carregar
 function abrir() {
   if (!TOKEN) {
@@ -452,6 +472,11 @@ function abrir() {
       mostrar('cartaoRdo', true);
       q('baixar').href = r.pdf;
       q('baixar').setAttribute('download', r.pdfNome || 'RDO.pdf');
+      /* O MESMO LINK SERVE DEPOIS. `rdoAssinaturaAbrir` entrega sempre o PDF
+         que está DEPOSITADO — então, quando o app repõe o depósito com as
+         firmas, este endereço passa a devolver a via assinada sozinho. É o
+         que o e-mail manda guardar, e é aqui que a promessa se cumpre. */
+      pintarVia(r);
       desenharPdf(r.pdf);
     } else if (r.semPdf) {
       recado(r.aviso || 'O PDF deste RDO ainda não está disponível.', 'atencao');
@@ -504,7 +529,12 @@ function assinar() {
     // Reabre só para atualizar a lista de quem assinou — sem custo para quem
     // já terminou, e evita a página ficar mostrando o estado de antes.
     chamar({ action: 'rdoAssinaturaAbrir', t: TOKEN }).then(function (novo) {
-      if (novo && novo.ok) listarQuem(novo.outras);
+      if (!novo || !novo.ok) return;
+      listarQuem(novo.outras);
+      /* E a frase do PDF muda com a assinatura que acabou de entrar: o que
+         está para download ainda é a via de ANTES dela, e quem baixar agora
+         sem saber disso leva o RDO sem a própria firma. */
+      pintarVia(novo);
     }).catch(function () {});
   }).catch(function (e) {
     /* Falhou no envio: o traço CONTINUA na tela. Mandar o fiscal assinar de

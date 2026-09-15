@@ -3164,7 +3164,21 @@ function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha) {
     return { rotulo: String(a.rotulo || a.papel || ''), assinada: assinada,
              quem: String(a.nomeAssinante || ''), quando: String(a.assinadoEm || '').slice(0, 16) };
   });
-  var linkMeu = minha && String(minha.status) !== 'assinada' ? rdoAssinaturaLink_(minha.token) : '';
+  /* O LINK PESSOAL É DUAS COISAS, e a segunda não estava escrita em lugar
+     nenhum: ele assina, e ele ABRE o RDO daquele dia a qualquer momento.
+     `rdoAssinaturaAbrir` sempre serviu o PDF que está DEPOSITADO — então,
+     depois que o app repõe o depósito com as firmas, o mesmo endereço passa
+     a entregar a via assinada. O fiscal não precisa guardar anexo nenhum
+     nem pedir o RDO de volta ao escritório.
+
+     Por isso o link é calculado mesmo para quem JÁ assinou. Ele continua
+     sendo credencial pessoal — e é por isso que este corpo só ganha `minha`
+     dentro do laço que manda UM E-MAIL POR PESSOA. O e-mail do RDO ASSINADO
+     vai num `to` só, para a lista inteira: link pessoal ali seria o link do
+     fiscal na caixa do engenheiro, e é justamente o que a assinatura online
+     existe para impedir. */
+  var linkPessoal = minha && String(minha.token || '') ? rdoAssinaturaLink_(minha.token) : '';
+  var linkMeu = minha && String(minha.status) !== 'assinada' ? linkPessoal : '';
   var jaAssinei = !!(minha && String(minha.status) === 'assinada');
   /* Quem tem firma arquivada não recebe "você já assinou": ele não assinou
      nada hoje, o sistema aplicou a firma que ele deixou guardada. O e-mail
@@ -3187,6 +3201,11 @@ function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha) {
       ? '\nSua firma arquivada foi aplicada a este RDO — você não precisa assinar.\n' +
         'Para deixar de pré-assinar os RDOs, avise o escritório.\n'
       : '\nVocê já assinou este RDO. Obrigado.\n';
+  }
+  if (linkPessoal) {
+    textoAss += '\nGUARDE ESTE LINK: ele abre o RDO deste dia a qualquer momento, para ' +
+                'reler ou baixar o PDF. Assim que todas as firmas entram, é a via ' +
+                'ASSINADA que ele passa a entregar.\n' + linkPessoal + '\n';
   }
 
   var texto = titulo + '\n\n' +
@@ -3249,6 +3268,19 @@ function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha) {
               : '<p style="font-size:13px;color:#1a7f45;margin:14px 0 4px">' +
                 '&#10003; Você já assinou este RDO. Obrigado.</p>')
           : '')) +
+    /* A PORTA QUE FICA ABERTA. Anexo de e-mail se perde, some na caixa cheia
+       e nunca é a via mais nova. O link continua entregando o RDO daquele
+       dia — e a via ASSINADA, depois que as firmas entram. */
+    (linkPessoal
+      ? '<div style="margin:12px 0 4px;padding:11px 12px;border:1px solid #d8d8d8;' +
+        'border-radius:6px;background:#fbfbfc">' +
+        '<a href="' + esc(linkPessoal) + '" style="color:#1e3a5f;font-size:13px;' +
+        'font-weight:bold;text-decoration:none">&#8595; Abrir ou baixar o RDO deste dia</a>' +
+        '<div style="font-size:11px;color:#666;margin-top:5px">' +
+        'Guarde este link: ele abre o RDO a qualquer momento, sem depender do anexo. ' +
+        'Quando todas as firmas entram, ele passa a entregar a via <strong>assinada</strong>. ' +
+        'É pessoal — não repasse.</div></div>'
+      : '') +
     '<p style="font-size:13px;color:#333;margin:14px 0 4px">' +
     'O relatório completo vai <strong>em anexo</strong> neste e-mail (PDF).</p>' +
     '<p style="font-size:11px;color:#888;margin:12px 0 0">' +
@@ -4076,6 +4108,13 @@ function rdoAssinaturaAbrir(p) {
     var blob = arq.getBlob();
     resp.pdf = 'data:application/pdf;base64,' + Utilities.base64Encode(blob.getBytes());
     resp.pdfNome = 'RDO' + (numero ? '_' + numero : '') + '_' + dataISO.replace(/-/g, '') + '.pdf';
+    /* ESTE PDF JÁ TRAZ AS FIRMAS DESENHADAS? Quem acaba de assinar baixaria,
+       sem saber, a via de antes da própria assinatura: o depósito só é
+       reposto quando o app redesenha o dia, alguns minutos depois. A página
+       diz isso em vez de entregar calado o arquivo velho. */
+    var assinadasDoDia = resp.outras.filter(function (x) { return x.assinada; }).length;
+    resp.pdfComFirmas = assinadasDoDia > 0 &&
+                        rdoPdfAssinaturasNoDeposito_(obra, dataISO) >= assinadasDoDia;
   }
   return resp;
 }

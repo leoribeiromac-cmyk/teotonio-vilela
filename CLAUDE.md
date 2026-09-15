@@ -78,6 +78,18 @@ que mexa no corpo do POST deixa o Apps Script sem parâmetro nenhum — a págin
 abria em `Ação desconhecida: ""` e ele não conseguia assinar, sem nada parecer
 errado de fora daquela rede.
 
+O LINK É TAMBÉM A PORTA DE LEITURA, e não só a de assinar: o e-mail de
+quem assina manda GUARDÁ-LO. `rdoAssinaturaAbrir` sempre serviu o PDF que
+está DEPOSITADO, então o mesmo endereço entrega a via ASSINADA depois que o
+app repõe o depósito — anexo de e-mail se perde e nunca é a via mais nova.
+Por isso o link vai no corpo até para quem JÁ assinou. Ele continua sendo
+credencial pessoal, e é por isso que `rdoEmailCorpo_` só ganha `minha`
+dentro do laço de UM E-MAIL POR PESSOA: o e-mail do RDO ASSINADO vai num
+`to` só, para a lista inteira, e link pessoal ali seria o link do fiscal na
+caixa do engenheiro. A página avisa qual via está para download
+(`pdfComFirmas`) — quem acaba de assinar baixaria, calado, o RDO de antes da
+própria firma, porque o depósito só é reposto minutos depois.
+
 Os papéis são TRÊS palavras que têm de bater dos dois lados — `engenheiro`,
 `fiscalizacao`, `supervisao`: `rdoPapeisAssinatura()` (index.html) e
 `RDO_ASSINANTES` (Code.gs). Trocar uma delas de um lado só põe a firma do

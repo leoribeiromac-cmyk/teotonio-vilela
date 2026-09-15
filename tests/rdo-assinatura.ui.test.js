@@ -356,6 +356,76 @@ async function rabiscar(p) {
     await ctx.close();
   }
 
+  // ------------------------------------------ o link é a porta que fica aberta
+  /* O MESMO LINK QUE ASSINA BAIXA O RDO A QUALQUER MOMENTO. Anexo de e-mail
+     se perde e nunca é a via mais nova; `rdoAssinaturaAbrir` sempre serviu o
+     PDF que está DEPOSITADO, então depois que o app repõe o depósito com as
+     firmas é a via assinada que este endereço entrega.
+
+     O que a página NÃO pode fazer é entregar calado o arquivo velho a quem
+     acabou de assinar: nos minutos entre a firma e a reposição do depósito,
+     o que está para download é o RDO SEM a assinatura dele. */
+  {
+    console.log('\nQual via do RDO está para baixar');
+    const { ctx, p } = await abrirPagina(navegador, () => respostaAbrir());
+    await p.waitForSelector('#cartaoRdo:not(.oculto)', { timeout: 15000 });
+    ok('quem ainda não assinou é mandado guardar o link',
+       (await p.textContent('#dicaVia')).includes('Guarde este link'),
+       await p.textContent('#dicaVia'));
+    await ctx.close();
+  }
+  {
+    const { ctx, p } = await abrirPagina(navegador, () => respostaAbrir({
+      assinada: true, assinadoEm: '2026-08-25 09:12:00', nomeAssinante: 'Walter Botelho',
+      pdfComFirmas: false }));
+    await p.waitForSelector('#cartaoRdo:not(.oculto)', { timeout: 15000 });
+    ok('quem assinou há pouco é avisado de que esta via ainda é a de antes',
+       (await p.textContent('#dicaVia')).includes('antes da sua assinatura'),
+       await p.textContent('#dicaVia'));
+    ok('e de que basta voltar pelo mesmo link',
+       (await p.textContent('#dicaVia')).includes('mesmo link'));
+    await ctx.close();
+  }
+  {
+    const { ctx, p } = await abrirPagina(navegador, () => respostaAbrir({
+      assinada: true, assinadoEm: '2026-08-25 09:12:00', nomeAssinante: 'Walter Botelho',
+      pdfComFirmas: true }));
+    await p.waitForSelector('#cartaoRdo:not(.oculto)', { timeout: 15000 });
+    ok('e quando o depósito já tem as firmas, o link entrega a via assinada',
+       (await p.textContent('#dicaVia')).includes('via com as assinaturas'),
+       await p.textContent('#dicaVia'));
+    ok('o botão de baixar continua à mão', await p.isVisible('#baixar'));
+    await ctx.close();
+  }
+  {
+    /* E o aviso muda NA HORA de assinar: até o clique, a resposta dizia
+       "ainda não assinado"; depois dele, o que está para download passou a
+       ser a via de antes da firma que acabou de entrar. */
+    let jaAssinou = false;
+    const { ctx, p } = await abrirPagina(navegador, (params) => {
+      if (params.action === 'rdoAssinaturaGravar') {
+        jaAssinou = true;
+        return { ok: true, assinadoEm: '2026-08-25 10:30:00', codigo: 'A1B2C3D4',
+                 faltam: 0, nomeAssinante: params.nome };
+      }
+      return respostaAbrir({ assinada: jaAssinou, pdfComFirmas: false });
+    });
+    await p.waitForSelector('#cartaoAssinar:not(.oculto)', { timeout: 15000 });
+    ok('antes de assinar, o aviso é o de guardar o link',
+       (await p.textContent('#dicaVia')).includes('Guarde este link'));
+    await p.fill('#nome', 'Walter Botelho');
+    await rabiscar(p);
+    await p.check('#concordo');
+    await p.click('#btAssinar');
+    await p.waitForFunction(
+      () => (document.getElementById('dicaVia').textContent || '').indexOf('antes da sua') !== -1,
+      null, { timeout: 15000 }).catch(() => {});
+    ok('depois de assinar, o aviso passa a ser o da via que ficou para trás',
+       (await p.textContent('#dicaVia')).includes('antes da sua assinatura'),
+       await p.textContent('#dicaVia'));
+    await ctx.close();
+  }
+
   // ------------------------------------------------------- links ruins
   {
     console.log('\nLink que não presta');

@@ -478,14 +478,84 @@ t('quem já assinou não recebe o botão de assinar de novo', () => {
   ctx.reenviarRDOPorEmail(HOJE);
   const eng = ctx.rdoAssinantes().filter(a => a.papel === 'engenheiro')[0];
   const dele = paraLista().filter(e => e.to === eng.email)[0];
-  verdade(dele.htmlBody.indexOf('assinar.html') === -1, 'mandou link para quem já assinou');
+  verdade(dele.htmlBody.indexOf('Ler e assinar o RDO') === -1,
+          'mandou o botão de assinar para quem já assinou');
   verdade(dele.htmlBody.indexOf('já assinou') !== -1, 'não reconheceu quem já assinou');
+});
+
+/* O LINK É A PORTA QUE FICA ABERTA. Anexo de e-mail se perde, some na caixa
+   cheia e nunca é a via mais nova — e o fiscal ficava dependendo de pedir o
+   RDO de volta ao escritório. O mesmo endereço que ele usa para assinar abre
+   o RDO daquele dia quando ele quiser, e entrega a via ASSINADA depois que
+   as firmas entram (`rdoAssinaturaAbrir` sempre serviu o PDF DEPOSITADO). */
+t('o e-mail de quem assina traz o link para baixar o RDO quando quiser', () => {
+  depositar();
+  ctx.reenviarRDOPorEmail(HOJE);
+  const fis = ctx.rdoAssinantes().filter(a => a.papel === 'fiscalizacao')[0];
+  const dele = paraLista().filter(e => e.to === fis.email)[0];
+  verdade(dele.htmlBody.indexOf('Abrir ou baixar o RDO deste dia') !== -1,
+          'sem a porta de download no e-mail de quem assina');
+  verdade(dele.body.indexOf('GUARDE ESTE LINK') !== -1, 'e sem dizer isso na versão em texto');
+});
+t('e quem JÁ assinou continua com ele — é só aí que o RDO assinado vale a pena', () => {
+  depositar();
+  assinar('engenheiro', { nome: 'Paulo Engenheiro' });
+  ctx.reenviarRDOPorEmail(HOJE);
+  const eng = ctx.rdoAssinantes().filter(a => a.papel === 'engenheiro')[0];
+  const dele = paraLista().filter(e => e.to === eng.email)[0];
+  verdade(dele.htmlBody.indexOf('Abrir ou baixar o RDO deste dia') !== -1,
+          'quem já assinou ficou sem como rebaixar o RDO');
+  verdade(dele.htmlBody.indexOf(tokenDe('engenheiro')) !== -1, 'e sem o link dele');
+  verdade(dele.htmlBody.indexOf(tokenDe('fiscalizacao')) === -1,
+          'o link do fiscal vazou no e-mail do engenheiro');
+});
+t('a cópia do escritório continua sem link nenhum — ela não assina nem precisa', () => {
+  depositar();
+  ctx.reenviarRDOPorEmail(HOJE);
+  const assinantes = ctx.rdoAssinantes().map(a => a.email.toLowerCase());
+  paraLista().filter(e => assinantes.indexOf(String(e.to).toLowerCase()) === -1)
+    .forEach(e => verdade(e.htmlBody.indexOf('assinar.html') === -1,
+                          'link de assinatura na cópia do escritório'));
+});
+/* A TRAVA QUE NÃO PODE CAIR. O e-mail do RDO ASSINADO vai num `to` só, para
+   a lista inteira. Link pessoal ali seria o link do FISCAL chegando na caixa
+   do engenheiro — exatamente o que a assinatura por link pessoal existe para
+   impedir. Ele leva o PDF em anexo, e ponto. */
+t('o e-mail do RDO ASSINADO, que vai para todos juntos, não leva link pessoal', () => {
+  depositar({ assinaturas: '0' });
+  assinar('engenheiro', { nome: 'Paulo Engenheiro' });
+  assinar('fiscalizacao', { nome: 'Willian Fiscal' });
+  depositar({ assinaturas: '2' });
+  const assinado = paraLista().filter(e => String(e.subject || '').indexOf('ASSINADO') !== -1)[0];
+  verdade(!!assinado, 'o RDO assinado não saiu');
+  verdade(assinado.to.split(',').length > 1, 'esperava um e-mail só para a lista inteira');
+  verdade(String(assinado.body || '').indexOf('assinar.html') === -1,
+          'link pessoal no e-mail que vai para todos juntos');
 });
 t('a Propriedade RDO_SITE_URL manda no endereço do link', () => {
   PROPS.setProperty('RDO_SITE_URL', 'https://obra.exemplo.com.br/app/');
   verdade(ctx.rdoAssinaturaLink_('abc123').indexOf(
     'https://obra.exemplo.com.br/app/assinar.html?t=abc123') === 0,
     ctx.rdoAssinaturaLink_('abc123'));
+});
+
+t('a página diz quando o PDF ainda é a via de ANTES da assinatura', () => {
+  depositar({ assinaturas: '0' });
+  assinar('fiscalizacao', { nome: 'Willian Fiscal' });
+  const r = ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') });
+  verdade(r.ok && !!r.pdf, 'sem PDF na resposta');
+  verdade(!r.pdfComFirmas, 'disse que a via já tinha as firmas, e o depósito é o de antes');
+});
+t('e quando ele já traz as firmas desenhadas', () => {
+  depositar({ assinaturas: '0' });
+  assinar('fiscalizacao', { nome: 'Willian Fiscal' });
+  depositar({ assinaturas: '1' });                  // o app redesenhou o dia
+  verdade(ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') }).pdfComFirmas);
+});
+t('dia sem firma nenhuma não se anuncia como via assinada', () => {
+  depositar({ assinaturas: '0' });
+  convites();
+  verdade(!ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') }).pdfComFirmas);
 });
 
 console.log('\nO PDF assinado de volta para a fiscalização');
@@ -879,7 +949,13 @@ t('o e-mail do titular não traz link e diz que a firma arquivada foi aplicada',
   const meu = paraLista().filter(e => String(e.to) === 'msantana@gestorengenharia.com.br')[0];
   verdade(!!meu, 'o titular não recebeu o RDO');
   verdade(String(meu.body).indexOf('firma arquivada') !== -1, meu.body);
-  verdade(String(meu.body).indexOf('assinar.html') === -1, 'mandou link de assinatura para quem já está assinado');
+  verdade(String(meu.body).indexOf('Você assina este RDO') === -1,
+          'mandou o convite de assinar para quem já está pré-assinado');
+  /* O LINK ELE CONTINUA TENDO — para baixar, não para assinar. É o mesmo
+     endereço que entrega a via assinada depois que as firmas entram, e o
+     titular é justamente quem mais precisa do RDO da própria obra em mãos. */
+  verdade(String(meu.body).indexOf('GUARDE ESTE LINK') !== -1,
+          'o titular ficou sem como rebaixar o RDO deste dia');
 });
 t('e o do fiscal continua trazendo o link dele', () => {
   arquivar();
