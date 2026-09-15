@@ -478,14 +478,84 @@ t('quem já assinou não recebe o botão de assinar de novo', () => {
   ctx.reenviarRDOPorEmail(HOJE);
   const eng = ctx.rdoAssinantes().filter(a => a.papel === 'engenheiro')[0];
   const dele = paraLista().filter(e => e.to === eng.email)[0];
-  verdade(dele.htmlBody.indexOf('assinar.html') === -1, 'mandou link para quem já assinou');
+  verdade(dele.htmlBody.indexOf('Ler e assinar o RDO') === -1,
+          'mandou o botão de assinar para quem já assinou');
   verdade(dele.htmlBody.indexOf('já assinou') !== -1, 'não reconheceu quem já assinou');
+});
+
+/* O LINK É A PORTA QUE FICA ABERTA. Anexo de e-mail se perde, some na caixa
+   cheia e nunca é a via mais nova — e o fiscal ficava dependendo de pedir o
+   RDO de volta ao escritório. O mesmo endereço que ele usa para assinar abre
+   o RDO daquele dia quando ele quiser, e entrega a via ASSINADA depois que
+   as firmas entram (`rdoAssinaturaAbrir` sempre serviu o PDF DEPOSITADO). */
+t('o e-mail de quem assina traz o link para baixar o RDO quando quiser', () => {
+  depositar();
+  ctx.reenviarRDOPorEmail(HOJE);
+  const fis = ctx.rdoAssinantes().filter(a => a.papel === 'fiscalizacao')[0];
+  const dele = paraLista().filter(e => e.to === fis.email)[0];
+  verdade(dele.htmlBody.indexOf('Abrir ou baixar o RDO deste dia') !== -1,
+          'sem a porta de download no e-mail de quem assina');
+  verdade(dele.body.indexOf('GUARDE ESTE LINK') !== -1, 'e sem dizer isso na versão em texto');
+});
+t('e quem JÁ assinou continua com ele — é só aí que o RDO assinado vale a pena', () => {
+  depositar();
+  assinar('engenheiro', { nome: 'Paulo Engenheiro' });
+  ctx.reenviarRDOPorEmail(HOJE);
+  const eng = ctx.rdoAssinantes().filter(a => a.papel === 'engenheiro')[0];
+  const dele = paraLista().filter(e => e.to === eng.email)[0];
+  verdade(dele.htmlBody.indexOf('Abrir ou baixar o RDO deste dia') !== -1,
+          'quem já assinou ficou sem como rebaixar o RDO');
+  verdade(dele.htmlBody.indexOf(tokenDe('engenheiro')) !== -1, 'e sem o link dele');
+  verdade(dele.htmlBody.indexOf(tokenDe('fiscalizacao')) === -1,
+          'o link do fiscal vazou no e-mail do engenheiro');
+});
+t('a cópia do escritório continua sem link nenhum — ela não assina nem precisa', () => {
+  depositar();
+  ctx.reenviarRDOPorEmail(HOJE);
+  const assinantes = ctx.rdoAssinantes().map(a => a.email.toLowerCase());
+  paraLista().filter(e => assinantes.indexOf(String(e.to).toLowerCase()) === -1)
+    .forEach(e => verdade(e.htmlBody.indexOf('assinar.html') === -1,
+                          'link de assinatura na cópia do escritório'));
+});
+/* A TRAVA QUE NÃO PODE CAIR. O e-mail do RDO ASSINADO vai num `to` só, para
+   a lista inteira. Link pessoal ali seria o link do FISCAL chegando na caixa
+   do engenheiro — exatamente o que a assinatura por link pessoal existe para
+   impedir. Ele leva o PDF em anexo, e ponto. */
+t('o e-mail do RDO ASSINADO, que vai para todos juntos, não leva link pessoal', () => {
+  depositar({ assinaturas: '0' });
+  assinar('engenheiro', { nome: 'Paulo Engenheiro' });
+  assinar('fiscalizacao', { nome: 'Willian Fiscal' });
+  depositar({ assinaturas: '2' });
+  const assinado = paraLista().filter(e => String(e.subject || '').indexOf('ASSINADO') !== -1)[0];
+  verdade(!!assinado, 'o RDO assinado não saiu');
+  verdade(assinado.to.split(',').length > 1, 'esperava um e-mail só para a lista inteira');
+  verdade(String(assinado.body || '').indexOf('assinar.html') === -1,
+          'link pessoal no e-mail que vai para todos juntos');
 });
 t('a Propriedade RDO_SITE_URL manda no endereço do link', () => {
   PROPS.setProperty('RDO_SITE_URL', 'https://obra.exemplo.com.br/app/');
   verdade(ctx.rdoAssinaturaLink_('abc123').indexOf(
     'https://obra.exemplo.com.br/app/assinar.html?t=abc123') === 0,
     ctx.rdoAssinaturaLink_('abc123'));
+});
+
+t('a página diz quando o PDF ainda é a via de ANTES da assinatura', () => {
+  depositar({ assinaturas: '0' });
+  assinar('fiscalizacao', { nome: 'Willian Fiscal' });
+  const r = ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') });
+  verdade(r.ok && !!r.pdf, 'sem PDF na resposta');
+  verdade(!r.pdfComFirmas, 'disse que a via já tinha as firmas, e o depósito é o de antes');
+});
+t('e quando ele já traz as firmas desenhadas', () => {
+  depositar({ assinaturas: '0' });
+  assinar('fiscalizacao', { nome: 'Willian Fiscal' });
+  depositar({ assinaturas: '1' });                  // o app redesenhou o dia
+  verdade(ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') }).pdfComFirmas);
+});
+t('dia sem firma nenhuma não se anuncia como via assinada', () => {
+  depositar({ assinaturas: '0' });
+  convites();
+  verdade(!ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') }).pdfComFirmas);
 });
 
 console.log('\nO PDF assinado de volta para a fiscalização');
@@ -879,7 +949,13 @@ t('o e-mail do titular não traz link e diz que a firma arquivada foi aplicada',
   const meu = paraLista().filter(e => String(e.to) === 'msantana@gestorengenharia.com.br')[0];
   verdade(!!meu, 'o titular não recebeu o RDO');
   verdade(String(meu.body).indexOf('firma arquivada') !== -1, meu.body);
-  verdade(String(meu.body).indexOf('assinar.html') === -1, 'mandou link de assinatura para quem já está assinado');
+  verdade(String(meu.body).indexOf('Você assina este RDO') === -1,
+          'mandou o convite de assinar para quem já está pré-assinado');
+  /* O LINK ELE CONTINUA TENDO — para baixar, não para assinar. É o mesmo
+     endereço que entrega a via assinada depois que as firmas entram, e o
+     titular é justamente quem mais precisa do RDO da própria obra em mãos. */
+  verdade(String(meu.body).indexOf('GUARDE ESTE LINK') !== -1,
+          'o titular ficou sem como rebaixar o RDO deste dia');
 });
 t('e o do fiscal continua trazendo o link dele', () => {
   arquivar();
@@ -1134,6 +1210,139 @@ t('e não oferece nada para escolher quando já está arquivada', () => {
 t('e diz quando está armado', () => {
   armar();
   verdade(ctx.rdoFirmasArquivadasLer({}).firmas[0].armada);
+});
+
+// ------------------------------------------------------------------
+// A VARREDURA — como o RDO assinado sai sem ninguém abrir a tela do dia
+// ------------------------------------------------------------------
+/* O e-mail do RDO ASSINADO nasce do DEPÓSITO, e o depósito é desenho de
+   navegador. A última firma, porém, chega quando o fiscal abre o link dele
+   — à tarde, com o app do escritório fechado. `rdoAssinadosPendentes` é a
+   lista de serviço que o app varre sozinho: os dias já assinados cujo PDF
+   guardado ficou para trás.
+
+   As datas aqui são RELATIVAS AO DIA DE HOJE de propósito: a janela da
+   varredura é contada a partir de agora, e um teste preso a uma data fixa
+   passaria a falhar sozinho com o passar das semanas. */
+const diaRelativo = (n) => {
+  const d = new Date(Date.now() - n * 24 * 3600 * 1000);
+  const p = x => String(x).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+};
+const ONTEM = diaRelativo(1);
+const ANTIGO = diaRelativo(40);
+
+/* O dia precisa existir na aba do diário — é de lá que sai o número do RDO
+   que vai no convite. */
+const comDiario = (data, id) => {
+  PLANILHA.RDO_Diario.push(linhaDiario({ id: id || ('D' + data.replace(/-/g, '')), data }));
+};
+const assinarNoDia = (papel, data) => ctx.rdoAssinaturaGravar({
+  t: tokenDe(papel, data), assinatura: uriPng(), nome: 'Fulano de Tal Assinante' });
+const assinarTodosNoDia = (data) => {
+  convites(data);
+  assinarNoDia('engenheiro', data);
+  assinarNoDia('fiscalizacao', data);
+};
+const pendentes = (extra) => ctx.rdoAssinadosPendentes(
+  Object.assign({ obra: 'teotonio' }, extra || {})).pendentes;
+
+console.log('\nOs dias assinados que o app ainda tem de repor');
+
+t('dia assinado por todos com o depósito para trás entra na lista', () => {
+  comDiario(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 0 });   // o das 8h, com os quadros em branco
+  assinarTodosNoDia(ONTEM);
+  const l = pendentes();
+  eq(l.length, 1, JSON.stringify(l));
+  eq(l[0].data, ONTEM);
+  eq(l[0].assinadas, 2);
+  eq(l[0].noDeposito, 0, 'o PDF guardado ainda é o de antes das firmas');
+});
+
+t('dia em que ainda falta alguém NÃO entra — não é hora de mandar nada', () => {
+  comDiario(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 0 });
+  convites(ONTEM);
+  assinarNoDia('engenheiro', ONTEM);
+  eq(pendentes().length, 0);
+});
+
+t('dia sem depósito nenhum entra: é o atrasado que nunca foi desenhado', () => {
+  comDiario(ONTEM);
+  assinarTodosNoDia(ONTEM);
+  const l = pendentes();
+  eq(l.length, 1, JSON.stringify(l));
+  eq(l[0].noDeposito, -1);
+});
+
+t('depósito em dia sai da lista — é o que fecha a varredura', () => {
+  comDiario(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 0 });
+  assinarTodosNoDia(ONTEM);
+  eq(pendentes().length, 1, 'devia estar pendente antes de o app repor');
+  depositar({ data: ONTEM, assinaturas: 2 });   // o app redesenhou com as firmas
+  eq(pendentes().length, 0);
+});
+
+t('e é esse depósito que manda o RDO assinado para a lista inteira', () => {
+  comDiario(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 0 });
+  assinarTodosNoDia(ONTEM);
+  eq(paraLista().length, 0, 'nada podia ter saído antes do PDF com as firmas');
+  depositar({ data: ONTEM, assinaturas: 2 });
+  const enviados = paraLista().filter(e => String(e.subject || '').indexOf('ASSINADO') !== -1);
+  eq(enviados.length, 1, JSON.stringify(paraLista().map(e => e.subject)));
+  verdade(enviados[0].to.split(',').length > 1, 'o assinado tem de ir para a lista toda');
+});
+
+t('dia fora da janela não é varrido para sempre', () => {
+  comDiario(ANTIGO);
+  assinarTodosNoDia(ANTIGO);
+  eq(pendentes().length, 0, 'quarenta dias atrás não é mais serviço da varredura');
+  eq(pendentes({ dias: 60 }).length, 1, 'com a janela aberta à mão ele aparece');
+});
+
+t('a varredura só LÊ: não manda e-mail nenhum', () => {
+  comDiario(ONTEM);
+  assinarTodosNoDia(ONTEM);
+  const antes = CORREIO.enviados.length;
+  pendentes();
+  pendentes();
+  eq(CORREIO.enviados.length, antes);
+});
+
+t('o dia pendente diz se já chegou a sair alguma vez', () => {
+  comDiario(ONTEM);
+  assinarTodosNoDia(ONTEM);
+  verdade(!pendentes()[0].enviado, 'nunca saiu, e mesmo assim veio marcado como enviado');
+});
+
+/* O QUE A VARREDURA NÃO ENXERGA, e é de propósito: ela compara CONTAGEM de
+   firmas, não quais firmas são. Cancelar a assinatura de alguém e tomá-la de
+   novo devolve o mesmo número, e o dia não volta para a lista — o PDF
+   guardado continua com o traço cancelado desenhado.
+
+   Não é descuido. Reescrever sozinho um documento que já foi para a
+   fiscalização é outra decisão (a mesma do "tirar a firma arquivada vale
+   para os PRÓXIMOS RDOs"), e quem cancela uma assinatura é o escritório,
+   que está com a tela daquele dia aberta na mão. Este teste existe para
+   esse contrato ficar escrito, e não virar suposição de quem mexer aqui. */
+t('trocar uma firma pela outra não repõe o depósito sozinho', () => {
+  comDiario(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 0 });
+  assinarTodosNoDia(ONTEM);
+  depositar({ data: ONTEM, assinaturas: 2 });
+  ctx.rdoAssinaturaCancelar(ONTEM, 'fiscalizacao', 'assinou no dia errado');
+  assinarNoDia('fiscalizacao', ONTEM);
+  eq(pendentes().length, 0, 'a varredura conta firmas, e a contagem não mudou');
+});
+
+t('outra obra não tem varredura — a assinatura online é da Teotônio', () => {
+  const r = ctx.rdoAssinadosPendentes({ obra: 'ranario' });
+  verdade(r.ok);
+  eq(r.pendentes.length, 0);
+  verdade(!!r.indisponivel);
 });
 
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');

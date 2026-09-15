@@ -130,6 +130,10 @@
       <a id="baixar" class="b-sec" download>Baixar o PDF</a>
       <span class="dica" id="dicaFolhas"></span>
     </div>
+    <!-- QUAL VIA É ESTA. Quem acaba de assinar baixaria, sem saber, o PDF de
+         antes da própria firma: o depósito só é reposto quando o app
+         redesenha o dia, minutos depois. -->
+    <div class="dica" id="dicaVia" style="margin-top:8px"></div>
   </div>
 
   <div id="cartaoResumo" class="cartao oculto">
@@ -192,13 +196,34 @@ var BACKEND = 'https://script.google.com/macros/s/AKfycbwfslMjc5bmKbZ3y6OpUZyi8M
 var TOKEN = new URLSearchParams(location.search).get('t') || '';
 var DADOS = null;
 
-/* POST com FormData, e não JSONP: o PDF do RDO volta em base64 e passa
-   MUITO do teto de URL do navegador. É o mesmo transporte que o app usa
-   para as fotos (ver enviarPost, no index.html). */
+/* POST, e não JSONP: o PDF do RDO volta em base64 e o traço da assinatura
+   sobe em base64 — os dois passam MUITO do teto de URL do navegador.
+
+   MAS O CORPO DO POST NÃO É O ÚNICO LUGAR DA `action`. Quem assina é o
+   fiscal, e o fiscal abre este link de dentro da rede da SP Obras, atrás de
+   um filtro corporativo. Um filtro desses reescreve o que passa — e quando
+   ele mexe no `multipart/form-data` (a fronteira do FormData é um cabeçalho
+   que se perde fácil), o Apps Script recebe um POST sem parâmetro nenhum e
+   responde `Ação desconhecida: ""`. A página abria em vermelho, com uma
+   mensagem que não diz nada a quem só quer assinar, e no app de casa nada
+   parecia errado — porque de fora da rede dele o mesmo POST chega inteiro.
+
+   Duas travas, e as duas são necessárias:
+     • a `action` e o `t` vão TAMBÉM na querystring. São curtos, e com eles
+       o roteador do Code.gs sabe o que fazer mesmo se o corpo se perder
+       inteiro — que é o caso de abrir o RDO, onde o token é tudo o que é
+       preciso;
+     • o corpo vai como `application/x-www-form-urlencoded`, e não mais como
+       multipart. É o formato que o Apps Script lê de forma mais previsível,
+       é uma requisição simples do mesmo jeito (sem preflight de CORS) e não
+       tem fronteira para um proxy estragar. O traço em base64 cabe: o teto
+       aqui é do CORPO, não da URL. */
 function chamar(params) {
-  var fd = new FormData();
-  Object.keys(params).forEach(function (k) { fd.append(k, params[k] == null ? '' : params[k]); });
-  return fetch(BACKEND, { method: 'POST', body: fd }).then(function (r) {
+  var corpo = new URLSearchParams();
+  Object.keys(params).forEach(function (k) { corpo.append(k, params[k] == null ? '' : params[k]); });
+  var url = BACKEND + '?action=' + encodeURIComponent(params.action || '') +
+            '&t=' + encodeURIComponent(params.t || '');
+  return fetch(url, { method: 'POST', body: corpo }).then(function (r) {
     if (!r.ok) throw new Error('Falha de rede (HTTP ' + r.status + ')');
     return r.text();
   }).then(function (txt) {
@@ -402,6 +427,22 @@ function listarQuem(lista) {
   mostrar('cartaoQuem', true);
 }
 
+/* Qual via do RDO está na tela. Fica separado porque a página REPERGUNTA
+   depois de assinar: até aquele instante o PDF depositado era o de antes da
+   firma, e a frase tem de mudar junto. */
+function pintarVia(r) {
+  var el = q('dicaVia');
+  if (!el) return;
+  el.textContent = r.pdfComFirmas
+    ? 'Esta é a via com as assinaturas. Este link entrega sempre a versão mais ' +
+      'recente do RDO deste dia — guarde-o para baixar quando precisar.'
+    : (r.assinada
+        ? 'Atenção: esta via ainda é a de antes da sua assinatura. A versão com as ' +
+          'firmas fica pronta em alguns minutos — volte por este mesmo link para baixá-la.'
+        : 'Guarde este link: ele abre o RDO deste dia a qualquer momento, e passa a ' +
+          'entregar a via assinada assim que todas as firmas entrarem.');
+}
+
 // -------------------------------------------------- carregar
 function abrir() {
   if (!TOKEN) {
@@ -431,6 +472,11 @@ function abrir() {
       mostrar('cartaoRdo', true);
       q('baixar').href = r.pdf;
       q('baixar').setAttribute('download', r.pdfNome || 'RDO.pdf');
+      /* O MESMO LINK SERVE DEPOIS. `rdoAssinaturaAbrir` entrega sempre o PDF
+         que está DEPOSITADO — então, quando o app repõe o depósito com as
+         firmas, este endereço passa a devolver a via assinada sozinho. É o
+         que o e-mail manda guardar, e é aqui que a promessa se cumpre. */
+      pintarVia(r);
       desenharPdf(r.pdf);
     } else if (r.semPdf) {
       recado(r.aviso || 'O PDF deste RDO ainda não está disponível.', 'atencao');
@@ -483,7 +529,12 @@ function assinar() {
     // Reabre só para atualizar a lista de quem assinou — sem custo para quem
     // já terminou, e evita a página ficar mostrando o estado de antes.
     chamar({ action: 'rdoAssinaturaAbrir', t: TOKEN }).then(function (novo) {
-      if (novo && novo.ok) listarQuem(novo.outras);
+      if (!novo || !novo.ok) return;
+      listarQuem(novo.outras);
+      /* E a frase do PDF muda com a assinatura que acabou de entrar: o que
+         está para download ainda é a via de ANTES dela, e quem baixar agora
+         sem saber disso leva o RDO sem a própria firma. */
+      pintarVia(novo);
     }).catch(function () {});
   }).catch(function (e) {
     /* Falhou no envio: o traço CONTINUA na tela. Mandar o fiscal assinar de

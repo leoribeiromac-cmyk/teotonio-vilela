@@ -72,22 +72,22 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=59"></script>
-<script src="dados/ruas-de-terra.js?v=59"></script>
+<script src="dados/ranario.js?v=61"></script>
+<script src="dados/ruas-de-terra.js?v=61"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=59"></script>
+<script src="dados/teotonio-muros.js?v=61"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=59"></script>
-<script src="js/nf/adaptador.js?v=59"></script>
-<script src="js/nf/notas.js?v=59"></script>
-<script src="js/equip/equipamentos.js?v=59"></script>
+<script src="js/ui/icones.js?v=61"></script>
+<script src="js/nf/adaptador.js?v=61"></script>
+<script src="js/nf/notas.js?v=61"></script>
+<script src="js/equip/equipamentos.js?v=61"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=59"></script>
+<script src="js/bf/bota-fora.js?v=61"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -6963,6 +6963,15 @@ async function carregarTudo(opts = {}) {
       return;
     }
     render();
+
+    /* Os dias já assinados cujo PDF guardado ficou para trás: redesenha e
+       redeposita, e é o depósito que manda o RDO ASSINADO para a lista.
+       Fica DEPOIS do `render()` e sem `await`: é manutenção de fundo, e o
+       desenho do PDF é síncrono — segurá-lo antes da tela deixaria o app
+       parado olhando para um dia que não é o de ninguém. E fica depois do
+       desvio acima de propósito: com formulário aberto ou campo focado, a
+       varredura espera a próxima carga. */
+    varrerRDOsAssinados().catch(() => {});
   } catch(e) {
     // Carga velha que falhou não pode apagar o status de uma nova que já
     // deu certo depois dela.
@@ -18541,6 +18550,67 @@ async function reporDepositoSeAssinado(data) {
   return await depositarRDOPdf(data);
 }
 
+/* ====================================================================
+   A VARREDURA — o RDO assinado sai sem ninguém ter de lembrar
+   --------------------------------------------------------------------
+   `reporDepositoSeAssinado` só acontece quando alguém ABRE a tela do RDO
+   daquele dia. E o dia em que a última firma entra quase nunca é o dia que
+   está na tela: o e-mail das 8h leva o RDO de ONTEM, o fiscal abre o link
+   dele no meio da tarde, e a essa altura ninguém do escritório tem a tela
+   de ontem aberta. O resultado era um RDO assinado na planilha cujo PDF
+   guardado ainda trazia o quadro do fiscal em branco — e que só saía
+   quando alguém, por conta própria, abrisse aquele dia.
+
+   Então o app pergunta. O servidor devolve os dias da janela recente em
+   que todas as firmas já entraram mas o depósito ficou para trás
+   (`rdoAssinadosPendentes`), e aqui eles são redesenhados e redepositados.
+   É o depósito que dispara o e-mail do RDO ASSINADO para a lista inteira —
+   quem desenha continua sendo o navegador, e o servidor continua mandando
+   só o que o app deixou lá.
+
+   Roda no fim de toda carga bem-sucedida: no boot e a cada 5 minutos de
+   app aberto. Na prática o fiscal assina e o RDO assinado sai para todos
+   em minutos, do primeiro aparelho que estiver com o app em mãos — o do
+   apontador serve tão bem quanto o do escritório.
+
+   SILENCIOSA de propósito, como o depósito: é manutenção de um passo que
+   ninguém vê, não tarefa de quem está com o app na mão. E cada dia é
+   tentado UMA vez por sessão (`_ASSIN_VARRIDOS`): um desenho que por
+   algum motivo saia com menos firmas do que a planilha tem continuaria
+   pendente para o servidor, e sem essa trava o app subiria o mesmo PDF de
+   5 em 5 minutos, do 4G do canteiro, para sempre.
+   ==================================================================== */
+const RDO_VARREDURA_MAX = 3;      // dias por passada: repor é raro, e cada um sobe um PDF
+const _ASSIN_VARRIDOS = new Set();
+
+async function varrerRDOsAssinados() {
+  if (OBRAS_COM_ASSINATURA_ONLINE.indexOf(OBRA.id) === -1) return 0;
+  // Sem sessão não há como depositar (`rdoPdfDoDia` exige token): perguntar
+  // seria só barulho na rede de quem ainda não entrou.
+  if (!tokenSessao()) return 0;
+
+  let r;
+  try {
+    r = await enviarAcao({ action: 'rdoAssinadosPendentes', obra: OBRA.id,
+                           ...authParams() }, 0, 0);
+  } catch (e) {
+    return 0;                     // sem sinal: fica para a próxima carga
+  }
+  // Backend antigo responde "Ação desconhecida" — e aí não há o que varrer.
+  if (!r || !r.ok || !r.pendentes || !r.pendentes.length) return 0;
+
+  let repostos = 0;
+  for (const pend of r.pendentes.slice(0, RDO_VARREDURA_MAX)) {
+    const chave = OBRA.id + '|' + pend.data;
+    if (_ASSIN_VARRIDOS.has(chave)) continue;
+    _ASSIN_VARRIDOS.add(chave);
+    try {
+      if (await depositarRDOPdf(pend.data)) repostos++;
+    } catch (e) { /* um dia que não desenha não pode levar os outros junto */ }
+  }
+  return repostos;
+}
+
 // ---------------------------------------------------------------- painel
 /* Quem manda o RDO para a fiscalização — a mesma regra do `exigirPodeEnviarRDO`,
    no Code.gs. O apontador preenche e salva o dia; quem decide que ele está
@@ -19915,6 +19985,7 @@ window.adicionarEquipCustomV4 = adicionarEquipCustomV4;
 window.removerEquipCustomV4 = removerEquipCustomV4;
 window.salvarDiarioV4 = salvarDiarioV4;
 window.depositarRDOPdf = depositarRDOPdf;
+window.varrerRDOsAssinados = varrerRDOsAssinados;
 window.gerarPDFInternoTurnoV4 = gerarPDFInternoTurnoV4;
 window.gerarPDFDiarioV4 = gerarPDFDiarioV4;
 window.gerarPDFInterno = gerarPDFInterno;

@@ -120,13 +120,19 @@ function camposMultipart(corpo) {
       if (buf) params = camposMultipart(buf.toString('utf8'));
     }
     capturadas.push({ acao: params.action || '', params, metodo: req.method() });
-    const corpo = { ok: true, fileId: 'arquivo-falso' };
+    let corpo = { ok: true, fileId: 'arquivo-falso' };
+    // A lista de serviço da varredura: os dias já assinados cujo PDF guardado
+    // ficou para trás. Quem manda nela, no teste, é `pendentesDoServidor`.
+    if (params.action === 'rdoAssinadosPendentes') {
+      corpo = { ok: true, obra: 'teotonio', previstas: 2, pendentes: pendentesDoServidor };
+    }
     route.fulfill(cb
       ? { status: 200, contentType: 'application/javascript', body: cb + '(' + JSON.stringify(corpo) + ')' }
       : { status: 200, contentType: 'application/json', body: JSON.stringify(corpo) });
   });
 
   const doDia = () => capturadas.filter(c => c.acao === 'rdoPdfDoDia');
+  let pendentesDoServidor = [];
 
   // --- depósito puro: sobe o PDF e não baixa nada ---
   const depositou = await s.p.evaluate(d => depositarRDOPdf(d), HOJE);
@@ -172,6 +178,49 @@ function camposMultipart(corpo) {
      atrasado.params.data === ANTIGO, atrasado.params.data);
   ok('e o número de RDO daquele dia', atrasado.params.numero_rdo === '42',
      atrasado.params.numero_rdo);
+
+  /* --- A VARREDURA DOS DIAS ASSINADOS ---
+     O e-mail do RDO ASSINADO nasce do DEPÓSITO, e o depósito é desenho de
+     navegador. Só que a última firma chega quando o FISCAL abre o link dele —
+     à tarde, com a tela daquele dia fechada em todo lugar. Era aí que o RDO
+     assinado parava: assinado na planilha, e no Drive um PDF com o quadro do
+     fiscal em branco, esperando alguém do escritório lembrar de abrir o dia.
+
+     Agora o app pergunta ao servidor quais dias estão nesse estado e os
+     redesenha sozinho. É este teste que prova que o RDO assinado volta para
+     a lista sem ninguém fazer nada. */
+  pendentesDoServidor = [{ data: ANTIGO, assinadas: 2, noDeposito: 0, enviado: false }];
+  const antesDaVarredura = doDia().length;
+  const repostos = await s.p.evaluate(() => varrerRDOsAssinados());
+  await s.p.waitForTimeout(400);
+  ok('a varredura pergunta ao servidor que dias ficaram para trás',
+     capturadas.some(c => c.acao === 'rdoAssinadosPendentes'));
+  ok('e redeposita o dia que o fiscal assinou, sem ninguém abrir a tela dele',
+     repostos === 1 && doDia().length === antesDaVarredura + 1,
+     JSON.stringify(repostos) + ' · ' + doDia().length + ' depósito(s)');
+  ok('o depósito reposto leva a data daquele dia — é ele que dispara o e-mail',
+     doDia()[doDia().length - 1].params.data === ANTIGO,
+     doDia()[doDia().length - 1].params.data);
+
+  const depoisDoPrimeiro = doDia().length;
+  const denovo = await s.p.evaluate(() => varrerRDOsAssinados());
+  await s.p.waitForTimeout(400);
+  ok('o mesmo dia não sobe de novo a cada carga — o 4G do canteiro não é de graça',
+     denovo === 0 && doDia().length === depoisDoPrimeiro,
+     JSON.stringify(denovo) + ' · ' + doDia().length + ' depósito(s)');
+
+  pendentesDoServidor = [];
+  const semPendencia = await s.p.evaluate(() => varrerRDOsAssinados());
+  ok('e sem pendência a varredura não deposita nada', semPendencia === 0,
+     JSON.stringify(semPendencia));
+
+  ok('a varredura roda no fim de toda carga — boot e refresh de 5 em 5 minutos',
+     /varrerRDOsAssinados\(\)\.catch/.test(html0));
+  ok('o servidor tem a ação que a varredura consulta',
+     /case 'rdoAssinadosPendentes':/.test(gs) && /function rdoAssinadosPendentes\(/.test(gs));
+  ok('e ela exige token e respeita a obra da sessão, como o depósito',
+     /PROTEGIDAS[\s\S]{0,900}'rdoAssinadosPendentes'/.test(gs) &&
+     /POR_OBRA[\s\S]{0,300}'rdoAssinadosPendentes'/.test(gs));
 
   /* --- obra que não manda RDO por e-mail não deposita. Mesma página, mesmos
      dados: só a obra ativa muda, então o que este teste isola é a trava, e

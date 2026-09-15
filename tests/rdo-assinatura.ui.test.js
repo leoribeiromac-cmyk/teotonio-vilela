@@ -74,15 +74,24 @@ async function abrirPagina(navegador, guiao, query) {
   const ctx = await navegador.newContext();
   const p = await ctx.newPage();
   const enviadas = [];
+  const enviadasURL = [];
+  const enviadasTipo = [];
   await p.route('**script.google.com/**', async rota => {
     const req = rota.request();
-    const corpo = req.postData() || '';
+    /* O QUE CHEGA AO SERVIDOR, do jeito que chega. A página manda a `action`
+       e o `t` na QUERYSTRING e o resto no corpo urlencoded — as duas coisas
+       são lidas aqui juntas, como o `e.parameter` do Apps Script faz.
+
+       O porquê da querystring está na `assinar.html`: o fiscal abre o link
+       de dentro da rede da SP Obras, e um filtro que mexa no corpo do POST
+       deixava o Apps Script sem parâmetro nenhum — a página abria em
+       `Ação desconhecida: ""` e ninguém assinava. `enviadasURL` guarda o
+       endereço para o teste poder cobrar isso. */
     const params = {};
-    // multipart do FormData: só precisamos dos campos, que vêm em texto
-    corpo.split(/------[^\r\n]*/).forEach(parte => {
-      const m = parte.match(/name="([^"]+)"\r\n\r\n([\s\S]*?)\r\n$/);
-      if (m) params[m[1]] = m[2];
-    });
+    new URL(req.url()).searchParams.forEach((v, k) => { params[k] = v; });
+    new URLSearchParams(req.postData() || '').forEach((v, k) => { params[k] = v; });
+    enviadasURL.push(req.url());
+    enviadasTipo.push(String((req.headers() || {})['content-type'] || ''));
     enviadas.push(params);
     const r = guiao(params);
     if (r === null) return rota.abort('failed');           // sinal caiu
@@ -90,7 +99,7 @@ async function abrirPagina(navegador, guiao, query) {
   });
   await p.goto(PAGINA + (query === undefined ? '?t=' + 'f'.repeat(40) : query),
                { waitUntil: 'domcontentloaded' });
-  return { ctx, p, enviadas };
+  return { ctx, p, enviadas, enviadasURL, enviadasTipo };
 }
 
 // Desenha um rabisco no quadro, como o dedo faria.
@@ -188,6 +197,30 @@ async function rabiscar(p) {
        (await p.textContent('#dicaFolhas')));
     ok('e dá para baixar o PDF',
        (await p.getAttribute('#baixar', 'download')) === 'RDO_128_20260824.pdf');
+    await ctx.close();
+  }
+
+  // ------------------------------------------------- o que chega ao servidor
+  /* O FISCAL ASSINA DE DENTRO DA REDE DA SP OBRAS. Um filtro corporativo que
+     mexa no corpo do POST (o multipart do FormData tem uma fronteira que se
+     perde fácil) deixava o Apps Script sem parâmetro nenhum, e a página abria
+     em `Ação desconhecida: ""` — sem nada de errado no app de casa, porque de
+     fora daquela rede o mesmo POST chega inteiro. Por isso a `action` e o `t`
+     viajam TAMBÉM na querystring, onde nenhum corpo perdido os alcança. */
+  {
+    console.log('\nO que chega ao servidor');
+    const { ctx, p, enviadas, enviadasURL, enviadasTipo } =
+      await abrirPagina(navegador, () => respostaAbrir());
+    await p.waitForSelector('#cartaoAssinar:not(.oculto)', { timeout: 15000 });
+    const url = new URL(enviadasURL[0]);
+    ok('a ação vai na querystring, e não só no corpo',
+       url.searchParams.get('action') === 'rdoAssinaturaAbrir', enviadasURL[0]);
+    ok('e o código do convite junto com ela',
+       url.searchParams.get('t') === 'f'.repeat(40), enviadasURL[0]);
+    ok('o corpo é urlencoded, sem fronteira para um proxy estragar',
+       enviadasTipo[0].indexOf('application/x-www-form-urlencoded') === 0, enviadasTipo[0]);
+    ok('e o servidor recebe a ação de abrir o RDO',
+       enviadas[0].action === 'rdoAssinaturaAbrir', JSON.stringify(enviadas[0]));
     await ctx.close();
   }
 
@@ -320,6 +353,76 @@ async function rabiscar(p) {
        (await p.textContent('#mensagem')).includes('2026-08-25 09:12'),
        await p.textContent('#mensagem'));
     ok('mas continua podendo ler o RDO', await p.isVisible('#cartaoRdo'));
+    await ctx.close();
+  }
+
+  // ------------------------------------------ o link é a porta que fica aberta
+  /* O MESMO LINK QUE ASSINA BAIXA O RDO A QUALQUER MOMENTO. Anexo de e-mail
+     se perde e nunca é a via mais nova; `rdoAssinaturaAbrir` sempre serviu o
+     PDF que está DEPOSITADO, então depois que o app repõe o depósito com as
+     firmas é a via assinada que este endereço entrega.
+
+     O que a página NÃO pode fazer é entregar calado o arquivo velho a quem
+     acabou de assinar: nos minutos entre a firma e a reposição do depósito,
+     o que está para download é o RDO SEM a assinatura dele. */
+  {
+    console.log('\nQual via do RDO está para baixar');
+    const { ctx, p } = await abrirPagina(navegador, () => respostaAbrir());
+    await p.waitForSelector('#cartaoRdo:not(.oculto)', { timeout: 15000 });
+    ok('quem ainda não assinou é mandado guardar o link',
+       (await p.textContent('#dicaVia')).includes('Guarde este link'),
+       await p.textContent('#dicaVia'));
+    await ctx.close();
+  }
+  {
+    const { ctx, p } = await abrirPagina(navegador, () => respostaAbrir({
+      assinada: true, assinadoEm: '2026-08-25 09:12:00', nomeAssinante: 'Walter Botelho',
+      pdfComFirmas: false }));
+    await p.waitForSelector('#cartaoRdo:not(.oculto)', { timeout: 15000 });
+    ok('quem assinou há pouco é avisado de que esta via ainda é a de antes',
+       (await p.textContent('#dicaVia')).includes('antes da sua assinatura'),
+       await p.textContent('#dicaVia'));
+    ok('e de que basta voltar pelo mesmo link',
+       (await p.textContent('#dicaVia')).includes('mesmo link'));
+    await ctx.close();
+  }
+  {
+    const { ctx, p } = await abrirPagina(navegador, () => respostaAbrir({
+      assinada: true, assinadoEm: '2026-08-25 09:12:00', nomeAssinante: 'Walter Botelho',
+      pdfComFirmas: true }));
+    await p.waitForSelector('#cartaoRdo:not(.oculto)', { timeout: 15000 });
+    ok('e quando o depósito já tem as firmas, o link entrega a via assinada',
+       (await p.textContent('#dicaVia')).includes('via com as assinaturas'),
+       await p.textContent('#dicaVia'));
+    ok('o botão de baixar continua à mão', await p.isVisible('#baixar'));
+    await ctx.close();
+  }
+  {
+    /* E o aviso muda NA HORA de assinar: até o clique, a resposta dizia
+       "ainda não assinado"; depois dele, o que está para download passou a
+       ser a via de antes da firma que acabou de entrar. */
+    let jaAssinou = false;
+    const { ctx, p } = await abrirPagina(navegador, (params) => {
+      if (params.action === 'rdoAssinaturaGravar') {
+        jaAssinou = true;
+        return { ok: true, assinadoEm: '2026-08-25 10:30:00', codigo: 'A1B2C3D4',
+                 faltam: 0, nomeAssinante: params.nome };
+      }
+      return respostaAbrir({ assinada: jaAssinou, pdfComFirmas: false });
+    });
+    await p.waitForSelector('#cartaoAssinar:not(.oculto)', { timeout: 15000 });
+    ok('antes de assinar, o aviso é o de guardar o link',
+       (await p.textContent('#dicaVia')).includes('Guarde este link'));
+    await p.fill('#nome', 'Walter Botelho');
+    await rabiscar(p);
+    await p.check('#concordo');
+    await p.click('#btAssinar');
+    await p.waitForFunction(
+      () => (document.getElementById('dicaVia').textContent || '').indexOf('antes da sua') !== -1,
+      null, { timeout: 15000 }).catch(() => {});
+    ok('depois de assinar, o aviso passa a ser o da via que ficou para trás',
+       (await p.textContent('#dicaVia')).includes('antes da sua assinatura'),
+       await p.textContent('#dicaVia'));
     await ctx.close();
   }
 

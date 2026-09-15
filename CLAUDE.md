@@ -71,6 +71,25 @@ também ao engenheiro. Não há login: quem assina não tem usuário no app.
 `assinar.html` é a página de quem assina, **fora** do app de propósito (nada de
 tela de login, nada de PWA de 1 MB, nenhum acesso ao resto da obra).
 
+A `assinar.html` manda a `action` e o `t` TAMBÉM na querystring, e o corpo
+do POST vai urlencoded (nunca mais `FormData`/multipart). Não é preferência:
+o fiscal abre o link de dentro da rede da SP Obras, e um filtro corporativo
+que mexa no corpo do POST deixa o Apps Script sem parâmetro nenhum — a página
+abria em `Ação desconhecida: ""` e ele não conseguia assinar, sem nada parecer
+errado de fora daquela rede.
+
+O LINK É TAMBÉM A PORTA DE LEITURA, e não só a de assinar: o e-mail de
+quem assina manda GUARDÁ-LO. `rdoAssinaturaAbrir` sempre serviu o PDF que
+está DEPOSITADO, então o mesmo endereço entrega a via ASSINADA depois que o
+app repõe o depósito — anexo de e-mail se perde e nunca é a via mais nova.
+Por isso o link vai no corpo até para quem JÁ assinou. Ele continua sendo
+credencial pessoal, e é por isso que `rdoEmailCorpo_` só ganha `minha`
+dentro do laço de UM E-MAIL POR PESSOA: o e-mail do RDO ASSINADO vai num
+`to` só, para a lista inteira, e link pessoal ali seria o link do fiscal na
+caixa do engenheiro. A página avisa qual via está para download
+(`pdfComFirmas`) — quem acaba de assinar baixaria, calado, o RDO de antes da
+própria firma, porque o depósito só é reposto minutos depois.
+
 Os papéis são TRÊS palavras que têm de bater dos dois lados — `engenheiro`,
 `fiscalizacao`, `supervisao`: `rdoPapeisAssinatura()` (index.html) e
 `RDO_ASSINANTES` (Code.gs). Trocar uma delas de um lado só põe a firma do
@@ -139,6 +158,28 @@ guarda o traço, o nome e a hora; o app os põe dentro dos quadros ao gerar o PD
 oficial e REDEPOSITA — e é o depósito com todas as firmas que dispara o e-mail
 do "RDO ASSINADO". Daí o `assinaturas: N` do `rdoPdfDoDia`: é como o servidor
 sabe que o PDF guardado ficou para trás de quem assinou depois.
+
+### Ninguém precisa lembrar de abrir a tela do dia
+
+O fiscal assina à tarde, e a tela daquele dia está fechada em todo lugar —
+o e-mail das 8h leva o RDO de ONTEM. O RDO assinado ficava esperando alguém
+do escritório abrir aquele dia e gerar o oficial de novo.
+
+Agora o app VARRE: `rdoAssinadosPendentes` (Code.gs) devolve os dias da
+janela recente em que todas as firmas online entraram mas o PDF depositado
+ainda traz menos do que isso, e `varrerRDOsAssinados` (index.html) redesenha
+e redeposita cada um — o depósito é que manda o RDO assinado para a lista
+inteira. Roda no fim de toda `carregarTudo()` bem-sucedida: boot e o refresh
+de 5 em 5 minutos, de qualquer aparelho com sessão. O servidor continua sem
+desenhar nada.
+
+As travas: cada dia é tentado UMA vez por sessão (`_ASSIN_VARRIDOS`) — sem
+isso, um desenho que saia com menos firmas do que a planilha tem faria o app
+subir o mesmo PDF de 5 em 5 minutos do 4G do canteiro, para sempre; e a
+varredura compara CONTAGEM de firmas, não quais são, então cancelar uma
+assinatura e tomar outra no lugar NÃO repõe o depósito sozinho (reescrever um
+documento que já foi para a fiscalização é outra decisão — a mesma regra do
+"tirar a firma arquivada vale para os PRÓXIMOS RDOs").
 `tests/rdo-assinatura-servidor.test.js` (o servidor) e
 `tests/rdo-assinatura.ui.test.js` (a página de assinar e o PDF com as firmas).
 
