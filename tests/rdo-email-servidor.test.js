@@ -209,13 +209,17 @@ const depositar = (extra) => ctx.rdoPdfDoDia(Object.assign(
   { action: 'rdoPdfDoDia', obra: 'teotonio', data: HOJE, numero_rdo: '128', pdf: uriPdf() }, extra || {}));
 const paraFiscalizacao = () => CORREIO.enviados.filter(e => !e.simples);
 const paraDono = () => CORREIO.enviados.filter(e => e.simples);
+// Quantos e-mails um envio produz: UM POR PESSOA. Sai da própria lista do
+// Code.gs — tirar ou pôr um destinatário não é mexer no envio, e não pode
+// quebrar dez asserções que contavam a lista de cabeça.
+const N_DEST = ctx.RDO_EMAIL_DESTINOS.length;
 
 console.log('\nENVIO AUTOMÁTICO DO RDO — o lado do servidor\n');
 
 console.log('Para quem vai');
 t('a lista do código vale quando não há Propriedade', () => {
   const d = ctx.rdoEmailDestinatarios();
-  eq(d.length, 4, 'quantidade');
+  eq(d.length, N_DEST, 'quantidade');
   verdade(d.every(e => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)), 'todos válidos');
 });
 t('a Propriedade RDO_EMAILS manda na lista do código', () => {
@@ -284,7 +288,7 @@ console.log('\nO envio');
 t('manda o PDF do dia para toda a lista — um e-mail para cada, com o resumo no corpo', () => {
   depositar();
   verdade(ctx.reenviarRDOPorEmail(HOJE).ok, 'enviou');
-  eq(paraFiscalizacao().length, 4, 'um e-mail por destinatário');
+  eq(paraFiscalizacao().length, N_DEST, 'um e-mail por destinatário');
   eq(paraFiscalizacao().map(e => e.to).sort().join(','),
      ctx.rdoEmailDestinatarios().slice().sort().join(','), 'destinatários');
   const e = paraFiscalizacao()[0];
@@ -316,7 +320,7 @@ t('paralisação com JSON estragado não derruba o envio', () => {
   PLANILHA.RDO_Diario = [linhaDiario({ paralisacoes_json: '{isso não é json' })];
   depositar();
   verdade(ctx.reenviarRDOPorEmail(HOJE).ok);
-  eq(paraFiscalizacao().length, 4);
+  eq(paraFiscalizacao().length, N_DEST);
 });
 t('o mesmo dia não é enviado duas vezes (gatilho repetido não repete o e-mail)', () => {
   depositar();
@@ -324,13 +328,13 @@ t('o mesmo dia não é enviado duas vezes (gatilho repetido não repete o e-mail
   const r2 = ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
   verdade(r2.ok, 'não é erro');
   eq(r2.pulado, 'já enviado');
-  eq(paraFiscalizacao().length, 4, 'e-mails');
+  eq(paraFiscalizacao().length, N_DEST, 'e-mails');
 });
 t('reenvio manual manda de novo, de propósito', () => {
   depositar();
   ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
   ctx.reenviarRDOPorEmail(HOJE);
-  eq(paraFiscalizacao().length, 8);
+  eq(paraFiscalizacao().length, N_DEST * 2);
 });
 t('dia sem PDF: a fiscalização não recebe nada, o dono é avisado', () => {
   const r = ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
@@ -366,7 +370,7 @@ t('RDO sem linha na planilha ainda vai — o PDF é o que importa', () => {
   PLANILHA.RDO_Diario = [];
   depositar();
   verdade(ctx.reenviarRDOPorEmail(HOJE).ok);
-  eq(paraFiscalizacao().length, 4);
+  eq(paraFiscalizacao().length, N_DEST);
 });
 t('o e-mail é do dia certo mesmo com outra obra na mesma data', () => {
   PLANILHA.RDO_Diario = [linhaDiario(), linhaDiario({ id: 'D0500', obra: 'ranario', numero_rdo: '7',
@@ -392,7 +396,7 @@ t('o gatilho manda o RDO de ONTEM — a data que ele mesmo calcula', () => {
   depositar({ data: ONTEM_DE_VERDADE });
   const r = ctx.enviarRDODeOntemPorEmail();
   verdade(r.ok, 'não enviou: ' + JSON.stringify(r));
-  eq(paraFiscalizacao().length, 4);
+  eq(paraFiscalizacao().length, N_DEST);
   eq(r.data, ONTEM_DE_VERDADE);
 });
 t('e NÃO manda o de hoje, que ainda está sendo preenchido', () => {
@@ -454,9 +458,9 @@ t('manda o dia que ficou para trás — um e-mail por pessoa, com o PDF em anexo
   depositar();
   const r = mandarAgora();
   verdade(r.ok, 'não mandou: ' + JSON.stringify(r));
-  eq(paraFiscalizacao().length, 4, 'um e-mail por destinatário');
+  eq(paraFiscalizacao().length, N_DEST, 'um e-mail por destinatário');
   eq(paraFiscalizacao()[0].attachments.length, 1, 'anexo');
-  eq(r.para.length, 4, 'devolve para quem foi — é o que o app mostra na tela');
+  eq(r.para.length, N_DEST, 'devolve para quem foi — é o que o app mostra na tela');
 });
 t('abre os convites de assinatura do dia, e o link pessoal vai só no e-mail do dono', () => {
   depositar();
@@ -492,9 +496,9 @@ t('outra obra é recusada — o e-mail é só da Teotônio', () => {
 t('manda mesmo que aquele dia já tenha saído: quem aperta o botão sabe o dia', () => {
   depositar();
   ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
-  eq(paraFiscalizacao().length, 4);
+  eq(paraFiscalizacao().length, N_DEST);
   verdade(mandarAgora().ok, 'o botão foi barrado pelo registro do gatilho');
-  eq(paraFiscalizacao().length, 8, 'o reenvio não saiu');
+  eq(paraFiscalizacao().length, N_DEST * 2, 'o reenvio não saiu');
 });
 
 console.log('\nQuem pode mandar');
@@ -583,7 +587,7 @@ t('ninguém recebeu é FALHA, e o dia não fica marcado como enviado', () => {
   ctx.rdoEmailDestinatarios().forEach(e => { CORREIO.recusar[e.toLowerCase()] = 'Serviço indisponível'; });
   const r = ctx.reenviarRDOPorEmail(HOJE);
   verdade(!r.ok, 'disse que enviou: ' + JSON.stringify(r));
-  eq(r.falharam.length, 4);
+  eq(r.falharam.length, N_DEST);
   verdade(!ctx.rdoEmailJaEnviado_('teotonio', HOJE), 'marcou como enviado sem ter enviado');
 });
 t('e o gatilho da manhã segue a mesma regra', () => {

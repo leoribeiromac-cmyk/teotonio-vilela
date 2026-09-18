@@ -2617,7 +2617,6 @@ function configurarGatilhos() {
 var RDO_EMAIL_DESTINOS = [
   'leonardo@gestorengenharia.com.br',
   'msantana@gestorengenharia.com.br',
-  'fabiolarufino@mobilidadepch.com.br',
   'terceiro.wbotelho@spobras.sp.gov.br'
 ];
 
