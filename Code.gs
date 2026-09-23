@@ -98,6 +98,7 @@ function rotear(e) {
     var PROTEGIDAS = ['medicaoFechar', 'medicaoReabrir',
                       'deleteRDO', 'updateRDO', 'limparDuplicados', 'apagarPorPrefixoId',
                       'addBatchRDO', 'addRDODiario', 'updateRDODiario', 'deleteRDODiario',
+                      'mesclarRDODiario',
                       'usuariosListar', 'usuarioSalvar', 'usuarioExcluir',
                       'rdoFoto', 'obterFoto', 'rdoPdfDoDia', 'rdoAssinaturasDoDia',
                       'rdoAssinadosPendentes',
@@ -112,7 +113,7 @@ function rotear(e) {
       if (falhaAuth) return responder(falhaAuth, p.callback);
     }
     // Além do token (quem é), o perfil (o que pode) nas ações de lançamento.
-    var DE_LANCAMENTO = ['addBatchRDO', 'addRDODiario', 'updateRDODiario'];
+    var DE_LANCAMENTO = ['addBatchRDO', 'addRDODiario', 'updateRDODiario', 'mesclarRDODiario'];
     if (DE_LANCAMENTO.indexOf(action) !== -1) {
       var falhaPerfil = exigirPodeLancar(p.token, action);
       if (falhaPerfil) return responder(falhaPerfil, p.callback);
@@ -185,6 +186,7 @@ function rotear(e) {
       case 'producaoPorPacote': resp = producaoPorPacote(p.mes, p.obra); break;
       case 'addRDODiario':    resp = upsertRDODiario(p, false); break;
       case 'updateRDODiario': resp = upsertRDODiario(p, true); break;
+      case 'mesclarRDODiario': resp = mesclarRDODiario(p); break;
       case 'deleteRDODiario': resp = deleteRDODiario(p.id, p.data, p.token); break;
       case 'equipListar':       resp = equipListar(p.obra); break;
       case 'equipCadastrar':    resp = equipCadastrar(p); break;
@@ -2167,14 +2169,193 @@ function updateRDO(payloadJson, token) {
 }
 
 // ------------------------------------------------------------
-// 4. RDO Diário — grava por data (1 registro por data/turno)
-//    Corrige 2 bugs:
-//    • DUPLICAÇÃO: a célula Data costuma vir como objeto Date; a comparação
-//      antiga String(Date) === "2026-06-01" nunca casava → inseria sempre.
-//      Agora normaliza ambos para 'yyyy-MM-dd' antes de comparar.
-//    • SEM ID: inserts não geravam ID. Agora gera 'D####' sequencial (e faz
-//      backfill se uma linha existente estiver sem ID).
+// 4. RDO Diário — UMA linha por (obra, data), com os dois turnos nela
+//
+//    O DIA DUPLICAVA SOZINHO. A linha do dia era procurada por (obra, data,
+//    turno) com `idxColuna(cab, 'turno')` — e o idxColuna, quando não acha o
+//    nome exato, pega a primeira coluna que CONTÉM o nome. A aba não tem
+//    coluna `turno`, então ele caía em `apontador_noTURNO`, e a "chave" virou:
+//    só casa a linha cujo apontador do noturno está vazio. Resultado: salvo o
+//    noturno, o próximo salvamento daquele dia (um ajuste do diurno, o noturno
+//    corrigido) não achava a linha e criava outra. A lista dos 14 dias lia uma
+//    linha, o cartão do turno lia outra, e o Histórico acendia "duplicata"
+//    todo dia — e o "oficial" escolhido lá ficava só naquele navegador.
+//
+//    Agora: `turno` só entra na chave se a coluna existir com esse nome EXATO
+//    e o app mandar o turno (ele não manda: o diário é um só por dia).
+//    E quem salvar um dia que já tem linhas repetidas as UNE nesta mesma
+//    gravação (`rdoDiarioUnificar_`) — o dia se conserta no primeiro toque.
 // ------------------------------------------------------------
+
+/* O que é de cada turno numa linha que guarda os dois. É isso que permite
+   juntar duas linhas sem perder nada e, mais importante, que um salvamento
+   do diurno feito num aparelho que ainda não viu o noturno NÃO o apague:
+   o app manda os dois turnos juntos (a linha é uma só), e o aparelho do
+   apontador do dia, aberto desde cedo, manda o noturno em branco. */
+var RDO_TURNO_PARTES = {
+  diurno:  { colunas: ['apontador_diurno', 'clima_manha', 'clima_tarde'],
+             json: { efetivo_json: ['padrao_diurno', 'customIndireto_diurno', 'customDireto_diurno'],
+                     equipamentos_json: ['padrao_diurno', 'custom_diurno'],
+                     paralisacoes_json: ['diurno'] } },
+  noturno: { colunas: ['apontador_noturno', 'clima_noite'],
+             json: { efetivo_json: ['padrao_noturno', 'customIndireto_noturno', 'customDireto_noturno'],
+                     equipamentos_json: ['padrao_noturno', 'custom_noturno'],
+                     paralisacoes_json: ['noturno'] } }
+};
+// Textos que o app grava como "do diurno / do noturno" numa célula só.
+var RDO_TEXTOS_JUNTADOS = ['visitas', 'ocorrencias', 'observacoes_gerais', 'paralisado_motivo'];
+// A identidade do dia: vem da linha MAIS ANTIGA, que é o número já impresso.
+var RDO_IDENTIDADE = ['id', 'numero_rdo'];
+
+function rdoVazio_(v) {
+  return v == null || String(v).trim() === '';
+}
+function rdoJsonObj_(v) {
+  if (rdoVazio_(v)) return {};
+  try { var o = JSON.parse(String(v)); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; }
+}
+// "a / b" + "b / c" = "a / b / c": junta sem repetir trecho.
+function rdoJuntarTextos_(a, b) {
+  var vistos = {}, out = [];
+  [a, b].forEach(function (t) {
+    String(t == null ? '' : t).split(' / ').forEach(function (seg) {
+      var s = seg.trim();
+      if (s && !vistos[s.toLowerCase()]) { vistos[s.toLowerCase()] = true; out.push(s); }
+    });
+  });
+  return out.join(' / ');
+}
+// Copia de `origem` para `destino` (linhas-array) tudo o que é do turno.
+// Coluna por NOME EXATO: o idxColuna aproximado é o que causou a duplicação.
+function rdoTrazerTurno_(cab, destino, origem, turno) {
+  var partes = RDO_TURNO_PARTES[turno];
+  partes.colunas.forEach(function (c) {
+    var i = cab.indexOf(c);
+    if (i !== -1) destino[i] = origem[i];
+  });
+  Object.keys(partes.json).forEach(function (c) {
+    var i = cab.indexOf(c);
+    if (i === -1 || (rdoVazio_(destino[i]) && rdoVazio_(origem[i]))) return;
+    var d = rdoJsonObj_(destino[i]), o = rdoJsonObj_(origem[i]);
+    partes.json[c].forEach(function (k) {
+      if (o.hasOwnProperty(k)) d[k] = o[k]; else delete d[k];
+    });
+    destino[i] = JSON.stringify(d);
+  });
+}
+function rdoTemTurno_(cab, linha, turno) {
+  var i = cab.indexOf('apontador_' + turno);
+  return i !== -1 && !rdoVazio_(linha[i]);
+}
+
+/* Junta as linhas repetidas de UM dia (na ordem da planilha) numa só.
+   Cada turno vem inteiro da ÚLTIMA linha que o tem — as repetidas nasceram
+   de salvamentos posteriores, então a de baixo é a versão mais nova daquele
+   turno. O resto (data, obra, usuário) também da última que o preencheu; o
+   id e o número, da primeira; os textos, somados sem repetir. */
+function rdoMesclarLinhas_(cab, linhas) {
+  var base = linhas[0].slice();
+  if (linhas.length === 1) return base;
+  cab.forEach(function (c, i) {
+    if (RDO_IDENTIDADE.indexOf(c) !== -1) {
+      if (rdoVazio_(base[i])) {
+        for (var a = 0; a < linhas.length; a++) if (!rdoVazio_(linhas[a][i])) { base[i] = linhas[a][i]; break; }
+      }
+      return;
+    }
+    if (RDO_TEXTOS_JUNTADOS.indexOf(c) !== -1) {
+      base[i] = linhas.reduce(function (acc, l) { return rdoJuntarTextos_(acc, l[i]); }, '');
+      return;
+    }
+    for (var z = linhas.length - 1; z >= 0; z--) if (!rdoVazio_(linhas[z][i])) { base[i] = linhas[z][i]; break; }
+  });
+  Object.keys(RDO_TURNO_PARTES).forEach(function (t) {
+    for (var z = linhas.length - 1; z >= 0; z--) {
+      if (rdoTemTurno_(cab, linhas[z], t)) { rdoTrazerTurno_(cab, base, linhas[z], t); break; }
+    }
+  });
+  var iTem = cab.indexOf('tem_turno_noturno');
+  if (iTem !== -1 && rdoTemTurno_(cab, base, 'noturno')) base[iTem] = 'true';
+  return base;
+}
+
+/* Aplica o que chegou do app sobre a linha que já existe. A trava: turno que
+   JÁ está gravado e que chegou em branco é de outro aparelho, que não o viu
+   — não é pedido para apagar. O app não tem como "desenviar" um turno, e o
+   caminho para tirar um RDO é o Excluir do Histórico. */
+function rdoAplicarEnvio_(cab, base, registro) {
+  var novo = base.slice();
+  cab.forEach(function (c, i) {
+    if (registro.hasOwnProperty(c)) novo[i] = registro[c];
+  });
+  var preservou = false;
+  Object.keys(RDO_TURNO_PARTES).forEach(function (t) {
+    if (rdoTemTurno_(cab, novo, t) || !rdoTemTurno_(cab, base, t)) return;
+    rdoTrazerTurno_(cab, novo, base, t);
+    preservou = true;
+  });
+  // Tem apontador do noturno, tem turno noturno — seja quem for que mandou.
+  var iTem = cab.indexOf('tem_turno_noturno');
+  if (iTem !== -1 && rdoTemTurno_(cab, novo, 'noturno')) novo[iTem] = 'true';
+  // Quem não viu o outro turno também não viu o texto dele: soma, não troca.
+  if (preservou) {
+    RDO_TEXTOS_JUNTADOS.forEach(function (c) {
+      var i = cab.indexOf(c);
+      if (i !== -1 && registro.hasOwnProperty(c)) novo[i] = rdoJuntarTextos_(registro[c], base[i]);
+    });
+  }
+  return novo;
+}
+
+function rdoMesmoValor_(a, b) {
+  if (a instanceof Date || b instanceof Date) {
+    return normData(a) === normData(b);
+  }
+  return String(a == null ? '' : a) === String(b == null ? '' : b);
+}
+
+/* As linhas (índices 0-based em `dados`) do mesmo dia desta obra. */
+function rdoLinhasDoDia_(cab, dados, obraAlvo, dataAlvo, turno) {
+  var iData = cab.indexOf('data');
+  if (iData === -1) iData = idxColuna(cab, 'data');
+  var iObra = cab.indexOf('obra');
+  // NOME EXATO. Ver o cabeçalho deste bloco: o aproximado achava apontador_noturno.
+  var iTurno = turno ? cab.indexOf('turno') : -1;
+  var out = [];
+  if (dataAlvo === '' || iData === -1) return out;
+  for (var i = 1; i < dados.length; i++) {
+    if (normData(dados[i][iData]) !== dataAlvo) continue;
+    if (iObra !== -1 && normObra(dados[i][iObra]) !== obraAlvo) continue;
+    if (iTurno !== -1 && String(dados[i][iTurno]).trim().toLowerCase() !== turno) continue;
+    out.push(i);
+  }
+  return out;
+}
+
+/* Escreve `novo` na linha principal (só as células que mudaram) e apaga as
+   repetidas, de baixo para cima. Cada linha apagada vai INTEIRA para a
+   Auditoria: é o que permite reconstruir, se a junção tiver escolhido mal. */
+function rdoDiarioGravarUnificado_(aba, cab, dados, indices, novo, sess, dataAlvo) {
+  var principal = indices[0];
+  cab.forEach(function (c, idx) {
+    if (!rdoMesmoValor_(dados[principal][idx], novo[idx])) {
+      aba.getRange(principal + 1, idx + 1).setValue(seguro(novo[idx]));
+    }
+  });
+  var iId = cab.indexOf('id');
+  for (var k = indices.length - 1; k >= 1; k--) {
+    var linha = dados[indices[k]];
+    var copia = {};
+    cab.forEach(function (c, idx) { if (!rdoVazio_(linha[idx])) copia[c] = linha[idx]; });
+    aba.deleteRow(indices[k] + 1);
+    registrarAuditoria(sess && sess.usuario, sess && sess.perfil, 'mesclarRDODiario', OBRA_ID,
+      iId !== -1 ? String(linha[iId]) : dataAlvo,
+      JSON.stringify(copia),
+      'linha repetida de ' + dataAlvo + ' unida a ' + (iId !== -1 ? String(novo[iId]) : 'linha ' + (principal + 1)));
+  }
+  return indices.length - 1;
+}
+
 function upsertRDODiario(p, deveExistir) {
   var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
   if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
@@ -2202,8 +2383,6 @@ function upsertRDODiario(p, deveExistir) {
   garantirColuna(aba, 'paralisacoes_json');
   garantirColuna(aba, 'paralisado_motivo');
     var cab = cabecalhoNormalizado(aba);
-    var iData = idxColuna(cab, 'data');
-    var iTurno = idxColuna(cab, 'turno');
     var iId = idxColuna(cab, 'id');
     var iObra = idxColuna(cab, 'obra');
     var iNum = idxColuna(cab, 'numero_rdo');
@@ -2213,16 +2392,10 @@ function upsertRDODiario(p, deveExistir) {
     var turno = String(p.turno || '').trim().toLowerCase();
     var obraAlvo = normObra(p.obra);
 
-    // A chave do diário é (obra, data, turno). Sem a obra na chave, o diário
-    // do Ranário do dia 10 SOBRESCREVERIA o da Teotônio do dia 10 — um dia
+    // A chave do diário é (obra, data). Sem a obra na chave, o diário do
+    // Ranário do dia 10 SOBRESCREVERIA o da Teotônio do dia 10 — um dia
     // inteiro de efetivo, clima e ocorrências apagado sem aviso.
-    var linhaExistente = -1;
-    for (var i = 1; i < dados.length; i++) {
-      var mesmaData = dataAlvo !== '' && (iData !== -1) && normData(dados[i][iData]) === dataAlvo;
-      var mesmoTurno = (iTurno === -1) || String(dados[i][iTurno]).trim().toLowerCase() === turno;
-      var mesmaObra = (iObra === -1) || normObra(dados[i][iObra]) === obraAlvo;
-      if (mesmaData && mesmoTurno && mesmaObra) { linhaExistente = i + 1; break; }
-    }
+    var doDia = rdoLinhasDoDia_(cab, dados, obraAlvo, dataAlvo, turno);
 
     var registro = {};
     Object.keys(p).forEach(function (chave) {
@@ -2234,26 +2407,20 @@ function upsertRDODiario(p, deveExistir) {
     var sessD = sessaoDoToken(p.token);
     if (sessD && sessD.usuario) registro['usuario'] = sessD.usuario;
 
-    if (linhaExistente !== -1) {
-      // ATUALIZA a linha existente (sem duplicar). Faz backfill de ID se faltar.
-      if (iId !== -1 && !registro['id']) {
-        var idAtual = String(dados[linhaExistente - 1][iId] == null ? '' : dados[linhaExistente - 1][iId]).trim();
-        if (!idAtual) registro['id'] = gerarIdDiario(dados, iId);
-      }
-      // Backfill do número na linha antiga que ainda não o tem (mesmo efeito
-      // de migrarNumeroRdoPorObra, sem depender de alguém rodá-la).
-      if (iNum !== -1 && !registro['numero_rdo']) {
-        var numAtual = String(dados[linhaExistente - 1][iNum] == null ? '' : dados[linhaExistente - 1][iNum]).trim();
-        if (!numAtual) registro['numero_rdo'] = proximoNumeroRdo(dados, iNum, iObra, obraAlvo);
-      }
-      cab.forEach(function (nomeCol, idx) {
-        if (registro.hasOwnProperty(nomeCol)) {
-          aba.getRange(linhaExistente, idx + 1).setValue(seguro(registro[nomeCol]));
-        }
-      });
+    if (doDia.length) {
+      // ATUALIZA a linha do dia (sem duplicar) — e une as repetidas, se houver.
+      var principal = doDia[0];
+      var base = rdoMesclarLinhas_(cab, doDia.map(function (i) { return dados[i]; }));
+      var novo = rdoAplicarEnvio_(cab, base, registro);
+      // Backfill de ID e do número na linha antiga que ainda não os tem
+      // (mesmo efeito de migrarNumeroRdoPorObra, sem depender de alguém rodá-la).
+      if (iId !== -1 && rdoVazio_(novo[iId])) novo[iId] = gerarIdDiario(dados, iId);
+      if (iNum !== -1 && rdoVazio_(novo[iNum])) novo[iNum] = proximoNumeroRdo(dados, iNum, iObra, obraAlvo);
+      var unidas = rdoDiarioGravarUnificado_(aba, cab, dados, doDia, novo, sessD, dataAlvo);
+      var idFinal = iId !== -1 ? String(novo[iId]) : '';
       registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'updateRDODiario', OBRA_ID,
-        registro['id'] || dataAlvo, 'linha ' + linhaExistente, 'data ' + dataAlvo + ' turno ' + (turno || '-'));
-      return { ok: true, updated: true, id: registro['id'] || undefined };
+        idFinal || dataAlvo, 'linha ' + (principal + 1), 'data ' + dataAlvo + (unidas ? ' · ' + unidas + ' linha(s) repetida(s) unida(s)' : ''));
+      return { ok: true, updated: true, id: idFinal || undefined, unidas: unidas };
     } else {
       // INSERE nova linha, sempre com ID gerado (se a aba tem coluna ID).
       if (iId !== -1 && !registro['id']) {
@@ -2269,9 +2436,77 @@ function upsertRDODiario(p, deveExistir) {
       });
       aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
       registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'addRDODiario', OBRA_ID,
-        registro['id'] || dataAlvo, '', 'data ' + dataAlvo + ' turno ' + (turno || '-'));
+        registro['id'] || dataAlvo, '', 'data ' + dataAlvo);
       return { ok: true, inserted: true, id: registro['id'] || '' };
     }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* "Resolver" a duplicata no Histórico era escolher um "oficial" que ficava
+   guardado SÓ naquele navegador: o celular do apontador, o computador do
+   escritório e o do engenheiro continuavam vendo o dia em vermelho, e cada
+   um exportava a linha que quisesse. Unir é resolver para todo mundo, na
+   planilha. Nada se perde: cada turno fica com a sua versão mais nova, e a
+   linha apagada vai inteira para a Auditoria. */
+function mesclarRDODiario(p) {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+  var sess = sessaoDoToken(p.token);
+  if (sess && !sessaoPodeNaObra(sess, p.obra)) return negarPorObra(p.token, 'mesclarRDODiario', p.obra);
+  var dataAlvo = normData(p.data);
+  if (!dataAlvo) return { ok: false, error: 'Data não informada' };
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    var cab = cabecalhoNormalizado(aba);
+    var dados = aba.getDataRange().getValues();
+    var doDia = rdoLinhasDoDia_(cab, dados, normObra(p.obra), dataAlvo, '');
+    if (doDia.length < 2) return { ok: true, unidas: 0, linhas: doDia.length };
+    var novo = rdoMesclarLinhas_(cab, doDia.map(function (i) { return dados[i]; }));
+    var unidas = rdoDiarioGravarUnificado_(aba, cab, dados, doDia, novo, sess, dataAlvo);
+    var iId = cab.indexOf('id');
+    return { ok: true, unidas: unidas, id: iId !== -1 ? String(novo[iId]) : '' };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* FERRAMENTA MANUAL (editor do Apps Script): une TODOS os dias repetidos da
+   aba RDO_Diario de uma vez, em todas as obras. Seguro rodar de novo — dia
+   que já é uma linha só não é tocado. Veja o resultado em "Execuções". */
+function mesclarTodosRDODiarioRepetidos() {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+  var lock = LockService.getScriptLock();
+  lock.waitLock(60000);
+  try {
+    var cab = cabecalhoNormalizado(aba);
+    var iData = cab.indexOf('data');
+    if (iData === -1) iData = idxColuna(cab, 'data');
+    var iObra = cab.indexOf('obra');
+    var dias = [], total = 0;
+    // Uma passada por dia, relendo a aba: apagar linha muda os índices.
+    for (var volta = 0; volta < 1000; volta++) {
+      var dados = aba.getDataRange().getValues();
+      var vistos = {}, alvo = null;
+      for (var i = 1; i < dados.length && !alvo; i++) {
+        var chave = (iObra !== -1 ? normObra(dados[i][iObra]) : OBRA_ID) + '|' + normData(dados[i][iData]);
+        if (!normData(dados[i][iData])) continue;
+        if (vistos[chave]) alvo = chave; else vistos[chave] = true;
+      }
+      if (!alvo) break;
+      var obra = alvo.split('|')[0], data = alvo.split('|')[1];
+      var doDia = rdoLinhasDoDia_(cab, dados, obra, data, '');
+      var novo = rdoMesclarLinhas_(cab, doDia.map(function (x) { return dados[x]; }));
+      total += rdoDiarioGravarUnificado_(aba, cab, dados, doDia, novo, null, data);
+      dias.push(obra + ' ' + data + ' (' + doDia.length + ' linhas)');
+    }
+    var r = { ok: true, dias: dias.length, linhasUnidas: total, detalhe: dias };
+    Logger.log(JSON.stringify(r, null, 2));
+    return r;
   } finally {
     lock.releaseLock();
   }

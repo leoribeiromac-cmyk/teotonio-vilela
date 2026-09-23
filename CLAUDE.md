@@ -183,6 +183,34 @@ documento que já foi para a fiscalização é outra decisão — a mesma regra 
 `tests/rdo-assinatura-servidor.test.js` (o servidor) e
 `tests/rdo-assinatura.ui.test.js` (a página de assinar e o PDF com as firmas).
 
+## O RDO Diário é UMA linha por dia, com os dois turnos
+
+A aba `RDO_Diario` guarda o dia inteiro numa linha (diurno e noturno juntos),
+chave (obra, data). O dia duplicava sozinho porque o `upsertRDODiario`
+procurava a linha com `idxColuna(cab, 'turno')` — a aba não tem coluna
+`turno`, e o idxColuna aproximado caía em `apontador_noturno`: salvo o noturno,
+o próximo salvamento do dia não achava a linha e criava outra. **Coluna de
+chave se procura pelo nome EXATO** (`cab.indexOf`), nunca pelo aproximado.
+
+As travas:
+
+- Quem salva um dia que já está repetido UNE as linhas na mesma gravação
+  (`rdoMesclarLinhas_`); o Histórico tem **Unificar** (`mesclarRDODiario`) e o
+  editor tem `mesclarTodosRDODiarioRepetidos()`. Cada turno vem da última
+  linha que o tem, id/número da primeira, textos somados; a linha retirada
+  vai inteira para a Auditoria.
+- Turno já gravado que chega EM BRANCO é de um aparelho que não o viu, não
+  pedido para apagar (`rdoAplicarEnvio_`). Do lado do app,
+  `completarDiarioComPlanilha` traz o turno que outro aparelho enviou antes
+  de desenhar o seletor e antes de enviar.
+- Toda leitura do dia no app passa por `linhaDoDiaRDO(data)` — a mesma junção
+  do servidor. Cartão do turno, lista dos 14 dias e PDF liam linhas
+  diferentes, e a tela se desmentia. As partes de cada turno estão em
+  `RDO_TURNO_PARTES`, dos dois lados: mudou uma, mude a outra.
+
+`tests/rdo-diario-duplicado-servidor.test.js` (o servidor, com o cabeçalho
+real, sem `turno`) e `tests/rdo-dia-coerente.ui.test.js` (o app de verdade).
+
 ## Formulário aberto é dado do apontador
 
 Tela de formulário **não pode ser redesenhada nem esquecida** por baixo de
