@@ -14405,7 +14405,7 @@ function _gerarPDFsEmLote() {
     const lista = naoResolvidas.map(d =>
       `• ${fmtData(d)} — IDs em conflito: ${rdosDaData(d).map(r => getCSVField(r,'ID')).join(', ')}`
     ).join('<br>');
-    toast(`Exportação bloqueada: ${naoResolvidas.length} data(s) com duplicata não resolvida. Defina o RDO oficial (ou exclua o errado) antes de exportar:<br>${lista}`, 'error', 0);
+    toast(`Exportação bloqueada: ${naoResolvidas.length} data(s) com o dia gravado mais de uma vez. Unifique (ou defina o oficial) antes de exportar:<br>${lista}`, 'error', 0);
     if (naoResolvidas.length === 1) resolverDuplicata(naoResolvidas[0]);
     return;
   }
@@ -14610,13 +14610,79 @@ function resolverDuplicata(data) {
       <h2 style="font-size:var(--fs-xl);font-weight:700;margin:0;display:flex;align-items:center;gap:8px">${ic('balanca')} Resolver duplicata — ${fmtData(data)}</h2>
       <button class="btn btn-sm btn-outline" onclick="fecharModalRDO()">Fechar</button>
     </div>
-    <p style="font-size:var(--fs-md);color:var(--muted);margin:4px 0 14px;line-height:1.6">
-      Há <strong>${lista.length}</strong> RDOs nesta data. Escolha o <strong>oficial</strong> (usado na exportação) ou exclua o errado.
+    <p style="font-size:var(--fs-md);color:var(--muted);margin:4px 0 10px;line-height:1.6">
+      Há <strong>${lista.length}</strong> linhas nesta data — o mesmo dia gravado mais de uma vez.
+    </p>
+    <!-- UNIFICAR é o caminho normal: o dia vira UMA linha na planilha, para
+         todos os aparelhos. O "oficial" fica só neste navegador, e por isso
+         o dia continuava vermelho em todos os outros. -->
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:0 0 14px;padding:12px 14px;border-radius:var(--r-sm);background:var(--grn-l);border:1px solid var(--grn)">
+      <div style="flex:1;min-width:220px;font-size:var(--fs-md);line-height:1.5">
+        <strong>Unificar num RDO só.</strong> Cada turno fica com a versão mais recente, o número do RDO é o da primeira linha, e nada se perde: a linha retirada fica registrada na Auditoria.
+      </div>
+      <button class="btn btn-sm btn-primary" id="btnUnificarRDO" onclick="unificarRDODiario('${data}')">${ic('check')} Unificar</button>
+    </div>
+    <p style="font-size:var(--fs-sm);color:var(--muted);margin:0 0 10px;line-height:1.6">
+      Ou, se uma das linhas está errada: defina o <strong>oficial</strong> (só neste navegador) ou exclua a errada.
       <span style="color:var(--red);font-weight:600">${ic('alerta')} Excluir altera a planilha de produção (RDO_Diario) e não pode ser desfeito.</span>
     </p>
     <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:stretch">${cards}</div>
   `);
 }
+
+/* UNIFICAR as linhas repetidas de um dia, na planilha (`mesclarRDODiario`
+   no Code.gs). A tela não espera o CSV publicado, que demora minutos a
+   refletir: troca as linhas do dia pela versão unida já aqui — a mesma
+   junção que o servidor fez (`linhaDoDiaRDO`). */
+async function unificarRDODiario(data, emLote) {
+  const btn = emLote ? null : document.getElementById('btnUnificarRDO');
+  if (btn) { btn.disabled = true; btn.innerHTML = ic('ampulheta', 0, 'ic-gira') + ' Unificando…'; }
+  try {
+    const r = await jsonp(CONFIG.appsScript, { action: 'mesclarRDODiario', obra: OBRA.id, data, ...authParams() }, 0);
+    if (!r || !r.ok) {
+      const err = (r && (r.mensagem || r.error)) || 'Erro desconhecido';
+      if (/Ação desconhecida/i.test(err)) {
+        throw new Error('o servidor ainda não tem "mesclarRDODiario" — o Code.gs novo precisa ser implantado no Apps Script (Nova versão)');
+      }
+      throw new Error(erroLegivel(err));
+    }
+    const unida = linhaDoDiaRDO(data);
+    const doDia = new Set(rdosDaData(data));
+    let pos = -1;
+    STATE.rdodiario = (STATE.rdodiario || []).filter((x, i) => {
+      if (!doDia.has(x)) return true;
+      if (pos === -1) pos = i;
+      return false;
+    });
+    if (unida) STATE.rdodiario.splice(Math.max(pos, 0), 0, unida);
+    setOficialRDO(data, '');
+    if (!emLote) {
+      toast(`RDO de ${fmtData(data)} unificado — agora é uma linha só.`, 'success');
+      fecharModalRDO();
+      render();
+    }
+    return true;
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.innerHTML = ic('check') + ' Unificar'; }
+    toast(`Não deu para unificar ${fmtData(data)}: ${e.message}`, 'error', 8000);
+    return false;
+  }
+}
+window.unificarRDODiario = unificarRDODiario;
+
+window.unificarTodosRDODiario = async function (btn) {
+  const datas = [...new Set((STATE.rdodiario || []).map(rdoDiarioChaveData).filter(Boolean))]
+    .filter(d => rdosDaData(d).length > 1);
+  if (!datas.length) return;
+  if (btn) btn.disabled = true;
+  let ok = 0;
+  for (let i = 0; i < datas.length; i++) {
+    if (btn) btn.textContent = `Unificando… ${i + 1}/${datas.length}`;
+    if (await unificarRDODiario(datas[i], true)) ok++; else break;
+  }
+  if (ok) toast(`${ok} dia(s) unificado(s) — cada um agora é uma linha só.`, 'success');
+  render();
+};
 
 // (4) Define qual RDO é o oficial da data (só no navegador).
 function definirOficial(data, id) {
@@ -14713,8 +14779,8 @@ window.executarCriarRDOsFaltantes = async function() {
     if (btn) btn.textContent = `Criando… ${i + 1}/${dias.length}`;
     try {
       const result = await jsonp(CONFIG.appsScript, {
-        action: 'addRDODiario', obra: OBRA.id, data, tem_turno_noturno: 'false',
-        observacoes_gerais: '', ...authParams()
+        // Só a data: se o dia já existir (carga velha), nada dele é apagado.
+        action: 'addRDODiario', obra: OBRA.id, data, tem_turno_noturno: 'false', ...authParams()
       }, 0);
       if (result && result.ok) {
         if (result.updated) jaExistiam++; else criados++;
@@ -15126,7 +15192,7 @@ function _exportarRDOsXLS() {
   datas.forEach(data => {
     const daData = rdosDaData(data);
     const oficialId = getOficialRDO(data);
-    let fromSheet = daData[0];
+    let fromSheet = daData.length > 1 ? linhaDoDiaRDO(data) : daData[0];
     if (oficialId) {
       const of = daData.find(r => String(getCSVField(r, 'ID')).trim() === String(oficialId).trim());
       if (of) fromSheet = of;
@@ -15223,7 +15289,8 @@ function renderHistoricoDiarios() {
     avisosHtml += `
       <div style="margin:0 0 12px;padding:10px 14px;border-radius:var(--r-sm);background:var(--red-l);border:1px solid var(--red);font-size:var(--fs-md)">
         <strong style="color:var(--red)">${ic('alerta')} ${datasDuplicadas.length} data(s) com mais de um RDO${naoResolvidas ? ` (${naoResolvidas} sem oficial definido)` : ''}.</strong>
-        Defina o RDO <em>oficial</em> de cada data (ou exclua o errado) antes de exportar — a exportação em lote fica <strong>bloqueada</strong> enquanto houver duplicata não resolvida.
+        É o mesmo dia gravado mais de uma vez. <strong>Unificar</strong> junta as linhas numa só, na planilha, sem perder nenhum turno — e resolve para todos os aparelhos.
+        <div style="margin-top:8px"><button class="btn btn-sm btn-primary" onclick="unificarTodosRDODiario(this)">${ic('check')} Unificar ${datasDuplicadas.length > 1 ? `as ${datasDuplicadas.length} datas` : 'esta data'}</button></div>
         <div style="margin-top:4px">${chips}</div>
       </div>`;
   }
@@ -16857,11 +16924,79 @@ function defaultDiarioV4(data) {
   };
 }
 
-function carregarDiarioDaSheet(data) {
-  const sheetRow = (STATE.rdodiario || []).find(r => {
-    const rd = parseISODate(getCSVField(r, 'Data'));
-    return rd && getLocalISODate(rd) === data;
+/* ------------------------------------------------------------------
+   O DIA, EM UMA LINHA SÓ
+   ------------------------------------------------------------------
+   A planilha chegou a ter duas, três linhas para o mesmo dia (o servidor
+   procurava a linha pela coluna errada — ver `upsertRDODiario` no Code.gs).
+   E cada canto da tela lia uma: o cartão do turno pegava a PRIMEIRA, a lista
+   dos 14 dias a ÚLTIMA. Daí "Noturno — já enviado por Guilherme" ao lado de
+   um N em aberto, no mesmo dia.
+   Aqui o dia é lido JUNTANDO as linhas, com a mesma regra do servidor
+   (`rdoMesclarLinhas_`): cada turno vem inteiro da última linha que o tem,
+   id e número da primeira, textos somados sem repetir. Com uma linha só,
+   devolve a própria linha — nada muda para o dia que está certo. */
+const RDO_TURNO_PARTES = {
+  diurno:  { colunas: ['apontador_diurno', 'clima_manha', 'clima_tarde'],
+             json: { efetivo_json: ['padrao_diurno', 'customIndireto_diurno', 'customDireto_diurno'],
+                     equipamentos_json: ['padrao_diurno', 'custom_diurno'],
+                     paralisacoes_json: ['diurno'] } },
+  noturno: { colunas: ['apontador_noturno', 'clima_noite'],
+             json: { efetivo_json: ['padrao_noturno', 'customIndireto_noturno', 'customDireto_noturno'],
+                     equipamentos_json: ['padrao_noturno', 'custom_noturno'],
+                     paralisacoes_json: ['noturno'] } }
+};
+const RDO_TEXTOS_JUNTADOS = ['visitas', 'ocorrencias', 'observacoes_gerais', 'paralisado_motivo'];
+
+function rdoJuntarTextos(a, b) {
+  const vistos = new Set(), out = [];
+  [a, b].forEach(t => String(t == null ? '' : t).split(' / ').forEach(seg => {
+    const x = seg.trim();
+    if (x && !vistos.has(x.toLowerCase())) { vistos.add(x.toLowerCase()); out.push(x); }
+  }));
+  return out.join(' / ');
+}
+
+function linhaDoDiaRDO(data) {
+  const linhas = rdosDaData(data);
+  if (linhas.length < 2) return linhas[0] || null;
+  const vazio = v => v == null || String(v).trim() === '';
+  // chave em minúsculas -> nome da coluna como veio no CSV
+  const nomes = {};
+  linhas.forEach(l => Object.keys(l).forEach(k => { if (!nomes[k.toLowerCase()]) nomes[k.toLowerCase()] = k; }));
+  const val = (l, c) => getCSVField(l, c);
+  const base = {};
+  Object.keys(nomes).forEach(c => {
+    const k = nomes[c];
+    if (c === 'id' || c === 'numero_rdo') {
+      const achou = linhas.find(l => !vazio(val(l, c)));
+      base[k] = achou ? val(achou, c) : '';
+    } else if (RDO_TEXTOS_JUNTADOS.includes(c)) {
+      base[k] = linhas.reduce((acc, l) => rdoJuntarTextos(acc, val(l, c)), '');
+    } else {
+      const achou = [...linhas].reverse().find(l => !vazio(val(l, c)));
+      base[k] = achou ? val(achou, c) : '';
+    }
   });
+  const obj = v => { try { const o = JSON.parse(v || '{}'); return (o && typeof o === 'object') ? o : {}; } catch (e) { return {}; } };
+  Object.keys(RDO_TURNO_PARTES).forEach(t => {
+    const dona = [...linhas].reverse().find(l => !vazio(val(l, 'apontador_' + t)));
+    if (!dona) return;
+    const partes = RDO_TURNO_PARTES[t];
+    partes.colunas.forEach(c => { if (nomes[c]) base[nomes[c]] = val(dona, c); });
+    Object.keys(partes.json).forEach(c => {
+      if (!nomes[c]) return;
+      const d = obj(base[nomes[c]]), o = obj(val(dona, c));
+      partes.json[c].forEach(k => { if (k in o) d[k] = o[k]; else delete d[k]; });
+      base[nomes[c]] = JSON.stringify(d);
+    });
+  });
+  if (nomes.tem_turno_noturno && !vazio(val(base, 'apontador_noturno'))) base[nomes.tem_turno_noturno] = 'true';
+  return base;
+}
+
+function carregarDiarioDaSheet(data) {
+  const sheetRow = linhaDoDiaRDO(data);
   if (!sheetRow) return null;
   
   let efetivoJson = {};
@@ -16963,23 +17098,35 @@ function renderRDODiarioV4() {
    ------------------------------------------------------------------ */
 function renderDiasRecentesRDO() {
   const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
-  const linhaDaData = {};
-  (STATE.rdodiario || []).forEach(r => {
-    const d = parseISODate(getCSVField(r, 'Data'));
-    if (d) linhaDaData[getLocalISODate(d)] = r;
-  });
 
+  /* O MESMO dia que o cartão do turno lê (`linhaDoDiaRDO`, as linhas
+     repetidas juntas). Antes a lista ficava com a última linha da data e o
+     cartão com a primeira — e as duas diziam coisas diferentes do mesmo dia. */
   const dias = [];
   for (let i = 0; i < 14; i++) {
     const d = new Date(hoje.getTime() - i * 86400000);
     const iso = getLocalISODate(d);
-    const linha = linhaDaData[iso];
-    const diu = !!(linha && (getCSVField(linha, 'Apontador_Diurno') || getCSVField(linha, 'apontador_diurno')));
-    const not = !!(linha && (getCSVField(linha, 'Apontador_Noturno') || getCSVField(linha, 'apontador_noturno')));
+    const linha = linhaDoDiaRDO(iso);
+    const diu = !!(linha && getCSVField(linha, 'Apontador_Diurno'));
+    const not = !!(linha && getCSVField(linha, 'Apontador_Noturno'));
     dias.push({ iso, d, diu, not, domingo: d.getDay() === 0, hoje: i === 0 });
   }
 
-  const faltando = dias.filter(x => !x.diu && !x.not && !x.domingo && !x.hoje).length;
+  /* O resumo conta TURNOS, não só dia vazio. "Nenhum dia útil em aberto"
+     em cima de um N âmbar é a tela desmentindo a si mesma: o dia com o
+     diurno lançado e o noturno esquecido também ficou para trás.
+     O noturno só conta se a obra tem noturno — jornada declarada ou algum
+     noturno lançado na janela. Hoje e domingo ficam de fora, como sempre. */
+  const temNoturno = !!(OBRA.rdo && OBRA.rdo.jornada && OBRA.rdo.jornada.noturno) || dias.some(x => x.not);
+  const passados = dias.filter(x => !x.domingo && !x.hoje);
+  const faltando = passados.filter(x => !x.diu && !x.not).length;
+  const turnosAbertos = passados.filter(x => (x.diu || x.not) && (!x.diu || (temNoturno && !x.not)));
+  const resumo = [];
+  if (faltando) resumo.push(`<b>${faltando}</b> dia${faltando > 1 ? 's' : ''} sem RDO nenhum`);
+  if (turnosAbertos.length) {
+    const quais = turnosAbertos.map(x => `${x.d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} ${x.diu ? 'N' : 'D'}`);
+    resumo.push(`<b>${turnosAbertos.length}</b> turno${turnosAbertos.length > 1 ? 's' : ''} em aberto (${quais.join(', ')})`);
+  }
 
   const pill = (ok, letra, titulo) =>
     `<span class="dia-pill ${ok ? 'ok' : 'falta'}" title="${titulo}">${letra}</span>`;
@@ -16989,9 +17136,7 @@ function renderDiasRecentesRDO() {
       <div class="card-header">
         <div>
           <div class="card-title">Últimos 14 dias</div>
-          <div class="card-title-sub">${faltando === 0
-            ? 'Nenhum dia útil em aberto'
-            : `<b>${faltando}</b> dia${faltando > 1 ? 's' : ''} sem RDO nenhum`}</div>
+          <div class="card-title-sub">${resumo.length ? resumo.join(' · ') : 'Nenhum turno em aberto'}</div>
         </div>
       </div>
       <div class="card-body" style="padding:6px 0 8px">
@@ -17012,13 +17157,36 @@ function renderDiasRecentesRDO() {
     </div>`;
 }
 
+/* O TURNO QUE OUTRO APARELHO JÁ ENVIOU. O `DIARIO_V4` fica na memória
+   desde que a tela abriu — no celular do apontador do dia, desde cedo. O
+   noturno que o Guilherme enviou à noite não chegava nele: o cartão dizia
+   "Não preenchido" enquanto a lista, lida da planilha, já mostrava o N. E
+   pior, o próximo ajuste do diurno subia com o noturno EM BRANCO.
+   Então, antes de desenhar o seletor e antes de enviar, o turno que está
+   vazio aqui e preenchido na planilha vem de lá. Só turno VAZIO: um turno
+   com algo digitado neste aparelho é trabalho de alguém, e não se atropela. */
+function completarDiarioComPlanilha(d) {
+  if (!d || !d.data) return d;
+  const daPlanilha = carregarDiarioDaSheet(d.data);
+  if (!daPlanilha) return d;
+  const climaDo = { diurno: ['clima_manha', 'clima_tarde'], noturno: ['clima_noite'] };
+  ['diurno', 'noturno'].forEach(t => {
+    const aqui = d[t] || {};
+    if (aqui.preenchido || String(aqui.apontador || '').trim()) return;
+    if (!daPlanilha[t].preenchido) return;
+    d[t] = daPlanilha[t];
+    climaDo[t].forEach(c => { d[c] = daPlanilha[c]; });
+  });
+  return d;
+}
+
 window.abrirDiarioNaData = function (iso) {
   DIARIO_V4 = carregarDiarioDaSheet(iso) || loadDiarioV4(iso) || defaultDiarioV4(iso);
   transitionTo(render);
 };
 
 function renderSeletorTurno() {
-  const d = DIARIO_V4;
+  const d = completarDiarioComPlanilha(DIARIO_V4);
 
   const pendentesDiario = outboxLer().filter(it => it.kind === 'diario').length;
   const bannerPend = pendentesDiario > 0
@@ -17541,6 +17709,8 @@ async function salvarDiarioV4() {
   btn.innerHTML = ic('ampulheta', 0, 'ic-gira') + ' Salvando…';
   
   td.preenchido = true;
+  // O outro turno, se outro aparelho já o enviou: sobe junto, não em branco.
+  completarDiarioComPlanilha(d);
   saveDiarioV4(d);
   
   const existe = (STATE.rdodiario || []).some(r => {
@@ -17653,17 +17823,20 @@ async function gerarPDFDiario(data, opcoes) {
 function _gerarPDFDiario(data, opcoes) {
   const daData = rdosDaData(data);
   const oficialId = getOficialRDO(data);
-  let fromSheet = daData[0];
+  // Dia repetido na planilha: o PDF sai do dia UNIFICADO (os dois turnos),
+  // não da primeira linha — que podia ser justamente a que não tem o noturno.
+  let fromSheet = daData.length > 1 ? linhaDoDiaRDO(data) : daData[0];
   if (oficialId) {
     const of = daData.find(r => String(getCSVField(r, 'ID')).trim() === String(oficialId).trim());
     if (of) fromSheet = of;
   }
-  // Mais de um RDO na mesma data: deixa explícito quais IDs conflitam e qual
-  // está sendo usado (o oficial, se definido; senão o primeiro).
-  if (daData.length > 1) {
+  // O depósito (entregar: 'base64') roda em segundo plano: aviso ali seria ruído.
+  if (daData.length > 1 && !(opcoes && opcoes.entregar)) {
     const ids = daData.map(r => getCSVField(r, 'ID')).join(', ');
-    const usando = getCSVField(fromSheet, 'ID') || '(primeiro)';
-    toast(`Atenção: ${daData.length} RDOs em ${fmtData(data)} (IDs: ${ids}). Gerando o ${oficialId ? 'oficial' : 'primeiro'}: ${usando}.`, oficialId ? 'info' : 'error', oficialId ? 6000 : 8000);
+    toast(oficialId
+      ? `${daData.length} linhas em ${fmtData(data)} (IDs: ${ids}). Gerando o oficial: ${oficialId}.`
+      : `${daData.length} linhas em ${fmtData(data)} (IDs: ${ids}) — o PDF junta os turnos de todas. Unifique no Histórico para acabar com a repetição.`,
+      'info', 7000);
   }
 
   let d;
