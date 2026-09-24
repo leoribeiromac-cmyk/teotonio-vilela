@@ -30,6 +30,7 @@ var ABA_BOTAFORA   = 'BotaFora';     // viagens de bota-fora / frete, com as pro
 var ABA_NF         = 'NotasFiscais';
 var ABA_SAIDA      = 'EstoqueSaidas';
 var ABA_RDO_ASSIN  = 'RDO_Assinaturas'; // quem assinou o RDO do dia, e quando
+var ABA_MAPA_CHUVA = 'Mapa_Chuva';    // mapa de chuva do mês, dia a dia (do RDO)
 
 // Identificador desta obra na trilha de auditoria. Este backend atende UMA
 // obra, mas o campo existe para a auditoria ter o mesmo formato do app
@@ -78,7 +79,13 @@ var HEADERS = {
      e por isso ele nunca aparece no PDF nem em resposta pública. */
   'RDO_Assinaturas': ['id','obra','data','papel','rotulo','nome','email','token','status',
                       'convidadoEm','assinadoEm','assinatura','nomeAssinante','documento',
-                      'agente','observacao']
+                      'agente','observacao'],
+  /* MAPA DE CHUVA. Uma linha por obra e dia, refeita a cada gravação do RDO
+     (e toda madrugada, por inteiro). É o que os APONTADORES marcaram — o
+     clima de cada período e as paralisações —, não a estação do INMET: o
+     mapa é o registro do canteiro. Ver mapaChuvaClassificar. */
+  'Mapa_Chuva': ['obra','data','dia_semana','manha','tarde','noite',
+                 'clima_manha','clima_tarde','clima_noite','apontadores','paralisacoes','atualizado_em']
 };
 
 // ------------------------------------------------------------
@@ -2356,6 +2363,239 @@ function rdoDiarioGravarUnificado_(aba, cab, dados, indices, novo, sess, dataAlv
   return indices.length - 1;
 }
 
+// ------------------------------------------------------------
+// DOIS APONTADORES NO MESMO TURNO — as partes SOMAM, não se sobrepõem
+//
+// Nas Ruas de Terra são duas frentes (duas ruas), cada uma com o seu
+// apontador, no MESMO diurno. Com o dia numa linha só, o segundo a enviar
+// trocava o efetivo, os equipamentos e as ocorrências do primeiro pelos
+// dele: o RDO saía com metade da obra.
+//
+// Agora cada apontador envia só a SUA PARTE do turno (`contribuicao`), e a
+// linha guarda todas em `contribuicoes_json`:
+//     { diurno: { "<chave>": parte, ... }, noturno: { ... } }
+// A chave é o nome do apontador sem acento e sem caixa — o mesmo apontador
+// que reenvia troca a parte dele, outro apontador acrescenta a sua.
+// As colunas de sempre (apontador_*, clima_*, efetivo_json, equipamentos_json,
+// paralisacoes_json, ocorrências…) passam a ser a SOMA das partes, e por isso
+// o PDF, o e-mail, a Dias Improdutivos e o mapa de chuva continuam lendo as
+// mesmas colunas, sem saber que houve mais de um apontador.
+//
+// Quem manda parte é o app, e só nas obras de OBRAS_RDO_VARIOS_APONTADORES
+// (index.html). As outras continuam no envio de sempre (rdoAplicarEnvio_).
+// ------------------------------------------------------------
+
+// Do mais brando ao mais grave. Duas frentes no mesmo período: vale o pior —
+// se choveu numa rua, choveu na obra.
+var RDO_CLIMA_GRAVIDADE = ['Bom', 'Encoberto', 'Garoa', 'Chuva', 'Chuva forte'];
+function rdoClimaGrau_(v) {
+  var s = String(v == null ? '' : v).trim();
+  var i = RDO_CLIMA_GRAVIDADE.indexOf(s);
+  if (i !== -1) return i;
+  if (/forte/i.test(s)) return 4;
+  if (/chuv/i.test(s)) return 3;
+  if (/garoa/i.test(s)) return 2;
+  if (/encob|nublad/i.test(s)) return 1;
+  return s ? 0 : -1;
+}
+function rdoClimaPior_(lista) {
+  var pior = '', grau = -1;
+  lista.forEach(function (v) {
+    var g = rdoClimaGrau_(v);
+    if (g > grau) { grau = g; pior = String(v).trim(); }
+  });
+  return pior;
+}
+
+var RDO_CLIMA_DO_TURNO = { diurno: ['clima_manha', 'clima_tarde'], noturno: ['clima_noite'] };
+
+function rdoChaveParte_(nome) {
+  var s = String(nome == null ? '' : nome).trim().toLowerCase();
+  if (s.normalize) s = s.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return s.replace(/\s+/g, ' ');
+}
+
+// "8", "8,5" ou 8 → número. Vazio é zero.
+function rdoQtd_(v) {
+  if (typeof v === 'number') return isFinite(v) ? v : 0;
+  var s = String(v == null ? '' : v).trim();
+  if (!s) return 0;
+  if (s.indexOf(',') !== -1) s = s.replace(/\./g, '').replace(',', '.');
+  var n = parseFloat(s);
+  return isFinite(n) ? n : 0;
+}
+// De volta para o formato que o app grava: inteiro sem casa, fração com
+// vírgula. String(22.5) seria lido pelo num() do app como 225.
+function rdoQtdTexto_(n) {
+  var r = Math.round(n * 100) / 100;
+  return r % 1 === 0 ? String(r) : String(r).replace('.', ',');
+}
+// {Servente: "8"} + {Servente: "5", Pedreiro: "2"} = {Servente: "13", Pedreiro: "2"}
+function rdoSomarMapas_(mapas) {
+  var soma = {}, ordem = [];
+  mapas.forEach(function (m) {
+    Object.keys(m || {}).forEach(function (k) {
+      if (!soma.hasOwnProperty(k)) { soma[k] = 0; ordem.push(k); }
+      soma[k] += rdoQtd_(m[k]);
+    });
+  });
+  var out = {};
+  ordem.forEach(function (k) { if (soma[k]) out[k] = rdoQtdTexto_(soma[k]); });
+  return out;
+}
+// [{label:"Topógrafo", qtd:"1"}] das duas partes: mesma função soma, sem repetir a linha.
+function rdoSomarListas_(listas) {
+  var por = {}, ordem = [];
+  listas.forEach(function (l) {
+    (Array.isArray(l) ? l : []).forEach(function (it) {
+      var label = String(it && it.label || '').trim();
+      if (!label) return;
+      var k = rdoChaveParte_(label);
+      if (!por[k]) { por[k] = { label: label, qtd: 0 }; ordem.push(k); }
+      por[k].qtd += rdoQtd_(it.qtd);
+    });
+  });
+  return ordem.map(function (k) { return { label: por[k].label, qtd: rdoQtdTexto_(por[k].qtd) }; });
+}
+
+/* As partes guardadas na linha. Linha gravada ANTES desta regra (ou por uma
+   obra de um apontador só) não tem partes, mas pode ter o turno preenchido:
+   ele vira a parte de quem o assinou, marcada `legado`. Sem isto, o primeiro
+   apontador a mandar a sua parte depois da atualização apagaria o turno que
+   já estava na planilha. */
+function rdoPartesLer_(cab, linha) {
+  var i = cab.indexOf('contribuicoes_json');
+  var partes = rdoJsonObj_(i !== -1 ? linha[i] : '');
+  var col = function (c) { var k = cab.indexOf(c); return k === -1 ? '' : linha[k]; };
+  var ef = rdoJsonObj_(col('efetivo_json')), eq = rdoJsonObj_(col('equipamentos_json'));
+  var pa = rdoJsonObj_(col('paralisacoes_json'));
+  var textosUsados = false;
+  ['diurno', 'noturno'].forEach(function (t) {
+    if (!partes[t] || typeof partes[t] !== 'object') partes[t] = {};
+    if (Object.keys(partes[t]).length || rdoVazio_(col('apontador_' + t))) return;
+    var nome = String(col('apontador_' + t)).trim();
+    var clima = {};
+    RDO_CLIMA_DO_TURNO[t].forEach(function (c) { clima[c] = String(col(c) || ''); });
+    var parte = {
+      turno: t, apontador: nome, clima: clima,
+      efetivo: { padrao: ef['padrao_' + t] || {}, customIndireto: ef['customIndireto_' + t] || [],
+                 customDireto: ef['customDireto_' + t] || [] },
+      equipamentos: { padrao: eq['padrao_' + t] || {}, custom: eq['custom_' + t] || [] },
+      paralisacoes: Array.isArray(pa[t]) ? pa[t] : [],
+      visitas: '', ocorrencias: '', observacoes: '', legado: true
+    };
+    // Os textos da linha antiga são dos dois turnos juntos: vão inteiros
+    // para a primeira parte semeada, para a soma devolvê-los como estavam.
+    if (!textosUsados) {
+      parte.visitas = String(col('visitas') || '');
+      parte.ocorrencias = String(col('ocorrencias') || '');
+      parte.observacoes = String(col('observacoes_gerais') || '');
+      textosUsados = true;
+    }
+    partes[t][rdoChaveParte_(nome)] = parte;
+  });
+  return partes;
+}
+
+/* As colunas do dia, recalculadas a partir das partes. */
+function rdoPartesAgregar_(cab, linha, partes) {
+  var novo = linha.slice();
+  var put = function (c, v) { var k = cab.indexOf(c); if (k !== -1) novo[k] = v; };
+  var get = function (c) { var k = cab.indexOf(c); return k === -1 ? '' : novo[k]; };
+  var ef = rdoJsonObj_(get('efetivo_json')), eq = rdoJsonObj_(get('equipamentos_json'));
+  var pa = rdoJsonObj_(get('paralisacoes_json'));
+  var textos = { visitas: '', ocorrencias: '', observacoes_gerais: '' };
+  var motivos = '';
+  ['diurno', 'noturno'].forEach(function (t) {
+    var lista = Object.keys(partes[t] || {}).map(function (k) { return partes[t][k]; });
+    put('apontador_' + t, lista.map(function (x) { return String(x.apontador || '').trim(); })
+                               .filter(function (x) { return x; }).join(' / '));
+    if (lista.length) {
+      RDO_CLIMA_DO_TURNO[t].forEach(function (c) {
+        var pior = rdoClimaPior_(lista.map(function (x) { return (x.clima || {})[c]; }));
+        if (pior) put(c, pior);
+      });
+    }
+    var e = function (x) { return x.efetivo || {}; }, q = function (x) { return x.equipamentos || {}; };
+    ef['padrao_' + t] = rdoSomarMapas_(lista.map(function (x) { return e(x).padrao; }));
+    ef['customIndireto_' + t] = rdoSomarListas_(lista.map(function (x) { return e(x).customIndireto; }));
+    ef['customDireto_' + t] = rdoSomarListas_(lista.map(function (x) { return e(x).customDireto; }));
+    eq['padrao_' + t] = rdoSomarMapas_(lista.map(function (x) { return q(x).padrao; }));
+    eq['custom_' + t] = rdoSomarListas_(lista.map(function (x) { return q(x).custom; }));
+    pa[t] = [].concat.apply([], lista.map(function (x) { return Array.isArray(x.paralisacoes) ? x.paralisacoes : []; }));
+    lista.forEach(function (x) {
+      textos.visitas = rdoJuntarTextos_(textos.visitas, x.visitas);
+      textos.ocorrencias = rdoJuntarTextos_(textos.ocorrencias, x.ocorrencias);
+      textos.observacoes_gerais = rdoJuntarTextos_(textos.observacoes_gerais, x.observacoes);
+    });
+    pa[t].forEach(function (p) { if (p && p.motivo) motivos = rdoJuntarTextos_(motivos, p.motivo); });
+  });
+  put('efetivo_json', JSON.stringify(ef));
+  put('equipamentos_json', JSON.stringify(eq));
+  put('paralisacoes_json', JSON.stringify(pa));
+  Object.keys(textos).forEach(function (c) { put(c, textos[c]); });
+  put('paralisado_motivo', motivos);
+  put('tem_turno_noturno', Object.keys(partes.noturno || {}).length ? 'true' : 'false');
+  put('contribuicoes_json', JSON.stringify(partes));
+  return novo;
+}
+
+/* Aplica UMA parte enviada sobre a linha do dia. `de` é a chave da parte
+   que estava aberta para edição — se o apontador corrigiu o próprio nome,
+   a parte velha sai, em vez de o dia ficar com as duas.
+   Tirar a parte de OUTRA pessoa é do dono dela, do admin ou da engenharia:
+   é o mesmo critério de apagar lançamento. */
+function rdoParteAplicar_(cab, base, envio, de, sess, token) {
+  var t = String(envio && envio.turno || '').toLowerCase();
+  if (!RDO_CLIMA_DO_TURNO[t]) return { ok: false, error: 'Parte sem turno (diurno ou noturno).' };
+  var partes = rdoPartesLer_(cab, base);
+  var doTurno = partes[t];
+  var chaveDe = de ? rdoChaveParte_(de) : '';
+
+  if (envio.remover) {
+    var alvo = doTurno[chaveDe];
+    if (!alvo) return { ok: false, error: 'Essa parte do turno ' + t + ' já não existe.' };
+    var perfil = perfilDoToken(token);
+    if (!podeApagarLinha(token, alvo.usuario) && perfil !== 'engenharia') {
+      return negarPorPermissao(token, 'removerParteRDO', chaveDe, alvo.usuario || alvo.apontador);
+    }
+    delete doTurno[chaveDe];
+    return { ok: true, novo: rdoPartesAgregar_(cab, base, partes), chave: chaveDe, removida: alvo };
+  }
+
+  var nome = String(envio.apontador || '').trim();
+  if (!nome) return { ok: false, error: 'Apontador obrigatório na parte do turno.' };
+  var chave = rdoChaveParte_(nome);
+  var clima = {};
+  RDO_CLIMA_DO_TURNO[t].forEach(function (c) { clima[c] = String((envio.clima || {})[c] || ''); });
+  var parte = {
+    turno: t, apontador: nome, clima: clima,
+    efetivo: envio.efetivo || {}, equipamentos: envio.equipamentos || {},
+    paralisacoes: Array.isArray(envio.paralisacoes) ? envio.paralisacoes : [],
+    visitas: String(envio.visitas || ''), ocorrencias: String(envio.ocorrencias || ''),
+    observacoes: String(envio.observacoes || ''),
+    usuario: (sess && sess.usuario) || (doTurno[chave] && doTurno[chave].usuario) || '',
+    em: new Date().toISOString()
+  };
+  if (chaveDe && chaveDe !== chave) delete doTurno[chaveDe];
+  doTurno[chave] = parte;
+  return { ok: true, novo: rdoPartesAgregar_(cab, base, partes), chave: chave };
+}
+
+/* A linha do dia como o app a lê do CSV (coluna → valor). Vai de volta na
+   resposta da parte: o CSV publicado demora minutos para ver a gravação, e
+   sem isto o apontador voltava ao seletor e não via a própria parte. */
+function rdoLinhaObj_(cab, linha) {
+  var o = {};
+  cab.forEach(function (c, i) {
+    var v = linha[i];
+    if (c === 'data') v = normData(v);
+    else if (v instanceof Date) v = v.toISOString();
+    o[c] = v == null ? '' : v;
+  });
+  return o;
+}
+
 function upsertRDODiario(p, deveExistir) {
   var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
   if (!aba) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
@@ -2382,6 +2622,13 @@ function upsertRDODiario(p, deveExistir) {
      modo de falha que esta versão inteira foi feita para acabar. */
   garantirColuna(aba, 'paralisacoes_json');
   garantirColuna(aba, 'paralisado_motivo');
+  // Parte de um apontador (obra com mais de um no mesmo turno): ver rdoPartesLer_.
+  var envioParte = null;
+  if (p.contribuicao) {
+    try { envioParte = JSON.parse(String(p.contribuicao)); } catch (e) { envioParte = null; }
+    if (!envioParte || typeof envioParte !== 'object') return { ok: false, error: 'Parte do turno ilegível.' };
+    garantirColuna(aba, 'contribuicoes_json');
+  }
     var cab = cabecalhoNormalizado(aba);
     var iId = idxColuna(cab, 'id');
     var iObra = idxColuna(cab, 'obra');
@@ -2401,17 +2648,41 @@ function upsertRDODiario(p, deveExistir) {
     Object.keys(p).forEach(function (chave) {
       // 'token' é credencial, não dado do RDO: nunca vai para a planilha.
       if (chave === 'action' || chave === 'callback' || chave === 'token') return;
+      // A parte não é coluna: as colunas saem da soma das partes.
+      if (chave === 'contribuicao' || chave === 'contribuicao_de') return;
       registro[chave.toLowerCase()] = p[chave];
     });
     registro['obra'] = obraAlvo;
     var sessD = sessaoDoToken(p.token);
     if (sessD && sessD.usuario) registro['usuario'] = sessD.usuario;
 
+    var resParte = null;
+    if (envioParte) {
+      var vazia = cab.map(function () { return ''; });
+      var baseP = doDia.length ? rdoMesclarLinhas_(cab, doDia.map(function (i) { return dados[i]; })) : vazia;
+      // Só o que não é do turno vem do registro (data, obra, usuário).
+      cab.forEach(function (c, i) {
+        if (c === 'data' || c === 'obra' || c === 'usuario') { if (registro.hasOwnProperty(c)) baseP[i] = registro[c]; }
+      });
+      resParte = rdoParteAplicar_(cab, baseP, envioParte, p.contribuicao_de, sessD, p.token);
+      if (!resParte.ok) return resParte;
+      if (!doDia.length) {
+        // Dia novo: a linha nasce da soma (que por ora é só esta parte).
+        registro = {};
+        cab.forEach(function (c, i) { registro[c] = resParte.novo[i]; });
+        if (rdoVazio_(registro['id'])) delete registro['id'];
+        if (rdoVazio_(registro['numero_rdo'])) delete registro['numero_rdo'];
+      }
+    }
+    var sobreParte = resParte
+      ? ' · parte de ' + (envioParte.remover ? 'removida: ' : '') + resParte.chave + ' (' + envioParte.turno + ')'
+      : '';
+
     if (doDia.length) {
       // ATUALIZA a linha do dia (sem duplicar) — e une as repetidas, se houver.
       var principal = doDia[0];
       var base = rdoMesclarLinhas_(cab, doDia.map(function (i) { return dados[i]; }));
-      var novo = rdoAplicarEnvio_(cab, base, registro);
+      var novo = resParte ? resParte.novo : rdoAplicarEnvio_(cab, base, registro);
       // Backfill de ID e do número na linha antiga que ainda não os tem
       // (mesmo efeito de migrarNumeroRdoPorObra, sem depender de alguém rodá-la).
       if (iId !== -1 && rdoVazio_(novo[iId])) novo[iId] = gerarIdDiario(dados, iId);
@@ -2419,8 +2690,11 @@ function upsertRDODiario(p, deveExistir) {
       var unidas = rdoDiarioGravarUnificado_(aba, cab, dados, doDia, novo, sessD, dataAlvo);
       var idFinal = iId !== -1 ? String(novo[iId]) : '';
       registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'updateRDODiario', OBRA_ID,
-        idFinal || dataAlvo, 'linha ' + (principal + 1), 'data ' + dataAlvo + (unidas ? ' · ' + unidas + ' linha(s) repetida(s) unida(s)' : ''));
-      return { ok: true, updated: true, id: idFinal || undefined, unidas: unidas };
+        idFinal || dataAlvo, 'linha ' + (principal + 1), 'data ' + dataAlvo + (unidas ? ' · ' + unidas + ' linha(s) repetida(s) unida(s)' : '') + sobreParte);
+      mapaChuvaAposGravar_(cab, novo);
+      return { ok: true, updated: true, id: idFinal || undefined, unidas: unidas,
+               chave: resParte ? resParte.chave : undefined,
+               linha: resParte ? rdoLinhaObj_(cab, novo) : undefined };
     } else {
       // INSERE nova linha, sempre com ID gerado (se a aba tem coluna ID).
       if (iId !== -1 && !registro['id']) {
@@ -2436,8 +2710,11 @@ function upsertRDODiario(p, deveExistir) {
       });
       aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
       registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'addRDODiario', OBRA_ID,
-        registro['id'] || dataAlvo, '', 'data ' + dataAlvo);
-      return { ok: true, inserted: true, id: registro['id'] || '' };
+        registro['id'] || dataAlvo, '', 'data ' + dataAlvo + sobreParte);
+      mapaChuvaAposGravar_(cab, linha);
+      return { ok: true, inserted: true, id: registro['id'] || '',
+               chave: resParte ? resParte.chave : undefined,
+               linha: resParte ? rdoLinhaObj_(cab, linha) : undefined };
     }
   } finally {
     lock.releaseLock();
@@ -4843,6 +5120,158 @@ function backupDiario() {
 }
 
 // ------------------------------------------------------------
+// MAPA DE CHUVA — o gráfico circular do mês (31 fatias, três anéis:
+// Manhã, Tarde, Noite), cada casa em uma de quatro cores:
+//     seco produtivo · seco improdutivo · chuva produtivo · chuva improdutivo
+//
+// QUEM ALIMENTA SÃO OS APONTADORES, pelo RDO: o clima que marcaram em cada
+// período e as paralisações que lançaram. Não é a estação do INMET — o mapa
+// é o que o canteiro viu, e é o que a fiscalização assina junto com o RDO.
+//
+// A REGRA ESTÁ ESCRITA DUAS VEZES, igual, letra por letra: aqui e em
+// js/rdo/mapa-chuva.js (o app desenha o mapa). tests/mapa-chuva.test.js
+// confere que os dois corpos são o mesmo texto. Mudou um, mude o outro.
+//
+//   - Período sem o turno lançado (sem apontador) fica em branco: sem RDO
+//     não há o que afirmar. A noite só existe se houve turno noturno.
+//   - Chuva: o clima do período é garoa, chuva ou chuva forte.
+//   - Improdutivo: alguma paralisação do turno toca o período. Parada sem
+//     horário vale para o turno inteiro; o noturno atravessa a meia-noite.
+//   - Parada por chuva ("Chuva", "Pista impraticável após chuva") é chuva
+//     improdutivo mesmo com o período marcado seco: a causa é a chuva.
+// ------------------------------------------------------------
+var MAPA_CHUVA_ROTULOS = {
+  seco_produtivo: 'Seco produtivo', seco_improdutivo: 'Seco improdutivo',
+  chuva_produtivo: 'Chuva produtivo', chuva_improdutivo: 'Chuva improdutivo'
+};
+
+function mapaChuvaClassificar(dia) {
+  var periodos = [['manha', 'diurno', 360, 720], ['tarde', 'diurno', 720, 1080], ['noite', 'noturno', 1080, 1800]];
+  var emMin = function (s) {
+    var m = /^(\d{1,2}):(\d{2})/.exec(String(s == null ? '' : s).trim());
+    if (!m) return null;
+    var h = +m[1], mi = +m[2];
+    return (h < 24 && mi < 60) ? h * 60 + mi : null;
+  };
+  var out = {};
+  periodos.forEach(function (per) {
+    var nome = per[0], turno = per[1];
+    if (!dia || !dia[turno]) { out[nome] = ''; return; }
+    var chuva = /garoa|chuv/i.test(String((dia.clima || {})[nome] || ''));
+    var paradas = ((dia.paralisacoes || {})[turno] || []).filter(function (x) {
+      return x && String(x.motivo || '').trim();
+    });
+    var tocam = paradas.filter(function (x) {
+      var a = emMin(x.inicio), b = emMin(x.fim);
+      if (a === null || b === null) return true;
+      if (turno === 'noturno' && a < 360) { a += 1440; b += 1440; }
+      if (b <= a) b += 1440;
+      return a < per[3] && b > per[2];
+    });
+    var porChuva = chuva || tocam.some(function (x) { return /chuv/i.test(String(x.motivo)); });
+    if (tocam.length) out[nome] = porChuva ? 'chuva_improdutivo' : 'seco_improdutivo';
+    else out[nome] = chuva ? 'chuva_produtivo' : 'seco_produtivo';
+  });
+  return out;
+}
+
+/* O dia do mapa, a partir de uma linha da aba RDO_Diario (cab minúsculo). */
+function mapaChuvaDiaDaLinha_(cab, linha) {
+  var col = function (c) { var k = cab.indexOf(c); return k === -1 ? '' : linha[k]; };
+  var pa = rdoJsonObj_(col('paralisacoes_json'));
+  return {
+    diurno: !rdoVazio_(col('apontador_diurno')),
+    noturno: !rdoVazio_(col('apontador_noturno')),
+    clima: { manha: String(col('clima_manha') || ''), tarde: String(col('clima_tarde') || ''),
+             noite: String(col('clima_noite') || '') },
+    paralisacoes: { diurno: Array.isArray(pa.diurno) ? pa.diurno : [],
+                    noturno: Array.isArray(pa.noturno) ? pa.noturno : [] }
+  };
+}
+
+function mapaChuvaRegistro_(cab, linha) {
+  var col = function (c) { var k = cab.indexOf(c); return k === -1 ? '' : linha[k]; };
+  var dia = mapaChuvaDiaDaLinha_(cab, linha);
+  var cls = mapaChuvaClassificar(dia);
+  var data = normData(col('data'));
+  var paradas = dia.paralisacoes.diurno.concat(dia.paralisacoes.noturno)
+    .filter(function (x) { return x && String(x.motivo || '').trim(); })
+    .map(function (x) { return x.motivo + (x.inicio && x.fim ? ' ' + x.inicio + '–' + x.fim : ''); });
+  return {
+    obra: normObra(col('obra')), data: data, dia_semana: data ? rdoDiaSemana_(data) : '',
+    manha: MAPA_CHUVA_ROTULOS[cls.manha] || '', tarde: MAPA_CHUVA_ROTULOS[cls.tarde] || '',
+    noite: MAPA_CHUVA_ROTULOS[cls.noite] || '',
+    clima_manha: dia.diurno ? String(col('clima_manha') || '') : '',
+    clima_tarde: dia.diurno ? String(col('clima_tarde') || '') : '',
+    clima_noite: dia.noturno ? String(col('clima_noite') || '') : '',
+    apontadores: [col('apontador_diurno'), col('apontador_noturno')]
+      .map(function (x) { return String(x || '').trim(); }).filter(function (x) { return x; }).join(' / '),
+    paralisacoes: paradas.join(' | '),
+    atualizado_em: new Date()
+  };
+}
+
+/* Grava (ou troca) a linha do dia no mapa. Chamada por upsertRDODiario
+   DENTRO da trava dele — por isso não trava de novo. Nunca derruba o RDO:
+   o mapa é derivado e a madrugada o refaz inteiro. */
+function mapaChuvaAposGravar_(cab, linha) {
+  try {
+    var reg = mapaChuvaRegistro_(cab, linha);
+    if (!reg.data) return;
+    var aba = getOrCreateAba(ABA_MAPA_CHUVA);
+    var dados = aba.getDataRange().getValues();
+    var cabM = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+    var iO = cabM.indexOf('obra'), iD = cabM.indexOf('data');
+    var valores = cabM.map(function (c) { return reg.hasOwnProperty(c) ? reg[c] : ''; });
+    for (var i = 1; i < dados.length; i++) {
+      if (normObra(dados[i][iO]) === reg.obra && normData(dados[i][iD]) === reg.data) {
+        aba.getRange(i + 1, 1, 1, cabM.length).setValues([valores]);
+        return;
+      }
+    }
+    aba.getRange(aba.getLastRow() + 1, 1, 1, cabM.length).setValues([valores]);
+  } catch (e) {
+    Logger.log('Mapa de chuva não atualizado: ' + e);
+  }
+}
+
+/* Refaz o mapa INTEIRO a partir da aba RDO_Diario (dias repetidos unidos,
+   como o resto do sistema lê). Roda sozinha na madrugada, junto do
+   registrarClimaAuto — é o que alcança o que não passa pelo upsert: RDO
+   apagado, dia unificado no Histórico, correção feita direto na planilha.
+   Rode também no editor, uma vez, para trazer o histórico que já existe. */
+function refazerMapaChuva() {
+  var diario = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!diario) return { ok: false, error: 'Aba "' + NOME_ABA_DIARIO + '" não encontrada' };
+  var dados = diario.getDataRange().getValues();
+  var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iData = cab.indexOf('data'), iObra = cab.indexOf('obra');
+  var grupos = {}, ordem = [];
+  for (var i = 1; i < dados.length; i++) {
+    var d = normData(dados[i][iData]);
+    if (!d) continue;
+    var k = normObra(iObra !== -1 ? dados[i][iObra] : '') + '|' + d;
+    if (!grupos[k]) { grupos[k] = []; ordem.push(k); }
+    grupos[k].push(dados[i]);
+  }
+  ordem.sort(function (a, b) {
+    var pa = a.split('|'), pb = b.split('|');
+    return pa[0] === pb[0] ? (pa[1] < pb[1] ? -1 : pa[1] > pb[1] ? 1 : 0) : (pa[0] < pb[0] ? -1 : 1);
+  });
+  var aba = getOrCreateAba(ABA_MAPA_CHUVA);
+  var cabM = HEADERS[ABA_MAPA_CHUVA];
+  var linhas = ordem.map(function (k) {
+    var reg = mapaChuvaRegistro_(cab, rdoMesclarLinhas_(cab, grupos[k]));
+    return cabM.map(function (c) { return reg.hasOwnProperty(c) ? reg[c] : ''; });
+  });
+  aba.clearContents();
+  aba.getRange(1, 1, 1, cabM.length).setValues([cabM]);
+  if (linhas.length) aba.getRange(2, 1, linhas.length, cabM.length).setValues(linhas);
+  Logger.log('Mapa de chuva refeito: ' + linhas.length + ' dia(s).');
+  return { ok: true, dias: linhas.length };
+}
+
+// ------------------------------------------------------------
 // CLIMA AUTOMÁTICO — grava a chuva de ONTEM na aba RDO_Diario, colunas
 // Chuva_mm_Auto e Clima_Fonte (criadas automaticamente se não existirem).
 // Contraprova objetiva do clima apontado — base para pleitos de
@@ -4877,6 +5306,9 @@ function registrarClimaAuto() {
   });
 
   Logger.log('Clima de ' + iso + ': ' + JSON.stringify(resultados));
+  // Carona no gatilho das 05h: o mapa de chuva é refeito inteiro, para
+  // alcançar o que não passou pelo upsert do RDO (ver refazerMapaChuva).
+  try { refazerMapaChuva(); } catch (e) { Logger.log('Mapa de chuva: ' + e); }
   // Uma obra sem dado não pode derrubar as outras: o gatilho só é
   // "falha" quando NENHUMA obra conseguiu registrar.
   return { ok: resultados.some(function (r) { return r.ok; }), data: iso, obras: resultados };

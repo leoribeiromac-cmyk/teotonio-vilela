@@ -72,22 +72,23 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=61"></script>
-<script src="dados/ruas-de-terra.js?v=61"></script>
+<script src="dados/ranario.js?v=62"></script>
+<script src="dados/ruas-de-terra.js?v=62"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=61"></script>
+<script src="dados/teotonio-muros.js?v=62"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=61"></script>
-<script src="js/nf/adaptador.js?v=61"></script>
-<script src="js/nf/notas.js?v=61"></script>
-<script src="js/equip/equipamentos.js?v=61"></script>
+<script src="js/ui/icones.js?v=62"></script>
+<script src="js/nf/adaptador.js?v=62"></script>
+<script src="js/nf/notas.js?v=62"></script>
+<script src="js/equip/equipamentos.js?v=62"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=61"></script>
+<script src="js/bf/bota-fora.js?v=62"></script>
+<script src="js/rdo/mapa-chuva.js?v=62"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -1865,6 +1866,30 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 @keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
 
 /* ===================== CLIMA AUTOMÁTICO ===================== */
+/* MAPA DE CHUVA (js/rdo/mapa-chuva.js). O desenho tem fundo branco e cores
+   fixas nos dois temas: é o documento que vai impresso para a fiscalização. */
+.mapa-chuva-corpo{display:grid;grid-template-columns:minmax(0,560px) minmax(0,1fr);gap:20px;align-items:start}
+.mapa-chuva-grafico svg{width:100%;height:auto;display:block;border-radius:var(--r-sm)}
+.mapa-chuva-legenda,.mapa-chuva-periodos{display:flex;flex-direction:column;gap:6px;font-size:var(--fs-sm)}
+.mapa-chuva-legenda span{display:flex;align-items:center;gap:8px}
+.mapa-chuva-legenda i{width:18px;height:12px;border:1px solid #1d1d1d;display:inline-block;flex:none}
+.mapa-chuva-periodos{margin-top:12px;color:var(--muted)}
+.mapa-chuva-totais{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px}
+.mapa-chuva-totais div{display:flex;flex-direction:column}
+.mapa-chuva-totais span{font-size:var(--fs-xs);font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.mapa-chuva-totais b{font-size:var(--fs-2xl)}
+.mapa-chuva-nota{margin-top:14px;font-size:var(--fs-xs);color:var(--muted);border-left:2px solid var(--border);padding-left:10px}
+@media (max-width:760px){.mapa-chuva-corpo{grid-template-columns:1fr}}
+/* Obra de várias partes: o cartão do turno lista quem já mandou a sua. */
+.turno-partes{cursor:default}
+.turno-partes-lista{list-style:none;margin:10px 0 8px;padding:0;display:flex;flex-direction:column;gap:6px;text-align:left;width:100%}
+.turno-partes-lista li{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--bg)}
+.turno-partes-lista li{flex-wrap:wrap}
+.turno-partes-lista li>div:first-child{display:flex;flex-direction:column;min-width:0;flex:1 1 110px;font-size:var(--fs-sm)}
+.turno-partes-lista li span{font-size:var(--fs-xs);color:var(--muted)}
+.turno-partes-acoes{display:flex;gap:4px;flex:none}
+.parte-parada{margin-top:14px;padding:10px 12px;border:1px solid var(--ylw);background:var(--ylw-l);color:var(--ylw-d);border-radius:var(--r-sm);display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:var(--fs-sm)}
+.parte-parada span{flex:1;min-width:180px}
 .clima-auto{
   display:flex;align-items:center;gap:12px;flex-wrap:wrap;
   margin-top:14px;padding-top:14px;border-top:1px solid var(--border);
@@ -6936,7 +6961,7 @@ async function carregarTudo(opts = {}) {
     STATE.pacotes = compl.pacotes;
     STATE.coeficientes = compl.coeficientes;
     STATE.rdoavanco = soDaObraAtiva(r);
-    STATE.rdodiario = soDaObraAtiva(d || []);
+    STATE.rdodiario = diarioLocalAplicar(soDaObraAtiva(d || []));
     atualizarPrazoDoCronograma(); // baseline acompanha o Project publicado na aba
     STATE.loaded = true;
     STATE.cargaFalhou = false;
@@ -7453,7 +7478,7 @@ const TELAS_BUSCAVEIS = [
   ['avancofisico', 'Avanço Físico',      'pacotes, mapa de estacas, produtividade, planta'],
   ['cronograma',   'Cronograma',         'planejamento reverso, saldo, quando iniciar, atraso'],
   ['medicao',      'Apoio à Medição',    'item contratual, coeficientes, prévia, fechar medição'],
-  ['improdutivos', 'Dias Improdutivos',  'chuva, paralisação, pleito, prorrogação de prazo'],
+  ['improdutivos', 'Dias Improdutivos',  'mapa de chuva, chuva, paralisação, pleito, prorrogação de prazo'],
   ['teoricoreal',  'Teórico × Real',     'consumo teórico contra estoque, divergência'],
   ['analista',     'Analista IA',        'leitura executiva, recomendação, projeção'],
   ['rdo',          'Lançar Serviço',     'novo lançamento, produção do dia, foto, quantidade'],
@@ -7898,7 +7923,7 @@ function render() {
     avancofisico: ['Avanço Físico', 'Pacotes, mapa de estacas e produtividade'],
     cronograma: ['Cronograma', 'Planejamento reverso · quando iniciar cada saldo'],
     medicao: ['Apoio à Medição', 'Consumo derivado por item contratual'],
-    improdutivos: ['Dias Improdutivos', 'Chuva medida × clima apontado × serviço lançado'],
+    improdutivos: ['Dias Improdutivos', 'Mapa de chuva · chuva medida × clima apontado × serviço lançado'],
     teoricoreal: ['Teórico × Real', 'Consumo derivado dos coeficientes × saídas do almoxarifado'],
     analista: ['Analista IA', 'Resumo inteligente da obra'],
     rdo: ['Lançar Serviço', 'Registra serviços executados · grava em RDO_Avanco'],
@@ -13297,6 +13322,8 @@ function renderImprodutivos() {
     </div>
   </div>
 
+  ${typeof renderMapaChuvaCard === 'function' ? renderMapaChuvaCard(IMPROD_MES, labelMes(IMPROD_MES)) : ''}
+
   <div class="card stagger-item">
     <div class="card-body flush">
       <div class="tabela-rolagem" style="overflow-x:auto">
@@ -17012,8 +17039,11 @@ function carregarDiarioDaSheet(data) {
   d.clima_tarde = getCSVField(sheetRow, 'Clima_Tarde') || getCSVField(sheetRow, 'clima_tarde') || 'Bom';
   d.clima_noite = getCSVField(sheetRow, 'Clima_Noite') || getCSVField(sheetRow, 'clima_noite') || 'Bom';
   
-  // Mesclar com localStorage: preferir efetivo do localStorage quando tem mais dados
-  const localSaved = loadDiarioV4(data);
+  // Mesclar com localStorage: preferir efetivo do localStorage quando tem mais dados.
+  // Rascunho que é a PARTE de um apontador (obra de várias partes) não é o dia:
+  // misturá-lo aqui poria o efetivo de uma frente no lugar da soma.
+  const rascunhoLocal = loadDiarioV4(data);
+  const localSaved = rascunhoLocal && !rascunhoLocal.parte ? rascunhoLocal : null;
 
   d.diurno.apontador = getCSVField(sheetRow, 'Apontador_Diurno') || getCSVField(sheetRow, 'apontador_diurno') || '';
   const localEfDiu = (localSaved && localSaved.diurno && localSaved.diurno.efetivo) || {};
@@ -17069,7 +17099,12 @@ function renderRDODiarioV4() {
        quer dizer trabalho que NÃO subiu — e nesse caso ele manda. Sem
        rascunho, a planilha continua sendo a fonte, como sempre foi. */
     const rascunho = loadDiarioV4(dataHoje);
-    if (rascunho) {
+    if (rascunho && rascunho.parte) {
+      // Parte de um apontador (obra de várias partes): volta ao formulário dela.
+      DIARIO_V4 = rascunho;
+      DIARIO_TURNO_ATIVO = rascunho.parte.turno;
+      setTimeout(() => toast('Retomando a sua parte do RDO, que ainda não foi enviada.', 'info', 5000), 400);
+    } else if (rascunho) {
       DIARIO_V4 = rascunho;
       setTimeout(() => toast('Retomando o RDO que estava aberto neste aparelho e ainda não foi enviado.', 'info', 5000), 400);
     } else {
@@ -17180,13 +17215,259 @@ function completarDiarioComPlanilha(d) {
   return d;
 }
 
+/* ------------------------------------------------------------------
+   DOIS APONTADORES NO MESMO TURNO — as partes SOMAM
+   ------------------------------------------------------------------
+   Nas Ruas de Terra são duas frentes (duas ruas), cada uma com o seu
+   apontador, no mesmo diurno. Com o dia numa linha só, o segundo a enviar
+   trocava o efetivo, os equipamentos e as ocorrências do primeiro pelos
+   dele — o RDO saía com metade da obra.
+
+   Nestas obras o apontador não edita o turno inteiro: ele envia a SUA
+   PARTE (`contribuicao`), e o servidor soma as partes nas colunas de
+   sempre (ver rdoPartesLer_ no Code.gs). O formulário é o mesmo; o que
+   muda é que ele abre com a parte de um apontador, não com o dia somado,
+   e o seletor lista as partes de cada turno. O PDF, a lista dos 14 dias e
+   o mapa de chuva leem o dia somado, como sempre.
+   ------------------------------------------------------------------ */
+const OBRAS_RDO_VARIOS_APONTADORES = ['ruas-de-terra'];
+function rdoVariosApontadores() {
+  return OBRAS_RDO_VARIOS_APONTADORES.indexOf(OBRA.id) !== -1;
+}
+// A mesma chave do servidor (rdoChaveParte_): nome sem acento e sem caixa.
+function rdoChaveParte(nome) {
+  return String(nome == null ? '' : nome).trim().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ');
+}
+const RDO_CLIMA_DO_TURNO = { diurno: ['clima_manha', 'clima_tarde'], noturno: ['clima_noite'] };
+
+/* As partes do dia, por turno. Dia lançado antes desta regra não tem
+   partes, mas pode ter o turno: ele aparece como a parte de quem o
+   assinou — do mesmo jeito que o servidor o semeia. */
+function partesDoDiaRDO(data) {
+  const linha = linhaDoDiaRDO(data);
+  let o = {};
+  try { o = JSON.parse(getCSVField(linha, 'contribuicoes_json') || '{}') || {}; } catch (e) { o = {}; }
+  const d = carregarDiarioDaSheet(data);
+  ['diurno', 'noturno'].forEach(t => {
+    if (!o[t] || typeof o[t] !== 'object') o[t] = {};
+    if (Object.keys(o[t]).length || !d || !d[t].preenchido) return;
+    const td = d[t];
+    const clima = {};
+    RDO_CLIMA_DO_TURNO[t].forEach(c => { clima[c] = d[c]; });
+    o[t][rdoChaveParte(td.apontador)] = {
+      turno: t, apontador: td.apontador, clima,
+      efetivo: { padrao: td.efetivo, customIndireto: td.customIndireto, customDireto: td.customDireto },
+      equipamentos: { padrao: td.equipamentos, custom: td.customEquip },
+      paralisacoes: td.paralisacoes, visitas: td.visitas, ocorrencias: td.ocorrencias,
+      observacoes: td.observacoes, legado: true,
+    };
+  });
+  return o;
+}
+
+function tdDaParte(p) {
+  const c = v => JSON.parse(JSON.stringify(v == null ? null : v));
+  const ef = p.efetivo || {}, eq = p.equipamentos || {};
+  return {
+    apontador: p.apontador || '',
+    efetivo: c(ef.padrao) || {}, equipamentos: c(eq.padrao) || {},
+    customIndireto: c(ef.customIndireto) || [], customDireto: c(ef.customDireto) || [],
+    customEquip: c(eq.custom) || [],
+    paralisacoes: c(p.paralisacoes) || [],
+    visitas: p.visitas || '', ocorrencias: p.ocorrencias || '', observacoes: p.observacoes || '',
+    preenchido: false,
+  };
+}
+
+function resumoDaParte(p) {
+  const soma = (m) => Object.values(m || {}).reduce((s, v) => s + (num(v) || 0), 0);
+  const somaL = (l) => (l || []).reduce((s, x) => s + (num(x && x.qtd) || 0), 0);
+  const ef = p.efetivo || {}, eq = p.equipamentos || {};
+  const pessoas = soma(ef.padrao) + somaL(ef.customIndireto) + somaL(ef.customDireto);
+  const maquinas = soma(eq.padrao) + somaL(eq.custom);
+  const paradas = paralisacoesValidas(p.paralisacoes).length;
+  return [pessoas + ' pessoa' + (pessoas === 1 ? '' : 's'),
+          maquinas ? maquinas + ' equip.' : '',
+          paradas ? paradas + ' paralisação' + (paradas === 1 ? '' : 'ões') : ''].filter(Boolean).join(' · ');
+}
+
+/* Abre o formulário com UMA parte: a de `chave`, para corrigir, ou uma
+   em branco, para o apontador acrescentar a dele. */
+window.abrirParteV4 = function (t, chave) {
+  const data = DIARIO_V4.data;
+  const p = chave ? (partesDoDiaRDO(data)[t] || {})[chave] : null;
+  if (p) {
+    const meu = String(STATE.usuarioLogado || '').trim().toLowerCase();
+    const dele = String(p.usuario || '').trim().toLowerCase();
+    if (dele && meu && dele !== meu &&
+        !confirm(`Esta parte do ${t.toUpperCase()} foi enviada por ${p.apontador}.\n\nEditar e enviar de novo substitui o que ${p.apontador} lançou. Continuar?`)) return;
+  }
+  const d = defaultDiarioV4(data);
+  if (p) {
+    d[t] = tdDaParte(p);
+    RDO_CLIMA_DO_TURNO[t].forEach(c => { if ((p.clima || {})[c]) d[c] = p.clima[c]; });
+  }
+  d.parte = { turno: t, de: chave || '' };
+  DIARIO_V4 = d;
+  DIARIO_TURNO_ATIVO = t;
+  saveDiarioV4(d);
+  transitionTo(render);
+};
+
+window.continuarParteV4 = function (data) {
+  const r = loadDiarioV4(data);
+  if (!r || !r.parte) return;
+  DIARIO_V4 = r;
+  DIARIO_TURNO_ATIVO = r.parte.turno;
+  transitionTo(render);
+};
+
+window.descartarParteV4 = function (data) {
+  if (!confirm('Descartar a parte que está só neste aparelho? O que foi digitado nela se perde.')) return;
+  clearDiarioV4(data);
+  transitionTo(render);
+};
+
+/* O CSV publicado leva minutos para enxergar uma gravação. A resposta da
+   parte traz a linha do dia já somada, e ela fica valendo por cima do CSV
+   até ele alcançá-la (ou por 10 minutos) — senão o apontador voltava ao
+   seletor e não via a parte que acabou de mandar. */
+const _DIARIO_LOCAL = {};
+function diarioLocalAplicar(linhas) {
+  const agora = Date.now();
+  let out = linhas || [];
+  Object.keys(_DIARIO_LOCAL).forEach(k => {
+    const x = _DIARIO_LOCAL[k];
+    if (agora - x.em > 10 * 60 * 1000) { delete _DIARIO_LOCAL[k]; return; }
+    if (x.obra !== OBRA.id) return;
+    const doDia = out.filter(r => {
+      const rd = parseISODate(getCSVField(r, 'Data'));
+      return rd && getLocalISODate(rd) === x.data;
+    });
+    const alcancou = doDia.some(r => String(getCSVField(r, 'contribuicoes_json') || '') ===
+                                     String(x.linha.contribuicoes_json || ''));
+    if (alcancou) { delete _DIARIO_LOCAL[k]; return; }
+    out = out.filter(r => doDia.indexOf(r) === -1).concat([x.linha]);
+  });
+  return out;
+}
+function diarioLocalGuardar(data, linha) {
+  if (!linha) return;
+  _DIARIO_LOCAL[OBRA.id + '|' + data] = { obra: OBRA.id, data, linha, em: Date.now() };
+  STATE.rdodiario = diarioLocalAplicar(STATE.rdodiario);
+}
+
+async function salvarParteV4(d, t, btn, original) {
+  const td = d[t];
+  const limpa = l => (l || []).filter(f => f.label && f.label.trim());
+  const clima = {};
+  RDO_CLIMA_DO_TURNO[t].forEach(c => { clima[c] = d[c] || ''; });
+  const contribuicao = {
+    turno: t, apontador: td.apontador.trim(), clima,
+    efetivo: { padrao: td.efetivo || {}, customIndireto: limpa(td.customIndireto), customDireto: limpa(td.customDireto) },
+    equipamentos: { padrao: td.equipamentos || {}, custom: limpa(td.customEquip) },
+    paralisacoes: paralisacoesValidas(td.paralisacoes),
+    visitas: td.visitas || '', ocorrencias: td.ocorrencias || '', observacoes: td.observacoes || '',
+  };
+  const params = {
+    action: 'updateRDODiario', obra: OBRA.id, data: d.data,
+    contribuicao: JSON.stringify(contribuicao), contribuicao_de: d.parte.de || '',
+  };
+  try {
+    const result = await jsonp(CONFIG.appsScript, { ...params, ...authParams() }, 0, 0, null);
+    if (!result.ok) throw new Error(result.mensagem || result.error || 'Erro');
+    clearDiarioV4(d.data);
+    diarioLocalGuardar(d.data, result.linha);
+    toast(`Sua parte do ${t.toUpperCase()} foi somada ao RDO de ${fmtData(d.data)}`, 'success', 4000);
+    DIARIO_V4 = carregarDiarioDaSheet(d.data) || defaultDiarioV4(d.data);
+    DIARIO_TURNO_ATIVO = null;
+    transitionTo(render);
+    setTimeout(() => {
+      carregarTudo().then(() => depositarRDOPdf(d.data)).catch(() => {});
+    }, 1500);
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = original;
+    if (ehErroDeRede(e)) {
+      const guardou = await outboxAdicionar({ kind: 'diario', params,
+        descricao: `RDO Diário · parte de ${contribuicao.apontador} · ${t} · ${d.data}` });
+      toast(guardou
+        ? 'Sem internet — sua parte ficou guardada no aparelho. Vai enviar sozinha quando o sinal voltar.'
+        : 'SEM INTERNET E SEM ESPAÇO PARA GUARDAR NO APARELHO. A parte NÃO foi salva — não feche esta tela e tente de novo.',
+        guardou ? 'info' : 'error', 0);
+    } else {
+      toast('Falha: ' + e.message, 'error', 0);
+    }
+  }
+}
+
+window.removerParteV4 = async function (t, chave) {
+  const data = DIARIO_V4.data;
+  const p = (partesDoDiaRDO(data)[t] || {})[chave];
+  if (!p) return;
+  if (!confirm(`Tirar a parte de ${p.apontador} do ${t.toUpperCase()} de ${fmtData(data)}?\n\nO efetivo, os equipamentos e as ocorrências dela saem da soma do dia.`)) return;
+  try {
+    const r = await jsonp(CONFIG.appsScript, {
+      action: 'updateRDODiario', obra: OBRA.id, data,
+      contribuicao: JSON.stringify({ turno: t, remover: true }), contribuicao_de: chave,
+      ...authParams() }, 0, 0, null);
+    if (!r || !r.ok) {
+      toast(r && r.error === 'SEM_PERMISSAO'
+        ? 'Só quem enviou a parte, a engenharia ou o administrador podem tirá-la.'
+        : 'Não foi possível tirar a parte: ' + ((r && (r.mensagem || r.error)) || 'sem resposta'), 'error', 6000);
+      return;
+    }
+    diarioLocalGuardar(data, r.linha);
+    DIARIO_V4 = carregarDiarioDaSheet(data) || defaultDiarioV4(data);
+    toast('Parte de ' + p.apontador + ' retirada do dia.', 'success', 4000);
+    transitionTo(render);
+  } catch (e) {
+    toast('Sem conexão: a parte continua no dia. Tente de novo com sinal.', 'error', 6000);
+  }
+};
+
+/* O cartão do turno nas obras com mais de um apontador: quem já mandou a
+   parte, o tamanho de cada uma, e o botão para o próximo acrescentar a dele. */
+function cartaoTurnoComPartes(d, partes, t, rot, icone) {
+  const lista = Object.entries(partes[t] || {});
+  const cls = `btn-turno-grande btn-turno-${t} ${lista.length ? 'preenchido' : ''}`;
+  const miolo = `
+    <div class="btn-turno-icon">${ic(icone)}</div>
+    <div class="btn-turno-titulo">${rot}</div>`;
+  if (!lista.length) {
+    return `<button onclick="abrirParteV4('${t}','')" class="${cls}">${miolo}
+      <div class="btn-turno-status">Não preenchido</div></button>`;
+  }
+  const chaveJs = k => escHtml(JSON.stringify(k));
+  return `<div class="${cls} turno-enviado turno-partes">${miolo}
+    <div class="btn-turno-status preenchido">${ic('check')} ${lista.length} parte${lista.length > 1 ? 's' : ''} somada${lista.length > 1 ? 's' : ''}</div>
+    <ul class="turno-partes-lista">
+      ${lista.map(([k, p]) => `<li>
+        <div><b>${escHtml(p.apontador || '—')}</b><span>${escHtml(resumoDaParte(p))}</span></div>
+        <div class="turno-partes-acoes">
+          <button type="button" class="btn btn-sm btn-outline" onclick="abrirParteV4('${t}', ${chaveJs(k)})">${ic('editar')} Editar</button>
+          <button type="button" class="btn btn-sm btn-outline" title="Tirar esta parte do dia" onclick="removerParteV4('${t}', ${chaveJs(k)})">${ic('lixeira')}</button>
+        </div>
+      </li>`).join('')}
+    </ul>
+    <button type="button" class="btn btn-sm btn-primary btn-turno-editar" onclick="abrirParteV4('${t}','')">${ic('mais')} Adicionar minha parte</button>
+  </div>`;
+}
+
 window.abrirDiarioNaData = function (iso) {
   DIARIO_V4 = carregarDiarioDaSheet(iso) || loadDiarioV4(iso) || defaultDiarioV4(iso);
   transitionTo(render);
 };
 
 function renderSeletorTurno() {
-  const d = completarDiarioComPlanilha(DIARIO_V4);
+  // Obra de várias partes: o seletor mostra SEMPRE o dia somado da planilha —
+  // o que está na memória pode ser a parte de alguém.
+  const variasPartes = rdoVariosApontadores();
+  if (variasPartes) DIARIO_V4 = carregarDiarioDaSheet(DIARIO_V4.data) || defaultDiarioV4(DIARIO_V4.data);
+  const d = variasPartes ? DIARIO_V4 : completarDiarioComPlanilha(DIARIO_V4);
+  const partes = variasPartes ? partesDoDiaRDO(d.data) : null;
+  const parteParada = variasPartes ? loadDiarioV4(d.data) : null;
 
   const pendentesDiario = outboxLer().filter(it => it.kind === 'diario').length;
   const bannerPend = pendentesDiario > 0
@@ -17218,7 +17499,15 @@ function renderSeletorTurno() {
   };
 
   let botoesHtml = '';
-  if (algumPreenchido) {
+  if (parteParada && parteParada.parte) {
+    const pt = parteParada.parte.turno;
+    botoesHtml += `<div class="parte-parada">${ic('rascunho')} <span>Há uma parte do ${pt.toUpperCase()}${parteParada[pt] && parteParada[pt].apontador ? ' de <b>' + escHtml(parteParada[pt].apontador) + '</b>' : ''} começada neste aparelho e ainda não enviada.</span>
+      <button type="button" class="btn btn-sm btn-primary" onclick="continuarParteV4('${d.data}')">Continuar</button>
+      <button type="button" class="btn btn-sm btn-outline" onclick="descartarParteV4('${d.data}')">Descartar</button></div>`;
+  }
+  if (algumPreenchido && variasPartes) {
+    botoesHtml += `<div style="margin-top:16px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--muted);display:flex;gap:8px;align-items:center">${ic('info')} Nesta obra cada apontador envia a SUA parte do turno, e o RDO do dia é a soma delas.</div>`;
+  } else if (algumPreenchido) {
     botoesHtml += `<div style="margin-top:16px;padding:12px 14px;background:var(--bg-2);border-radius:var(--r-sm);font-size:var(--fs-sm);color:var(--muted);display:flex;gap:8px;align-items:center">${ic('info')} Turno já enviado abre em <b>Editar</b> — os dados existentes serão substituídos.</div>`;
   }
 
@@ -17246,8 +17535,8 @@ function renderSeletorTurno() {
           <div style="font-size:var(--fs-xs);font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Qual turno você está preenchendo em ${escHtml(fmtData(d.data))}?</div>
 
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-            ${cartaoTurno('diurno', 'DIURNO', 'sol')}
-            ${cartaoTurno('noturno', 'NOTURNO', 'lua')}
+            ${variasPartes ? cartaoTurnoComPartes(d, partes, 'diurno', 'DIURNO', 'sol') : cartaoTurno('diurno', 'DIURNO', 'sol')}
+            ${variasPartes ? cartaoTurnoComPartes(d, partes, 'noturno', 'NOTURNO', 'lua') : cartaoTurno('noturno', 'NOTURNO', 'lua')}
           </div>
         </div>
         ${botoesHtml}
@@ -17291,7 +17580,16 @@ function renderFormularioTurno() {
   const outroPreenchido = d[outroTurno].preenchido;
   
   let infoOutroHtml = '';
-  if (outroPreenchido) {
+  if (d.parte) {
+    const outras = Object.entries(partesDoDiaRDO(d.data)[t] || {})
+      .filter(([k]) => k !== d.parte.de).map(([, p]) => p.apontador).filter(Boolean);
+    infoOutroHtml = `
+      <div style="background:var(--blu-l);border:1px solid var(--blu);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:var(--fs-sm);color:var(--blu)">
+        ${ic('info')} Você está enviando a <strong>sua parte</strong> do turno ${turnoLabel}: só o efetivo, os equipamentos e as ocorrências da sua frente.
+        ${outras.length ? `A parte de <strong>${escHtml(outras.join(', '))}</strong> já está no dia e é SOMADA à sua, não substituída.` : 'Se outro apontador também lançar este turno, as partes se somam no RDO do dia.'}
+      </div>
+    `;
+  } else if (outroPreenchido) {
     infoOutroHtml = `
       <div style="background:var(--blu-l);border:1px solid var(--blu);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:var(--fs-sm);color:var(--blu)">
         ${ic('info')} Turno ${outroLabel} já foi preenchido por <strong>${d[outroTurno].apontador}</strong>. Você está adicionando o ${turnoLabel}.
@@ -17323,24 +17621,24 @@ function renderFormularioTurno() {
             <label>Apontador ${turnoLabel}</label>
             <input type="text" data-diario4="apontador" value="${escHtml(td.apontador||'')}" placeholder="Seu nome">
           </div>
-          <div class="field">
+          ${!d.parte || RDO_CLIMA_DO_TURNO[t].includes('clima_manha') ? `<div class="field">
             <label>Clima Manhã</label>
             <select data-diario4-clima="clima_manha">
               ${CLIMAS.map(c => `<option ${d.clima_manha===c?'selected':''}>${c}</option>`).join('')}
             </select>
-          </div>
-          <div class="field">
+          </div>` : ''}
+          ${!d.parte || RDO_CLIMA_DO_TURNO[t].includes('clima_tarde') ? `<div class="field">
             <label>Clima Tarde</label>
             <select data-diario4-clima="clima_tarde">
               ${CLIMAS.map(c => `<option ${d.clima_tarde===c?'selected':''}>${c}</option>`).join('')}
             </select>
-          </div>
-          <div class="field">
+          </div>` : ''}
+          ${!d.parte || RDO_CLIMA_DO_TURNO[t].includes('clima_noite') ? `<div class="field">
             <label>Clima Noite</label>
             <select data-diario4-clima="clima_noite">
               ${CLIMAS.map(c => `<option ${d.clima_noite===c?'selected':''}>${c}</option>`).join('')}
             </select>
-          </div>
+          </div>` : ''}
         </div>
         <div class="clima-auto">
           <button type="button" class="btn btn-outline btn-sm" id="btnClima" onclick="buscarClima()">
@@ -17707,6 +18005,9 @@ async function salvarDiarioV4() {
   const original = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = ic('ampulheta', 0, 'ic-gira') + ' Salvando…';
+
+  // Obra de várias partes: sobe só a parte deste apontador; o servidor soma.
+  if (d.parte) { saveDiarioV4(d); return salvarParteV4(d, t, btn, original); }
   
   td.preenchido = true;
   // O outro turno, se outro aparelho já o enviou: sobe junto, não em branco.
@@ -17840,7 +18141,7 @@ function _gerarPDFDiario(data, opcoes) {
   }
 
   let d;
-  if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
+  if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data && !DIARIO_V4.parte) {
     const v4 = DIARIO_V4;
     d = {
       data: data,
@@ -19575,7 +19876,7 @@ async function _gerarPDFInterno(data, turnoFocus) {
   });
 
   let d;
-  if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
+  if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data && !DIARIO_V4.parte) {
     const v4 = DIARIO_V4;
     d = {
       data: data,
@@ -19650,7 +19951,7 @@ async function _gerarPDFInterno(data, turnoFocus) {
     d.customIndireto_noturno = [];
     d.customDireto_noturno = [];
     d.customEquip_noturno = [];
-    if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
+    if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data && !DIARIO_V4.parte) {
       d.visitas = DIARIO_V4.diurno.visitas || '';
       d.ocorrencias = DIARIO_V4.diurno.ocorrencias || '';
       d.observacoes_gerais = DIARIO_V4.diurno.observacoes || '';
@@ -19663,7 +19964,7 @@ async function _gerarPDFInterno(data, turnoFocus) {
     d.customIndireto_diurno = [];
     d.customDireto_diurno = [];
     d.customEquip_diurno = [];
-    if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data) {
+    if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data && !DIARIO_V4.parte) {
       d.visitas = DIARIO_V4.noturno.visitas || '';
       d.ocorrencias = DIARIO_V4.noturno.ocorrencias || '';
       d.observacoes_gerais = DIARIO_V4.noturno.observacoes || '';
