@@ -25,7 +25,7 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v61'; // v61: o link do e-mail vira a porta de leitura do RDO — abre e baixa a qualquer momento, e entrega a via assinada depois que as firmas entram
+const VERSAO = 'teotonio-v62'; // v62: RDO com várias partes por turno (Ruas de Terra: os apontadores somam) e o mapa de chuva circular do mês
 // As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
 // app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
 // Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no

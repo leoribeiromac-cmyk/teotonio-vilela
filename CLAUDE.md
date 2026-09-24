@@ -21,6 +21,8 @@ para a navegação, então a mudança chega sem precisar limpar cache.
   chamada — mexer numa ação exige pensar nos dois dialetos.
 - `assinar.html` — página de assinatura online do RDO, aberta pelo link do
   e-mail. Autônoma: não carrega o app, só fala com o `Code.gs`.
+- `js/rdo/mapa-chuva.js` — o mapa de chuva circular do mês (tela Dias
+  Improdutivos + PDF). Ver "O mapa de chuva sai do RDO".
 - `js/bf/bota-fora.js` — tela de Bota-Fora: a viagem de caminhão com foto da
   carga/placa, assinatura do motorista e foto do ticket, e a exportação no
   formato da aba FRETE do fechamento. Só fala com o `Code.gs`.
@@ -210,6 +212,59 @@ As travas:
 
 `tests/rdo-diario-duplicado-servidor.test.js` (o servidor, com o cabeçalho
 real, sem `turno`) e `tests/rdo-dia-coerente.ui.test.js` (o app de verdade).
+
+### Dois apontadores no mesmo turno: as partes SOMAM
+
+Nas Ruas de Terra são duas frentes (duas ruas), cada uma com o seu
+apontador, no MESMO diurno. Com o dia numa linha só, o segundo a enviar
+trocava o efetivo, os equipamentos e as ocorrências do primeiro pelos dele.
+
+Nas obras de `OBRAS_RDO_VARIOS_APONTADORES` (index.html) o apontador não
+edita o turno inteiro: manda a SUA PARTE (`contribuicao`, no mesmo
+`updateRDODiario`), e o `Code.gs` guarda todas em `contribuicoes_json`
+(`{diurno:{<chave>:parte}, noturno:{…}}`) e recalcula as colunas de sempre
+como a SOMA (`rdoPartesAgregar_`): efetivo e equipamentos somados, listas
+personalizadas somadas pelo rótulo, paralisações e textos juntados,
+apontadores "A / B", e o clima de cada período é o PIOR das partes. Por
+isso PDF, e-mail, Dias Improdutivos e mapa de chuva não mudaram nada.
+
+As travas:
+
+- A chave da parte é o nome do apontador sem acento e sem caixa
+  (`rdoChaveParte_` / `rdoChaveParte`, dos dois lados). Reenviar TROCA a
+  parte; `contribuicao_de` tira a velha quando o nome foi corrigido.
+- O formulário abre com a PARTE (`abrirParteV4`), nunca com o dia somado —
+  senão o próximo salvar somaria o dia sobre ele mesmo. `DIARIO_V4.parte`
+  marca esse estado, e todo PDF que lê o `DIARIO_V4` como "o dia" o ignora
+  quando ele é uma parte.
+- Turno lançado ANTES das partes vira a parte de quem o assinou, `legado`
+  (`rdoPartesLer_`), na primeira parte que chegar — não é apagado.
+- Tirar a parte de outra pessoa: o dono, a engenharia ou o admin.
+- O CSV publicado demora minutos: a resposta traz a linha somada (`linha`)
+  e `diarioLocalAplicar` a mantém por cima do CSV até ele alcançá-la.
+
+`tests/rdo-varios-apontadores-servidor.test.js` e
+`tests/rdo-varios-apontadores.ui.test.js` (o app de verdade falando com o
+`Code.gs` de verdade, via `tests/servidor-falso.js`).
+
+## O mapa de chuva sai do RDO
+
+O mapa de chuva é o gráfico circular do mês que acompanha a medição: uma
+fatia por dia, três anéis (Manhã dentro, Tarde, Noite fora), cada casa em
+seco/chuva × produtivo/improdutivo. QUEM ALIMENTA SÃO OS APONTADORES — o
+clima marcado em cada período e as paralisações lançadas —, NÃO o INMET (a
+chuva medida continua na Dias Improdutivos, como contraprova).
+
+- Período sem o turno lançado fica em branco; a noite só existe com noturno.
+- Improdutivo = alguma paralisação do turno toca o período (sem horário, o
+  turno inteiro). Parada por chuva é chuva improdutivo mesmo com o período
+  marcado seco.
+
+A regra (`mapaChuvaClassificar`) está escrita DUAS vezes, igual letra por
+letra: `js/rdo/mapa-chuva.js` (desenha o SVG na tela Dias Improdutivos e o
+PDF) e `Code.gs` (aba `Mapa_Chuva`, gravada a cada RDO salvo e refeita
+inteira pelo gatilho das 05h — `refazerMapaChuva`). `tests/mapa-chuva.test.js`
+confere que os dois corpos são o mesmo texto. Mudou um, mude o outro.
 
 ## Formulário aberto é dado do apontador
 
