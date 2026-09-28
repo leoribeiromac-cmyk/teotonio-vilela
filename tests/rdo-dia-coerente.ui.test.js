@@ -89,11 +89,29 @@ const diario = H.csv([CAB].concat(LINHAS));
   await s.p.evaluate(() => { DIARIO_V4.diurno.ocorrencias = 'ajuste do diurno'; return salvarDiarioV4(); });
   await s.p.waitForTimeout(600);
   const envio = s.chamadas.find(c => /RDODiario/.test(c.acao || ''));
-  ok('o ajuste do diurno sobe COM o noturno, não em branco',
-    envio && envio.params.apontador_noturno === 'Guilherme' && envio.params.clima_noite === 'Nublado',
-    envio ? JSON.stringify({ n: envio.params.apontador_noturno, c: envio.params.clima_noite }) : 'nada enviado');
-  ok('e com o efetivo do noturno', envio && JSON.parse(envio.params.efetivo_json).padrao_noturno.Servente === 4,
-    envio && envio.params.efetivo_json);
+  /* O noturno que este aparelho só VIU (da planilha) não sobe: vai em branco
+     e o servidor guarda o que tem. Subir o que se viu horas atrás desfazia a
+     correção que o apontador da noite fez de outro aparelho. */
+  ok('o ajuste do diurno sobe SEM o noturno (o servidor guarda o que tem)',
+    envio && envio.params.apontador_noturno === '' && !('clima_noite' in envio.params) &&
+    !('padrao_noturno' in JSON.parse(envio.params.efetivo_json)),
+    envio ? JSON.stringify({ n: envio.params.apontador_noturno, c: envio.params.clima_noite, ef: envio.params.efetivo_json }) : 'nada enviado');
+  ok('e o texto do diurno vai na coluna dele', envio && envio.params.ocorrencias_diurno === 'ajuste do diurno',
+    envio && envio.params.ocorrencias_diurno);
+
+  // o noturno MEXIDO neste aparelho (e ainda não enviado) sobe junto
+  s.chamadas.length = 0;
+  await s.p.evaluate(() => {
+    selecionarTurnoV4('noturno');
+    DIARIO_V4.noturno.ocorrencias = 'mexido aqui'; saveDiarioV4(DIARIO_V4);
+    DIARIO_TURNO_ATIVO = 'diurno';
+    return salvarDiarioV4();
+  });
+  await s.p.waitForTimeout(600);
+  const envio2 = s.chamadas.find(c => /RDODiario/.test(c.acao || ''));
+  ok('o turno mexido AQUI e não enviado sobe junto',
+    envio2 && envio2.params.apontador_noturno === 'Guilherme' && envio2.params.ocorrencias_noturno === 'mexido aqui',
+    envio2 && JSON.stringify({ n: envio2.params.apontador_noturno, o: envio2.params.ocorrencias_noturno }));
 
   console.log('\nO HISTÓRICO: UNIFICAR RESOLVE PARA TODO MUNDO');
   await s.ir('historico');

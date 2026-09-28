@@ -243,8 +243,11 @@ function camposMultipart(corpo) {
   const iFim = html.indexOf('\nfunction ', iSalvar);
   const corpoSalvar = html.slice(iSalvar, iFim === -1 ? iSalvar + 9000 : iFim);
   ok('salvar o turno dispara o depósito', corpoSalvar.indexOf('depositarRDOPdf(d.data)') !== -1);
-  ok('o depósito só vai depois da recarga (senão o RDO sai sem número)',
-     /carregarTudo\(\)\.then\(\(\) => depositarRDOPdf\(d\.data\)\)/.test(corpoSalvar));
+  /* O número do RDO nasce no servidor. O depósito sai da linha que ele
+     devolve ao gravar (guardada por cima do CSV atrasado) — e depois da
+     recarga, como sempre. Sem isso o primeiro depósito ia com "RDO Nº —". */
+  ok('o depósito sai da linha gravada, depois da recarga (senão o RDO sai sem número)',
+     /diarioLocalGuardar\(d\.data, result\.linha\)[\s\S]*carregarTudo\(\)\.then\([\s\S]{0,120}depositarRDOPdf\(d\.data\)/.test(corpoSalvar));
 
   ok('nenhum erro de página durante o teste', s.erros.length === 0, s.erros.join(' | '));
 

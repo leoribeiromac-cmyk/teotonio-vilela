@@ -22,20 +22,25 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
     if (m.type() === 'error' && !/Failed to load resource|net::/.test(t)) err.push('CONSOLE: ' + t); });
 
   const chamadas = [];
+  const loginsVistos = [];
   let atrasoServidor = 0;
   await p.route('**://script.google.com/**', async (route) => {
     const u = new URL(route.request().url());
     const acao = u.searchParams.get('action');
     const cb = u.searchParams.get('callback');
     chamadas.push(acao);
+    const req = route.request();
+    const corpoPost = new URLSearchParams(req.method() === 'POST' ? (req.postData() || '') : '');
+    if (acao === 'login') loginsVistos.push({ metodo: req.method(), url: u.toString(), usuario: corpoPost.get('usuario'),
+                                              senha: corpoPost.get('senha') });
     let corpo;
     if (acao === 'usuariosNomes') corpo = { ok: true, usuarios: ['Leonardo', 'Wallace', 'Guilherme'] };
-    else if (acao === 'login') corpo = { ok: true, usuario: u.searchParams.get('usuario'),
+    else if (acao === 'login') corpo = { ok: true, usuario: corpoPost.get('usuario'),
                                          perfil: 'admin', token: 'tok-falso', obras: '*' };
     else corpo = { ok: true };
     if (atrasoServidor) await new Promise(r => setTimeout(r, atrasoServidor));
     route.fulfill({ status: 200, contentType: 'application/javascript',
-                    body: `${cb}(${JSON.stringify(corpo)})` });
+                    body: cb ? `${cb}(${JSON.stringify(corpo)})` : JSON.stringify(corpo) });
   });
   await p.route('**://docs.google.com/**', r => r.fulfill({ status: 200, body: '' }));
 
@@ -98,6 +103,11 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
   ok('três cliques na espera viram UM login só',
     chamadas.filter(a => a === 'login').length === 1, JSON.stringify(chamadas));
 
+  // a senha não pode ir na URL: GET fica no histórico, no log e no proxy
+  const lg = loginsVistos[0] || {};
+  ok('o login vai por POST, com a senha no corpo e FORA da URL',
+    lg.metodo === 'POST' && lg.senha != null && !/senha=/.test(lg.url) && /action=login/.test(lg.url), JSON.stringify(lg));
+
   const depois = await p.evaluate(() => ({
     logado: STATE.usuarioLogado, token: localStorage.getItem(CONFIG.ls.token) }));
   ok('o login conclui normalmente', depois.logado === 'Leonardo' && depois.token === 'tok-falso',
@@ -112,7 +122,7 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
     const cb = u.searchParams.get('callback');
     const corpo = u.searchParams.get('action') === 'login'
       ? { ok: false, error: 'CREDENCIAIS_INVALIDAS' } : { ok: true };
-    route.fulfill({ status: 200, contentType: 'application/javascript', body: `${cb}(${JSON.stringify(corpo)})` });
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: cb ? `${cb}(${JSON.stringify(corpo)})` : JSON.stringify(corpo) });
   });
   await p.evaluate(() => navigate('rdo'));
   await p.waitForSelector('#loginBtn', { timeout: 5000 });

@@ -32,7 +32,7 @@ const ok = (n, c, e) => { if (c) console.log('  ✓ ' + n); else { falhas++; con
     else if (acao === 'usuariosNomes') corpo = { ok: true, usuarios: ['Leonardo'] };
     else if (acao === 'obterFoto') corpo = { ok: true, mini: true, dataUri: 'data:image/jpeg;base64,' + 'A'.repeat(400) };
     else corpo = { ok: true };
-    route.fulfill({ status: 200, contentType: 'application/javascript', body: `${cb}(${JSON.stringify(corpo)})` });
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: cb ? `${cb}(${JSON.stringify(corpo)})` : JSON.stringify(corpo) });
   });
   await p.route('**://docs.google.com/**', r => r.fulfill({ status: 200, body: '' }));
 

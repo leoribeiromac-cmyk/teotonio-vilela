@@ -183,11 +183,27 @@ async function abrir(opts = {}) {
 
   await p.route('**://script.google.com/**', async route => {
     const u = new URL(route.request().url());
-    const acao = u.searchParams.get('action');
+    let acao = u.searchParams.get('action');
     const cb = u.searchParams.get('callback');
     const params = {};
     u.searchParams.forEach((v, k) => { params[k] = v; });
-    chamadas.push({ acao, params, url: u.toString(), tamanho: u.toString().length });
+    // o login e a troca de senha vão por POST urlencoded (senha fora da URL):
+    // o corpo entra nos parâmetros, como no `e.parameter` do Apps Script
+    const req = route.request();
+    const tipo = req.headers()['content-type'] || '';
+    if (req.method() === 'POST' && /urlencoded/.test(tipo)) {
+      new URLSearchParams(req.postData() || '').forEach((v, k) => { params[k] = v; });
+    } else if (req.method() === 'POST' && /multipart\/form-data/.test(tipo)) {
+      // o POST grande (PDF do dia, foto) vai em FormData, com a action no corpo
+      const fronteira = (/boundary=([^;]+)/.exec(tipo) || [])[1];
+      const corpo = (req.postDataBuffer() || Buffer.alloc(0)).toString('latin1');
+      if (fronteira) corpo.split('--' + fronteira).forEach(parte => {
+        const m = /name="([^"]+)"\r\n\r\n([\s\S]*)\r\n$/.exec(parte);
+        if (m) params[m[1]] = Buffer.from(m[2], 'latin1').toString('utf8');
+      });
+    }
+    if (!acao && params.action) acao = params.action;
+    chamadas.push({ acao, params, url: u.toString(), tamanho: u.toString().length, metodo: req.method() });
     if (opts.atrasoGAS) await new Promise(r => setTimeout(r, opts.atrasoGAS));
     let corpo;
     if (opts.gas) corpo = await opts.gas(acao, params);
@@ -195,7 +211,8 @@ async function abrir(opts = {}) {
     else if (acao === 'login') corpo = { ok: true, usuario: params.usuario, perfil: 'admin', token: 'tok-falso', obras: '*' };
     else corpo = { ok: true };
     if (corpo === null) return route.abort();           // simula rede caindo
-    route.fulfill({ status: 200, contentType: 'application/javascript', body: `${cb}(${JSON.stringify(corpo)})` });
+    route.fulfill(cb ? { status: 200, contentType: 'application/javascript', body: `${cb}(${JSON.stringify(corpo)})` }
+                     : { status: 200, contentType: 'application/json', body: JSON.stringify(corpo) });
   });
 
   // qualquer outra saída externa morre — o app não deve depender de nada fora

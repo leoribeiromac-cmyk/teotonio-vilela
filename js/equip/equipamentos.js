@@ -1171,7 +1171,9 @@
         function exportarCSV() {
             if (!REL_DADOS.length) { showToast('Nada para exportar no período.', 'error'); return; }
             const head = ['Data', 'Turno', 'Equipamento', 'Operador', 'Horas', 'Status', 'Combustivel(L)', 'Locadora'];
-            const linhas = REL_DADOS.map(a => [a.data, a.turno, a.equipamento, a.operador, a.horas, rotuloStatusTxt(a.status), a.combustivel, locadoraDe(a.equipamento)]);
+            // `;` é o CSV do Excel pt-BR, e ali o decimal é vírgula: 7.5 h virava texto
+            const dec = v => (v === '' || v == null || !isFinite(Number(v))) ? v : String(Number(v)).replace('.', ',');
+            const linhas = REL_DADOS.map(a => [a.data, a.turno, a.equipamento, a.operador, dec(a.horas), rotuloStatusTxt(a.status), dec(a.combustivel), locadoraDe(a.equipamento)]);
             const csv = [head].concat(linhas).map(r => r.map(c => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
             const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
             const a = document.createElement('a');

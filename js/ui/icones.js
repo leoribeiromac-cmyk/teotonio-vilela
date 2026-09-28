@@ -33,17 +33,9 @@
          ic('nota', 0, 'cls')  → com classe extra
 
    ------------------------------------------------------------
-   ARQUIVO COMPARTILHADO — mantenha os dois repositórios IGUAIS
-   ------------------------------------------------------------
-   Este arquivo é o mesmo em `teotonio-vilela` e em `gestor-obras`
-   ("Gestor — Controle de Obras"). Ele já divergiu uma vez: um lado
-   ganhou 12 desenhos e o icFrente refeito, o outro ficou com a versão
-   antiga, e as mesmas frentes passaram a aparecer com ícones
-   diferentes em cada sistema.
-
-   Regra: alterou aqui, copie o arquivo INTEIRO para o outro repo no
-   mesmo dia. Nunca edite um lado só, e nunca remova um nome — algum
-   dos dois apps pode estar chamando por ele.
+   Nasceu cópia do `gestor-obras`, que não está mais em uso: este
+   arquivo é só deste app. Nunca remova um nome sem procurar quem o
+   chama (index.html e os módulos em js/).
    ============================================================ */
 'use strict';
 

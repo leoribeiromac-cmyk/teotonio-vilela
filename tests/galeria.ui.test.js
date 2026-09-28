@@ -42,7 +42,7 @@ const KB = (n) => 'data:image/jpeg;base64,' + 'A'.repeat(Math.round(n * 1024 * 4
     }
     else corpo = { ok: true };
     route.fulfill({ status: 200, contentType: 'application/javascript',
-                    body: `${cb}(${JSON.stringify(corpo)})` });
+                    body: cb ? `${cb}(${JSON.stringify(corpo)})` : JSON.stringify(corpo) });
   });
   await p.route('**://docs.google.com/**', r => r.fulfill({ status: 200, body: '' }));
 

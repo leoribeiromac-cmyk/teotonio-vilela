@@ -45,7 +45,8 @@ process.on('exit', () => { try { srv.kill(); } catch (e) {} });
   const DRIVE_FALSO = {};
   await p.route('**://script.google.com/**', (route) => {
     const req = route.request();
-    if (req.method() === 'POST') {
+    // o login também é POST (senha fora da URL), com a action na querystring
+    if (req.method() === 'POST' && new URL(req.url()).searchParams.get('action') !== 'login') {
       posts.push(req.postData() || '');
       return route.fulfill({ status: 200, contentType: 'application/json',
                              body: JSON.stringify({ ok: true, fileId: 'F1', fileIdLimpa: 'L1' }) });
@@ -62,7 +63,7 @@ process.on('exit', () => { try { srv.kill(); } catch (e) {} });
       corpo = { ok: true, mini: false, dataUri: DRIVE_FALSO[u.searchParams.get('fileId')] || '' };
     }
     else corpo = { ok: true };
-    route.fulfill({ status: 200, contentType: 'application/javascript', body: `${cb}(${JSON.stringify(corpo)})` });
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: cb ? `${cb}(${JSON.stringify(corpo)})` : JSON.stringify(corpo) });
   });
   await p.route('**://docs.google.com/**', r => r.fulfill({ status: 200, body: '' }));
 

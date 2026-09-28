@@ -254,11 +254,17 @@ function recado(texto, tipo) {
 
 // -------------------------------------------------- o quadro de assinar
 var TELA = null, CTX = null, TEM_TRACO = false;
+/* Tamanho do quadro quando o desenho começou. O celular que gira no meio da
+   assinatura muda o tamanho NA TELA, mas o bitmap (e o traço já feito) fica;
+   o ponto do dedo é convertido para esse tamanho — senão o traço novo saía
+   deslocado do dedo, e a firma, torta. */
+var TELA_W = 600, TELA_H = 200;
 
 function prepararTela() {
   TELA = q('tela');
   var ratio = Math.min(2, window.devicePixelRatio || 1);
   var w = TELA.clientWidth || 600, h = TELA.clientHeight || 200;
+  TELA_W = w; TELA_H = h;
   TELA.width = Math.round(w * ratio);
   TELA.height = Math.round(h * ratio);
   CTX = TELA.getContext('2d');
@@ -281,7 +287,8 @@ function ligarTela() {
   function ponto(ev) {
     var r = TELA.getBoundingClientRect();
     var t = ev.touches && ev.touches[0] ? ev.touches[0] : ev;
-    return { x: t.clientX - r.left, y: t.clientY - r.top };
+    var sx = r.width ? TELA_W / r.width : 1, sy = r.height ? TELA_H / r.height : 1;
+    return { x: (t.clientX - r.left) * sx, y: (t.clientY - r.top) * sy };
   }
   function inicio(ev) {
     ev.preventDefault();

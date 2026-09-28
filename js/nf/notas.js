@@ -26,20 +26,11 @@
    de execucao, por isso pode ser carregado antes.
 
    ------------------------------------------------------------
-   ARQUIVO COMPARTILHADO — mantenha os dois repositorios IGUAIS
+   ESTE ARQUIVO JA NAO E COMPARTILHADO
    ------------------------------------------------------------
-   O mesmo arquivo roda em `teotonio-vilela` e em `gestor-obras`.
-   No teotonio quem faz a ponte de vocabulario e `js/nf/adaptador.js`;
-   nao ha logica de negocio la dentro, entao o arquivo continua sendo
-   copia literal dos dois lados.
-
-   Ele ja divergiu: cada repo recebeu correcoes que o outro nao teve
-   (parse de itens vindos como texto, limite de itens da nota, campos
-   escondidos no modo simples). Todas foram reunidas aqui.
-
-   Regra: alterou aqui, copie o arquivo INTEIRO para o outro repo no
-   mesmo dia. Nada especifico de um app entra neste arquivo — se
-   precisar, o lugar e o adaptador.
+   Nasceu copia do `gestor-obras`, que nao esta mais em uso: pode ser
+   mudado so aqui. O `js/nf/adaptador.js` continua fazendo a ponte de
+   vocabulario com o resto do app.
 
    Multi-obra: `ORDEM` e `OBRAS` so existem no gestor-obras. Onde forem
    usados, e obrigatorio checar `typeof` antes — no teotonio, que e de
@@ -2654,6 +2645,9 @@ function nfSetFiltro(k, v) { estado[k] = v; estado.nfLimite = NF_PAGINA; render(
 function nfMais() { estado.nfLimite = (estado.nfLimite || NF_PAGINA) + NF_PAGINA; render(); }
 
 /* ---------- exportações ---------- */
+/* CSV separado por `;` é o do Excel em pt-BR, e ali o decimal é VÍRGULA:
+   "1234.50" vira texto (ou 123450) na planilha do escritório. Todo número
+   que sai daqui passa por `.replace('.', ',')`. */
 function nfCSVbaixar(nome, cab, linhas) {
   const esc2 = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const csv = '﻿' + cab.map(esc2).join(';') + '\n' + linhas.map(l => l.map(esc2).join(';')).join('\n');
@@ -2668,8 +2662,8 @@ function nfExportarCSV() {
   const fs = nfFiltrar(o);
   const cab = ['Numero', 'Serie', 'Chave', 'Emissao', 'Recebimento', 'CNPJ', 'Fornecedor', 'Municipio', 'UF', 'Produtos', 'Frete', 'Total', 'BaseICMS', 'ICMS', 'Status', 'Responsavel', 'Itens'];
   const linhas = fs.map(n => [n.numero, n.serie, n.chave, n.dataEmissao, n.dataEntrada, nfCNPJfmt(n.cnpj), n.razaoSocial,
-    n.municipio, n.uf, nfNum(n.vProd).toFixed(2), nfNum(n.vFrete).toFixed(2), nfNum(n.vTotal).toFixed(2),
-    nfNum(n.vBaseICMS).toFixed(2), nfNum(n.vICMS).toFixed(2), n.status, n.responsavel,
+    n.municipio, n.uf, nfNum(n.vProd).toFixed(2).replace('.', ','), nfNum(n.vFrete).toFixed(2).replace('.', ','), nfNum(n.vTotal).toFixed(2).replace('.', ','),
+    nfNum(n.vBaseICMS).toFixed(2).replace('.', ','), nfNum(n.vICMS).toFixed(2).replace('.', ','), n.status, n.responsavel,
     (n.itens || []).map(i => `${i.descricao} (${fmtQtd(i.qtd)} ${i.un})`).join(' | ')]);
   nfCSVbaixar('notas-fiscais-' + o.id + '-' + hoje() + '.csv', cab, linhas);
 }
@@ -2680,7 +2674,7 @@ function nfExportarItensCSV() {
   const itens = nfItensDe(nfFiltrar(o));
   const cab = ['Data', 'Numero', 'Serie', 'CNPJ', 'Fornecedor', 'Material', 'Un', 'Quantidade', 'ValorUnit', 'ValorTotal', 'Status', 'Responsavel'];
   const linhas = itens.map(i => [i.dataISO, i.numero, i.serie, nfCNPJfmt(i.cnpj), i.fornecedor, i.descricao, i.un,
-    i.qtd.toFixed(4), i.vUnit.toFixed(4), i.vTotal.toFixed(2), i.status, i.responsavel]);
+    i.qtd.toFixed(4).replace('.', ','), i.vUnit.toFixed(4).replace('.', ','), i.vTotal.toFixed(2).replace('.', ','), i.status, i.responsavel]);
   nfCSVbaixar('notas-produtos-' + o.id + '-' + hoje() + '.csv', cab, linhas);
 }
 
@@ -3148,8 +3142,8 @@ function nfExportarEstoqueCSV() {
   const o = obra();
   const s = nfEstoqueFiltrado(o);
   const cab = ['Material', 'Un', 'Entrou', 'Saiu', 'Saldo', 'PrecoMedio', 'ValorRecebido', 'ValorEmMao', 'Lotes', 'UltimaMovimentacao'];
-  const linhas = s.map(x => [x.descricao, x.un, x.entradas.toFixed(4), x.saidas.toFixed(4), x.saldo.toFixed(4),
-    x.unitMedio.toFixed(4), x.valor.toFixed(2), x.valorSaldo.toFixed(2), x.lotes.join(' | '), x.ultima]);
+  const linhas = s.map(x => [x.descricao, x.un, x.entradas.toFixed(4).replace('.', ','), x.saidas.toFixed(4).replace('.', ','), x.saldo.toFixed(4).replace('.', ','),
+    x.unitMedio.toFixed(4).replace('.', ','), x.valor.toFixed(2).replace('.', ','), x.valorSaldo.toFixed(2).replace('.', ','), x.lotes.join(' | '), x.ultima]);
   nfCSVbaixar('estoque-' + o.id + '-' + hoje() + '.csv', cab, linhas);
 }
 /* ============================================================

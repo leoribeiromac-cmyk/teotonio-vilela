@@ -40,6 +40,16 @@ Então são dois tempos: o app **deposita** (`depositarRDOPdf` → ação
 **envia** o que foi depositado. Só da **Teotônio** — as outras obras nem
 depositam (`OBRAS_COM_RDO_POR_EMAIL`), e o servidor recusa se depositarem.
 
+**O PDF oficial sai do que está GRAVADO** — da linha do dia
+(`linhaDoDiaRDO`), nunca do formulário (`DIARIO_V4`) nem do rascunho. É o
+documento que a fiscalização assina: desenhado da tela, levava o que não
+tinha subido. O CSV publicado leva minutos para ver uma gravação, então o
+`upsertRDODiario` devolve SEMPRE a linha como ficou (`linha`, com o
+`numero_rdo` e a `revisao`), o app a guarda por cima do CSV
+(`diarioLocalGuardar`) até ele alcançá-la — pela `revisao`, um carimbo novo a
+cada gravação — e o depósito sai dela. Sem isso o primeiro depósito ia com
+"RDO Nº —". `tests/rdo-gravado-e-assinado.ui.test.js`.
+
 O gatilho olha para ONTEM, uma vez, e vai embora — o dia que ficou para trás
 (domingo e feriado lançados depois, turno fechado tarde, RDO corrigido) não
 tem segunda chance sozinho. Para ele existe o botão **Enviar para assinatura**,
@@ -192,6 +202,22 @@ documento que já foi para a fiscalização é outra decisão — a mesma regra 
 `tests/rdo-assinatura-servidor.test.js` (o servidor) e
 `tests/rdo-assinatura.ui.test.js` (a página de assinar e o PDF com as firmas).
 
+### O RDO assinado só muda REABERTO
+
+Firma de pessoa (pelo link — a arquivada do engenheiro não conta,
+`rdoFirmasDePessoa_`) é o aceite daquele conteúdo. Gravar o dia por cima
+punha a firma do fiscal num documento que ele não viu. Então o
+`upsertRDODiario` recusa com `RDO_ASSINADO`, e mudar exige `reabrir: '1'`,
+que só o escritório manda (`exigirPodeEnviarRDO`). Reabrir
+(`rdoReabrirAssinaturas_`) cancela cada firma dada com LINK NOVO, deixa o
+rastro na observação e na Auditoria e esquece o "RDO ASSINADO" do dia; o app
+então redeposita e manda o convite de novo (`enviarRDOParaAssinatura(data,
+true)`). No app: `editarTurnoV4` avisa antes, `rdoAssinadoAoSalvar` pergunta
+ao escritório e barra o apontador (o que ele digitou fica no rascunho), e a
+fila guarda o turno recusado e tenta de novo a cada 10 min, sem travar os
+outros. `tests/rdo-turno-assinado-servidor.test.js` e
+`tests/rdo-gravado-e-assinado.ui.test.js`.
+
 ## O RDO Diário é UMA linha por dia, com os dois turnos
 
 A aba `RDO_Diario` guarda o dia inteiro numa linha (diurno e noturno juntos),
@@ -209,16 +235,30 @@ As travas:
   linha que o tem, id/número da primeira, textos somados; a linha retirada
   vai inteira para a Auditoria.
 - Turno já gravado que chega EM BRANCO é de um aparelho que não o viu, não
-  pedido para apagar (`rdoAplicarEnvio_`). Do lado do app,
-  `completarDiarioComPlanilha` traz o turno que outro aparelho enviou antes
-  de desenhar o seletor e antes de enviar.
+  pedido para apagar (`rdoAplicarEnvio_`). E o app manda em branco, de
+  propósito, o turno que não é dele: o `salvarDiarioV4` sobe o turno aberto
+  e, do outro, só o que foi mexido NESTE aparelho e ainda não subiu
+  (`_editados`, marcado pelo `saveDiarioV4`). Subir o que se VIU horas atrás
+  desfazia a correção que outro aparelho fez no outro turno.
+  `completarDiarioComPlanilha` continua trazendo o turno de lá para a tela.
+- Visitas, ocorrências e observações têm coluna POR TURNO (`visitas_diurno`,
+  `ocorrencias_noturno`, `obs_diurno`… — `RDO_TEXTOS_POR_TURNO`) e andam com
+  o turno no `RDO_TURNO_PARTES`. A coluna juntada, que o PDF e o e-mail leem,
+  é REFEITA delas a cada gravação (`rdoTextosRecalcular_`) — numa célula só,
+  corrigir a ocorrência de um turno a somava à errada. Linha de antes tem o
+  texto junto no turno que tinha (`rdoTextosSemear_`, e o mesmo no
+  `carregarDiarioDaSheet`). O app velho em cache, que só manda o junto,
+  deixa a linha "de texto junto" de novo. O `paralisado_motivo` também é
+  refeito do `paralisacoes_json` dos dois turnos.
 - Toda leitura do dia no app passa por `linhaDoDiaRDO(data)` — a mesma junção
   do servidor. Cartão do turno, lista dos 14 dias e PDF liam linhas
   diferentes, e a tela se desmentia. As partes de cada turno estão em
   `RDO_TURNO_PARTES`, dos dois lados: mudou uma, mude a outra.
 
 `tests/rdo-diario-duplicado-servidor.test.js` (o servidor, com o cabeçalho
-real, sem `turno`) e `tests/rdo-dia-coerente.ui.test.js` (o app de verdade).
+real, sem `turno`), `tests/rdo-turno-assinado-servidor.test.js` (turno em
+branco e textos por turno) e `tests/rdo-dia-coerente.ui.test.js` (o app de
+verdade).
 
 ### Dois apontadores no mesmo turno: as partes SOMAM
 
@@ -335,6 +375,24 @@ na tela dele apaga lançamento e arquiva firma. Três ferramentas:
 O Histórico acha o lançamento pelo ID guardado na linha (`histLinha(idx)`,
 `data-id`), nunca pela posição: com a edição aberta o refresh troca o
 `STATE.rdoavanco`, e a posição andava para o lançamento vizinho.
+
+## Senha não vai na URL
+
+O login e a troca de senha (`usuarioSalvar`) vão por POST
+(`enviarPost(params, ms, true)`): corpo urlencoded e a `action` também na
+querystring, como a `assinar.html`. O JSONP é GET, e a URL de um GET fica no
+histórico, no log do Google e em proxy — a senha do admin ficava ali. O
+harness lê o corpo do POST (urlencoded e multipart) e responde JSON quando
+não há `callback`; mock de teste que só responde JSONP quebra o login.
+`tests/login.ui.test.js`.
+
+## A chuva do INMET é do dia de São Paulo
+
+O dia do INMET é em UTC: 00h–23h UTC é 21h da véspera até 20h59 daqui.
+`climaDaEstacao_` pede `d` e `d+1` (salvo quando `d+1` ainda não começou em
+UTC) e o `somarChuva_` fica só com as horas cujo dia LOCAL é `d` — antes, a
+chuva das 21h de ontem entrava na noite de hoje e a das 21h–meia-noite de
+hoje sumia. `tests/clima-estacao.test.js` (INMET falso com `DT_MEDICAO`).
 
 ## Previsão do tempo da obra
 
@@ -461,11 +519,16 @@ O que segura o tempo dessa tela, e as travas que não podem cair:
 `tests/nf-leitura-ia.ui.test.js` (o aparelho, no app de verdade) e
 `tests/nf-leitura-ia-servidor.test.js` (o servidor, com o Gemini falso).
 
-## App irmão
+## Sem app irmão
 
-`leoribeiromac-cmyk/gestor-obras` ("Gestor — Controle de Obras") é o sistema
-multi-obra da mesma empresa e compartilha código com este:
-`js/nf/notas.js` e `js/ui/icones.js` são cópias, com `js/nf/adaptador.js`
-fazendo a ponte de vocabulário. Corrigiu de um lado, copie para o outro —
-e cuidado com os nomes das variáveis de CSS, que diferem (lá `--accent`,
-aqui `--acc`).
+O `gestor-obras` ("Gestor — Controle de Obras") não é mais usado.
+`js/nf/notas.js` e `js/ui/icones.js` nasceram cópias dele e agora são só
+deste app — corrige-se aqui, sem copiar para lugar nenhum. O
+`js/nf/adaptador.js` continua sendo a ponte de vocabulário do módulo de
+notas com o resto do app.
+
+Nota e saída de estoque regravadas pelo mesmo id (`nfSalvar`/`saidaSalvar`)
+passam por `regravarNaObra_`: linha de OUTRA obra é recusada (`OUTRA_OBRA`,
+erro terminal na fila) e o dono (`usuario`) e o `criadoem` ficam os da linha
+— quem edita a nota de outro não vira dono dela (e não ganha o direito de
+apagá-la). `tests/multiobra.test.js`.

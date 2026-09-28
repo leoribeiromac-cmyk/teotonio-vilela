@@ -60,7 +60,7 @@ async function abrir(perfil) {
     } else if (acao === 'medicaoReabrir') {
       MEDICOES = MEDICOES.map(m => Object.assign({}, m, { reaberta: 'sim' }));
     }
-    r.fulfill({ status: 200, contentType: 'application/javascript', body: `${cb}(${JSON.stringify(resp)})` });
+    r.fulfill({ status: 200, contentType: 'application/javascript', body: cb ? `${cb}(${JSON.stringify(resp)})` : JSON.stringify(resp) });
   });
   await p.goto('http://localhost:8099/index.html', { waitUntil: 'load' });
   await p.evaluate(pf => { localStorage.setItem('teotonio_user', 'Leonardo');

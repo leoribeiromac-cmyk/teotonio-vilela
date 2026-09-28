@@ -72,23 +72,23 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=63"></script>
-<script src="dados/ruas-de-terra.js?v=63"></script>
+<script src="dados/ranario.js?v=64"></script>
+<script src="dados/ruas-de-terra.js?v=64"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=63"></script>
+<script src="dados/teotonio-muros.js?v=64"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=63"></script>
-<script src="js/nf/adaptador.js?v=63"></script>
-<script src="js/nf/notas.js?v=63"></script>
-<script src="js/equip/equipamentos.js?v=63"></script>
+<script src="js/ui/icones.js?v=64"></script>
+<script src="js/nf/adaptador.js?v=64"></script>
+<script src="js/nf/notas.js?v=64"></script>
+<script src="js/equip/equipamentos.js?v=64"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=63"></script>
-<script src="js/rdo/mapa-chuva.js?v=63"></script>
+<script src="js/bf/bota-fora.js?v=64"></script>
+<script src="js/rdo/mapa-chuva.js?v=64"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -4126,19 +4126,28 @@ const LIMITE_URL = 6000;   // margem confortável abaixo do teto do navegador
    O que se corta aqui é a espera infinita, não a espera longa. */
 const POST_TEMPO = 90000;
 
-async function enviarPost(params, ms = POST_TEMPO) {
-  const fd = new FormData();
+/* `sigilo`: SENHA NÃO VAI NA URL. O JSONP é um GET, e a URL de um GET fica
+   no histórico do navegador, no log do Google e em qualquer proxy do caminho
+   — a senha do admin ficava escrita ali. O login e a troca de senha vão por
+   POST, com o corpo URLENCODED e a `action` também na querystring: é o
+   formato que sobrevive a filtro corporativo que mexe no corpo (a mesma
+   lição da assinar.html), e o Apps Script lê os dois em `e.parameter`. */
+async function enviarPost(params, ms = POST_TEMPO, sigilo = false) {
+  const fd = sigilo ? new URLSearchParams() : new FormData();
   Object.keys(params).forEach(k => fd.append(k, params[k] == null ? '' : params[k]));
   if (!fd.has('token')) {
     const t = tokenSessao();
     if (t) fd.append('token', t);
   }
+  const url = sigilo
+    ? CONFIG.appsScript + (CONFIG.appsScript.indexOf('?') >= 0 ? '&' : '?') + 'action=' + encodeURIComponent(params.action || '')
+    : CONFIG.appsScript;
   let ctl = null, relogio = 0;
   try { ctl = new AbortController(); } catch (e) { ctl = null; }
   if (ctl && ms) relogio = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, ms);
   let r;
   try {
-    r = await fetch(CONFIG.appsScript, { method: 'POST', body: fd, signal: ctl ? ctl.signal : undefined });
+    r = await fetch(url, { method: 'POST', body: fd, signal: ctl ? ctl.signal : undefined });
   } catch (e) {
     // "Falha de rede" no texto é o que manda o lançamento para a fila de
     // envio, em vez de o apontador levar "falhou" e perder o que digitou
@@ -4414,6 +4423,8 @@ const ERROS_TERMINAIS = [
   'batch inválido', 'payload inválido', 'Ação desconhecida',
   'SEM_PERMISSAO', 'PERFIL_INVALIDO', 'prefixo não informado',
   'ID não informado', 'Coluna ID não encontrada',
+  // id de nota/saída que já é de outra obra (regravarNaObra_ no Code.gs)
+  'OUTRA_OBRA',
 ];
 /* Recusas que dependem de QUEM está logado ou de qual obra ele enxerga —
    não do conteúdo. Reenviar agora não adianta, mas outro login adianta: o
@@ -4465,6 +4476,7 @@ async function outboxFlush(manual = false) {
   let enviados = 0, falhouRede = false;
   try {
     for (const item of itens) {
+      if (!manual && item.esperarAte && Date.now() < item.esperarAte) continue;
       try {
         // Token injetado no MOMENTO do envio (o da hora do enfileiramento pode ter expirado).
         // foto e assinatura entram na fila em base64: enviarAcao troca para POST
@@ -4502,6 +4514,21 @@ async function outboxFlush(manual = false) {
             toast('Sessão expirada — saia e faça login de novo. Os lançamentos guardados serão reenviados em seguida.', 'error', 0);
           }
           break;
+        }
+        /* O RDO daquele dia foi ASSINADO enquanto o turno esperava na fila.
+           Reenviar não adianta até o escritório reabrir — mas o turno é
+           trabalho do apontador: fica guardado, e a fila segue com os outros. */
+        if (String(e && e.message || '').includes('RDO_ASSINADO')) {
+          item.tentativas = (item.tentativas || 0) + 1;
+          item.ultimoErro = 'RDO já assinado — o escritório precisa reabrir';
+          // não bate no servidor de 30 em 30 s por isso: tenta de novo em 10 min
+          item.esperarAte = Date.now() + 10 * 60 * 1000;
+          outboxAtualizar(item);
+          if (item.tentativas === 1) {
+            toast('Um turno guardado (' + descricaoDaFila([item]) + ') não subiu: o RDO desse dia já foi assinado. ' +
+                  'Ele fica guardado no aparelho — peça ao escritório para reabrir o RDO.', 'error', 0);
+          }
+          continue;
         }
         if (ehErroDeAcesso(e)) {
           item.tentativas = (item.tentativas || 0) + 1;
@@ -6150,7 +6177,7 @@ window.fazerLogin = async function() {
 
   // 1) Valida no servidor — a senha correta vive nas Propriedades do Apps Script.
   try {
-    const r = await jsonp(CONFIG.appsScript, { action: 'login', usuario: u, senha: p }, 0);
+    const r = await enviarPost({ action: 'login', usuario: u, senha: p, token: '' }, 30000, true);
     if (r.ok && r.token) {
       localStorage.setItem(CONFIG.ls.token, r.token);
       guardarObrasPermitidas(r.obras);
@@ -10178,10 +10205,11 @@ window.usuarioSalvarUI = async function(nomeAntigo) {
   }
 
   try {
-    const r = await jsonp(CONFIG.appsScript, {
+    // a senha nova não vai na URL (ver enviarPost)
+    const r = await enviarPost({
       action: 'usuarioSalvar', nome, perfil, senha, obras,
       nomeAntigo: nomeAntigo || '', ...authParams()
-    }, 0);
+    }, 30000, true);
     if (!r.ok) { toast(r.mensagem || erroLegivel(r.error), 'error', 0); return; }
     if (nomeAntigo && nomeAntigo !== nome) {
       USUARIOS_UI = USUARIOS_UI.filter(u => u !== nomeAntigo);
@@ -17805,6 +17833,12 @@ function saveDiarioV4(d) {
   // a hora do rascunho decide, quando a fila subir o turno, se ele ainda
   // tem algo NOVO (editado depois de ir para a fila) ou se já subiu inteiro
   d._salvoEm = Date.now();
+  // Todo formulário do dia mexe no turno que está aberto: é ele que passa a
+  // ser "deste aparelho" e sobe no próximo Salvar. O outro sobe em branco.
+  if (d === DIARIO_V4 && DIARIO_TURNO_ATIVO) {
+    if (!d._editados) d._editados = {};
+    d._editados[DIARIO_TURNO_ATIVO] = true;
+  }
   try { localStorage.setItem(lsObra('teotonio_rdo_diario_v4_' + d.data), JSON.stringify(d)); } catch(e) {}
 }
 
@@ -17815,6 +17849,8 @@ function clearDiarioV4(data) {
 function defaultDiarioV4(data) {
   return {
     data: data,
+    // turnos mexidos NESTE aparelho desde que o dia foi aberto (ver salvarDiarioV4)
+    _editados: {},
     clima_manha: 'Bom',
     clima_tarde: 'Bom',
     clima_noite: 'Bom',
@@ -17844,11 +17880,13 @@ function defaultDiarioV4(data) {
    id e número da primeira, textos somados sem repetir. Com uma linha só,
    devolve a própria linha — nada muda para o dia que está certo. */
 const RDO_TURNO_PARTES = {
-  diurno:  { colunas: ['apontador_diurno', 'clima_manha', 'clima_tarde'],
+  diurno:  { colunas: ['apontador_diurno', 'clima_manha', 'clima_tarde',
+                       'visitas_diurno', 'ocorrencias_diurno', 'obs_diurno'],
              json: { efetivo_json: ['padrao_diurno', 'customIndireto_diurno', 'customDireto_diurno'],
                      equipamentos_json: ['padrao_diurno', 'custom_diurno'],
                      paralisacoes_json: ['diurno'] } },
-  noturno: { colunas: ['apontador_noturno', 'clima_noite'],
+  noturno: { colunas: ['apontador_noturno', 'clima_noite',
+                       'visitas_noturno', 'ocorrencias_noturno', 'obs_noturno'],
              json: { efetivo_json: ['padrao_noturno', 'customIndireto_noturno', 'customDireto_noturno'],
                      equipamentos_json: ['padrao_noturno', 'custom_noturno'],
                      paralisacoes_json: ['noturno'] } }
@@ -17933,9 +17971,6 @@ function carregarDiarioDaSheet(data) {
   d.diurno.customDireto = efetivoJson.customDireto_diurno || [];
   d.diurno.customEquip = equipJson.custom_diurno || [];
   d.diurno.paralisacoes = paralJson.diurno || [];
-  d.diurno.visitas =getCSVField(sheetRow, 'Visitas_Diurno') || getCSVField(sheetRow, 'visitas_diurno') || getCSVField(sheetRow, 'Visitas') || getCSVField(sheetRow, 'visitas') || '';
-  d.diurno.ocorrencias = getCSVField(sheetRow, 'Ocorrencias_Diurno') || getCSVField(sheetRow, 'ocorrencias_diurno') || getCSVField(sheetRow, 'Ocorrencias') || getCSVField(sheetRow, 'ocorrencias') || '';
-  d.diurno.observacoes = getCSVField(sheetRow, 'Obs_Diurno') || getCSVField(sheetRow, 'obs_diurno') || getCSVField(sheetRow, 'Observacoes_Gerais') || getCSVField(sheetRow, 'observacoes_gerais') || '';
   d.diurno.preenchido = !!d.diurno.apontador;
 
   d.noturno.apontador = getCSVField(sheetRow, 'Apontador_Noturno') || getCSVField(sheetRow, 'apontador_noturno') || '';
@@ -17946,10 +17981,23 @@ function carregarDiarioDaSheet(data) {
   d.noturno.customDireto = efetivoJson.customDireto_noturno || [];
   d.noturno.customEquip = equipJson.custom_noturno || [];
   d.noturno.paralisacoes = paralJson.noturno || [];
-  d.noturno.visitas =getCSVField(sheetRow, 'Visitas_Noturno') || getCSVField(sheetRow, 'visitas_noturno') || '';
-  d.noturno.ocorrencias = getCSVField(sheetRow, 'Ocorrencias_Noturno') || getCSVField(sheetRow, 'ocorrencias_noturno') || '';
-  d.noturno.observacoes = getCSVField(sheetRow, 'Obs_Noturno') || getCSVField(sheetRow, 'obs_noturno') || '';
   d.noturno.preenchido = !!d.noturno.apontador;
+
+  /* Os textos de cada turno têm coluna própria (ver RDO_TEXTOS_POR_TURNO no
+     Code.gs). Linha de antes delas só tem o texto junto: ele vai para o
+     turno que a linha tem — o diurno, se tem os dois, como sempre foi. */
+  const donoLegado = d.diurno.apontador || !d.noturno.apontador ? 'diurno' : 'noturno';
+  [['visitas', 'visitas_', 'visitas'], ['ocorrencias', 'ocorrencias_', 'ocorrencias'],
+   ['observacoes', 'obs_', 'observacoes_gerais']].forEach(([campo, pre, junto]) => {
+    const diu = getCSVField(sheetRow, pre + 'diurno') || '';
+    const not = getCSVField(sheetRow, pre + 'noturno') || '';
+    if (String(diu).trim() || String(not).trim()) {
+      d.diurno[campo] = diu; d.noturno[campo] = not;
+    } else {
+      d.diurno[campo] = ''; d.noturno[campo] = '';
+      d[donoLegado][campo] = getCSVField(sheetRow, junto) || '';
+    }
+  });
 
   return d;
 }
@@ -18296,10 +18344,14 @@ function diarioLocalAplicar(linhas) {
     /* "Alcançou" depende do que foi feito: a parte somada, quando o CSV traz
        as mesmas contribuições; o dia UNIFICADO, quando o CSV também passa a
        ter uma linha só naquela data. */
+    const rev = String(x.linha.revisao || '');
     const alcancou = x.modo === 'uma-linha'
       ? doDia.length === 1
-      : doDia.some(r => String(getCSVField(r, 'contribuicoes_json') || '') ===
-                        String(x.linha.contribuicoes_json || ''));
+      : rev
+        // a `revisao` muda a cada gravação: o CSV que a traz já tem esta
+        ? doDia.some(r => String(getCSVField(r, 'revisao') || '') === rev)
+        : doDia.some(r => String(getCSVField(r, 'contribuicoes_json') || '') ===
+                          String(x.linha.contribuicoes_json || ''));
     if (alcancou) { delete _DIARIO_LOCAL[k]; return; }
     out = out.filter(r => doDia.indexOf(r) === -1).concat([x.linha]);
   });
@@ -18900,6 +18952,19 @@ function selecionarTurnoV4(turno) {
 window.editarTurnoV4 = function(turno) {
   const td = DIARIO_V4[turno];
   const quem = td && td.apontador ? ` por ${td.apontador}` : '';
+  const firmas = rdoFirmasDadasNaTela(DIARIO_V4.data);
+  if (firmas.length) {
+    const nomes = firmas.map(a => a.nomeAssinante || a.nome || a.rotulo).join(', ');
+    if (!podeEnviarRDOParaAssinatura()) {
+      toast(`O RDO de ${fmtData(DIARIO_V4.data)} já foi assinado (${nomes}). Só o escritório reabre um RDO assinado.`, 'error', 8000);
+      return;
+    }
+    if (!confirm(`O RDO de ${fmtData(DIARIO_V4.data)} já foi ASSINADO (${nomes}).\n\n` +
+                 'Salvar uma alteração REABRE o RDO: as assinaturas são canceladas e quem assinou recebe ' +
+                 'um link novo para assinar o RDO como ficar. Continuar?')) return;
+    DIARIO_V4._reabrir = true;
+    return selecionarTurnoV4(turno);
+  }
   if (!confirm(`O turno ${turno.toUpperCase()} de ${fmtData(DIARIO_V4.data)} já foi enviado${quem}.\n\nEditar e enviar de novo substitui os dados gravados. Continuar?`)) return;
   selecionarTurnoV4(turno);
 };
@@ -18972,62 +19037,78 @@ async function salvarDiarioV4() {
   // Obra de várias partes: sobe só a parte deste apontador; o servidor soma.
   if (d.parte) { saveDiarioV4(d); return salvarParteV4(d, t, btn, original); }
   
+  /* QUAIS TURNOS SOBEM. O dia é uma linha só, mas este aparelho só responde
+     pelo turno que tem na mão. O outro, visto aqui horas atrás, sobe EM
+     BRANCO — e o servidor guarda o que já tem dele (rdoAplicarEnvio_). Antes
+     subiam os dois, e o diurno salvo à tarde desfazia a correção que o
+     apontador da noite tinha feito no noturno, de outro aparelho.
+     O outro turno só sobe junto se foi mexido AQUI e ainda não foi enviado
+     (`_editados`) — é trabalho de alguém, e o Salvar limpa o rascunho.
+     Rascunho de antes desta versão não sabe quem foi mexido: sobem os dois,
+     como sempre subiram. */
+  const editados = d._editados ? { ...d._editados } : null;
   td.preenchido = true;
-  // O outro turno, se outro aparelho já o enviou: sobe junto, não em branco.
+  // O outro turno, se outro aparelho já o enviou, aparece na tela (não sobe).
   completarDiarioComPlanilha(d);
   saveDiarioV4(d);
-  
+  const sobe = {};
+  ['diurno', 'noturno'].forEach(x => {
+    sobe[x] = x === t || (!!String(d[x].apontador || '').trim() && (!editados || !!editados[x]));
+  });
+
   const existe = (STATE.rdodiario || []).some(r => {
     const rd = parseISODate(getCSVField(r, 'Data'));
     return rd && getLocalISODate(rd) === d.data;
   });
-  
-  const efetivoJSON = {
-    padrao_diurno: d.diurno.efetivo || {},
-    padrao_noturno: d.noturno.efetivo || {},
-    customIndireto_diurno: (d.diurno.customIndireto || []).filter(f => f.label && f.label.trim()),
-    customDireto_diurno: (d.diurno.customDireto || []).filter(f => f.label && f.label.trim()),
-    customIndireto_noturno: (d.noturno.customIndireto || []).filter(f => f.label && f.label.trim()),
-    customDireto_noturno: (d.noturno.customDireto || []).filter(f => f.label && f.label.trim()),
-  };
-  const equipJSON = {
-    padrao_diurno: d.diurno.equipamentos || {},
-    padrao_noturno: d.noturno.equipamentos || {},
-    custom_diurno: (d.diurno.customEquip || []).filter(e => e.label && e.label.trim()),
-    custom_noturno: (d.noturno.customEquip || []).filter(e => e.label && e.label.trim()),
-  };
-  const paralisacoesJSON = {
-    diurno: paralisacoesValidas(d.diurno.paralisacoes),
-    noturno: paralisacoesValidas(d.noturno.paralisacoes),
-  };
-  const totalParalis = paralisacoesJSON.diurno.length + paralisacoesJSON.noturno.length;
+
+  const efetivoJSON = {}, equipJSON = {}, paralisacoesJSON = {};
+  ['diurno', 'noturno'].filter(x => sobe[x]).forEach(x => {
+    efetivoJSON['padrao_' + x] = d[x].efetivo || {};
+    efetivoJSON['customIndireto_' + x] = (d[x].customIndireto || []).filter(f => f.label && f.label.trim());
+    efetivoJSON['customDireto_' + x] = (d[x].customDireto || []).filter(f => f.label && f.label.trim());
+    equipJSON['padrao_' + x] = d[x].equipamentos || {};
+    equipJSON['custom_' + x] = (d[x].customEquip || []).filter(e => e.label && e.label.trim());
+    paralisacoesJSON[x] = paralisacoesValidas(d[x].paralisacoes);
+  });
+  const totalParalis = (paralisacoesJSON.diurno || []).length + (paralisacoesJSON.noturno || []).length;
   /* A coluna `paralisado_motivo` da planilha existe desde o começo e o app
      sempre a gravou vazia. Agora ela recebe o resumo legível — quem lê a
      planilha direto (ou uma automação antiga) vê a parada sem precisar
-     entender o JSON ao lado. */
+     entender o JSON ao lado. O servidor refaz com os dois turnos. */
   const motivosResumo = paralisacoesValidas(
-    paralisacoesJSON.diurno.concat(paralisacoesJSON.noturno)).map(p => p.motivo).join(' / ');
-
+    (paralisacoesJSON.diurno || []).concat(paralisacoesJSON.noturno || [])).map(p => p.motivo).join(' / ');
+  const juntar = campo => ['diurno', 'noturno'].filter(x => sobe[x]).map(x => d[x][campo]).filter(x => x).join(' / ');
 
   const params = {
     action: existe ? 'updateRDODiario' : 'addRDODiario',
     obra: OBRA.id,          // de qual obra é este diário (todas na mesma aba)
     data: d.data,
-    apontador_diurno: d.diurno.apontador || '',
-    apontador_noturno: d.noturno.apontador || '',
-    encarregado: '', 
-    clima_manha: d.clima_manha || '',
-    clima_tarde: d.clima_tarde || '',
-    clima_noite: d.clima_noite || '',
-    visitas: [d.diurno.visitas, d.noturno.visitas].filter(x=>x).join(' / ') || '',
-    ocorrencias: [d.diurno.ocorrencias, d.noturno.ocorrencias].filter(x=>x).join(' / ') || '',
-    observacoes_gerais: [d.diurno.observacoes, d.noturno.observacoes].filter(x=>x).join(' / ') || '',
-    tem_turno_noturno: d.noturno.preenchido ? 'true' : 'false',
+    // turno que não sobe vai com o apontador VAZIO: é assim que o servidor
+    // sabe que deve guardar o que já tem dele
+    apontador_diurno: sobe.diurno ? (d.diurno.apontador || '') : '',
+    apontador_noturno: sobe.noturno ? (d.noturno.apontador || '') : '',
+    encarregado: '',
+    // o texto junto continua indo (servidor antigo); o novo o refaz dos por turno
+    visitas: juntar('visitas'),
+    ocorrencias: juntar('ocorrencias'),
+    observacoes_gerais: juntar('observacoes'),
     efetivo_json: JSON.stringify(efetivoJSON),
     equipamentos_json: JSON.stringify(equipJSON),
     paralisacoes_json: JSON.stringify(paralisacoesJSON),
     paralisado_motivo: motivosResumo,
   };
+  if (sobe.diurno) {
+    Object.assign(params, { clima_manha: d.clima_manha || '', clima_tarde: d.clima_tarde || '',
+      visitas_diurno: d.diurno.visitas || '', ocorrencias_diurno: d.diurno.ocorrencias || '',
+      obs_diurno: d.diurno.observacoes || '' });
+  }
+  if (sobe.noturno) {
+    Object.assign(params, { clima_noite: d.clima_noite || '', tem_turno_noturno: d.noturno.preenchido ? 'true' : 'false',
+      visitas_noturno: d.noturno.visitas || '', ocorrencias_noturno: d.noturno.ocorrencias || '',
+      obs_noturno: d.noturno.observacoes || '' });
+  }
+  // O escritório confirmou reabrir o RDO assinado (ver editarTurnoV4)
+  if (d._reabrir) params.reabrir = '1';
   
   const descricaoFila = `RDO Diário · turno ${t} · ${d.data}`;
 
@@ -19036,20 +19117,38 @@ async function salvarDiarioV4() {
   try {
     // enviarAcao, não jsonp: dia pesado passa do limite da URL (vira POST)
     const result = await enviarAcao({ ...params, ...authParams() }, 0, 0);
+    if (result && result.error === 'RDO_ASSINADO') {
+      btn.disabled = false;
+      btn.innerHTML = original;
+      return rdoAssinadoAoSalvar(d, result);
+    }
     if (!result.ok) throw new Error(result.error || 'Erro');
+    /* A linha como o servidor a gravou (com o número do RDO e a `revisao`)
+       vale por cima do CSV até ele alcançá-la. O PDF oficial depositado logo
+       abaixo sai DELA: antes saía do formulário, e o número só chegava com o
+       CSV — o primeiro depósito ia com "RDO Nº —". */
+    if (result.linha) diarioLocalGuardar(d.data, result.linha);
+    const reaberto = result.reaberto || 0;
+    d._editados = {};
+    delete d._reabrir;
     // Gravou no servidor: o rascunho local cumpriu o papel dele e sai de cena.
     // `clearDiarioV4` existia e nunca era chamada — o rascunho ficava para
     // sempre, e por isso "existe rascunho" não podia significar nada. Agora
     // significa: rascunho presente = trabalho que ainda NÃO subiu.
     clearDiarioV4(d.data);
     toast(`Turno ${t.toUpperCase()} salvo` +
-          (totalParalis ? ` · ${totalParalis} paralisação(ões) registrada(s)` : ''), 'success', 4000);
-    /* Recarrega e SÓ ENTÃO deposita o PDF do dia para o envio automático:
-       o número do RDO que sai no cabeçalho é gerado pelo servidor na hora
-       da gravação, e antes da recarga ele ainda não chegou aqui — o e-mail
-       da fiscalização sairia com um RDO sem número. */
+          (totalParalis ? ` · ${totalParalis} paralisação(ões) registrada(s)` : '') +
+          (reaberto ? ` · RDO reaberto: ${reaberto} assinatura(s) cancelada(s), o convite sai de novo` : ''),
+          'success', reaberto ? 8000 : 4000);
+    // as firmas guardadas na memória foram canceladas: o PDF não pode trazê-las
+    if (reaberto) _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
+    /* Recarrega e deposita o PDF do dia para o envio automático. Reaberto,
+       manda o convite de novo — quem assinou recebe o link novo e assina o
+       que ficou. */
     setTimeout(() => {
-      carregarTudo().then(() => depositarRDOPdf(d.data)).catch(() => {});
+      // (o envio para assinatura deposita antes de mandar)
+      carregarTudo().then(() => reaberto ? enviarRDOParaAssinatura(d.data, true) : depositarRDOPdf(d.data))
+        .catch(() => {});
     }, 1500);
     btn.disabled = false;
     btn.innerHTML = original;
@@ -19071,6 +19170,29 @@ async function salvarDiarioV4() {
       toast('Falha: ' + e.message, 'error', 0);
     }
   }
+}
+
+/* O RDO JÁ FOI ASSINADO e o servidor recusou a gravação (ver
+   upsertRDODiario). O escritório pode reabrir — as firmas dadas são
+   canceladas e o convite sai de novo; o apontador não, e o que ele digitou
+   fica guardado no aparelho. */
+function rdoAssinadoAoSalvar(d, r) {
+  saveDiarioV4(d);
+  const msg = (r && r.mensagem) || 'O RDO deste dia já foi assinado.';
+  if (!podeEnviarRDOParaAssinatura()) {
+    toast(msg + ' O que você digitou ficou guardado neste aparelho — peça ao escritório para reabrir.', 'error', 0);
+    return;
+  }
+  if (!confirm(msg + '\n\nReabrir o RDO e gravar a alteração?\n\n' +
+               'Quem assinou recebe um link novo e assina de novo o RDO como ficou.')) return;
+  d._reabrir = true;
+  return salvarDiarioV4();
+}
+
+/* Editar um turno do RDO que alguém já assinou: o aviso diz antes, e não
+   depois do Salvar. */
+function rdoFirmasDadasNaTela(data) {
+  return assinaturasDoRDO(data).filter(a => a.status === 'assinada' && a.origem !== 'arquivada');
 }
 
 // ====================================================================
@@ -19106,47 +19228,26 @@ function _gerarPDFDiario(data, opcoes) {
       'info', 7000);
   }
 
+  /* O PDF OFICIAL SAI DO QUE ESTÁ GRAVADO — nunca do formulário nem do
+     rascunho deste aparelho. Ele é o documento que a fiscalização assina e
+     que o depósito manda por e-mail: desenhado da tela, levava o que ainda
+     não tinha subido (ou nem ia subir), e o RDO assinado dizia uma coisa e a
+     planilha outra. A linha que o servidor devolve ao salvar (ver
+     diarioLocalGuardar) já está aqui, antes de o CSV alcançá-la. */
+  const rascunho = loadDiarioV4(data);
+  if (fromSheet && rascunho && !rascunho.parte && !(opcoes && opcoes.entregar)) {
+    toast('O PDF sai do que está GRAVADO. Há alterações deste dia neste aparelho que ainda não foram enviadas — salve o turno para elas entrarem.', 'info', 8000);
+  }
   let d;
-  if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data && !DIARIO_V4.parte) {
-    const v4 = DIARIO_V4;
-    d = {
-      data: data,
-      sheetId: fromSheet ? getCSVField(fromSheet, 'ID') : '',
-      numeroRdo: fromSheet ? (getCSVField(fromSheet, 'numero_rdo') || getCSVField(fromSheet, 'Numero_RDO') || '') : '',
-      apontador_diurno: v4.diurno.apontador || '',
-      apontador_noturno: v4.noturno.apontador || '',
-      clima_manha: v4.clima_manha, clima_tarde: v4.clima_tarde, clima_noite: v4.clima_noite,
-      visitas: [v4.diurno.visitas, v4.noturno.visitas].filter(x=>x).join(' / ') || '',
-      ocorrencias: ocorrenciasComParalisacoes(
-        [v4.diurno.ocorrencias, v4.noturno.ocorrencias].filter(x=>x).join(' / '),
-        (v4.diurno.paralisacoes || []).concat(v4.noturno.paralisacoes || [])),
-      observacoes_gerais: [v4.diurno.observacoes, v4.noturno.observacoes].filter(x=>x).join(' / ') || '',
-      efetivo_diurno: v4.diurno.efetivo || {},
-      efetivo_noturno: v4.noturno.efetivo || {},
-      equipamentos_diurno: v4.diurno.equipamentos || {},
-      equipamentos_noturno: v4.noturno.equipamentos || {},
-      customIndireto_diurno: v4.diurno.customIndireto || [],
-      customIndireto_noturno: v4.noturno.customIndireto || [],
-      customDireto_diurno: v4.diurno.customDireto || [],
-      customDireto_noturno: v4.noturno.customDireto || [],
-      customEquip_diurno: v4.diurno.customEquip || [],
-      customEquip_noturno: v4.noturno.customEquip || [],
-    };
-  } else if (fromSheet) {
+  if (fromSheet) {
     let efetJson = {}, equipJson = {};
     const rawEfetivo = getCSVField(fromSheet, 'Efetivo_JSON') || getCSVField(fromSheet, 'efetivo_json') || '{}';
     const rawEquip = getCSVField(fromSheet, 'Equipamentos_JSON') || getCSVField(fromSheet, 'equipamentos_json') || '{}';
     try { efetJson = JSON.parse(rawEfetivo); } catch(e) {}
     try { equipJson = JSON.parse(rawEquip); } catch(e) {}
 
-    // Une planilha + localStorage: um valor presente em QUALQUER fonte aparece.
-    // localStorage (edições mais recentes do aparelho) sobrescreve a planilha
-    // chave-a-chave, mas nunca apaga chaves que só existem na planilha.
-    const localDiario = loadDiarioV4(data);
-    const localEfDiu = (localDiario && localDiario.diurno && localDiario.diurno.efetivo) || {};
-    const localEfNot = (localDiario && localDiario.noturno && localDiario.noturno.efetivo) || {};
-    const efetivoDiurno = { ...(efetJson.padrao_diurno || {}), ...localEfDiu };
-    const efetivoNoturno = { ...(efetJson.padrao_noturno || {}), ...localEfNot };
+    const efetivoDiurno = efetJson.padrao_diurno || {};
+    const efetivoNoturno = efetJson.padrao_noturno || {};
 
     d = {
       data: data,
@@ -19179,7 +19280,12 @@ function _gerarPDFDiario(data, opcoes) {
   } else {
     d = null;
   }
-  if (!d) { toast('Não encontrei o RDO Diário pra gerar PDF', 'error'); return; }
+  if (!d) {
+    toast(rascunho && !rascunho.parte
+      ? 'Este dia ainda não foi salvo no servidor — salve o turno para gerar o PDF oficial.'
+      : 'Não encontrei o RDO Diário pra gerar PDF', 'error');
+    return;
+  }
   
   const servicosDiurnos = STATE.rdoavanco.filter(r => {
     const rd = parseISODate(getCSVField(r, 'Data'));
@@ -20194,13 +20300,14 @@ async function conferirEnvioRDO(data) {
 
    Sem repetição automática de propósito: um pedido que demora não pode
    virar dois e-mails para a fiscalização. */
-async function enviarRDOParaAssinatura(data) {
+async function enviarRDOParaAssinatura(data, jaDecidido) {
   if (OBRAS_COM_ASSINATURA_ONLINE.indexOf(OBRA.id) === -1) return;
   if (!data) return;
   if (!podeEnviarRDOParaAssinatura()) {
     return toast('O RDO vai para a fiscalização pelo escritório — o seu perfil preenche o dia, mas não o manda.', 'error', 6000);
   }
-  if (!confirm(`Mandar o RDO de ${fmtData(data)} agora?\n\n` +
+  // `jaDecidido`: o RDO reaberto — quem reabriu já disse que o convite sai de novo
+  if (!jaDecidido && !confirm(`Mandar o RDO de ${fmtData(data)} agora?\n\n` +
                'Cada um da lista da obra recebe o PDF por e-mail; o engenheiro e a ' +
                'fiscalização recebem também o link pessoal para assinar.')) return;
 
@@ -20914,7 +21021,12 @@ async function _gerarPDFInterno(data, turnoFocus) {
     d = null;
   }
 
-  if (!d) { toast('Não encontrei o RDO Diário pra gerar PDF', 'error'); return; }
+  if (!d) {
+    toast(rascunho && !rascunho.parte
+      ? 'Este dia ainda não foi salvo no servidor — salve o turno para gerar o PDF oficial.'
+      : 'Não encontrei o RDO Diário pra gerar PDF', 'error');
+    return;
+  }
 
   // --- LÓGICA DE ISOLAMENTO DO TURNO ---
   if (focus === 'diurno') {

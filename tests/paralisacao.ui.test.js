@@ -42,7 +42,7 @@ async function abrir(csvExtra) {
     }
     const resp = acao === 'login'
       ? { ok: true, usuario: 'Leonardo', perfil: 'admin', token: 't', obras: '*' } : { ok: true };
-    r.fulfill({ status: 200, contentType: 'application/javascript', body: `${cb}(${JSON.stringify(resp)})` });
+    r.fulfill({ status: 200, contentType: 'application/javascript', body: cb ? `${cb}(${JSON.stringify(resp)})` : JSON.stringify(resp) });
   });
   await p.goto('http://localhost:8099/index.html', { waitUntil: 'load' });
   await p.evaluate(() => { localStorage.setItem('teotonio_user', 'Leonardo');
