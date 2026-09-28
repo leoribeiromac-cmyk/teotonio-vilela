@@ -43,7 +43,8 @@ const ok = (nome, cond, extra) => {
     const r = await s.p.evaluate(() => {
       const tb = document.querySelector('.topbar');
       const acts = document.getElementById('topbarActions');
-      const botoes = [...(acts ? acts.children : [])].map(b => {
+      // botão escondido no celular (o "Sair" mora na gaveta) não é alvo de toque
+      const botoes = [...(acts ? acts.children : [])].filter(b => getComputedStyle(b).display !== 'none').map(b => {
         const c = b.getBoundingClientRect();
         return { rotulo: (b.getAttribute('title') || b.textContent).trim().slice(0, 20),
                  w: Math.round(c.width), h: Math.round(c.height),

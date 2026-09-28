@@ -57,7 +57,8 @@ function rdoRecente() {
     [...document.querySelectorAll('.svc-frequentes .chip')].map(b => b.getAttribute('onclick')));
   ok('a fileira traz três pacotes', chips.length === 3, chips.length + ': ' + chips.join(' | '));
   ok('e são os MAIS lançados nos últimos 30 dias, em ordem',
-     /'P02'/.test(chips[0] || '') && /'P05'/.test(chips[1] || '') && /'P09'/.test(chips[2] || ''),
+     // o argumento vai como literal JS seguro (jsArg): "P02" entre aspas duplas
+     /['"]P02['"]/.test(chips[0] || '') && /['"]P05['"]/.test(chips[1] || '') && /['"]P09['"]/.test(chips[2] || ''),
      chips.join(' | '));
 
   const antes = await s.p.evaluate(() => ({

@@ -25,7 +25,7 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v62'; // v62: RDO com várias partes por turno (Ruas de Terra: os apontadores somam) e o mapa de chuva circular do mês
+const VERSAO = 'teotonio-v63'; // v63: revisão completa — correções de dado e segurança, casca offline no install, previsão do tempo, abrir sem sinal
 // As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
 // app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
 // Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no
@@ -50,7 +50,9 @@ const IMUTAVEL = /\/projetos\/.+\/\d+\/\d+_\d+\.webp$/;
 // social do fornecedor ficaria congelada no aparelho para sempre. Quem guarda
 // esse cadastro (por meio ano) é o próprio módulo de notas, em localStorage.
 const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleusercontent.com',
-                 'generativelanguage.googleapis.com', 'brasilapi.com.br', 'minhareceita.org'];
+                 'generativelanguage.googleapis.com', 'brasilapi.com.br', 'minhareceita.org',
+                 // previsão do tempo: servir a de ontem do cache seria pior que não mostrar
+                 'api.open-meteo.com'];
 
 // Em qual balde este pedido mora.
 function baldeDe(url) {
@@ -59,10 +61,38 @@ function baldeDe(url) {
   return VERSAO;
 }
 
-self.addEventListener('install', () => {
-  // sem cliente controlando (primeira instalação) não há o que interromper:
-  // assume na hora, senão o app abriria a primeira vez sem service worker.
-  if (!self.clients || !self.registration.active) self.skipWaiting();
+/* A VERSÃO NOVA JÁ NASCE COM O APP GUARDADO.
+   O `install` não guardava nada, e o `activate` apaga os baldes antigos: o
+   aparelho que recebeu uma atualização com sinal e depois abriu o app no
+   canteiro SEM sinal encontrava o balde novo vazio — o app não abria. Agora
+   a casca (index.html e os scripts versionados que ele pede) é baixada aqui,
+   antes de a versão nova poder assumir. Se a casca não vier e já houver uma
+   versão rodando, a instalação falha de propósito: a velha continua, e o
+   navegador tenta de novo na próxima visita. */
+async function guardarCasca() {
+  const c = await caches.open(VERSAO);
+  const r = await fetch('./index.html', { cache: 'no-cache' });
+  if (!r.ok) throw new Error('casca: HTTP ' + r.status);
+  const html = await r.clone().text();
+  await c.put('./index.html', r);
+  const deps = [];
+  const re = /<script src="((?:js|dados)\/[^"]+)"/g;
+  let m;
+  while ((m = re.exec(html)) !== null) deps.push(m[1]);
+  // o resto é conveniência: um arquivo que falhar não derruba a instalação
+  await Promise.all(['manifest.json', 'favicon.svg'].concat(deps)
+    .map(u => c.add(u).catch(() => {})));
+}
+
+self.addEventListener('install', (e) => {
+  e.waitUntil((async () => {
+    const haVersaoRodando = !!(self.registration && self.registration.active);
+    try { await guardarCasca(); }
+    catch (err) { if (haVersaoRodando) throw err; }
+    // sem cliente controlando (primeira instalação) não há o que interromper:
+    // assume na hora, senão o app abriria a primeira vez sem service worker.
+    if (!haVersaoRodando) await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('message', (e) => {
@@ -87,10 +117,20 @@ self.addEventListener('fetch', (e) => {
   // e já houver cópia em cache, abre do cache na hora em vez de tela branca —
   // a resposta da rede continua em segundo plano e atualiza o cache pro próximo open.
   if (e.request.mode === 'navigate' || url.pathname.endsWith('/index.html')) {
+    /* A cópia guardada da casca: a do próprio endereço ou, para "/" e
+       "/index.html" (dois endereços da MESMA página), a guardada no install. */
+    const guardada = async () => (await caches.match(e.request, { ignoreSearch: true })) ||
+      (/\/(index\.html)?$/.test(url.pathname) ? caches.match('./index.html') : undefined);
     e.respondWith((async () => {
       const rede = fetch(e.request).then(resp => {
-        const clone = resp.clone();
-        caches.open(VERSAO).then(c => c.put(e.request, clone));
+        // só página boa substitui a guardada: erro 5xx ou redirecionamento
+        // por cima da cópia boa era trocar o app offline por uma página de erro
+        if (resp && resp.ok && !resp.redirected) {
+          const clone = resp.clone();
+          // waitUntil: servida a cópia pelo prazo de 4 s, o worker podia ser
+          // desligado antes de gravar a nova — e o aparelho ficava na versão velha
+          e.waitUntil(caches.open(VERSAO).then(c => c.put(e.request, clone)).catch(() => {}));
+        }
         return resp;
       });
       rede.catch(() => {}); // evita "unhandled rejection" quando servimos o cache
@@ -98,10 +138,10 @@ self.addEventListener('fetch', (e) => {
       try {
         const resp = await Promise.race([rede, timeout]);
         if (resp) return resp;
-        const hit = await caches.match(e.request, { ignoreSearch: true });
+        const hit = await guardada();
         return hit || rede; // sem cache: espera a rede mesmo lenta
       } catch (_) {
-        const hit = await caches.match(e.request, { ignoreSearch: true });
+        const hit = await guardada();
         if (hit) return hit;
         throw _;
       }

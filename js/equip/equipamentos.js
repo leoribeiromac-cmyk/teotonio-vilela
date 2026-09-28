@@ -550,19 +550,25 @@
         }
 
         /* ===================== ENVIO COM CONFIRMAÇÃO + ÚLTIMOS (Etapa 2) ===================== */
+        // sem emoji (regra do app: os ícones são os de js/ui/icones.js) — o
+        // rótulo também vai para a planilha da medição, onde emoji é ruído
         const STATUS_LABEL = {
-            OperandoNormalmente: '🟢 Operando',
-            ManutencaoCorretiva: '🔴 Corretiva',
-            ManutencaoPreventiva: '🟡 Preventiva',
-            ParadoChuva: '🌧️ Parado (chuva)',
-            FaltaOperador: '👤 Falta operador',
-            FaltaFrenteServico: '🚧 Sem frente'
+            OperandoNormalmente: 'Operando',
+            ManutencaoCorretiva: 'Manutenção corretiva',
+            ManutencaoPreventiva: 'Manutenção preventiva',
+            ParadoChuva: 'Parado (chuva)',
+            FaltaOperador: 'Falta de operador',
+            FaltaFrenteServico: 'Sem frente de serviço'
         };
         function rotuloStatus(s) { return STATUS_LABEL[s] || s || '—'; }
-        function formatarData(iso) {
-            if (!iso) return '—';
-            const p = String(iso).split('-');
-            return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso;
+        /* O backend legado devolve a data como '2026-07-15T03:00:00.000Z'; o
+           split cru dava "15T03:00:00.000Z/07/2026" na planilha da medição. */
+        function formatarData(v) {
+            if (!v) return '—';
+            const iso = paraISO(v);
+            if (!iso) return String(v);
+            const p = iso.split('-');
+            return `${p[2]}/${p[1]}/${p[0]}`;
         }
 
         function abrirConfirmacao() {
@@ -767,12 +773,12 @@
                     <div class="eq-item">
                         <div class="eq-item-txt">
                             <p class="eq-item-nome">${escapeHtml(a.equipamento)}</p>
-                            <p class="kpi-s">${formatarData(a.data)} · ${escapeHtml(a.turno)} · ${escapeHtml(a.operador)} · ${rotuloStatus(a.status)}</p>
+                            <p class="kpi-s">${escapeHtml(formatarData(a.data))} · ${escapeHtml(a.turno)} · ${escapeHtml(a.operador)} · ${escapeHtml(rotuloStatus(a.status))}</p>
                             ${a.assinatura && String(a.assinatura).indexOf('http') === 0 ? `<a href="${escapeHtml(a.assinatura)}" target="_blank" rel="noopener" class="kpi-s"> ver assinatura</a>` : ''}
                         </div>
                         <div class="eq-item-lado">
                             <span class="eq-item-horas">${escapeHtml(String(a.horas))}h</span>
-                            <button type="button" data-carimbo="${a.carimbo}" class="btn-editar-apont btn btn-ghost btn-icone" title="Corrigir este apontamento" aria-label="Corrigir este apontamento">${ic('editar')}</button>
+                            <button type="button" data-carimbo="${escapeHtml(a.carimbo)}" class="btn-editar-apont btn btn-ghost btn-icone" title="Corrigir este apontamento" aria-label="Corrigir este apontamento">${ic('editar')}</button>
                             <button type="button" data-carimbo="${a.carimbo}" class="btn-apagar-apont btn btn-ghost btn-icone" title="Apagar este apontamento" aria-label="Apagar este apontamento">${ic('lixeira')}</button>
                         </div>
                     </div>`).join('');
@@ -940,7 +946,13 @@
             const w = canvas.clientWidth || 600, h = canvas.clientHeight || 160;
             canvas.width = w * ratio; canvas.height = h * ratio;
             ctx.scale(ratio, ratio);
-            ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#e2e8f0';
+            /* PAPEL BRANCO, TINTA ESCURA. A tinta era '#e2e8f0' (herança de um
+               app de tema escuro) sobre fundo transparente: no tema claro o
+               operador assinava às cegas (contraste 1,2:1), e o PNG que sobe é
+               traço quase branco sobre nada — some no papel impresso. É o
+               mesmo desenho da assinar.html. */
+            ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
+            ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#101828';
             /* Remedir é obrigatório a cada abertura (canvas escondido mede 0),
                e mudar canvas.width já apaga o traço. Os OUVINTES, esses, só
                entram uma vez: reatar a cada abertura empilhava um mousemove
@@ -954,12 +966,19 @@
             const end = () => { drawing = false; };
             canvas.addEventListener('mousedown', start);
             canvas.addEventListener('mousemove', move);
-            window.addEventListener('mouseup', end);
+            // no próprio canvas, não no window: cada tela montada deixava um
+            // ouvinte no window segurando o canvas velho (~4 MB a DPR 3)
+            canvas.addEventListener('mouseup', end);
+            canvas.addEventListener('mouseleave', end);
             canvas.addEventListener('touchstart', start, { passive: false });
             canvas.addEventListener('touchmove', move, { passive: false });
             canvas.addEventListener('touchend', end);
             canvas._hasInk = () => hasInk;
-            canvas._clear = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); hasInk = false; };
+            canvas._clear = () => {
+                ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.restore(); hasInk = false;
+            };
             canvas._resetInk = () => { hasInk = false; };
         }
         function temAssinatura() { const c = document.getElementById('assinaturaCanvas'); return !!(c && c._hasInk && c._hasInk()); }
@@ -1135,7 +1154,7 @@
             const maxS = A.status[0] ? A.status[0].horas : 0;
             html += secaoRel('Por situação / status', A.status.map(s => `
                 <div class="eq-barra-item">
-                    <div class="eq-barra-lbl"><span>${rotuloStatus(s.nome)}</span><span class="kpi-s">${numBR(s.horas)}h · ${s.apont}x</span></div>
+                    <div class="eq-barra-lbl"><span>${escapeHtml(rotuloStatus(s.nome))}</span><span class="kpi-s">${numBR(s.horas)}h · ${s.apont}x</span></div>
                     ${barraRel(s.horas, maxS, '')}
                 </div>`).join(''));
             const maxL = A.locs[0] ? A.locs[0].horas : 0;
@@ -1174,7 +1193,7 @@
         };
         const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
         function nomeMes(mesStr) { const p = String(mesStr).split('-'); const m = parseInt(p[1], 10); return `${MESES_PT[m - 1] || '?'} / ${p[0]}`; }
-        function diaSemanaBR(iso) { const d = new Date(iso + 'T12:00:00'); return isNaN(d.getTime()) ? '' : ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()]; }
+        function diaSemanaBR(v) { const iso = paraISO(v); const d = new Date(iso + 'T12:00:00'); return (!iso || isNaN(d.getTime())) ? '' : ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'][d.getDay()]; }
 
         // Extrai início/fim/paradas/detalhes do texto de observação salvo no apontamento
         function parseObs(obs) {
@@ -1291,7 +1310,8 @@
                 const eqFiltro = document.getElementById('relEquip').value;
                 if (eqFiltro) dados = dados.filter(a => a.equipamento === eqFiltro);
                 // Garante que cai só no mês pedido mesmo se o backend ignorar o filtro
-                dados = dados.filter(a => String(a.data || '').slice(0, 7) === mes);
+                // a data pode vir 'dd/mm/aaaa' ou ISO com hora: compara o mês NORMALIZADO
+                dados = dados.filter(a => paraISO(a.data).slice(0, 7) === mes);
                 if (!dados.length) { stEl.textContent = ''; showToast('Nenhum apontamento encontrado nesse mês.', 'error'); return; }
                 stEl.textContent = 'Montando planilha…';
                 construirWorkbookMedicao(dados, mes, eqFiltro);
@@ -1783,10 +1803,15 @@
     btnText = document.getElementById('btnText');
     if (!form) return;
 
+    /* A data do DIA daqui, não a do meridiano de Greenwich: `valueAsDate` e
+       `toISOString` usam UTC, e depois das 21h o apontamento do turno da
+       noite nascia com a data de amanhã (no último dia, do mês seguinte). */
+    const agora = new Date(), p2 = n => String(n).padStart(2, '0');
+    const isoHoje = `${agora.getFullYear()}-${p2(agora.getMonth() + 1)}-${p2(agora.getDate())}`;
     const hoje = document.getElementById('data');
-    if (hoje && !hoje.value) hoje.valueAsDate = new Date();
+    if (hoje && !hoje.value) hoje.value = isoHoje;
     const mes = document.getElementById('medMes');
-    if (mes && !mes.value) mes.value = new Date().toISOString().slice(0, 7);
+    if (mes && !mes.value) mes.value = isoHoje.slice(0, 7);
 
     ligarFormApontamento();
     ligarFormLoc();

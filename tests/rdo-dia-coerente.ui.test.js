@@ -120,6 +120,14 @@ const diario = H.csv([CAB].concat(LINHAS));
   ok('com a identidade da linha mais antiga', depois.id === 'D0601', depois.id);
   ok('e sem perder texto de nenhuma das duas', /vala aberta/.test(depois.oc) && /caminhão atrasou/.test(depois.oc), depois.oc);
 
+  /* O CSV publicado leva minutos para ver a união. A recarga seguinte (a de
+     5 em 5 min, ou a que um salvamento agendou) trazia as duas linhas de
+     volta — na CI, a do salvamento acima caía logo depois do Unificar. */
+  await s.p.evaluate(() => carregarTudo());
+  await s.p.waitForTimeout(400);
+  const aposRecarga = await s.p.evaluate(d => rdosDaData(d).length, DIA_REPETIDO);
+  ok('e continua uma linha só depois de recarregar o CSV atrasado', aposRecarga === 1, aposRecarga);
+
   ok('nenhum erro de página', s.erros.length === 0, s.erros.slice(0, 3).join(' | '));
 
   console.log(falhas ? '\n' + falhas + ' FALHA(S)' : '\nTudo certo.');

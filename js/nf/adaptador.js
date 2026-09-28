@@ -80,7 +80,12 @@ function fmtBRLc(n) {
 }
 function fmtQtd(n) { return (n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 }); }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
-function hoje() { return new Date().toISOString().slice(0, 10); }
+/* O dia DAQUI: o toISOString é UTC, e depois das 21h a nota recebida hoje
+   entrava com a data de amanhã (e no último dia do mês, no mês seguinte). */
+function hoje() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+}
 function isoAdd(iso, dias) {
   const d = new Date(iso + 'T00:00:00');
   d.setDate(d.getDate() + dias);

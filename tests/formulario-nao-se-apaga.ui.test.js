@@ -38,6 +38,9 @@ const PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mP8z8BQz0AEYBxVSF+FAP2FBPhML7VJAAAAAElFTkSuQmCC',
   'base64');
 
+// A planilha publicada. Mudá-la no meio do teste é "chegou dado novo".
+let CSV = 'id,Data\r\nr1,2026-07-01\r\n';
+
 async function abrir(navegador) {
   const ctx = await navegador.newContext({ viewport: { width: 400, height: 860 }, isMobile: true, hasTouch: true });
   await ctx.route('**script.google*.com/**', r => {
@@ -54,7 +57,7 @@ async function abrir(navegador) {
   // CSV com uma linha: a carga de fundo precisa TERMINAR BEM para chegar ao
   // `render()`. Devolver vazio faria a carga falhar e o teste passaria por
   // um motivo errado.
-  await ctx.route('**docs.google.com/**', r => r.fulfill({ status: 200, contentType: 'text/csv', body: 'id,Data\r\nr1,2026-07-01\r\n' }));
+  await ctx.route('**docs.google.com/**', r => r.fulfill({ status: 200, contentType: 'text/csv', body: CSV }));
   const p = await ctx.newPage();
   const erros = [];
   p.on('pageerror', e => erros.push(e.message));
@@ -182,8 +185,17 @@ async function voltarParaOApp(p) {
     await p.evaluate(() => { STATE.cargaFalhou = false; STATE.loaded = true; navigate('historico'); });
     await p.waitForTimeout(1200);
     await p.evaluate(() => { window.__redesenhou = false; const r = window.render; window.render = function () { window.__redesenhou = true; return r.apply(this, arguments); }; });
+    /* Voltar da câmera a cada foto baixava a planilha inteira e redesenhava a
+       tela igualzinha. Agora: dentro de um minuto da última carga não baixa
+       de novo, e planilha que não mudou não redesenha. */
     await voltarParaOApp(p);
-    ok('o Histórico se redesenha ao voltar para o app',
+    ok('voltar logo depois da última carga não redesenha à toa',
+       await p.evaluate(() => window.__redesenhou === false));
+    // chegou lançamento novo na planilha, e a última carga já tem mais de 1 min
+    CSV = 'id,Data\r\nr1,2026-07-01\r\nr2,2026-07-02\r\n';
+    await p.evaluate(() => { STATE.lastSync = new Date(Date.now() - 120000); });
+    await voltarParaOApp(p);
+    ok('o Histórico se redesenha ao voltar para o app com dado novo',
        await p.evaluate(() => window.__redesenhou === true));
     ok('sem erro de página', erros.length === 0, erros.slice(0, 3).join(' ; '));
     await p.context().close();

@@ -767,6 +767,20 @@ O painel responde "como vai a obra"; não respondia "o que falta fazer hoje".
 Quando o RDO do dia não é preenchido, ninguém percebe — só na hora de fechar a
 medição, semanas depois, quando não dá mais para lembrar o que foi executado.
 
+### Previsão do tempo
+
+Embaixo do cartão, os **próximos 5 dias** na coordenada do canteiro: chuva
+prevista (mm e chance), máxima e mínima. Dia com **5 mm ou mais** fica marcado
+como risco e **20 mm ou mais** como chuva forte, com um aviso para conferir a
+programação de concretagem, imprimação e pavimentação.
+
+É apoio ao planejamento, não registro: nada disso vai para o RDO (lá continua
+o clima que o apontador viu e a chuva medida pelo INMET). Vem do
+[Open-Meteo](https://open-meteo.com) — aberto, sem chave —, é guardada por uma
+hora e, sem sinal, a última previsão aparece dizendo de quando é. A coordenada
+de cada obra fica em `COORD_OBRAS` no `index.html` (as mesmas de
+`CLIMA_OBRAS` no `Code.gs`).
+
 ## Projetos
 
 Tela **Projetos**: as pranchas do executivo **abertas dentro do app**, nunca no
@@ -1000,6 +1014,16 @@ primeira abertura, e a chave velha só é apagada depois que tudo gravou.
 
 Sem IndexedDB disponível (navegação privada, navegador antigo), a fila volta
 para o `localStorage` — mas agora com o erro visível.
+
+### Abrir sem sinal
+
+Cada carga boa guarda uma cópia dos CSVs no aparelho (IndexedDB, por obra).
+Abrindo o app sem sinal, ele usa essa cópia — o Painel, o Histórico e a lista
+de pacotes do Lançar Serviço funcionam — e a barra diz **"Sem sinal · dados
+guardados de DD/MM HH:MM"**. Quando o sinal volta, a carga nova substitui a
+cópia. O service worker também passou a guardar o app inteiro **na
+instalação** de cada versão: antes, uma atualização recebida com sinal
+deixava o app sem abrir no canteiro sem sinal.
 
 ## Muros de contenção (capítulo 10.0)
 

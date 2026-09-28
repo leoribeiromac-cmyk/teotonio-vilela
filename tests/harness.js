@@ -200,6 +200,13 @@ async function abrir(opts = {}) {
 
   // qualquer outra saída externa morre — o app não deve depender de nada fora
   await p.route('**://*.googleapis.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{}' }));
+  // a previsão do tempo da Central de Campo: `opts.previsao` é a resposta do
+  // Open-Meteo (objeto), `null` derruba a chamada como falta de sinal
+  await p.route('**://api.open-meteo.com/**', r => {
+    if (opts.previsao === null) return r.abort();
+    r.fulfill({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+                body: JSON.stringify(opts.previsao || {}) });
+  });
 
   const cdp = await ctx.newCDPSession(p);
   if (opts.cpuThrottle) await cdp.send('Emulation.setCPUThrottlingRate', { rate: opts.cpuThrottle });
