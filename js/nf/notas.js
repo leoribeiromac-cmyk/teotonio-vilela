@@ -1083,7 +1083,7 @@ function nfPassoUI(linhas) {
   box.innerHTML = `<div class="card" style="box-shadow:none"><div class="card-b" style="padding:16px 18px">
     ${linhas.map(l => `<div style="display:flex;gap:10px;align-items:flex-start;padding:7px 0;font-size:13.5px">
       <span class="nf-passo-ic ${l.st === 'ok' ? 'ok' : ''}">${l.ic === 'traco' ? '—' : (l.ic ? ic(l.ic) : '·')}</span>
-      <span style="flex:1;color:${l.st === 'ok' ? 'var(--text)' : 'var(--muted)'}">${l.t}</span></div>`).join('')}
+      <span style="flex:1;color:${l.st === 'ok' ? 'var(--text)' : 'var(--muted)'}">${esc(l.t)}</span></div>`).join('')}
     </div></div>`;
 }
 

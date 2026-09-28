@@ -681,6 +681,34 @@ table.t.nf-tbl tfoot tr:hover td{background:var(--surface-2)}
 }
 .cc-aviso .cc-ic { line-height: 0; flex-shrink: 0; color: var(--ylw-d); }
 .cc-aviso .cc-ic .ic { width: 17px; height: 17px; vertical-align: 0; }
+/* Previsão do tempo — faixa de cinco dias. Dia com chuva de risco ganha o
+   azul do "molhado"; chuva forte, o mesmo azul mais carregado. */
+.cc-previsao { margin-top:14px; padding-top:12px; border-top:1px dashed var(--border); }
+.cc-previsao[hidden] { display:none; }
+.prev-head { display:flex; justify-content:space-between; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:8px; }
+.prev-fonte { font-size:var(--fs-2xs); color:var(--muted); font-family:'JetBrains Mono',monospace; }
+.prev-dias { display:grid; grid-template-columns:repeat(5, minmax(0, 1fr)); gap:8px; }
+.prev-dia { display:flex; flex-direction:column; align-items:center; gap:4px; padding:9px 6px;
+  border:1px solid var(--border); border-radius:var(--r-sm); background:var(--surface-2); text-align:center; min-width:0; }
+.prev-nome { font-size:var(--fs-xs); font-weight:700; color:var(--text-2); text-transform:capitalize; white-space:nowrap; }
+.prev-nome small { font-weight:500; color:var(--muted); margin-left:2px; }
+.prev-ic { line-height:0; color:var(--ylw-d); }
+.prev-ic .ic { width:24px; height:24px; }
+.prev-mm { font-size:var(--fs-sm); font-weight:700; font-family:'JetBrains Mono',monospace; color:var(--text); white-space:nowrap; }
+.prev-mm small, .prev-temp small { font-weight:500; color:var(--muted); }
+.prev-temp { font-size:var(--fs-xs); color:var(--text-2); font-family:'JetBrains Mono',monospace; }
+.prev-risco { border-color:var(--blu); background:var(--blu-l); }
+.prev-risco .prev-ic, .prev-forte .prev-ic { color:var(--blu); }
+.prev-forte { border-color:var(--blu); background:var(--blu-l); box-shadow:inset 0 -3px 0 var(--blu); }
+.prev-alerta { display:flex; gap:8px; align-items:flex-start; margin-top:10px; padding:9px 12px;
+  border-radius:var(--r-sm); background:var(--blu-l); color:var(--text-2); font-size:var(--fs-sm); line-height:1.45; }
+.prev-alerta .ic { width:16px; height:16px; flex-shrink:0; margin-top:2px; color:var(--blu); }
+@media (max-width: 520px) {
+  /* no celular os cinco dias viram uma fita que rola de lado, sem espremer o número */
+  .prev-dias { display:flex; overflow-x:auto; scroll-snap-type:x mandatory; padding-bottom:2px; }
+  .prev-dia { flex:0 0 78px; scroll-snap-align:start; }
+  .prev-nome small { display:block; margin:1px 0 0; }
+}
 @media (max-width: 700px) {
   .cc-acoes { margin-left: 0; width: 100%; }
   .cc-acoes .btn { flex: 1; justify-content: center; }
@@ -2169,6 +2197,16 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 .ai-content ul { padding-left:20px; margin-bottom:16px; }
 .ai-content li { margin-bottom:6px; }
 .ai-content strong { color: var(--text-2); font-weight: 700; }
+.ai-content h4 { margin:14px 0 8px; font-size:var(--fs-lg); color:var(--text) }
+.ai-content ol { padding-left:22px; margin-bottom:16px; }
+/* a IA manda tabela quando o pedido é de prazos: sem estilo ela saía colada */
+.ai-content table { width:100%; border-collapse:collapse; margin:10px 0 16px; font-size:var(--fs-md); display:block; overflow-x:auto }
+.ai-content th, .ai-content td { border-bottom:1px solid var(--border); padding:7px 10px; text-align:left; vertical-align:top }
+.ai-content th { font-size:var(--fs-xs); text-transform:uppercase; letter-spacing:.04em; color:var(--muted); background:var(--surface-2) }
+.ai-barra { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed var(--border) }
+.ai-barra[hidden] { display:none }
+.ai-carimbo { font-size:var(--fs-xs); color:var(--muted); font-family:'JetBrains Mono',monospace }
 .loader-spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--pri); border-radius: 50%; animation: spin 0.8s linear infinite; }
 
 /* Botão de edição em tabela (reutilizado também no Histórico). */
@@ -3725,6 +3763,14 @@ function trocarObra(id, opcoes) {
   const fotosPendentes = Object.keys(_fotosPorServico)
     .reduce((n, k) => n + ((_fotosPorServico[k] || []).length), 0);
   _fotosPorServico = {}; _ctxFotoPorChave = {}; _limiteFotoPorChave = {};
+  // o rascunho da tela aberta é da obra que sai: grava na chave DELA e solta
+  if (_rascAtivo) { try { _rascAtivo.agora(); } catch (e) {} _rascAtivo = null; }
+  /* O RDO Diário aberto também é da obra que sai. Sem zerar, a tela da obra
+     nova mostrava as observações e o clima da anterior — e o salvar gravava
+     o dia de uma obra na linha da outra. Idem as medições fechadas (o mês
+     "fechado" da Teotônio aparecia fechado no Ranário, com o snapshot dela). */
+  DIARIO_V4 = null; DIARIO_TURNO_ATIVO = null;
+  MEDICOES_FECHADAS = null;
   localStorage.setItem(LS_OBRA, id);
   OBRA = OBRAS_CFG[id];
   CONFIG = montarConfig(id);
@@ -3750,7 +3796,9 @@ function trocarObra(id, opcoes) {
   // Trocar de obra pela barra lateral devolve ao Painel Executivo, que é o
   // ponto de partida da obra nova. Quem troca pelo filtro de uma tela quer
   // continuar NELA vendo a outra obra — aí a tela é mantida.
-  if (!(opcoes && opcoes.manterTela && podeVer(STATE.currentPage))) STATE.currentPage = 'executivo';
+  if (!(opcoes && opcoes.manterTela && podeVer(STATE.currentPage))) {
+    STATE.currentPage = podeVer('executivo') ? 'executivo' : 'rdo';
+  }
   // a barra lateral carrega o nome da obra, o seletor e os contadores:
   // sem redesenhá-la, o menu continuaria anunciando a obra anterior
   renderShell();
@@ -3830,7 +3878,19 @@ function escHtml(v) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/* UM VALOR DENTRO DE onclick="fn('…')". O escHtml não basta ali: o navegador
+   DESFAZ as entidades do atributo antes de rodar o código, e um apóstrofo
+   volta a ser apóstrofo — "caixa d'água" quebrava o clique (SyntaxError) e
+   um nome montado de propósito rodava script na sessão de quem clicasse.
+   JSON.stringify faz do valor um literal de string JS válido; o escHtml por
+   fora o protege dentro do atributo entre aspas duplas. Uso:
+     onclick="ampliarFoto(${jsArg(id)}, ${jsArg(nome)})"   (sem aspas em volta) */
+function jsArg(v) {
+  return escHtml(JSON.stringify(String(v == null ? '' : v)));
 }
 
 function getLocalISODate(d) {
@@ -3872,14 +3932,17 @@ function parseCSV(text) {
   });
 }
 
-async function fetchCSV(url) {
+async function fetchCSVTexto(url) {
   // cache: 'no-store' + querystring únicos furam tanto o cache do navegador
   // quanto reduzem chance de pegar a cópia velha do CSV publicado do Google,
   // que causava serviços recém-lançados "aparecerem e sumirem" no refresh.
   const buster = '&t=' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
   const res = await fetch(url + buster, { cache: 'no-store' });
   if (!res.ok) throw new Error('HTTP ' + res.status);
-  return parseCSV(await res.text());
+  return res.text();
+}
+async function fetchCSV(url) {
+  return parseCSV(await fetchCSVTexto(url));
 }
 
 /* ------------------------------------------------------------------
@@ -3968,12 +4031,20 @@ function enviarAcao(params, retries = 1, retryDelay = 2000) {
   return jsonp(CONFIG.appsScript, params, retries, retryDelay);
 }
 
+/* O nome do retorno leva um CONTADOR: com o sorteio de 0 a 9999, duas
+   chamadas no mesmo milissegundo (a galeria pede 24 fotos de uma vez)
+   colidiam — a segunda registrava por cima da primeira, recebia a resposta
+   DELA, e a foto de um serviço era guardada no cache com o ID de outro. */
+let _jsonpSeq = 0;
 function jsonp(url, params, retries = 2, retryDelay = 3000, onRetry = null) {
   function attempt() {
     return new Promise((resolve, reject) => {
-      const cb = 'jsonp_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+      const cb = 'jsonp_cb_' + Date.now().toString(36) + '_' + (++_jsonpSeq);
       const timeout = setTimeout(() => {
         cleanup();
+        // a resposta pode chegar DEPOIS do prazo (o servidor já executou):
+        // um retorno mudo evita o ReferenceError na página
+        window[cb] = () => { delete window[cb]; };
         reject(new Error('Timeout (30s)'));
       }, 30000);
 
@@ -4192,6 +4263,16 @@ const ERROS_TERMINAIS = [
   'SEM_PERMISSAO', 'PERFIL_INVALIDO', 'prefixo não informado',
   'ID não informado', 'Coluna ID não encontrada',
 ];
+/* Recusas que dependem de QUEM está logado ou de qual obra ele enxerga —
+   não do conteúdo. Reenviar agora não adianta, mas outro login adianta: o
+   item fica na fila, marcado, e a fila ANDA. Antes ele parava tudo atrás
+   dele (a viagem de bota-fora depois dele nunca era tentada). */
+const ERROS_DE_ACESSO = ['SEM_ACESSO_A_OBRA', 'não é desta obra'];
+function ehErroDeAcesso(e) {
+  const m = String((e && e.message) || e || '');
+  return ERROS_DE_ACESSO.some(t => m.indexOf(t) !== -1);
+}
+let _avisouSessaoVencida = false;
 function ehErroTerminal(e) {
   const m = String((e && e.message) || e || '');
   return ERROS_TERMINAIS.some(t => m.indexOf(t) !== -1);
@@ -4239,12 +4320,46 @@ async function outboxFlush(manual = false) {
         if (!result.ok) throw new Error('servidor: ' + (result.error || 'erro'));
         outboxRemover(item.id);
         enviados++;
+        /* O turno do RDO que subiu pela FILA não passava pelo que o envio
+           direto faz depois de gravar: o PDF do dia não era depositado (o
+           e-mail das 8h ia sem ele, ou com um velho). */
+        if (item.kind === 'diario' && item.params && item.params.data &&
+            (item.params.obra || 'teotonio') === OBRA.id) {
+          const dataDia = item.params.data;
+          if (result.linha) diarioLocalGuardar(dataDia, result.linha);
+          // O rascunho que ficou na tela subiu inteiro: sai de cena, como no
+          // envio direto. Se foi editado DEPOIS de ir para a fila, fica — é
+          // trabalho novo, e continua avisando que não subiu.
+          const rasc = loadDiarioV4(dataDia);
+          if (rasc && (rasc._salvoEm || 0) <= (item.rascunhoEm || 0)) {
+            clearDiarioV4(dataDia);
+            if (DIARIO_V4 && DIARIO_V4.data === dataDia && !DIARIO_TURNO_ATIVO) DIARIO_V4 = null;
+          }
+          setTimeout(() => {
+            carregarTudo({ fundo: true }).then(() => depositarRDOPdf(dataDia)).catch(() => {});
+          }, 1500);
+        }
       } catch(e) {
         if (ehErroDeRede(e)) { falhouRede = true; break; } // segue offline — tenta tudo de novo depois
         // Sessão expirada NÃO é erro definitivo: mantém na fila e pede novo login.
+        // O aviso é UM: a fila tenta de 30 em 30 s, e cada tentativa empilhava
+        // mais um aviso permanente na tela.
         if (String(e && e.message || '').includes('TOKEN_INVALIDO')) {
-          toast('Sessão expirada — saia e faça login de novo. Os RDOs guardados serão reenviados em seguida.', 'error', 0);
+          if (!_avisouSessaoVencida) {
+            _avisouSessaoVencida = true;
+            toast('Sessão expirada — saia e faça login de novo. Os lançamentos guardados serão reenviados em seguida.', 'error', 0);
+          }
           break;
+        }
+        if (ehErroDeAcesso(e)) {
+          item.tentativas = (item.tentativas || 0) + 1;
+          item.ultimoErro = String((e && e.message) || e || '').slice(0, 200);
+          outboxAtualizar(item);
+          if (item.tentativas === 1) {
+            toast('Um lançamento guardado (' + descricaoDaFila([item]) + ') é de uma obra que este usuário não acessa. ' +
+                  'Ele fica guardado; entre com quem lançou para ele subir.', 'error', 8000);
+          }
+          continue;
         }
         if (ehErroTerminal(e)) {
           // O servidor recusou o CONTEÚDO. Reenviar não conserta — mas o
@@ -4274,7 +4389,9 @@ async function outboxFlush(manual = false) {
   }
   if (enviados > 0) {
     toast(`${enviados} RDO${enviados>1?'s':''} guardado${enviados>1?'s':''} enviado${enviados>1?'s':''} agora`, 'success', 4500);
-    setTimeout(() => carregarTudo(), 1500);
+    // em modo FUNDO: a fila sobe sozinha a cada 30 s, e uma carga "de frente"
+    // redesenhava o formulário por baixo de quem estava preenchendo
+    setTimeout(() => carregarTudo({ fundo: true }), 1500);
     // O que entrou na fila DURANTE este envio foi ignorado: o flush já estava
     // rodando e o segundo pedido voltou na hora. Sem isto ele esperava o
     // temporizador de 30 s — é o caso das páginas 2..N de uma nota, que só
@@ -4306,10 +4423,13 @@ function descricaoDaFila(itens) {
     saida:   ['saída de estoque', 'saídas de estoque'],
     equip:   ['apontamento de equipamento', 'apontamentos de equipamento'],
     botafora:['viagem de bota-fora', 'viagens de bota-fora'],
+    foto:    ['foto de serviço', 'fotos de serviço'],
+    diario:  ['turno do RDO Diário', 'turnos do RDO Diário'],
   };
   const cont = {};
   (itens || []).forEach(it => {
-    const t = (it && it.tipo) || 'rdo';
+    // a foto e o turno do RDO entram na fila com `kind`, não com `tipo`
+    const t = (it && (it.tipo || (it.kind !== 'rdo' && it.kind))) || 'rdo';
     cont[t] = (cont[t] || 0) + 1;
   });
   const partes = Object.keys(cont).map(t => {
@@ -4562,12 +4682,33 @@ function ptNum(v) {
   return String(v).replace('.', ',');
 }
 
+/* A MESMA DATA É LIDA MILHARES DE VEZES. O Painel Executivo passa por cada
+   lançamento umas oito vezes por desenho (Curva S, ritmo, frentes, mês…), e
+   com 20 mil lançamentos eram 160 mil `new Date(ano, mês, dia)` por tela —
+   o construtor com fuso é a parte cara. O texto da planilha não muda de
+   significado durante a sessão, então o instante fica guardado pelo texto e
+   cada chamada recebe um Date NOVO (quem chama pode mexer nele à vontade,
+   como sempre pôde). Medido: 4,5× mais rápido por chamada. */
+const _DATA_LIDA = new Map();
 function parseISODate(s) {
   if (!s) return null;
   if (s instanceof Date) return s;
+  if (typeof s === 'string') {
+    const ms = _DATA_LIDA.get(s);
+    if (ms !== undefined) return ms === null ? null : new Date(ms);
+    const d = _parseISODateTexto(s);
+    if (_DATA_LIDA.size > 50000) _DATA_LIDA.clear();
+    _DATA_LIDA.set(s, d ? d.getTime() : null);
+    return d;
+  }
+  return _parseISODateTexto(s);
+}
+function _parseISODateTexto(s) {
   const str = String(s);
   if (str.includes('/')) {
     const p = str.split('/');
+    // "12/05" (sem ano) derrubava a tela inteira com TypeError em p[2]
+    if (p.length < 3) return null;
     return new Date(parseInt(p[2].slice(0,4)), parseInt(p[1])-1, parseInt(p[0]));
   }
   if (str.includes('-') && str.length >= 10) {
@@ -4578,6 +4719,11 @@ function parseISODate(s) {
   return new Date(str);
 }
 
+/* Formatadores de data guardados: montar um Intl.DateTimeFormat é a parte
+   cara do toLocaleDateString, e há telas que formatam centenas de datas. */
+const FMT_DIA_MES = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short' });
+const FMT_MES_ANO = new Intl.DateTimeFormat('pt-BR', { month: 'short', year: '2-digit' });
+
 function fmtData(iso) {
   if (!iso) return '';
   const d = parseISODate(iso);
@@ -4586,45 +4732,49 @@ function fmtData(iso) {
 }
 
 // ---- Calendário: dias úteis / feriados ------------------------------------
-// Feriados NACIONAIS (fixos + móveis). Feriados MUNICIPAIS não entram aqui —
-// variam por município da obra; confira o calendário local se precisar.
-// Feriados nacionais + municipais/estaduais de São Paulo (obra é na capital):
-// 25/01 aniversário da cidade · 09/07 Revolução Constitucionalista.
-const FERIADOS_NACIONAIS = new Set([
-  // 2025
-  '2025-01-01','2025-01-25','2025-03-03','2025-03-04','2025-04-18','2025-04-21','2025-05-01',
-  '2025-06-19','2025-07-09','2025-09-07','2025-10-12','2025-11-02','2025-11-15','2025-11-20','2025-12-25',
-  // 2026
-  '2026-01-01','2026-01-25','2026-02-16','2026-02-17','2026-04-03','2026-04-21','2026-05-01',
-  '2026-06-04','2026-07-09','2026-09-07','2026-10-12','2026-11-02','2026-11-15','2026-11-20','2026-12-25',
-  // 2027 (até o horizonte do cronograma)
-  '2027-01-01','2027-01-25','2027-02-08','2027-02-09','2027-03-26','2027-04-21',
-  '2027-05-01','2027-05-27','2027-07-09','2027-09-07','2027-10-12','2027-11-02',
-  '2027-11-15','2027-11-20','2027-12-25',
-  // 2028 — o contrato já foi aditado uma vez; a tabela não pode acabar antes da obra
-  '2028-01-01','2028-01-25','2028-02-28','2028-02-29','2028-04-14','2028-04-21',
-  '2028-05-01','2028-06-15','2028-07-09','2028-09-07','2028-10-12','2028-11-02',
-  '2028-11-15','2028-11-20','2028-12-25'
-]);
+/* Feriados nacionais + municipais/estaduais de São Paulo (as obras são na
+   capital): 25/01 aniversário da cidade · 09/07 Revolução Constitucionalista.
 
-/* O último ano que a tabela acima cobre. Passar disso não é erro de cálculo —
-   é a tabela que acabou —, mas o silêncio era: todo feriado virava dia útil e
-   a lista de "dias úteis sem RDO" passava a cobrar dias em que ninguém
-   trabalhou, no meio de um pleito de prazo. */
-const FERIADOS_ATE = 2028;
-let _avisouFeriados = false;
+   A TABELA DEIXOU DE ACABAR. Ela era escrita à mão ano a ano e ia até 2028;
+   passado disso, todo feriado virava dia útil e a lista de "dias úteis sem
+   RDO" cobrava dias em que ninguém trabalhou — no meio de um pleito de prazo.
+   Os fixos são sempre os mesmos, e os móveis (Carnaval, Sexta-feira Santa,
+   Corpus Christi) saem da Páscoa, que tem conta conhecida (Meeus/Butcher).
+   Conferido: 2025 a 2028 saem IGUAIS à tabela manual que existia aqui. */
+const FERIADOS_FIXOS = ['01-01', '01-25', '04-21', '05-01', '07-09', '09-07',
+                        '10-12', '11-02', '11-15', '11-20', '12-25'];
+
+/* Domingo de Páscoa (calendário gregoriano), como Date local à meia-noite. */
+function domingoDePascoa(ano) {
+  const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100;
+  const d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const n = h + l - 7 * m + 114;
+  return new Date(ano, Math.floor(n / 31) - 1, (n % 31) + 1);
+}
+
+const _feriadosPorAno = new Map();
+function feriadosDoAno(ano) {
+  let set = _feriadosPorAno.get(ano);
+  if (set) return set;
+  const p = domingoDePascoa(ano);
+  const desloc = dias => getLocalISODate(new Date(p.getFullYear(), p.getMonth(), p.getDate() + dias));
+  set = new Set(FERIADOS_FIXOS.map(md => ano + '-' + md)
+    .concat([desloc(-48), desloc(-47),    // Carnaval (segunda e terça)
+             desloc(-2),                  // Sexta-feira Santa
+             desloc(60)]));               // Corpus Christi
+  _feriadosPorAno.set(ano, set);
+  return set;
+}
+
+/* Até onde o calendário vai. Continua existindo porque telas e testes
+   perguntam; agora a resposta é "sempre". */
+const FERIADOS_ATE = Infinity;
 function ehFeriadoNacional(d) {
   if (!d || isNaN(d)) return false;
-  if (d.getFullYear() > FERIADOS_ATE && !_avisouFeriados) {
-    _avisouFeriados = true;
-    console.warn('FERIADOS_NACIONAIS vai só até ' + FERIADOS_ATE +
-      '; a partir de ' + (FERIADOS_ATE + 1) + ' os feriados contam como dia útil. Atualize a tabela.');
-    try {
-      toast('A tabela de feriados vai até ' + FERIADOS_ATE + '. Datas depois disso contam feriado como dia útil — ' +
-            'atualize a tabela antes de usar esses números numa medição.', 'error', 9000);
-    } catch (e) {}
-  }
-  return FERIADOS_NACIONAIS.has(getLocalISODate(d));
+  return feriadosDoAno(d.getFullYear()).has(getLocalISODate(d));
 }
 
 // Sábado conta como dia útil? (obra que trabalha aos sábados). Padrão: não.
@@ -4873,12 +5023,35 @@ function listarEstacas() {
 /* Um trecho: dois números com "a", "até" ou traço no meio. O separador é
    exigido justamente para não transformar "E10, E12" (duas estacas soltas,
    que é o que o apontador quis dizer) numa faixa de três. */
-const RE_TRECHO = /E?\s?(\d{1,3})\s*(?:A|ATÉ|ATE|-|–|—)\s*E?\s?(\d{1,3})/g;
-const RE_ESTACA = /E\s?\d{1,3}|\b\d{2,3}\b/g;
+/* Número seguido de UNIDADE é medida, não estaca: "E120 - 30 m" é a estaca
+   120 e trinta metros — e virava o trecho E30..E120, espalhando a quantidade
+   por 22 estacas da Teotônio. Na Ruas de Terra, "E5 - 10 m" ganhava uma E10
+   fantasma pelo número solto. */
+const RE_TRECHO = /E?\s?(\d{1,3})\s*(?:A|ATÉ|ATE|-|–|—)\s*E?\s?(\d{1,3})(?!\d)(?!\s*(?:K?M[²³23]?|UN)(?![A-Z0-9]))/g;
+const RE_ESTACA = /E\s?\d{1,3}|\b\d{2,3}\b(?!\s*(?:K?M[²³23]?|UN)(?![A-Z0-9]))/g;
 // Guarda contra dado sujo: "E1 a 999" não vira 999 células no mapa.
 const MAX_TRECHO = 200;
 
+/* O mesmo campo de estaca se repete em milhares de lançamentos, e o Painel o
+   relê três vezes por desenho (avanço, mapa da via, planta). A leitura só
+   depende do texto e dos eixos da obra ativa, então fica guardada por texto
+   enquanto os eixos forem os mesmos — trocar de obra troca o CONFIG.eixos e
+   joga a memória fora. O que volta é CONGELADO: é a mesma lista para todos
+   os que pedem, e quem precisar mexer copia. */
+let _estacasLidas = { ref: null, mapa: new Map() };
 function lerLocalEstaca(txt) {
+  const eixos = eixosDaObraAtiva();
+  if (_estacasLidas.ref !== eixos || _estacasLidas.mapa.size > 20000) {
+    _estacasLidas = { ref: eixos, mapa: new Map() };
+  }
+  const chave = String(txt || '');
+  const lida = _estacasLidas.mapa.get(chave);
+  if (lida) return lida;
+  const nova = Object.freeze(_lerLocalEstacaTexto(chave).map(Object.freeze));
+  _estacasLidas.mapa.set(chave, nova);
+  return nova;
+}
+function _lerLocalEstacaTexto(txt) {
   const bruto = String(txt || '').toUpperCase();
   const mEixo = bruto.match(/\(\s*([A-Z0-9]{2,6})\s*\)/);
   const eixoDito = mEixo && eixoPorId(mEixo[1]) ? mEixo[1] : '';
@@ -4933,6 +5106,15 @@ function lerLadoDaVia(txt) {
 // AI INTEGRATION (via Lovable Cloud Edge Function)
 // ====================================================================
 const GEMINI_KEY_LS = 'teotonio_gemini_key';
+/* A recomendação guardada é por obra (ver iaCacheChave); trocar ou tirar a
+   chave invalida a de TODAS. */
+function iaCacheLimpar() {
+  try {
+    Object.keys(localStorage).forEach(k => {
+      if (k === 'teotonio_ia_rec_v1' || k.indexOf('teotonio_ia_rec_v1:') === 0) localStorage.removeItem(k);
+    });
+  } catch (e) {}
+}
 
 function temChaveGemini() {
   return !!(localStorage.getItem(GEMINI_KEY_LS) || '').trim();
@@ -4993,7 +5175,7 @@ window.salvarChaveIA = function() {
     if (!confirm('Essa chave não parece estar no formato esperado (AIza...). Salvar mesmo assim?')) return;
   }
   localStorage.setItem(GEMINI_KEY_LS, v);
-  localStorage.removeItem('teotonio_ia_rec_v1'); // invalida cache para forçar nova chamada
+  iaCacheLimpar(); // invalida cache para forçar nova chamada
   toast('Chave salva. Gerando recomendação…', 'success');
   fecharConfigIA();
   if (typeof refreshIA === 'function') refreshIA();
@@ -5001,7 +5183,7 @@ window.salvarChaveIA = function() {
 
 window.removerChaveIA = function() {
   localStorage.removeItem(GEMINI_KEY_LS);
-  localStorage.removeItem('teotonio_ia_rec_v1');
+  iaCacheLimpar();
   toast('Chave removida. IA desativada.', 'info');
   fecharConfigIA();
   // Atualiza o card no painel
@@ -5035,11 +5217,14 @@ async function callGeminiAPI(promptText) {
 
   let modeloIndisponivel = '';
   for (const model of GEMINI_MODELS) {
-    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey;
+    /* A chave vai no CABEÇALHO, não na URL: na URL ela ficava no histórico
+       de rede, em log de proxy e em qualquer relatório de erro que copiasse
+       o endereço. O Gemini aceita as duas formas; o SDK oficial usa esta. */
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
 
     let response;
     try {
-      response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
+      response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey }, body });
     } catch (netErr) {
       // fetch só rejeita por rede/CORS. Causa comum: chave com restrição de
       // "Application/HTTP referrer" no Google Cloud bloqueia chamadas do navegador.
@@ -5067,6 +5252,13 @@ async function callGeminiAPI(promptText) {
       modeloIndisponivel = model + (apiMsg ? ' — ' + apiMsg : '');
       continue; // tenta o próximo modelo
     }
+    /* Sobrecarga do Google (500/503) não é chave ruim nem pedido ruim: é
+       aquele modelo, agora. Tenta o próximo da lista — o mesmo que o Code.gs
+       faz com a leitura de nota fiscal. */
+    if (response.status === 500 || response.status === 503) {
+      modeloIndisponivel = model + ' — sobrecarregado (' + response.status + ')';
+      continue;
+    }
     if (response.status === 429) {
       throw new Error('Cota da API Gemini excedida (429). Aguarde alguns minutos ou confira os limites do seu plano no Google AI Studio.' + (apiMsg ? ' ' + apiMsg : ''));
     }
@@ -5078,7 +5270,10 @@ async function callGeminiAPI(promptText) {
     throw new Error('Erro HTTP ' + response.status + (apiMsg ? ': ' + apiMsg : '') + '.');
   }
 
-  // Todos os modelos retornaram 404 para esta chave.
+  // Todos os modelos falharam: ou não existem para esta chave, ou estão sobrecarregados.
+  if (/sobrecarregado/.test(modeloIndisponivel)) {
+    throw new Error('O Gemini está sobrecarregado agora (' + modeloIndisponivel + '). Tente de novo em alguns minutos.');
+  }
   throw new Error('Nenhum modelo Gemini está disponível para esta chave (' + modeloIndisponivel + '). Gere uma nova chave em aistudio.google.com/app/apikey com a API Generative Language ativa.');
 }
 
@@ -5304,6 +5499,11 @@ function transitionTo(actionFn) {
 
 function navigate(page) {
   if (STATE.currentPage === page) return;
+  /* O gravador de rascunho é da tela que está SAINDO: grava o que ela tem
+     agora e se desliga. Deixado ligado, o `pagehide` de mais tarde (celular
+     bloqueado em outra tela) chamava o coletor sem o formulário na tela —
+     "não há nada digitado" — e APAGAVA o rascunho do Bota-Fora. */
+  if (_rascAtivo) { try { _rascAtivo.agora(); } catch (e) {} _rascAtivo = null; }
   STATE.currentPage = page;
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.page === page);
@@ -5807,6 +6007,10 @@ function concluirLogin(u, perfil) {
   if (STATE.perfilLogado) localStorage.setItem(CONFIG.ls.perfil, STATE.perfilLogado);
   else localStorage.removeItem(CONFIG.ls.perfil);
   toast(`Acesso liberado — ${perfilNome()}`, 'success');
+  // quem entra agora pode ver o que antes não via: a lista de meses
+  // fechados é buscada de novo (antes do login ela ficava [] para sempre)
+  MEDICOES_FECHADAS = null;
+  _avisouSessaoVencida = false;
   // A obra aberta pode não ser das que este usuário enxerga (o aparelho é
   // compartilhado, ou o acesso mudou). Troca antes de desenhar, senão ele
   // veria os dados de uma obra que o servidor vai recusar a cada gravação.
@@ -5842,6 +6046,7 @@ window.fazerLogout = function() {
   localStorage.removeItem(CONFIG.ls.perfil);
   localStorage.removeItem(APP.lsGlobal.obras);
   toast('Você saiu do sistema.', 'info');
+  MEDICOES_FECHADAS = null;
   renderShell();
   atualizarBotoesTopo();
   if (!podeVer(STATE.currentPage)) STATE.currentPage = 'executivo';
@@ -6721,6 +6926,10 @@ async function baixarFotoServidor(fileId, mini) {
 async function enviarFotosDoLote(mapaIdParaFotos, idxBase) {
   const ids = Object.keys(mapaIdParaFotos);
   if (!ids.length) return 0;
+  /* A obra é lida UMA vez, agora: cada foto pode levar até 90 s no 3G, e
+     quem troca de obra nesse meio fazia as fotos seguintes subirem com a
+     obra NOVA — o servidor recusava ("não é desta obra") e elas se perdiam. */
+  const obraId = OBRA.id;
   let enviadas = 0, falhas = 0;
   for (const id of ids) {
     const lista = mapaIdParaFotos[id];
@@ -6739,7 +6948,7 @@ async function enviarFotosDoLote(mapaIdParaFotos, idxBase) {
                        // significaria uma segunda chance de o sinal cair no
                        // meio e deixar meia prova no Drive
                        fotoLimpa: f.limpa || '',
-                       obra: OBRA.id,
+                       obra: obraId,
                        lat: f.lat || '', lon: f.lon || '', prec: f.prec || '',
                        clientId: f.cid || '',
                        ...authParams() };
@@ -6748,9 +6957,10 @@ async function enviarFotosDoLote(mapaIdParaFotos, idxBase) {
         if (r && r.ok) { enviadas++; continue; }
         falhas++;
       } catch (e) {
-        // sem sinal: a foto espera na fila junto com o resto
-        try { outboxAdicionar({ kind: 'foto', params, descricao: 'foto do serviço ' + id }); }
-        catch (err) { falhas++; }
+        // sem sinal: a foto espera na fila junto com o resto — pelo mesmo
+        // caminho do envio direto, que tenta de novo sem a versão limpa
+        // quando o aparelho não tem espaço para as duas
+        if (!(await fotoParaAFila(id, (idxBase || 0) + i, f, obraId))) falhas++;
       }
     }
   }
@@ -6766,9 +6976,9 @@ async function enviarFotosDoLote(mapaIdParaFotos, idxBase) {
    caber. Se não couber o par, vai só a carimbada — perder a foto inteira
    para guardar a versão de enfeite seria trocar o essencial pelo
    conveniente. */
-async function fotoParaAFila(id, idx, f) {
+async function fotoParaAFila(id, idx, f, obraId) {
   const params = { action: 'rdoFoto', id, idx, foto: f.full,
-                   fotoLimpa: f.limpa || '', obra: OBRA.id,
+                   fotoLimpa: f.limpa || '', obra: obraId || OBRA.id,
                    lat: f.lat || '', lon: f.lon || '', prec: f.prec || '',
                    clientId: f.cid || '' };
   const guardar = (p) => outboxAdicionar({ kind: 'foto', params: p,
@@ -6935,85 +7145,230 @@ let _epocaCarga = 0;
    Tela nova que peça preenchimento entra AQUI. */
 const TELAS_DE_FORMULARIO = ['rdo', 'rdodiario', 'equip', 'botafora'];
 
+/* ------------------------------------------------------------------
+   A ÚLTIMA CARGA BOA FICA NO APARELHO
+   ------------------------------------------------------------------
+   Abrir o app sem sinal — que no canteiro do Ranário é o normal — dava a
+   tela de falha em TODAS as telas: o "Lançar assim mesmo" navegava para
+   uma tela que pintava a falha de novo. Agora cada carga boa guarda o texto
+   dos CSVs (IndexedDB, por obra), e a abertura sem sinal usa essa cópia,
+   dizendo na barra de quando ela é. Lançamento continua indo para a fila
+   como sempre; a diferença é que dá para escolher o pacote e ver o dia.
+
+   Guardar custa escrever alguns MB: só se regrava quando o texto mudou e
+   no máximo a cada 10 minutos.
+   ------------------------------------------------------------------ */
+const CARGA_DB = 'teotonioDados', CARGA_STORE = 'carga';
+const CARGA_GRAVAR_A_CADA_MS = 10 * 60 * 1000;
+let _cargaDbP = null;
+const _cargaGravadaEm = {};
+function _cargaAbrir() {
+  if (!_cargaDbP) {
+    _cargaDbP = new Promise(res => {
+      if (!window.indexedDB) return res(null);
+      let req;
+      try { req = indexedDB.open(CARGA_DB, 1); } catch (e) { return res(null); }
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(CARGA_STORE)) db.createObjectStore(CARGA_STORE);
+      };
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => res(null);
+      req.onblocked = () => res(null);
+    });
+  }
+  return _cargaDbP;
+}
+async function cargaGuardar(obraId, textos) {
+  const agora = Date.now();
+  if (_cargaGravadaEm[obraId] && agora - _cargaGravadaEm[obraId] < CARGA_GRAVAR_A_CADA_MS) return;
+  _cargaGravadaEm[obraId] = agora;
+  try {
+    const db = await _cargaAbrir();
+    if (!db) return;
+    await new Promise((ok, erro) => {
+      const tx = db.transaction(CARGA_STORE, 'readwrite');
+      tx.objectStore(CARGA_STORE).put({ em: agora, textos }, obraId);
+      tx.oncomplete = ok; tx.onerror = () => erro(tx.error); tx.onabort = () => erro(tx.error);
+    });
+  } catch (e) { /* cota cheia, navegação privada: segue sem a cópia */ }
+}
+async function cargaLer(obraId) {
+  try {
+    const db = await _cargaAbrir();
+    if (!db) return null;
+    return await new Promise(ok => {
+      const tx = db.transaction(CARGA_STORE, 'readonly');
+      const rq = tx.objectStore(CARGA_STORE).get(obraId);
+      rq.onsuccess = () => ok(rq.result || null);
+      rq.onerror = () => ok(null);
+    });
+  } catch (e) { return null; }
+}
+
+/* LANÇAMENTO APAGADO NÃO VOLTA. O Apagar do Histórico tira a linha da tela
+   na hora; 4 s depois a reconciliação relia o CSV publicado — que o Google
+   demora minutos para atualizar — e o lançamento reaparecia (e apagar de
+   novo dava erro). O ID fica aqui até o CSV também parar de trazê-lo. */
+const _APAGADOS_LOCAL = new Set();
+function semApagadosLocais(linhas) {
+  if (!_APAGADOS_LOCAL.size) return linhas;
+  const vistos = new Set();
+  const out = linhas.filter(l => {
+    const id = String(getCSVField(l, 'ID') || '').trim();
+    if (id && _APAGADOS_LOCAL.has(id)) { vistos.add(id); return false; }
+    return true;
+  });
+  // o que o CSV já não traz saiu de verdade: não precisa mais ser lembrado
+  [..._APAGADOS_LOCAL].forEach(id => { if (!vistos.has(id)) _APAGADOS_LOCAL.delete(id); });
+  return out;
+}
+
+/* Os CSVs da carga anterior, para o refresh de fundo saber que NADA mudou.
+   Com 20 mil lançamentos são ~7 MB de texto: reinterpretar e redesenhar tudo
+   a cada 5 minutos (e a cada volta da câmera) para chegar no mesmo lugar era
+   meio segundo de tela presa no celular. */
+let _textosCarga = { obra: '', textos: null };
+
+function aplicarCarga(c, p, k, r, d) {
+  STATE.cronograma = c;
+  // Pacotes que o contrato já tem e a planilha ainda não (ver aplicarComplemento).
+  const compl = aplicarComplemento(p, k);
+  STATE.pacotes = compl.pacotes;
+  STATE.coeficientes = compl.coeficientes;
+  STATE.rdoavanco = semApagadosLocais(soDaObraAtiva(r));
+  // Diário que não veio (CSV fora por um instante) não é diário vazio: fica o
+  // que já estava. Trocar por [] fazia a tela dizer "RDO de hoje pendente" e
+  // a varredura das assinaturas gastar a chance dela contra um diário vazio.
+  if (d !== null) STATE.rdodiario = diarioLocalAplicar(soDaObraAtiva(d || []));
+  try { atualizarPrazoDoCronograma(); }   // baseline acompanha o Project publicado na aba
+  catch (e) { console.error('atualizarPrazoDoCronograma', e); }
+}
+
 async function carregarTudo(opts = {}) {
   const fundo = opts && opts.fundo === true;
   const minhaEpoca = ++_epocaCarga;
   const minhaObra = OBRA.id;
   if (!fundo) setSyncStatus('loading', 'Carregando dados…');
+  const textos = {};
+  const baixar = (qual, url) => fetchCSVTexto(url).then(t => { textos[qual] = t; return t; });
+  let c, p, k, r, d;
   try {
     // Cadastro: da planilha (Teotônio) ou do arquivo da obra. Os LANÇAMENTOS
     // vêm sempre da planilha, para todas as obras — o que muda é o filtro.
     const doArquivo = CONFIG.fonte === 'arquivo';
-    const [c, p, k, r, d] = await Promise.all([
-      doArquivo ? cadastroDoArquivo('cronograma')   : fetchCSV(CONFIG.csv.cronograma),
-      doArquivo ? cadastroDoArquivo('pacotes')      : fetchCSV(CONFIG.csv.pacotes),
-      doArquivo ? cadastroDoArquivo('coeficientes') : fetchCSV(CONFIG.csv.coeficientes),
-      fetchCSV(CONFIG.csv.rdoavanco),
-      fetchCSV(CONFIG.csv.rdodiario).catch(() => []),
+    [c, p, k, r, d] = await Promise.all([
+      doArquivo ? cadastroDoArquivo('cronograma')   : baixar('c', CONFIG.csv.cronograma),
+      doArquivo ? cadastroDoArquivo('pacotes')      : baixar('p', CONFIG.csv.pacotes),
+      doArquivo ? cadastroDoArquivo('coeficientes') : baixar('k', CONFIG.csv.coeficientes),
+      baixar('r', CONFIG.csv.rdoavanco),
+      baixar('d', CONFIG.csv.rdodiario).catch(() => null),
     ]);
-    // Chegou atrasada, ou a obra mudou enquanto os CSVs vinham: joga fora.
-    // Gravar aqui seria sobrescrever dado mais novo com dado mais velho — ou
-    // encher o STATE de uma obra com os lançamentos de outra.
-    if (minhaEpoca !== _epocaCarga || minhaObra !== OBRA.id) return;
-    STATE.cronograma = c;
-    // Pacotes que o contrato já tem e a planilha ainda não (ver aplicarComplemento).
-    const compl = aplicarComplemento(p, k);
-    STATE.pacotes = compl.pacotes;
-    STATE.coeficientes = compl.coeficientes;
-    STATE.rdoavanco = soDaObraAtiva(r);
-    STATE.rdodiario = diarioLocalAplicar(soDaObraAtiva(d || []));
-    atualizarPrazoDoCronograma(); // baseline acompanha o Project publicado na aba
-    STATE.loaded = true;
-    STATE.cargaFalhou = false;
-    STATE.lastSync = new Date();
-    const hm = STATE.lastSync.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
-    setSyncStatus('ok', `Sincronizado às ${hm} · ${STATE.pacotes.length} pacotes, ${STATE.rdoavanco.length} serviços`);
-
-    // Refresh de fundo em página de formulário (ou com campo focado em qualquer
-    // página): NÃO re-renderiza — derrubaria foco/teclado do apontador no meio
-    // da digitação. Os dados novos já estão no STATE; só os contadores mudam.
-    const emFormulario = TELAS_DE_FORMULARIO.includes(STATE.currentPage);
-    const digitando = document.activeElement &&
-      ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
-    // Linha do Histórico aberta em edição também é formulário: re-renderizar
-    // por baixo fecharia a linha (e a prévia da foto) no meio do trabalho,
-    // sem nada focado — o apontador estava na câmera, não no teclado.
-    const editandoLinha = [...document.querySelectorAll('[id^="hist-edit-row-"]')]
-      .some(el => el.style.display !== 'none');
-    if (fundo && (emFormulario || digitando || editandoLinha)) {
-      const rc = document.getElementById('rdoCount');
-      if (rc) rc.textContent = STATE.rdoavanco.length;
-      const dc = document.getElementById('diarioCount');
-      if (dc) dc.textContent = (STATE.rdodiario || []).length;
-      return;
-    }
-    render();
-
-    /* Os dias já assinados cujo PDF guardado ficou para trás: redesenha e
-       redeposita, e é o depósito que manda o RDO ASSINADO para a lista.
-       Fica DEPOIS do `render()` e sem `await`: é manutenção de fundo, e o
-       desenho do PDF é síncrono — segurá-lo antes da tela deixaria o app
-       parado olhando para um dia que não é o de ninguém. E fica depois do
-       desvio acima de propósito: com formulário aberto ou campo focado, a
-       varredura espera a próxima carga. */
-    varrerRDOsAssinados().catch(() => {});
-  } catch(e) {
-    // Carga velha que falhou não pode apagar o status de uma nova que já
-    // deu certo depois dela.
-    if (minhaEpoca !== _epocaCarga) return;
-    // Mantém STATE.loaded como está: se já houve uma carga boa, os dados velhos
-    // continuam navegáveis (antes, uma falha de fundo deixava toda navegação em
-    // branco até a próxima sincronização bem-sucedida).
-    STATE.cargaFalhou = true;
-    setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar novamente</span>');
-    // Sem nenhuma carga boa antes, a tela é a mensagem: `render()` pinta a
-    // falha em vez de sair sem desenhar nada.
-    render();
-    // Com dado velho na tela o toast passa em 6 s e não atrapalha. Sem dado
-    // nenhum ele é a rede de segurança da mensagem — fica até ser fechado.
-    if (!STATE.loaded) toast('Sem conexão com Google Sheets. O lançamento continua funcionando: entra na fila do aparelho.', 'error', 0);
-    else if (!fundo) toast('Sem conexão com Google Sheets. Verifique sua internet.', 'error', 6000);
+  } catch (e) {
+    return cargaFalhou(minhaEpoca, minhaObra, fundo);
   }
+  // Chegou atrasada, ou a obra mudou enquanto os CSVs vinham: joga fora.
+  // Gravar aqui seria sobrescrever dado mais novo com dado mais velho — ou
+  // encher o STATE de uma obra com os lançamentos de outra.
+  if (minhaEpoca !== _epocaCarga || minhaObra !== OBRA.id) return;
+
+  // Nada mudou desde a última carga: no refresh de fundo não há o que
+  // reinterpretar nem redesenhar.
+  const antes = _textosCarga.obra === minhaObra && _textosCarga.textos;
+  const igual = antes && STATE.loaded && !STATE.dadosDoAparelho &&
+    ['c', 'p', 'k', 'r', 'd'].every(q => antes[q] === textos[q]);
+  _textosCarga = { obra: minhaObra, textos };
+  const hm = () => new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  if (fundo && igual) {
+    STATE.lastSync = new Date();
+    STATE.cargaFalhou = false;
+    setSyncStatus('ok', `Sincronizado às ${hm()} · ${STATE.pacotes.length} pacotes, ${STATE.rdoavanco.length} serviços`);
+    varrerRDOsAssinados().catch(() => {});
+    return;
+  }
+
+  const lido = t => (typeof t === 'string' ? parseCSV(t) : t);
+  aplicarCarga(lido(c), lido(p), lido(k), lido(r), d === null ? null : lido(d));
+  if (d === null) delete textos.d;          // não guarda "sem diário" por cima do bom
+  cargaGuardar(minhaObra, Object.assign({}, textos));
+  STATE.loaded = true;
+  STATE.cargaFalhou = false;
+  STATE.dadosDoAparelho = null;
+  STATE.lastSync = new Date();
+  setSyncStatus('ok', `Sincronizado às ${hm()} · ${STATE.pacotes.length} pacotes, ${STATE.rdoavanco.length} serviços`);
+
+  // Refresh de fundo em página de formulário (ou com campo focado em qualquer
+  // página): NÃO re-renderiza — derrubaria foco/teclado do apontador no meio
+  // da digitação. Os dados novos já estão no STATE; só os contadores mudam.
+  const emFormulario = TELAS_DE_FORMULARIO.includes(STATE.currentPage);
+  const digitando = document.activeElement &&
+    ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
+  // Linha do Histórico aberta em edição também é formulário: re-renderizar
+  // por baixo fecharia a linha (e a prévia da foto) no meio do trabalho,
+  // sem nada focado — o apontador estava na câmera, não no teclado.
+  const editandoLinha = [...document.querySelectorAll('[id^="hist-edit-row-"]')]
+    .some(el => el.style.display !== 'none');
+  if (fundo && (emFormulario || digitando || editandoLinha)) {
+    const rc = document.getElementById('rdoCount');
+    if (rc) rc.textContent = STATE.rdoavanco.length;
+    const dc = document.getElementById('diarioCount');
+    if (dc) dc.textContent = (STATE.rdodiario || []).length;
+    return;
+  }
+  /* Erro de DESENHO não é erro de rede: dentro do try da carga, uma tela
+     quebrada virava "Sem conexão com Google Sheets" e escondia o defeito. */
+  try { render(); } catch (e) { console.error('render', e); }
+
+  /* Os dias já assinados cujo PDF guardado ficou para trás: redesenha e
+     redeposita, e é o depósito que manda o RDO ASSINADO para a lista.
+     Fica DEPOIS do `render()` e sem `await`: é manutenção de fundo, e o
+     desenho do PDF é síncrono — segurá-lo antes da tela deixaria o app
+     parado olhando para um dia que não é o de ninguém. E fica depois do
+     desvio acima de propósito: com formulário aberto ou campo focado, a
+     varredura espera a próxima carga. Sem o CSV do diário, espera também. */
+  if (d !== null) varrerRDOsAssinados().catch(() => {});
+}
+
+async function cargaFalhou(minhaEpoca, minhaObra, fundo) {
+  // Carga velha que falhou não pode apagar o status de uma nova que já
+  // deu certo depois dela.
+  if (minhaEpoca !== _epocaCarga) return;
+  // Sem nenhuma carga boa nesta sessão: a última guardada no aparelho.
+  if (!STATE.loaded) {
+    const g = await cargaLer(minhaObra);
+    if (minhaEpoca !== _epocaCarga || minhaObra !== OBRA.id) return;
+    if (g && g.textos && g.textos.r !== undefined) {
+      try {
+        const t = g.textos;
+        const doArquivo = CONFIG.fonte === 'arquivo';
+        aplicarCarga(
+          doArquivo ? cadastroDoArquivo('cronograma') : parseCSV(t.c || ''),
+          doArquivo ? cadastroDoArquivo('pacotes') : parseCSV(t.p || ''),
+          doArquivo ? cadastroDoArquivo('coeficientes') : parseCSV(t.k || ''),
+          parseCSV(t.r || ''), t.d !== undefined ? parseCSV(t.d) : []);
+        STATE.loaded = true;
+        STATE.cargaFalhou = true;
+        STATE.dadosDoAparelho = g.em;
+        const quando = new Date(g.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        setSyncStatus('error', `Sem sinal · dados guardados de ${quando} · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar de novo</span>`);
+        try { render(); } catch (e) { console.error('render', e); }
+        if (!fundo) toast('Sem sinal. Mostrando os dados guardados no aparelho (' + quando + '). O que você lançar entra na fila e sobe quando a internet voltar.', 'info', 7000);
+        return;
+      } catch (e) { console.error('carga guardada', e); }
+    }
+  }
+  // Mantém STATE.loaded como está: se já houve uma carga boa, os dados velhos
+  // continuam navegáveis (antes, uma falha de fundo deixava toda navegação em
+  // branco até a próxima sincronização bem-sucedida).
+  STATE.cargaFalhou = true;
+  setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar novamente</span>');
+  // Sem nenhuma carga boa antes, a tela é a mensagem: `render()` pinta a
+  // falha em vez de sair sem desenhar nada.
+  try { render(); } catch (e) { console.error('render', e); }
+  // Com dado velho na tela o toast passa em 6 s e não atrapalha. Sem dado
+  // nenhum ele é a rede de segurança da mensagem — fica até ser fechado.
+  if (!STATE.loaded) toast('Sem conexão com Google Sheets. O lançamento continua funcionando: entra na fila do aparelho.', 'error', 0);
+  else if (!fundo) toast('Sem conexão com Google Sheets. Verifique sua internet.', 'error', 6000);
 }
 
 function setSyncStatus(state, text) {
@@ -7181,7 +7536,7 @@ function calcularConsumoItens(avanco) {
          da planilha, ele entra na chave; quando não traz (as 104 linhas que
          já existiam), a agregação continua por código, como sempre foi. */
       const itemPlanilha = String(getCSVField(c, 'Item Planilha') || '').trim();
-      const chave = itemPlanilha ? item + ' ' + itemPlanilha : item;
+      const chave = itemPlanilha ? item + '\u0000' + itemPlanilha : item;
       if (!out[chave]) {
         out[chave] = {
           item, itemPlanilha, descricao: desc,
@@ -7959,7 +8314,7 @@ function render() {
     return;
   }
 
-  if (STATE.currentPage === 'executivo') pageEl.innerHTML = renderExecutivo();
+  if (STATE.currentPage === 'executivo') { pageEl.innerHTML = renderExecutivo(); previsaoPreencher(); }
   else if (STATE.currentPage === 'avancofisico') pageEl.innerHTML = renderAvancoFisico();
   else if (STATE.currentPage === 'cronograma') pageEl.innerHTML = renderCronograma();
   else if (STATE.currentPage === 'medicao') { pageEl.innerHTML = renderMedicao(); medicaoGarantirFechadas(); }
@@ -8110,7 +8465,7 @@ function renderProjetos() {
     <div class="proj-grupo">${escHtml(grupo)}</div>
     ${ps.map(p => `
       <button type="button" class="proj-item ${p.arquivo === PROJ.sel ? 'ativo' : ''}"
-              onclick="selecionarPrancha('${escHtml(p.arquivo)}')">
+              onclick="selecionarPrancha(${jsArg(p.arquivo)})">
         <span class="proj-item-ic">${ic('arquivo')}</span>
         <span class="proj-item-txt">
           <span class="proj-item-nome">${escHtml(p.disciplina)}</span>
@@ -8791,7 +9146,9 @@ window.prachaGuardar = async function () {
   const proximo = async () => {
     while (i < urls.length) {
       const u = urls[i++];
-      try { await fetch(u, { cache: 'force-cache' }); } catch (e) { falhou++; }
+      // 404 ou 5xx também é falha: contado como "baixado", a prancha dizia
+      // que abria sem sinal e o quadrado não estava lá
+      try { const r = await fetch(u, { cache: 'force-cache' }); if (!r.ok) falhou++; } catch (e) { falhou++; }
       feitos++;
       if (feitos % 8 === 0 || feitos === urls.length) {
         b.textContent = Math.round(feitos / urls.length * 100) + '%';
@@ -9019,7 +9376,7 @@ function renderGaleria() {
       <input type="checkbox" ${marcada(f) ? 'checked' : ''} onchange="galMarcar('${f.fileId}', this.checked)">
       ${marcada(f) ? 'No relatório' : 'Fora'}</label>` : ''}
     <div id="galbox-${f.fileId}" style="position:relative;background:var(--surface-2);cursor:zoom-in;height:170px"
-         onclick="ampliarFoto('${f.fileId}','${escHtml(f.pacote)}','${f.fileIdLimpa || ''}')">
+         onclick="ampliarFoto(${jsArg(f.fileId)},${jsArg(f.pacote)},${jsArg(f.fileIdLimpa || '')})">
       <img id="gal-${f.fileId}" alt="${escHtml(f.pacote)}"
            style="width:100%;height:170px;object-fit:cover;display:none">
       <div id="galph-${f.fileId}" style="height:170px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:var(--fs-sm)">
@@ -9554,7 +9911,7 @@ async function usuariosCarregarLista() {
           : '<span style="color:var(--muted,#718096)">protegida</span>'}</td>
         <td style="padding:10px 12px;text-align:right;white-space:nowrap">
           <button class="btn btn-ghost btn-sm" onclick="usuarioAbrirForm(${i})">Editar</button>
-          ${u.nome === r.eu ? '' : `<button class="btn btn-ghost btn-sm" style="color:var(--err,#e53e3e)" onclick="usuarioExcluirUI('${escHtml(u.nome)}')">Excluir</button>`}
+          ${u.nome === r.eu ? '' : `<button class="btn btn-ghost btn-sm" style="color:var(--err,#e53e3e)" onclick="usuarioExcluirUI(${jsArg(u.nome)})">Excluir</button>`}
         </td></tr>`).join('')}
       </tbody></table></div>`;
   } catch (e) {
@@ -9597,7 +9954,7 @@ window.usuarioAbrirForm = function(idx) {
             como consertar o acesso de ninguém.</div>
         </div>
         <div style="display:flex;gap:8px;margin-top:16px">
-          <button class="btn btn-primary btn-sm" onclick="usuarioSalvarUI(${u ? `'${escHtml(u.nome)}'` : 'null'})">Salvar</button>
+          <button class="btn btn-primary btn-sm" onclick="usuarioSalvarUI(${u ? `${jsArg(u.nome)}` : 'null'})">Salvar</button>
           <button class="btn btn-ghost btn-sm" onclick="document.getElementById('usuarioFormWrap').innerHTML=''">Cancelar</button>
         </div>
       </div>
@@ -9674,135 +10031,241 @@ window.usuarioExcluirUI = async function(nome) {
 };
 
 // ====================================================================
-// VIEW: ANALISTA IA (ATUALIZADO)
+// VIEW: ANALISTA IA
 // ====================================================================
+/* O texto desta tela e os pedidos à IA estavam em português de Portugal
+   ("detete", "A analisar os dados", "registos", data em pt-PT) — e a IA
+   respondia no mesmo tom, num app de obra em São Paulo. Agora é pt-BR de
+   ponta a ponta, e o pedido diz qual obra está sendo analisada. */
+const IA_TIPOS = {
+  completa:   'Resumo completo (ritmo + projeções)',
+  projecoes:  'Projeções e prazos',
+  gargalos:   'Gargalos e alertas',
+  eficiencia: 'Onde a produção está concentrada',
+};
+
 function renderAnalistaIA() {
+  const temChave = !!(localStorage.getItem(GEMINI_KEY_LS) || '').trim();
+  const ultimo = iaUltimoRelatorio();
   return `
     <div class="card stagger-item">
       <div class="card-header">
         <div>
-          <div class="card-title">${ic('ia')} Analista IA Avançado</div>
-          <div class="card-title-sub">Gere análises, projeções de prazos e detete gargalos da obra com base no contexto recente.</div>
+          <div class="card-title">${ic('ia')} Analista IA</div>
+          <div class="card-title-sub">Análises, projeções de prazo e gargalos de ${escHtml(OBRA.nome || 'obra')}, com base nos lançamentos recentes.</div>
         </div>
+        ${temChave ? '' : `<button class="btn btn-sm" onclick="abrirConfigIA()">${ic('chave')} Configurar chave</button>`}
       </div>
       <div class="card-body" style="border-bottom: 1px solid var(--border); background: var(--surface-2);">
          <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; align-items: end;">
             <div class="field">
-                <label>Tipo de Análise</label>
+                <label for="aiAnalysisType">Tipo de análise</label>
                 <select id="aiAnalysisType">
-                    <option value="completa">Resumo Completo (Geral + Projeções)</option>
-                    <option value="projecoes">Apenas Projeções e Prazos</option>
-                    <option value="gargalos">Identificação de Gargalos e Alertas</option>
-                    <option value="eficiencia">Eficiência de Efetivo e Produção</option>
+                    ${Object.keys(IA_TIPOS).map(k => `<option value="${k}">${IA_TIPOS[k]}</option>`).join('')}
                 </select>
             </div>
             <div class="field">
-                <label>Contexto Histórico</label>
+                <label for="aiContextDays">Período analisado</label>
                 <select id="aiContextDays">
-                    <option value="7">Últimos 7 dias (Curto Prazo)</option>
-                    <option value="15" selected>Últimos 15 dias (Médio Prazo)</option>
-                    <option value="30">Últimos 30 dias (Longo Prazo)</option>
+                    <option value="7">Últimos 7 dias</option>
+                    <option value="15" selected>Últimos 15 dias</option>
+                    <option value="30">Últimos 30 dias</option>
+                    <option value="60">Últimos 60 dias</option>
                 </select>
             </div>
             <div class="field">
-                <button class="btn btn-primary" id="btnRunAI" style="width: 100%; height: 38px; justify-content: center;" onclick="runAIAnalysis()">Gerar Relatório IA</button>
+                <button class="btn btn-primary" id="btnRunAI" style="width: 100%; height: 38px; justify-content: center;" onclick="runAIAnalysis()">${ic('ia')} Gerar relatório</button>
             </div>
          </div>
       </div>
       <div class="card-body">
-        <div id="ai-output" class="ai-content">
+        <div class="ai-barra" id="aiBarra" ${ultimo ? '' : 'hidden'}>
+          <span class="ai-carimbo" id="aiCarimbo">${ultimo ? escHtml(ultimo.rotulo) : ''}</span>
+          <button class="btn btn-sm" onclick="copiarRelatorioIA()">${ic('copiar')} Copiar texto</button>
+        </div>
+        <div id="ai-output" class="ai-content" aria-live="polite">
+          ${ultimo ? ultimo.html : `
           <div class="empty">
             <div class="empty-icon">${ic('ia')}</div>
-            <div class="empty-title">Aguardando Parâmetros</div>
-            <div class="empty-sub">Selecione o tipo de análise e o contexto histórico acima, depois clique em "Gerar Relatório IA" para obter os insights.</div>
-          </div>
+            <div class="empty-title">Escolha a análise e o período</div>
+            <div class="empty-sub">${temChave
+              ? 'Depois toque em "Gerar relatório". A IA lê o avanço dos pacotes, a produção do período e as paralisações lançadas no RDO.'
+              : 'A análise usa a sua chave do Google Gemini, guardada só neste aparelho. Configure-a para começar.'}</div>
+          </div>`}
         </div>
       </div>
     </div>
   `;
 }
 
+/* O último relatório fica guardado POR OBRA nesta sessão: trocar de tela e
+   voltar não pode custar outra chamada (nem outra espera de 20 s). */
+function iaChaveRelatorio() { return 'teotonio_ia_relatorio_' + (OBRA && OBRA.id || ''); }
+function iaUltimoRelatorio() {
+  try { const o = JSON.parse(sessionStorage.getItem(iaChaveRelatorio()) || 'null'); return o && o.html ? o : null; }
+  catch (e) { return null; }
+}
+
+/* O que a IA devolve vai para o innerHTML. Ela lê observações digitadas no
+   campo — texto que qualquer um escreve —, então a resposta passa por uma
+   lista do que pode ficar: só marcação de texto, sem atributo nenhum. Um
+   <img onerror> ou <script> que viesse no meio some aqui. */
+const IA_TAGS_OK = new Set(['H2', 'H3', 'H4', 'H5', 'P', 'UL', 'OL', 'LI', 'STRONG', 'B', 'EM', 'I',
+  'BR', 'HR', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'SPAN', 'DIV', 'SMALL', 'BLOCKQUOTE', 'CODE']);
+const IA_TAGS_FORA = /^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|TEMPLATE|NOSCRIPT|SVG|MATH|LINK|META|FORM|INPUT|BUTTON|TEXTAREA|SELECT)$/;
+function htmlSeguroIA(html) {
+  const tpl = document.createElement('template');   // conteúdo inerte: nada carrega nem roda
+  tpl.innerHTML = String(html == null ? '' : html);
+  (function limpar(no) {
+    Array.from(no.childNodes).forEach(f => {
+      if (f.nodeType === 3) return;
+      if (f.nodeType !== 1) { f.remove(); return; }
+      if (!IA_TAGS_OK.has(f.tagName)) {
+        if (IA_TAGS_FORA.test(f.tagName)) { f.remove(); return; }
+        limpar(f); f.replaceWith(...Array.from(f.childNodes));   // fica o texto, sai a tag
+        return;
+      }
+      Array.from(f.attributes).forEach(a => f.removeAttribute(a.name));
+      limpar(f);
+    });
+  })(tpl.content);
+  return tpl.innerHTML;
+}
+
+/* Mesmo pedindo HTML, a IA às vezes responde em Markdown. Em vez de mostrar
+   asteriscos e cerquilhas, o básico vira marcação. */
+function mdSimplesParaHTML(txt) {
+  const linhas = escHtml(txt).split(/\r?\n/);
+  const out = [];
+  let lista = false;
+  const inline = t => t.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+  linhas.forEach(l => {
+    const m = l.match(/^\s*[-*•]\s+(.*)$/) || l.match(/^\s*\d+[.)]\s+(.*)$/);
+    if (m) { if (!lista) { out.push('<ul>'); lista = true; } out.push('<li>' + inline(m[1]) + '</li>'); return; }
+    if (lista) { out.push('</ul>'); lista = false; }
+    const h = l.match(/^\s*#{1,6}\s+(.*)$/);
+    if (h) out.push('<h4>' + inline(h[1]) + '</h4>');
+    else if (l.trim()) out.push('<p>' + inline(l) + '</p>');
+  });
+  if (lista) out.push('</ul>');
+  return out.join('');
+}
+
+function respostaIAParaHTML(texto) {
+  const t = String(texto || '').trim();
+  return htmlSeguroIA(/<\s*(p|h\d|ul|ol|li|table|strong|br|div)\b/i.test(t) ? t : mdSimplesParaHTML(t));
+}
+
+/* As paradas lançadas no RDO Diário dentro da janela — é o "por quê" que o
+   avanço sozinho não conta. */
+function paralisacoesDoPeriodo(desde) {
+  const dias = new Set();
+  (STATE.rdodiario || []).forEach(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (d && d >= desde) dias.add(getLocalISODate(d));
+  });
+  const out = [];
+  [...dias].sort().forEach(iso => {
+    const linha = linhaDoDiaRDO(iso);
+    if (!linha) return;
+    paralisacoesDoDia(linha).forEach(p => out.push(fmtData(iso) + ' (' + p.turno + '): ' + textoParalisacao(p)));
+  });
+  return { diasComRDO: dias.size, lista: out };
+}
+
 window.runAIAnalysis = async function() {
   const btn = document.getElementById('btnRunAI');
   const output = document.getElementById('ai-output');
-  const type = document.getElementById('aiAnalysisType').value;
-  const days = parseInt(document.getElementById('aiContextDays').value, 10);
-  
   if (!btn || !output) return;
+  const type = document.getElementById('aiAnalysisType').value;
+  const days = parseInt(document.getElementById('aiContextDays').value, 10) || 15;
+  const barra = document.getElementById('aiBarra');
+  const rotuloBtn = btn.innerHTML;
 
   btn.disabled = true;
-  btn.innerHTML = "A analisar os dados...";
-  output.innerHTML = `<div style="text-align:center; padding: 40px;"><div class="loader-spinner"></div><p style="margin-top:10px; color:var(--muted)">A ler RDOs, calcular ritmos recentes e gerar conclusões...</p></div>`;
+  btn.innerHTML = 'Analisando…';
+  if (barra) barra.hidden = true;
+  output.innerHTML = `<div style="text-align:center; padding: 40px;"><div class="loader-spinner"></div><p style="margin-top:10px; color:var(--muted)">Lendo os lançamentos, calculando o ritmo recente e escrevendo as conclusões…</p></div>`;
 
   try {
-    // Determinar data limite para o contexto
     const limiteData = new Date();
     limiteData.setDate(limiteData.getDate() - days);
     limiteData.setHours(0,0,0,0);
 
     const av = calcularAvancoPorPacote();
     const pacotesAtivos = Object.values(av).filter(a => a.pct > 0 && a.pacote && getCSVField(a.pacote, 'Status') !== 'Histórico');
-    
-    // Filtrar RDOs dentro do contexto de dias selecionado
+
     const rdosRecentes = STATE.rdoavanco.filter(r => {
-        const d = parseISODate(getCSVField(r, 'Data'));
-        return d && d >= limiteData;
+      const d = parseISODate(getCSVField(r, 'Data'));
+      return d && d >= limiteData;
     });
-    
-    let contextData = `DADOS GERAIS DA OBRA (Atualizado a: ${new Date().toLocaleDateString('pt-PT')}):\n`;
-    contextData += `Total de registos (RDOs) no histórico: ${STATE.rdoavanco.length}\n`;
-    contextData += `RDOs registados nos últimos ${days} dias: ${rdosRecentes.length}\n\n`;
-    
-    contextData += `SITUAÇÃO DOS PACOTES EM ANDAMENTO:\n`;
-    
+    // produção do período por pacote, numa passada só
+    const prodPorPacote = {};
+    rdosRecentes.forEach(r => {
+      const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+      prodPorPacote[pid] = (prodPorPacote[pid] || 0) + num(getCSVField(r, 'Quantidade'));
+    });
+    const paradas = paralisacoesDoPeriodo(limiteData);
+    const obraTxt = [OBRA.nome, OBRA.objeto || OBRA.subtitulo].filter(Boolean).join(' — ');
+
+    let contextData = `OBRA: ${obraTxt}\n`;
+    contextData += `DATA DE HOJE: ${new Date().toLocaleDateString('pt-BR')}\n`;
+    contextData += `Lançamentos de serviço no histórico: ${STATE.rdoavanco.length}\n`;
+    contextData += `Lançamentos nos últimos ${days} dias: ${rdosRecentes.length}\n`;
+    contextData += `Dias com RDO diário nos últimos ${days} dias: ${paradas.diasComRDO}\n\n`;
+    contextData += `PACOTES EM ANDAMENTO:\n`;
     pacotesAtivos.forEach(a => {
-      const f = getCSVField(a.pacote, 'Frente') || 'Desconhecida';
+      const f = getCSVField(a.pacote, 'Frente') || 'Sem frente';
       const p = getCSVField(a.pacote, 'Pacote');
-      const pct = (a.pct * 100).toFixed(1);
+      const pct = (a.pct * 100).toFixed(1).replace('.', ',');
       const estimativa = num(getCSVField(a.pacote, 'Qtd Estimada'));
-      const executada = a.qtdExecutada;
-      const saldo = Math.max(0, estimativa - executada).toFixed(2);
+      const saldo = Math.max(0, estimativa - a.qtdExecutada);
       const unid = getCSVField(a.pacote, 'Unidade Física') || '';
-
-      // Calcula produção específica deste pacote no período selecionado
-      const rdosNestePacote = rdosRecentes.filter(r => (getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')) === getCSVField(a.pacote, 'ID'));
-      const producaoRecente = rdosNestePacote.reduce((acc, r) => acc + num(getCSVField(r, 'Quantidade')), 0);
-
-      contextData += `- Frente: ${f} | Pacote: ${p} | Avanço Total: ${pct}% | Saldo a Executar: ${saldo} ${unid} | Produção últimos ${days} dias: ${producaoRecente.toFixed(2)} ${unid}\n`;
+      const producaoRecente = prodPorPacote[getCSVField(a.pacote, 'ID')] || 0;
+      contextData += `- Frente: ${f} | Pacote: ${p} | Avanço: ${pct}% | Saldo: ${fmtNum(saldo, 2)} ${unid} | Produção nos últimos ${days} dias: ${fmtNum(producaoRecente, 2)} ${unid}\n`;
     });
+    contextData += `\nPARALISAÇÕES LANÇADAS NO RDO (últimos ${days} dias): ${paradas.lista.length ? '\n- ' + paradas.lista.slice(0, 40).join('\n- ') : 'nenhuma'}\n`;
 
-    let prompt = "";
-    if (type === 'completa') {
-        prompt = `Analise os seguintes dados de avanço de obra de engenharia.\n\n${contextData}\n\nFornece um resumo executivo. Destaca as frentes com bom ritmo de produção nos últimos ${days} dias. Identifica gargalos (frentes que pararam ou abrandaram) e faz uma breve projeção matemática dos pacotes que precisam de acelerar o ritmo. Utiliza linguagem técnica de planeamento.`;
-    } else if (type === 'projecoes') {
-        prompt = `Foca-te ESTRITAMENTE EM PROJEÇÕES E PRAZOS. Lê os dados:\n\n${contextData}\n\nPara os pacotes mais críticos, calcula matematicamente o ritmo médio diário (Produção nos últimos ${days} dias a dividir por ${days}). Depois, estima quantos dias serão necessários para terminar o "Saldo a Executar" mantendo esse ritmo recente. Apresenta os resultados de forma clara, preferencialmente numa tabela.`;
-    } else if (type === 'gargalos') {
-        prompt = `Foca-te em GARGALOS E ALERTAS CRÍTICOS:\n\n${contextData}\n\nIdentifica rapidamente quais os pacotes que estão parados (produção = 0) ou com produção muito baixa nos últimos ${days} dias, apesar de estarem sinalizados em andamento. Sugere possíveis causas e que medidas a direção de obra deve tomar imediatamente para reverter os atrasos.`;
-    } else if (type === 'eficiencia') {
-        prompt = `Analisa a eficiência do avanço da obra no contexto dos últimos ${days} dias:\n\n${contextData}\n\nQuais foram os pacotes que mais alavancaram o avanço geral neste período? Compara o volume executado nos últimos ${days} dias com o avanço global do pacote para destacares onde a obra está a aplicar mais esforços atualmente.`;
-    }
-    
-    prompt += "\n\nIMPORTANTE: Formate a sua resposta EXCLUSIVAMENTE em HTML estruturado (use <h3>, <h4>, <ul>, <li>, <p>, <strong>, <br>, etc.). NÃO use formatação Markdown (como ## ou **). Retorne APENAS o código HTML limpo, sem blocos de código (```html).";
+    const pedidos = {
+      completa: `Faça um resumo executivo. Destaque as frentes com bom ritmo nos últimos ${days} dias, aponte os gargalos (frentes que pararam ou desaceleraram, cruzando com as paralisações lançadas) e projete quais pacotes precisam acelerar.`,
+      projecoes: `Foque ESTRITAMENTE em projeções e prazos. Para os pacotes mais críticos, calcule o ritmo médio diário (produção dos últimos ${days} dias dividida por ${days}) e estime quantos dias faltam para zerar o saldo mantendo esse ritmo. Apresente em tabela.`,
+      gargalos: `Foque em gargalos e alertas. Aponte os pacotes em andamento com produção zero ou muito baixa nos últimos ${days} dias, relacione com as paralisações lançadas quando houver, sugira causas prováveis e o que a direção da obra deve fazer já.`,
+      eficiencia: `Mostre onde a produção está concentrada nos últimos ${days} dias: quais pacotes mais puxaram o avanço, comparando a produção do período com o avanço total de cada um.`,
+    };
+    const prompt = `Você é um engenheiro de planejamento de obras públicas no Brasil. Escreva em português do Brasil, com vocabulário de obra (frente, pacote, saldo, ritmo, RDO), direto e sem rodeios.\n\n${contextData}\n${pedidos[type] || pedidos.completa}\n\nIMPORTANTE: responda EXCLUSIVAMENTE em HTML simples (<h3>, <h4>, <p>, <ul>, <li>, <strong>, <table>, <tr>, <th>, <td>). Não use Markdown nem blocos de código.`;
 
-    const analysisHTML = await callGeminiAPI(prompt);
-    
-    output.innerHTML = analysisHTML;
-    toast('Relatório IA gerado com sucesso!', 'success');
+    const html = respostaIAParaHTML(await callGeminiAPI(prompt));
+    output.innerHTML = html;
+    const rotulo = (IA_TIPOS[type] || 'Análise') + ' · últimos ' + days + ' dias · gerado às ' +
+      new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    try { sessionStorage.setItem(iaChaveRelatorio(), JSON.stringify({ html, rotulo })); } catch (e) {}
+    if (barra) { barra.hidden = false; document.getElementById('aiCarimbo').textContent = rotulo; }
+    toast('Relatório gerado.', 'success');
   } catch (err) {
-    let msg = err.message;
+    let msg = escHtml(err && err.message || 'Erro desconhecido');
     let acao = '';
     if (err.code === 'SEM_CHAVE_IA') {
-      msg = 'Nenhuma chave do Google Gemini configurada neste navegador.';
+      msg = 'Nenhuma chave do Google Gemini configurada neste aparelho.';
       acao = '<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="abrirConfigIA()">Configurar chave de IA</button>';
     } else if (err.code === 'CHAVE_INVALIDA') {
       acao = '<button class="btn btn-primary btn-sm" style="margin-top:14px" onclick="abrirConfigIA()">Revisar chave de IA</button>';
     }
-    output.innerHTML = `<div class="empty"><div class="empty-icon" style="color:var(--red)">${ic('alerta')}</div><div class="empty-title">Erro na Análise</div><div class="empty-sub">${msg}</div>${acao}</div>`;
-    toast('Erro ao gerar relatório', 'error');
+    output.innerHTML = `<div class="empty"><div class="empty-icon" style="color:var(--red)">${ic('alerta')}</div><div class="empty-title">Não foi possível gerar a análise</div><div class="empty-sub">${msg}</div>${acao}</div>`;
+    toast('Erro ao gerar o relatório', 'error');
   } finally {
     btn.disabled = false;
-    btn.innerHTML = "Gerar Relatório IA";
+    btn.innerHTML = rotuloBtn;
   }
+};
+
+window.copiarRelatorioIA = function() {
+  const el = document.getElementById('ai-output');
+  if (!el) return;
+  const txt = el.innerText.trim();
+  const feito = () => toast('Relatório copiado.', 'success');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(feito, () => prompt('Copie o texto:', txt));
+  } else prompt('Copie o texto:', txt);
 };
 
 // ====================================================================
@@ -10022,13 +10485,14 @@ function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
     if (!por[f]) por[f] = { ult7d: 0, ultData: null, pacotes: 0, executou: false };
     por[f].pacotes++;
   });
-  const validPids = new Set(pacotesAtivos.map(p => getCSVField(p, 'ID')));
+  // pacote por ID num mapa: o `find` dentro do laço era lançamentos × pacotes
+  const pacPorId = new Map();
+  pacotesAtivos.forEach(p => { const id = getCSVField(p, 'ID'); if (!pacPorId.has(id)) pacPorId.set(id, p); });
   rdosAtivos.forEach(r => {
     const d = parseISODate(getCSVField(r, 'Data'));
     if (!d) return;
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
-    if (!validPids.has(pid)) return;
-    const pac = pacotesAtivos.find(p => getCSVField(p, 'ID') === pid);
+    const pac = pacPorId.get(pid);
     if (!pac) return;
     const f = getCSVField(pac, 'Frente') || 'Outros';
     if (!por[f]) por[f] = { ult7d: 0, ultData: null, pacotes: 0, executou: false };
@@ -10147,11 +10611,14 @@ function calcCurvaPrevista(pacotesAtivos, totalDiasEstimados) {
   return { byDay: result, cum, sortedDays, total: acc };
 }
 
-const IA_CACHE_KEY = 'teotonio_ia_rec_v1';
+/* A recomendação é DA OBRA: com a chave única, trocar de obra mostrava por
+   até 6 h o conselho escrito para a outra. */
+const IA_CACHE_BASE = 'teotonio_ia_rec_v1';
+function iaCacheChave() { return IA_CACHE_BASE + ':' + ((typeof OBRA !== 'undefined' && OBRA && OBRA.id) || ''); }
 const IA_CACHE_TTL = 6 * 3600 * 1000;
 function getIACached() {
   try {
-    const raw = localStorage.getItem(IA_CACHE_KEY);
+    const raw = localStorage.getItem(iaCacheChave());
     if (!raw) return null;
     const obj = JSON.parse(raw);
     if (!obj || !obj.ts || !obj.text) return null;
@@ -10209,7 +10676,7 @@ Responda APENAS com a recomendação.`;
     const text = await callGeminiAPI(prompt);
     const cleaned = (text || '').replace(/^["'\s]+|["'\s]+$/g, '').replace(/\n+/g, ' ').trim();
     if (cleaned) {
-      localStorage.setItem(IA_CACHE_KEY, JSON.stringify({ ts: Date.now(), text: cleaned }));
+      localStorage.setItem(iaCacheChave(), JSON.stringify({ ts: Date.now(), text: cleaned }));
       el.classList.remove('loading');
       txtEl.textContent = cleaned;
     } else {
@@ -10367,6 +10834,165 @@ function renderAvenida3D(rdosAtivos, pacotesAtivos) {
 
    Fica FORA dos filtros de mês/frente de propósito: é sempre hoje.
    ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------
+   PREVISÃO DO TEMPO DA OBRA
+   ------------------------------------------------------------------
+   O app registra a chuva que JÁ caiu (clima do RDO, INMET, mapa de chuva) —
+   mas a decisão que custa dinheiro é a de amanhã: concretar, imprimar,
+   aplicar CBUQ ou segurar a equipe. A previsão dos próximos dias fica na
+   Central de Campo, na coordenada do canteiro (as mesmas de CLIMA_OBRAS,
+   no Code.gs), com o dia de risco marcado.
+
+   Regras que não podem cair:
+   • NUNCA atrasa o painel. A faixa nasce vazia e é preenchida depois,
+     com o que estiver guardado primeiro e a rede em seguida.
+   • Sem sinal, mostra a última previsão guardada e diz de quando ela é —
+     previsão velha sem data se passa por previsão de hoje.
+   • É apoio ao planejamento, não registro: nada disto vai para o RDO, que
+     continua sendo o que o apontador viu e o INMET mediu.
+   • Open-Meteo: aberto, sem chave e sem cadastro. Fica em SO_REDE no sw.js
+     para o service worker não servir previsão de ontem como se fosse nova.
+   ------------------------------------------------------------------ */
+const COORD_OBRAS = {
+  'teotonio':      { lat: -23.7205, lon: -46.7025 },
+  'ruas-de-terra': { lat: -23.5395, lon: -46.4585 },
+  'ranario':       { lat: -23.5290, lon: -47.1355 },
+};
+const PREV_URL = 'https://api.open-meteo.com/v1/forecast';
+const PREV_VALIDADE_MS = 60 * 60 * 1000;     // uma hora: a previsão muda pouco mais que isso
+const PREV_DIAS = 6;
+/* Acima disto o dia vira "risco": 5 mm é onde o RDO já chama de chuva (ver
+   a tradução de milímetros do INMET no README) e onde imprimação e CBUQ param. */
+const PREV_MM_RISCO = 5;
+const PREV_MM_FORTE = 20;
+
+function coordDaObra() {
+  return (OBRA && OBRA.coord) || (OBRA && COORD_OBRAS[OBRA.id]) || null;
+}
+function previsaoChave() { return 'teotonio_previsao_v1_' + ((OBRA && OBRA.id) || ''); }
+function previsaoGuardada() {
+  try {
+    const o = JSON.parse(localStorage.getItem(previsaoChave()) || 'null');
+    return o && o.dias && o.dias.length ? o : null;
+  } catch (e) { return null; }
+}
+
+/* Lê a resposta do Open-Meteo para um formato nosso, curto — é o que fica
+   guardado, e o que o desenho usa. */
+function previsaoDoOpenMeteo(j) {
+  const d = j && j.daily;
+  if (!d || !Array.isArray(d.time)) return null;
+  const n = v => (v == null || isNaN(v)) ? null : +v;
+  return d.time.map((iso, i) => ({
+    iso,
+    mm: n(d.precipitation_sum && d.precipitation_sum[i]),
+    prob: n(d.precipitation_probability_max && d.precipitation_probability_max[i]),
+    max: n(d.temperature_2m_max && d.temperature_2m_max[i]),
+    min: n(d.temperature_2m_min && d.temperature_2m_min[i]),
+    cod: n(d.weather_code && d.weather_code[i]),
+  }));
+}
+
+let _previsaoBuscando = null;
+async function previsaoBuscar() {
+  const c = coordDaObra();
+  if (!c) return null;
+  if (_previsaoBuscando) return _previsaoBuscando;
+  const url = PREV_URL + '?latitude=' + c.lat + '&longitude=' + c.lon +
+    '&daily=precipitation_sum,precipitation_probability_max,temperature_2m_max,temperature_2m_min,weather_code' +
+    '&timezone=America%2FSao_Paulo&forecast_days=' + PREV_DIAS;
+  const obraId = OBRA && OBRA.id;
+  _previsaoBuscando = (async () => {
+    const ctl = typeof AbortController === 'function' ? new AbortController() : null;
+    const t = setTimeout(() => { if (ctl) ctl.abort(); }, 9000);
+    try {
+      const r = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
+      if (!r.ok) return null;
+      const dias = previsaoDoOpenMeteo(await r.json());
+      if (!dias || !dias.length) return null;
+      const o = { em: Date.now(), obra: obraId, dias };
+      // a obra pode ter sido trocada durante a espera: guarda na chave DELA
+      try { localStorage.setItem('teotonio_previsao_v1_' + obraId, JSON.stringify(o)); } catch (e) {}
+      return o;
+    } catch (e) {
+      return null;              // sem sinal: fica a guardada, se houver
+    } finally {
+      clearTimeout(t);
+      _previsaoBuscando = null;
+    }
+  })();
+  return _previsaoBuscando;
+}
+
+function previsaoIcone(dia) {
+  const c = dia.cod;
+  if ((dia.mm || 0) >= 1 || (c >= 51 && c <= 67) || (c >= 80 && c <= 99)) return 'chuva';
+  if (c === 0 || c === 1) return 'sol';
+  if (c === 2) return 'solNuvem';
+  return 'nuvem';
+}
+
+function previsaoHTML(o) {
+  const hojeIso = getLocalISODate(new Date());
+  const dias = (o.dias || []).filter(d => d.iso >= hojeIso).slice(0, 5);
+  if (!dias.length) return '';
+  const fmtMm = v => v == null ? '—' : (v < 0.1 ? '0' : fmtNum(v, v < 10 ? 1 : 0));
+  const risco = dias.filter(d => (d.mm || 0) >= PREV_MM_RISCO);
+  const nomeDia = iso => {
+    if (iso === hojeIso) return 'Hoje';
+    const d = parseISODate(iso);
+    const amanha = new Date(); amanha.setDate(amanha.getDate() + 1);
+    if (iso === getLocalISODate(amanha)) return 'Amanhã';
+    return d.toLocaleDateString('pt-BR', { weekday: 'short' }).replace('.', '');
+  };
+  const idade = Date.now() - (o.em || 0);
+  const quando = new Date(o.em || Date.now());
+  const quandoTxt = idade > 20 * 3600 * 1000
+    ? 'de ' + quando.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) + ' — sem sinal para atualizar'
+    : 'atualizada às ' + quando.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `
+    <div class="prev-head">
+      <span class="cc-lbl">Previsão do tempo no canteiro</span>
+      <span class="prev-fonte" title="Previsão Open-Meteo na coordenada da obra">${quandoTxt}</span>
+    </div>
+    <div class="prev-dias" role="list">
+      ${dias.map(d => {
+        const mm = d.mm || 0;
+        const cls = mm >= PREV_MM_FORTE ? 'prev-forte' : mm >= PREV_MM_RISCO ? 'prev-risco' : '';
+        const temp = (d.max != null && d.min != null) ? `${Math.round(d.max)}°<small>/${Math.round(d.min)}°</small>` : '';
+        const dataBR = d.iso.slice(8, 10) + '/' + d.iso.slice(5, 7);
+        return `<div class="prev-dia ${cls}" role="listitem"
+                     aria-label="${nomeDia(d.iso)} ${dataBR}: ${fmtMm(d.mm)} milímetros${d.prob != null ? ', ' + d.prob + '% de chance de chuva' : ''}">
+          <span class="prev-nome">${nomeDia(d.iso)} <small>${dataBR}</small></span>
+          <span class="prev-ic">${ic(previsaoIcone(d))}</span>
+          <span class="prev-mm">${fmtMm(d.mm)} mm${d.prob != null ? ` <small>${d.prob}%</small>` : ''}</span>
+          <span class="prev-temp">${temp}</span>
+        </div>`;
+      }).join('')}
+    </div>
+    ${risco.length ? `<div class="prev-alerta">${ic('alerta')}<span>Chuva de ${PREV_MM_RISCO} mm ou mais prevista para
+      <strong>${risco.map(d => nomeDia(d.iso).toLowerCase() + ' (' + fmtMm(d.mm) + ' mm)').join(', ')}</strong> —
+      confira a programação de concretagem, imprimação e pavimentação.</span></div>` : ''}`;
+}
+
+/* Preenche a faixa, se ela estiver na tela. Primeiro o guardado (na hora),
+   depois a rede quando o guardado passou da validade. */
+function previsaoPreencher() {
+  const el = document.getElementById('ccPrevisao');
+  if (!el || !coordDaObra()) return;
+  const g = previsaoGuardada();
+  if (g) { el.innerHTML = previsaoHTML(g); el.hidden = !el.innerHTML.trim(); }
+  if (g && Date.now() - g.em < PREV_VALIDADE_MS) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  const obraId = OBRA && OBRA.id;
+  previsaoBuscar().then(o => {
+    const alvo = document.getElementById('ccPrevisao');
+    if (!o || !alvo || (OBRA && OBRA.id) !== obraId) return;
+    alvo.innerHTML = previsaoHTML(o);
+    alvo.hidden = !alvo.innerHTML.trim();
+  });
+}
+
 function renderCentralCampo() {
   const hoje = getLocalISODate(new Date());
   const servHoje   = servicosDaData(hoje);
@@ -10423,6 +11049,8 @@ function renderCentralCampo() {
           <span class="cc-ic">${ic('sino')}</span>
           <span>Pendente no canteiro: ${pendencias.join(' · ')}.</span>
         </div>` : ''}
+      ${coordDaObra() ? (() => { const g = previsaoGuardada(); const h = g ? previsaoHTML(g) : '';
+          return `<div class="cc-previsao" id="ccPrevisao" ${h ? '' : 'hidden'}>${h}</div>`; })() : ''}
     </section>`;
 }
 
@@ -10444,8 +11072,8 @@ function renderExecutivo() {
 
   if (STATE.filtros.frente) {
     pacotesAtivos = pacotesAtivos.filter(p => getCSVField(p, 'Frente') === STATE.filtros.frente);
-    const pacotesIds = pacotesAtivos.map(p => getCSVField(p, 'ID'));
-    rdosAtivos = rdosAtivos.filter(r => pacotesIds.includes(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
+    const pacotesIds = new Set(pacotesAtivos.map(p => getCSVField(p, 'ID')));
+    rdosAtivos = rdosAtivos.filter(r => pacotesIds.has(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
   }
 
   /* O escopo é o que o filtro de FRENTE deixou passar, com todos os meses.
@@ -11427,6 +12055,11 @@ async function montarGraficos() {
      escopo inteiro até a data de referência; o mês continua estreitando a
      janela do eixo, mais abaixo. Sem filtro, é o mesmo objeto de antes. */
   const metrics = STATE.dashData.metricsAcum || STATE.dashData.metrics;
+  /* Cores do gráfico segundo o tema: a grade quase preta e a legenda cinza-
+     escuro sumiam no fundo do tema escuro (contraste ~2:1). */
+  const corG = temaAtual() === 'dark'
+    ? { eixo: '#948b7c', legenda: '#d8d1c4', grade: 'rgba(255,255,255,0.07)', borda: '#463f33' }
+    : { eixo: 'oklch(0.55 0.02 60)', legenda: 'oklch(0.45 0.02 60)', grade: 'rgba(20,15,10,0.05)', borda: '#e4e0d8' };
   const sortedDays = metrics.sortedDays;
   const cumulative = metrics.cumulative;
   if (sortedDays.length === 0) return;
@@ -11685,14 +12318,14 @@ async function montarGraficos() {
       scales: {
         y: {
           beginAtZero: yMin === 0, min: yMin, max: yMax,
-          ticks: { callback: v => v + '%', font: { size: 10, family: 'JetBrains Mono, monospace' }, color: 'oklch(0.55 0.02 60)' },
-          grid: { color: 'rgba(20,15,10,0.05)' },
+          ticks: { callback: v => v + '%', font: { size: 10, family: 'JetBrains Mono, monospace' }, color: corG.eixo },
+          grid: { color: corG.grade },
           border: { display: false },
         },
         x: {
           ticks: {
             font: { size: 10, family: 'JetBrains Mono, monospace' },
-            color: 'oklch(0.55 0.02 60)',
+            color: corG.eixo,
             /* Oito rótulos cabem no desktop; no celular, "mai. de 24" oito
                vezes soma mais largura do que a tela tem e eles encostam uns
                nos outros ("mai. de 24nov. de 24jun. de 25"). Quatro é o que
@@ -11707,19 +12340,22 @@ async function montarGraficos() {
                  anos, o dia é ruído. Antes isso olhava só o filtro de mês,
                  então "3 meses" caía na régua de ano. */
               const diasJanela = labels.length;
-              if (diasJanela <= 45)  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-              if (diasJanela <= 200) return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
-              return d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+              /* O Chart.js chama este callback para TODOS os rótulos antes de
+                 escolher quais cabem — 600 dias, 600 chamadas por desenho. O
+                 toLocaleDateString monta um formatador novo a cada uma; o
+                 Intl guardado custa uma fração disso. */
+              return (diasJanela <= 200 ? FMT_DIA_MES : FMT_MES_ANO).format(d);
             }
           },
           grid: { display: false },
-          border: { color: 'var(--border)' },
+          // o canvas não entende var(--border): a cor vem resolvida (corG)
+          border: { color: corG.borda },
         }
       },
       plugins: {
         legend: {
           display: true, position: 'top', align: 'center',
-          labels: { usePointStyle: true, pointStyle: 'line', boxWidth: 24, font: { size: 11, family: 'JetBrains Mono, monospace' }, color: 'oklch(0.45 0.02 60)', padding: 14 },
+          labels: { usePointStyle: true, pointStyle: 'line', boxWidth: 24, font: { size: 11, family: 'JetBrains Mono, monospace' }, color: corG.legenda, padding: 14 },
         },
         tooltip: {
           backgroundColor: 'rgba(15,12,8,0.95)', titleColor: '#fff',
@@ -12177,7 +12813,7 @@ function renderCroquiEstacas() {
       ? `E${e.n} · sem lançamento`
       : `E${e.n} · ${lanc} RDO${lanc !== 1 ? 's' : ''} · ${pacs} pacote${pacs !== 1 ? 's' : ''}`;
     return `<div class="croqui-pt${sel}" style="left:${(e.x * 100).toFixed(2)}%;top:${(e.y * 100).toFixed(2)}%;${cor}"
-                 title="${escHtml(t)}" onclick="croquiSelecionar('${escHtml(c.eixo)}', ${e.n})">${e.n}</div>`;
+                 title="${escHtml(t)}" onclick="croquiSelecionar(${jsArg(c.eixo)}, ${e.n})">${e.n}</div>`;
   };
 
   const detalhe = () => {
@@ -12903,7 +13539,7 @@ window.fecharMedicao = async function () {
   if (!confirm(
     `Fechar a medição de ${nomeMesAno(comp)}?\n\n` +
     `${lista.length} item contratual será congelado como o que foi apresentado à fiscalização.` +
-    (estourados ? `\n\n⚠️ ${estourados} item está ACIMA da quantidade contratual.` : '') +
+    (estourados ? `\n\nATENÇÃO: ${estourados} item está ACIMA da quantidade contratual.` : '') +
     `\n\nLançamento retroativo continua sendo aceito depois disso — a diferença passa a aparecer na tela em vez de reescrever o número calado.`
   )) return;
 
@@ -13786,7 +14422,10 @@ function renderHistoricoServicos() {
       if (termo) {
         const alvo = [
           getCSVField(r, 'ID'), getCSVField(r, 'Pacote_ID'), getCSVField(r, 'Pacote_Nome'),
-          getCSVField(r, 'Local_Estaca'), getCSVField(r, 'Observações') || getCSVField(r, 'Observacoes'),
+          getCSVField(r, 'Local_Estaca'),
+          // a coluna é `Observacao` (é o que o lançamento grava); as outras
+          // duas grafias ficam para planilha antiga
+          getCSVField(r, 'Observacao') || getCSVField(r, 'Observações') || getCSVField(r, 'Observacoes'),
           getCSVField(r, 'Equipe'), getCSVField(r, 'Apontador'), getCSVField(r, 'Data'),
         ].join(' ').toLowerCase();
         if (!alvo.includes(termo)) return false;
@@ -13882,7 +14521,7 @@ function renderHistoricoServicos() {
             ${podeExcluir(r) ? `<button class="gantt-edit-btn" onclick="histDeletarServico(${idx})" title="Apagar este lançamento" aria-label="Apagar lançamento" style="color:var(--err,#e53e3e);margin-left:2px">${ic('lixeira')} <span class="so-mob">Apagar</span></button>` : ''}
           </td>
         </tr>
-        <tr id="hist-edit-row-${idx}" style="display:none"></tr>`;
+        <tr id="hist-edit-row-${idx}" data-id="${escHtml(id)}" style="display:none"></tr>`;
     }).join('');
 
     /* PAGINAÇÃO DE VERDADE. Antes o corte era cego em 100 e não havia como
@@ -13995,8 +14634,23 @@ function chaveFotoServico(id) {
    `idx` é a posição na lista invertida — a mesma que histEditarServico
    já usava para achar a linha.
    ------------------------------------------------------------------ */
+/* O LANÇAMENTO DE UMA LINHA DA TABELA — pelo ID, nunca pela posição.
+   O `idx` continua sendo a chave dos elementos na tela, mas a linha da
+   planilha que ele representa é a do ID guardado no desenho (`data-id`).
+   Achar pela posição na lista invertida era o defeito: com a edição aberta,
+   o refresh de fundo não redesenha a tabela mas TROCA o STATE.rdoavanco;
+   bastava um apontador lançar um serviço nesse meio para todas as posições
+   andarem uma casa — e o Salvar mandava o formulário por cima do
+   lançamento VIZINHO, calado, na base da medição. */
+function histLinha(idx) {
+  const el = document.getElementById(`hist-edit-row-${idx}`);
+  const id = el && el.dataset.id;
+  if (id) return (STATE.rdoavanco || []).find(x => String(getCSVField(x, 'ID')).trim() === String(id).trim()) || null;
+  return [...(STATE.rdoavanco || [])].reverse()[idx] || null;   // linha sem ID: como sempre foi
+}
+
 function histFormEdicao(idx) {
-  const r = [...STATE.rdoavanco].reverse()[idx];
+  const r = histLinha(idx);
   if (!r) return '';
 
   const id          = getCSVField(r, 'ID') || '';
@@ -14142,7 +14796,7 @@ window.histEditarServico = function(idx) {
     // A foto anexada aqui é de um serviço que JÁ EXISTE: o carimbo tem de
     // sair com a frente, o pacote e a estaca DELE, não com o que estiver
     // no formulário de lançamento.
-    const r = [...STATE.rdoavanco].reverse()[idx];
+    const r = histLinha(idx);
     if (r) {
       const jaTem = fotosDaLinha(r);
       const chave = chaveFotoServico(getCSVField(r, 'ID'));
@@ -14187,7 +14841,7 @@ window.histCancelarEdicao = function(idx) {
   if (toggle) toggle.style.color = '';
   // fecha sem salvar = descarta o que foi escolhido, senão a foto
   // reapareceria pendurada na próxima vez que a linha abrisse
-  const r = [...STATE.rdoavanco].reverse()[idx];
+  const r = histLinha(idx);
   if (r) {
     const chave = chaveFotoServico(getCSVField(r, 'ID'));
     delete _fotosPorServico[chave];
@@ -14197,8 +14851,8 @@ window.histCancelarEdicao = function(idx) {
 };
 
 window.histSalvarEdicao = async function(idx) {
-  const rdos = [...STATE.rdoavanco].reverse();
-  const r = rdos[idx];
+  const r = histLinha(idx);
+  if (!r) { toast('Este lançamento mudou ou saiu da planilha — feche e abra a edição de novo.', 'error', 6000); return; }
   const id = getCSVField(r, 'ID');
   if (!id) { toast('ID do lançamento não encontrado', 'error'); return; }
 
@@ -14284,8 +14938,8 @@ window.histSalvarEdicao = async function(idx) {
 };
 
 window.histDeletarServico = async function(idx) {
-  const rdos = [...STATE.rdoavanco].reverse();
-  const r = rdos[idx];
+  const r = histLinha(idx);
+  if (!r) { toast('Este lançamento mudou ou saiu da planilha — atualize a tela.', 'error', 6000); return; }
   const id = getCSVField(r, 'ID');
   if (!id) { toast('ID do lançamento não encontrado', 'error'); return; }
 
@@ -14300,6 +14954,7 @@ window.histDeletarServico = async function(idx) {
 
     // Remoção otimista: tira da tela na hora, sem esperar o CSV publicado
     // (que é cacheado pelo Google e demora minutos para atualizar).
+    _APAGADOS_LOCAL.add(String(id).trim());
     STATE.rdoavanco = STATE.rdoavanco.filter(x => String(getCSVField(x,'ID')).trim() !== String(id).trim());
     render();
     toast('Lançamento apagado', 'success');
@@ -14320,7 +14975,7 @@ async function verificarBackendNaoCriou(antes, esperadoRemovido, contexto) {
   const depois = STATE.rdoavanco.length;
   if (depois > antes) {
     toast(
-      '⚠️ ATENÇÃO: o servidor CRIOU ' + (depois - antes) + ' linha(s) em vez de apagar.\n' +
+      'ATENÇÃO: o servidor CRIOU ' + (depois - antes) + ' linha(s) em vez de apagar.\n' +
       'O Apps Script está sem o tratamento de "deleteRDO" no doGet. ' +
       'Cole o arquivo Code.gs atualizado e republique o app.',
       'error', 0
@@ -14356,7 +15011,7 @@ window.apagarDuplicatasRDO = async function() {
   // Não adianta limpar sem antes esvaziar a fila.
   const naFila = outboxLer().length;
   if (naFila > 0) {
-    if (confirm(`⚠️ Há ${naFila} lançamento(s) na fila de envio que estão sendo reenviados e RECRIANDO duplicatas.\n\nPrecisa descartar a fila ANTES de limpar.\n\nDescartar a fila agora?`)) {
+    if (confirm(`ATENÇÃO: há ${naFila} lançamento(s) na fila de envio que estão sendo reenviados e RECRIANDO duplicatas.\n\nPrecisa descartar a fila ANTES de limpar.\n\nDescartar a fila agora?`)) {
       outboxGravar([]);
       atualizarIndicadorOutbox();
       toast('Fila descartada. Agora clique em "Apagar duplicatas" de novo.', 'info', 6000);
@@ -14491,20 +15146,25 @@ function toggleSabadoUtil() {
   render();
 }
 
-// Resumo legível de um registro de RDO Diário.
+// Resumo legível de um registro de RDO Diário — PARA A TELA.
+// Tudo aqui é texto digitado no campo e vai para o innerHTML: sai escapado.
+// Um "<img onerror>" nas ocorrências rodava script na sessão de quem
+// clicasse em "Ver" — e a sessão do admin apaga e arquiva firma. O `id` fica
+// cru porque também vai para os handlers, por jsArg().
 function resumoRDO(r) {
+  const e = v => escHtml(v);
   return {
     id: getCSVField(r, 'ID') || '',
-    encarregado: getCSVField(r, 'Encarregado') || '—',
-    apontadorD: getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || '—',
-    apontadorN: getCSVField(r, 'Apontador_Noturno') || '—',
-    climaM: getCSVField(r, 'Clima_Manha') || '—',
-    climaT: getCSVField(r, 'Clima_Tarde') || '—',
-    climaN: getCSVField(r, 'Clima_Noite') || '—',
+    encarregado: e(getCSVField(r, 'Encarregado') || '—'),
+    apontadorD: e(getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || '—'),
+    apontadorN: e(getCSVField(r, 'Apontador_Noturno') || '—'),
+    climaM: e(getCSVField(r, 'Clima_Manha') || '—'),
+    climaT: e(getCSVField(r, 'Clima_Tarde') || '—'),
+    climaN: e(getCSVField(r, 'Clima_Noite') || '—'),
     hasNot: !!(getCSVField(r, 'Apontador_Noturno') || String(getCSVField(r, 'Tem_Turno_Noturno')).toLowerCase() === 'true' || getCSVField(r, 'Tem_Turno_Noturno') === 'Sim'),
-    visitas: getCSVField(r, 'Visitas') || '',
-    ocorrencias: getCSVField(r, 'Ocorrencias') || '',
-    obs: getCSVField(r, 'Observacoes_Gerais') || ''
+    visitas: e(getCSVField(r, 'Visitas') || ''),
+    ocorrencias: e(getCSVField(r, 'Ocorrencias') || ''),
+    obs: e(getCSVField(r, 'Observacoes_Gerais') || '')
   };
 }
 
@@ -14551,16 +15211,16 @@ function visualizarRDO(id) {
   const s = resumoRDO(r);
   const det = efetivoDetalhe(r);
   const soma = arr => arr.reduce((a, [, v]) => a + v, 0);
-  const efTxt = arr => arr.length ? arr.map(([k, v]) => `${k}: <strong>${v}</strong>`).join(' · ') : '—';
+  const efTxt = arr => arr.length ? arr.map(([k, v]) => `${escHtml(k)}: <strong>${v}</strong>`).join(' · ') : '—';
   const servs = servicosDaData(data);
   const servHtml = servs.length ? `
     <table class="t" style="width:100%;font-size:var(--fs-sm);margin-top:6px">
       <thead><tr><th style="text-align:left">Pacote</th><th style="text-align:left">Local</th><th style="text-align:right">Qtd</th><th>Turno</th></tr></thead>
       <tbody>${servs.map(sv => `<tr>
         <td>${escHtml(nomeDoPacoteNoLancamento(sv) || '—')}</td>
-        <td class="t-mono" style="font-size:var(--fs-xs)">${getCSVField(sv, 'Local_Estaca') || '—'}</td>
-        <td style="text-align:right">${fmtNum(num(getCSVField(sv, 'Quantidade') || 0))} ${getCSVField(sv, 'Unidade') || ''}</td>
-        <td style="text-align:center">${getCSVField(sv, 'Turno') || 'Diurno'}</td>
+        <td class="t-mono" style="font-size:var(--fs-xs)">${escHtml(getCSVField(sv, 'Local_Estaca') || '—')}</td>
+        <td style="text-align:right">${fmtNum(num(getCSVField(sv, 'Quantidade') || 0))} ${escHtml(getCSVField(sv, 'Unidade') || '')}</td>
+        <td style="text-align:center">${escHtml(getCSVField(sv, 'Turno') || 'Diurno')}</td>
       </tr>`).join('')}</tbody>
     </table>` : '<div style="color:var(--muted);font-size:var(--fs-sm);margin-top:6px">Nenhum serviço lançado nesta data.</div>';
   const linha = (lbl, val) => `<div style="display:flex;gap:8px;font-size:var(--fs-md);padding:3px 0"><span style="color:var(--muted);min-width:130px">${lbl}</span><span style="font-weight:600">${val || '—'}</span></div>`;
@@ -14570,7 +15230,7 @@ function visualizarRDO(id) {
       <button class="btn btn-sm btn-outline" onclick="fecharModalRDO()">Fechar</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 20px">
-      ${linha('ID', s.id)}
+      ${linha('ID', escHtml(s.id))}
       ${linha('Encarregado', s.encarregado)}
       ${linha('Apontador diurno', s.apontadorD)}
       ${linha('Apontador noturno', s.apontadorN)}
@@ -14593,7 +15253,7 @@ function visualizarRDO(id) {
       ${servHtml}
     </div>
     <div style="margin-top:16px;text-align:right">
-      <button class="btn btn-primary btn-sm" onclick="gerarPDFDiario('${data}')">${ic('pdf')} Gerar PDF</button>
+      <button class="btn btn-primary btn-sm" onclick="gerarPDFDiario(${jsArg(data)})">${ic('pdf')} Gerar PDF</button>
     </div>
   `);
 }
@@ -14605,7 +15265,7 @@ function resolverDuplicata(data) {
   if (lista.length < 2) { toast('Não há duplicata nesta data.', 'info'); fecharModalRDO(); return; }
   const oficialId = getOficialRDO(data);
   const soma = arr => arr.reduce((a, [, v]) => a + v, 0);
-  const efTxt = arr => arr.length ? arr.map(([k, v]) => `${k}: <strong>${v}</strong>`).join(' · ') : '—';
+  const efTxt = arr => arr.length ? arr.map(([k, v]) => `${escHtml(k)}: <strong>${v}</strong>`).join(' · ') : '—';
   const cards = lista.map(r => {
     const s = resumoRDO(r);
     const det = efetivoDetalhe(r);
@@ -14613,7 +15273,7 @@ function resolverDuplicata(data) {
     return `
       <div style="flex:1;min-width:250px;border:2px solid ${ehOf ? 'var(--grn)' : 'var(--border)'};border-radius:var(--r);padding:14px;background:${ehOf ? 'var(--grn-l)' : 'var(--bg)'}">
         <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:8px">
-          <span class="t-mono" style="font-size:var(--fs-sm);font-weight:700">${s.id || '(sem ID)'}</span>
+          <span class="t-mono" style="font-size:var(--fs-sm);font-weight:700">${escHtml(s.id || '(sem ID)')}</span>
           ${ehOf ? `<span class="pill pill-grn">${ic('estrela')} oficial</span>` : ''}
         </div>
         <div style="font-size:var(--fs-sm);line-height:1.7">
@@ -14626,9 +15286,9 @@ function resolverDuplicata(data) {
           <div><span style="color:var(--muted)">Efetivo noturno (${soma(det.noturno)}):</span> ${efTxt(det.noturno)}</div>
         </div>
         <div style="display:flex;gap:6px;margin-top:12px;flex-wrap:wrap">
-          <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${s.id}')">${ic('olho')} Ver completo</button>
-          ${ehOf ? '' : `<button class="btn btn-sm btn-primary" onclick="definirOficial('${data}','${s.id}')">${ic('check')} Definir como oficial</button>`}
-          <button class="btn btn-sm" onclick="excluirRDODiario('${data}','${s.id}')" style="background:var(--red);color:#fff;border:none">${ic('lixeira')} Excluir</button>
+          <button class="btn btn-sm btn-outline" onclick="visualizarRDO(${jsArg(s.id)})">${ic('olho')} Ver completo</button>
+          ${ehOf ? '' : `<button class="btn btn-sm btn-primary" onclick="definirOficial(${jsArg(data)},${jsArg(s.id)})">${ic('check')} Definir como oficial</button>`}
+          <button class="btn btn-sm" onclick="excluirRDODiario(${jsArg(data)},${jsArg(s.id)})" style="background:var(--red);color:#fff;border:none">${ic('lixeira')} Excluir</button>
         </div>
       </div>`;
   }).join('');
@@ -14736,7 +15396,7 @@ function excluirRDODiario(data, id) {
       </p>
       <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap">
         <button class="btn btn-sm btn-outline" onclick="resolverDuplicata('${data}')">Cancelar</button>
-        <button class="btn btn-sm" id="btnConfirmaExclui" onclick="executarExclusaoRDODiario('${data}','${id}')" style="background:var(--red);color:#fff;border:none">Excluir definitivamente</button>
+        <button class="btn btn-sm" id="btnConfirmaExclui" onclick="executarExclusaoRDODiario(${jsArg(data)},${jsArg(id)})" style="background:var(--red);color:#fff;border:none">Excluir definitivamente</button>
       </div>
     </div>
   `);
@@ -14746,7 +15406,7 @@ async function executarExclusaoRDODiario(data, id) {
   const btn = document.getElementById('btnConfirmaExclui');
   if (btn) { btn.disabled = true; btn.textContent = 'Excluindo…'; }
   try {
-    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDODiario', id, data, ...authParams() }, 0);
+    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDODiario', id, data, obra: OBRA.id, ...authParams() }, 0);
     if (!result.ok) {
       if (/Ação desconhecida/i.test(result.error || '')) {
         toast('O backend ainda não tem "deleteRDODiario". Cole o Code.gs atualizado no Apps Script e republique (Nova versão).', 'error', 0);
@@ -15385,14 +16045,14 @@ function renderHistoricoDiarios() {
         <tr${dup ? ' style="background:var(--red-l)"' : ''}>
           <td class="celula-check" data-rot="Selecionar para o lote" style="width:32px;text-align:center"><input type="checkbox" class="rdo-check" data-data="${dStr}" onchange="toggleRDOSelect('${dStr}', this)" aria-label="Selecionar RDO de ${fmtData(dStr)}" style="width:16px;height:16px;cursor:pointer"></td>
           <td class="celula-titulo">${fmtData(getCSVField(r, 'Data'))}${dup ? ` <span class="pill pill-red" title="Há ${contagemPorData[dStr]} RDOs nesta data — resolva qual é o oficial">${ic('alerta')} ${contagemPorData[dStr]}×</span>` : ''}${ehOficial ? `<span class="pill pill-grn" title="RDO oficial desta data">${ic('estrela')} oficial</span>` : ''}</td>
-          <td class="t-mono" data-rot="ID">${rid}</td>
-          <td style="font-size:var(--fs-sm)" data-rot="Encarregado">${getCSVField(r, 'Encarregado')||'—'}</td>
-          <td style="font-size:var(--fs-sm)" data-rot="Apontador">${getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || '—'}</td>
-          <td style="font-size:var(--fs-xs);color:var(--muted)" data-rot="Clima">${climaResumo||'—'}</td>
+          <td class="t-mono" data-rot="ID">${escHtml(rid)}</td>
+          <td style="font-size:var(--fs-sm)" data-rot="Encarregado">${escHtml(getCSVField(r, 'Encarregado')||'—')}</td>
+          <td style="font-size:var(--fs-sm)" data-rot="Apontador">${escHtml(getCSVField(r, 'Apontador_Diurno') || getCSVField(r, 'Apontador') || '—')}</td>
+          <td style="font-size:var(--fs-xs);color:var(--muted)" data-rot="Clima">${escHtml(climaResumo||'—')}</td>
           <td class="t-num" data-rot="Efetivo">${total}</td>
           <td data-rot="Noturno">${hasNoturno ?'<span class="pill pill-blu">Sim</span>':'<span class="pill pill-ylw">Não</span>'}</td>
           <td class="celula-acoes" style="white-space:nowrap">
-            <button class="btn btn-sm btn-outline" onclick="visualizarRDO('${rid}')" title="Visualizar (não baixa arquivo)" aria-label="Visualizar RDO de ${fmtData(dStr)}">${ic('olho')} <span class="so-mob">Ver</span></button>
+            <button class="btn btn-sm btn-outline" onclick="visualizarRDO(${jsArg(rid)})" title="Visualizar (não baixa arquivo)" aria-label="Visualizar RDO de ${fmtData(dStr)}">${ic('olho')} <span class="so-mob">Ver</span></button>
             <button class="btn btn-sm btn-outline" onclick="editarRDODiario('${dStr}')" title="Editar este RDO" aria-label="Editar RDO de ${fmtData(dStr)}" style="margin-left:2px">${ic('editar')} <span class="so-mob">Editar</span></button>
             ${dup ? `<button class="btn btn-sm" onclick="resolverDuplicata('${dStr}')" title="Resolver duplicata" aria-label="Resolver duplicata de ${fmtData(dStr)}" style="margin-left:2px;background:var(--red);color:#fff;border:none">${ic('balanca')} <span class="so-mob">Duplicata</span></button>` : ''}
             <button class="btn btn-sm btn-primary" onclick="gerarPDFDiario('${dStr}')" title="Gerar PDF (baixa arquivo)" aria-label="Gerar PDF do RDO de ${fmtData(dStr)}" style="margin-left:2px">${ic('pdf')} <span class="so-mob">PDF</span></button>
@@ -15423,7 +16083,7 @@ function renderHistoricoDiarios() {
       <table class="t t-cartoes">
         <thead><tr>
           <th style="width:32px;text-align:center"><input type="checkbox" id="cbTodos" onchange="toggleTodosRDOs(this)" title="Selecionar todos" aria-label="Selecionar todos os RDOs" style="width:16px;height:16px;cursor:pointer"></th>
-          <th>ID</th><th>Data</th><th>Encarregado</th><th>Apontador</th>
+          <th>Data</th><th>ID</th><th>Encarregado</th><th>Apontador</th>
           <th>Clima</th>
           <th class="t-num" style="text-align:right">Efetivo</th>
           <th>Noturno?</th>
@@ -15619,7 +16279,7 @@ function renderRDO() {
           </div>
         </div>
         <div style="margin-top:12px;padding:10px 14px;background:var(--blu-l);border-radius:var(--r);font-size:var(--fs-sm);color:var(--blu)">
-          ℹ Efetivo, equipamentos e clima vão na aba <strong>RDO Diário</strong> (1× por dia, separadamente).
+          ${ic('info')} Efetivo, equipamentos e clima vão na aba <strong>RDO Diário</strong> (1× por dia, separadamente).
         </div>
       </div>
     </div>
@@ -15968,7 +16628,7 @@ function renderServicoRow(s, idx, frentes) {
                 const rua = eixoPorId(eixoDoPacote(p));
                 return `<button type="button" class="chip ${s.pacoteId === pid ? 'on' : ''}"
                   title="${escHtml(getCSVField(p, 'Frente'))}${rua ? ' · ' + escHtml(rua.label) : ''}"
-                  onclick="usarPacoteFrequente(${idx}, '${escHtml(pid)}')"
+                  onclick="usarPacoteFrequente(${idx}, ${jsArg(pid)})"
                   >${escHtml(nomeCurtoDoPacote(p, rua))}</button>`;
               }).join('')}
             </div>`;
@@ -16157,6 +16817,10 @@ function rerenderServicoRow(idx) {
     const tmp = document.createElement('div');
     tmp.innerHTML = html;
     old.replaceWith(tmp.firstElementChild);
+    // a linha nasce com a caixa de fotos vazia, mas as escolhidas continuam
+    // pendentes: sem redesenhá-las, parecia que tinham sumido e o apontador
+    // tirava de novo — e subiam duplicadas
+    try { renderFotosPrev(String(idx)); } catch (e) {}
   }
 }
 
@@ -16204,6 +16868,13 @@ window.copiarServicosDeOntem = function() {
 
   const jaTemDados = STATE.draft.servicos.some(s => s.pacoteId || qtdDoServico(s) > 0);
   if (jaTemDados && !confirm('Substituir os serviços já preenchidos neste rascunho pelos ' + doDia.length + ' serviços de ' + fmtData(ultimaData) + '?')) return;
+
+  /* As fotos escolhidas são guardadas pela POSIÇÃO do serviço ('0', '1'…):
+     trocar a lista inteira sem soltá-las punha a foto do serviço 0 de antes
+     no serviço 0 copiado — outro pacote — e ela subia como prova DELE. */
+  const tinhaFotos = Object.keys(_fotosPorServico).some(k => /^o?\d+$/.test(k) && (_fotosPorServico[k] || []).length);
+  limparFotosDoFormulario();
+  if (tinhaFotos) toast('As fotos escolhidas antes foram soltas: anexe de novo no serviço certo.', 'info', 6000);
 
   STATE.draft.servicos = doDia.map(r => {
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
@@ -16507,8 +17178,8 @@ async function salvarRDO() {
   });
 
   let msgConfirm = `Confirmar envio de ${enviar.length} serviço${enviar.length!==1?'s':''}?\nData: ${d.data}  ·  Turno: ${d.turno}`;
-  if (repetidos > 0) msgConfirm += `\n\n⚠️ ${repetidos} já estava${repetidos>1?'m':''} lançado${repetidos>1?'s':''} neste dia e NÃO ${repetidos>1?'serão':'será'} reenviado${repetidos>1?'s':''} (para não duplicar).`;
-  if (estouros.length > 0) msgConfirm += `\n\n⚠️ QUANTIDADE ACIMA DO SALDO:\n• ` + estouros.join('\n• ') + `\nConfira se não é erro de digitação.`;
+  if (repetidos > 0) msgConfirm += `\n\nATENÇÃO: ${repetidos} já estava${repetidos>1?'m':''} lançado${repetidos>1?'s':''} neste dia e NÃO ${repetidos>1?'serão':'será'} reenviado${repetidos>1?'s':''} (para não duplicar).`;
+  if (estouros.length > 0) msgConfirm += `\n\nATENÇÃO — QUANTIDADE ACIMA DO SALDO:\n• ` + estouros.join('\n• ') + `\nConfira se não é erro de digitação.`;
   if (!confirm(msgConfirm)) return;
 
   batch = enviar;
@@ -16537,6 +17208,9 @@ async function salvarRDO() {
 
   function limparFormularioRDO() {
     clearDraft();
+    // o formulário novo começa sem as fotos do anterior (ver CLAUDE.md,
+    // "A foto é daquele serviço"): elas moram fora do rascunho
+    limparFotosDoFormulario();
     STATE.draft = {
       ...defaultDraft(),
       apontador: d.apontador,
@@ -16925,6 +17599,9 @@ function normalizarDiarioV4(d) {
 }
 
 function saveDiarioV4(d) {
+  // a hora do rascunho decide, quando a fila subir o turno, se ele ainda
+  // tem algo NOVO (editado depois de ir para a fila) ou se já subiu inteiro
+  d._salvoEm = Date.now();
   try { localStorage.setItem(lsObra('teotonio_rdo_diario_v4_' + d.data), JSON.stringify(d)); } catch(e) {}
 }
 
@@ -17077,9 +17754,23 @@ function carregarDiarioDaSheet(data) {
 // Abre a tela de lançamento já carregada com o RDO da data informada, para
 // edição a partir da lista do Histórico. Reusa carregarDiarioDaSheet (mesmo
 // caminho do formulário) e volta ao seletor de turno.
+/* O DIA DE QUALQUER DATA, com a mesma precedência que o dia de hoje já tinha
+   (ver renderRDODiarioV4): rascunho presente é trabalho que não subiu, e ele
+   manda. A lista dos 14 dias, o campo de data e o Editar do Histórico
+   carregavam a planilha PRIMEIRO — e o apontador da noite que preencheu o
+   turno depois da meia-noite, com a aba recarregada, voltava ao dia pela
+   lista e perdia tudo no primeiro toque (o autosave gravava por cima).
+   A parte de um apontador (obra de várias partes) não entra aqui: ela tem o
+   aviso próprio de "parte começada" no seletor de turnos. */
+function abrirDiaV4(iso) {
+  const r = loadDiarioV4(iso);
+  if (r && !r.parte) return completarDiarioComPlanilha(r);
+  return carregarDiarioDaSheet(iso) || r || defaultDiarioV4(iso);
+}
+
 window.editarRDODiario = function(data) {
   if (!data) return;
-  DIARIO_V4 = carregarDiarioDaSheet(data) || loadDiarioV4(data) || defaultDiarioV4(data);
+  DIARIO_V4 = abrirDiaV4(data);
   DIARIO_TURNO_ATIVO = null;
   navigate('rdodiario');
   toast('Editando RDO de ' + fmtData(data) + ' — escolha o turno para ajustar.', 'info', 4000);
@@ -17375,7 +18066,9 @@ async function salvarParteV4(d, t, btn, original) {
     contribuicao: JSON.stringify(contribuicao), contribuicao_de: d.parte.de || '',
   };
   try {
-    const result = await jsonp(CONFIG.appsScript, { ...params, ...authParams() }, 0, 0, null);
+    // enviarAcao, não jsonp: um dia pesado (dois turnos, paralisações, texto
+    // longo) passava do limite da URL e dava um falso "sem internet"
+    const result = await enviarAcao({ ...params, ...authParams() }, 0, 0);
     if (!result.ok) throw new Error(result.mensagem || result.error || 'Erro');
     clearDiarioV4(d.data);
     diarioLocalGuardar(d.data, result.linha);
@@ -17390,7 +18083,8 @@ async function salvarParteV4(d, t, btn, original) {
     btn.disabled = false;
     btn.innerHTML = original;
     if (ehErroDeRede(e)) {
-      const guardou = await outboxAdicionar({ kind: 'diario', params,
+      saveDiarioV4(d);
+      const guardou = await outboxAdicionar({ kind: 'diario', params, rascunhoEm: d._salvoEm,
         descricao: `RDO Diário · parte de ${contribuicao.apontador} · ${t} · ${d.data}` });
       toast(guardou
         ? 'Sem internet — sua parte ficou guardada no aparelho. Vai enviar sozinha quando o sinal voltar.'
@@ -17456,7 +18150,7 @@ function cartaoTurnoComPartes(d, partes, t, rot, icone) {
 }
 
 window.abrirDiarioNaData = function (iso) {
-  DIARIO_V4 = carregarDiarioDaSheet(iso) || loadDiarioV4(iso) || defaultDiarioV4(iso);
+  DIARIO_V4 = abrirDiaV4(iso);
   transitionTo(render);
 };
 
@@ -17592,7 +18286,7 @@ function renderFormularioTurno() {
   } else if (outroPreenchido) {
     infoOutroHtml = `
       <div style="background:var(--blu-l);border:1px solid var(--blu);border-radius:var(--r);padding:10px 14px;margin-bottom:14px;font-size:var(--fs-sm);color:var(--blu)">
-        ${ic('info')} Turno ${outroLabel} já foi preenchido por <strong>${d[outroTurno].apontador}</strong>. Você está adicionando o ${turnoLabel}.
+        ${ic('info')} Turno ${outroLabel} já foi preenchido por <strong>${escHtml(d[outroTurno].apontador)}</strong>. Você está adicionando o ${turnoLabel}.
       </div>
     `;
   }
@@ -17713,7 +18407,7 @@ function renderFormularioTurno() {
     
     <div class="stagger-item" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 18px;animation-delay:.3s">
       <div style="font-size:var(--fs-sm);color:var(--muted);max-width:480px">
-        ℹ Salva os dados do turno ${turnoLabel} no RDO Diário desta data. Se já houver outro turno, não é sobrescrito.
+        ${ic('info')} Salva os dados do turno ${turnoLabel} no RDO Diário desta data. Se já houver outro turno, não é sobrescrito.
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn btn-outline" onclick="resetTurnoV4()">Limpar turno</button>
@@ -17858,7 +18552,7 @@ function attachRDODiarioV4Form() {
   if (dataInput) {
     dataInput.onchange = () => {
       const novaData = dataInput.value;
-      DIARIO_V4 = carregarDiarioDaSheet(novaData) || loadDiarioV4(novaData) || defaultDiarioV4(novaData);
+      DIARIO_V4 = abrirDiaV4(novaData);
       transitionTo(render);
     };
   }
@@ -18071,7 +18765,8 @@ async function salvarDiarioV4() {
   // NÃO confiamos no navigator.onLine: tentamos enviar de verdade e só caímos
   // na fila se a rede realmente falhar (no catch). Evita falso "sem internet".
   try {
-    const result = await jsonp(CONFIG.appsScript, {...params, ...authParams()}, 0, 0, null);
+    // enviarAcao, não jsonp: dia pesado passa do limite da URL (vira POST)
+    const result = await enviarAcao({ ...params, ...authParams() }, 0, 0);
     if (!result.ok) throw new Error(result.error || 'Erro');
     // Gravou no servidor: o rascunho local cumpriu o papel dele e sai de cena.
     // `clearDiarioV4` existia e nunca era chamada — o rascunho ficava para
@@ -18094,7 +18789,9 @@ async function salvarDiarioV4() {
     btn.innerHTML = original;
     if (ehErroDeRede(e)) {
       // Mesmo cuidado do Lançar Serviço: só avisa "guardado" se guardou mesmo.
-      const guardou = await outboxAdicionar({ kind: 'diario', params: params, descricao: descricaoFila });
+      saveDiarioV4(d);    // o rascunho fica (é o que a tela mostra), carimbado agora
+      const guardou = await outboxAdicionar({ kind: 'diario', params: params, descricao: descricaoFila,
+                                              rascunhoEm: d._salvoEm });
       if (guardou) {
         toast('Sem internet — turno guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0);
       } else {
@@ -18945,6 +19642,10 @@ async function depositarRDOPdf(data, pacotePronto) {
     }, 1, 3000);
     if (!(r && r.ok)) {
       _DEPOSITO_FALHA = erroLegivel((r && (r.mensagem || r.error)) || 'o servidor recusou o depósito');
+    } else if (typeof _ASSIN_RDO !== 'undefined' && _ASSIN_RDO && _ASSIN_RDO.data === data) {
+      // o painel do dia dizia "Repondo…" para sempre: ele compara com o
+      // número de firmas do depósito, que acabou de mudar
+      _ASSIN_RDO.noDeposito = pdf.assinaturas || 0;
     }
     return !!(r && r.ok);
   } catch (e) {
@@ -19074,9 +19775,12 @@ async function varrerRDOsAssinados() {
   if (!r || !r.ok || !r.pendentes || !r.pendentes.length) return 0;
 
   let repostos = 0;
-  for (const pend of r.pendentes.slice(0, RDO_VARREDURA_MAX)) {
+  /* Primeiro tira os dias já tentados, DEPOIS corta no máximo por carga.
+     Na ordem inversa, os três primeiros (já tentados) ocupavam a janela
+     para sempre, e o quarto dia pendente nunca era alcançado na sessão. */
+  const aTentar = r.pendentes.filter(pend => !_ASSIN_VARRIDOS.has(OBRA.id + '|' + pend.data));
+  for (const pend of aTentar.slice(0, RDO_VARREDURA_MAX)) {
     const chave = OBRA.id + '|' + pend.data;
-    if (_ASSIN_VARRIDOS.has(chave)) continue;
     _ASSIN_VARRIDOS.add(chave);
     try {
       if (await depositarRDOPdf(pend.data)) repostos++;
@@ -19118,7 +19822,7 @@ function painelAssinaturasHtml(lista, noDeposito, data) {
             (a.origem === 'arquivada' ? ' <span class="ass-tag">firma arquivada</span>' : '')
           : (a.vencido ? 'link vencido — cancele e reabra no backend' : 'pendente')}</small>
       </span>
-      ${ok ? '' : `<button type="button" class="btn btn-sm btn-outline"
+      ${(ok || !a.link) ? '' : `<button type="button" class="btn btn-sm btn-outline"
         onclick="copiarLinkAssinatura(${i})" title="Copiar o link pessoal de ${escHtml(a.email || '')}"
         >${ic('copiar', 13)} Link</button>`}
     </div>`;
@@ -19530,7 +20234,7 @@ function pintarFirmaArquivada(msg) {
       <div class="firma-galeria">
         ${anteriores.map(a => `
           <button type="button" class="firma-item${_FIRMA.escolhida === a.ponteiro ? ' sel' : ''}"
-            onclick="firmaEscolherAnterior('${escHtml(a.ponteiro)}')">
+            onclick="firmaEscolherAnterior(${jsArg(a.ponteiro)})">
             <img src="${a.imagem}" alt="Firma de ${escHtml(a.data)}">
             <small>${escHtml(fmtData ? fmtData(a.data) : a.data)}</small>
           </button>`).join('')}
@@ -19870,10 +20574,11 @@ async function _gerarPDFInterno(data, turnoFocus) {
   // Tornando a função à prova de falhas: se o botão não enviou o turno, ela mesma descobre qual tela está aberta
   const focus = turnoFocus || (typeof DIARIO_TURNO_ATIVO !== 'undefined' ? DIARIO_TURNO_ATIVO : null);
 
-  const fromSheet = (STATE.rdodiario || []).find(r => {
-    const rd = String(r['Data']);
-    return rd === data || (parseISODate(rd) && parseISODate(rd).toISOString().split('T')[0] === data);
-  });
+  /* A MESMA junção do servidor (ver "O RDO Diário é UMA linha por dia").
+     Antes: `r['Data']` — com o cabeçalho em minúsculas vinha "undefined" —,
+     e a primeira linha do dia em vez do dia unido. Uma data digitada à mão
+     inválida em qualquer linha estourava o toISOString e derrubava TODO PDF. */
+  const fromSheet = linhaDoDiaRDO(data);
 
   let d;
   if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data && !DIARIO_V4.parte) {
@@ -20112,10 +20817,19 @@ async function _gerarPDFInterno(data, turnoFocus) {
   });
   y += 18;
 
+  /* PÁGINA NOVA QUANDO NÃO CABE. Sem isto, num dia com uns 25 serviços o
+     efetivo, os equipamentos e as observações simplesmente não saíam (as
+     seções eram puladas em silêncio) e as linhas passavam por baixo do
+     rodapé. */
+  function quebra(h) {
+    if (y + h > PH - 18) { rodape(); doc.addPage(); y = 14; }
+  }
+
   // SERVIÇOS POR TURNO
   function renderServicosTurno(turnoNome, servicos, corTurno) {
     if (servicos.length === 0) return;
     
+    quebra(8 + 6 + 5);
     rect(ML, y, TW, 8, corTurno);
     sf(10, 'bold', [255, 255, 255]);
     tx(turnoNome.toUpperCase() + '  ·  ' + servicos.length + ' serviço' + (servicos.length>1?'s':''), ML + 4, y + 5.5);
@@ -20131,21 +20845,24 @@ async function _gerarPDFInterno(data, turnoFocus) {
     y += 6;
     
     servicos.forEach((s, i) => {
+      quebra(5);
       const bg = i % 2 === 0 ? null : [252, 250, 246];
       if (bg) rect(ML, y, TW, 5, bg);
       
-      const pacote = (STATE && STATE.pacotes) ? STATE.pacotes.find(pp => pp['ID'] === s['Pacote_ID']) : null;
-      const frente = pacote ? (pacote['Frente'] || '') : '';
+      const pid = getCSVField(s, 'Pacote_ID');
+      const pacote = (STATE && STATE.pacotes) ? STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid) : null;
+      const frente = pacote ? (getCSVField(pacote, 'Frente') || '') : '';
       
       sf(7, 'bold', NAVY);
       tx((frente ? frente + ' · ' : '') + nomeDoPacoteNoLancamento(s), ML + 3, y + 3.5);
       sf(7, 'normal', [50, 50, 50]);
-      tx(s['Local_Estaca'] || '', ML + 75, y + 3.5);
+      tx(getCSVField(s, 'Local_Estaca') || '', ML + 75, y + 3.5);
       sf(7, 'bold', TERRA_DARK);
-      tx(parseFloat(s['Quantidade']||0).toLocaleString('pt-BR'), ML + 130, y + 3.5, { align: 'right' });
+      // num(), não parseFloat: "22,26" virava 22 e "1.500" virava 1,5
+      tx(fmtNum(num(getCSVField(s, 'Quantidade')), 2), ML + 130, y + 3.5, { align: 'right' });
       sf(7, 'normal', CINZA);
-      tx(s['Unidade'] || '', ML + 138, y + 3.5);
-      tx(s['Equipe'] || s['Subcontratado'] || '', ML + 152, y + 3.5);
+      tx(getCSVField(s, 'Unidade') || '', ML + 138, y + 3.5);
+      tx(getCSVField(s, 'Equipe') || getCSVField(s, 'Subcontratado') || '', ML + 152, y + 3.5);
       y += 5;
     });
     y += 3;
@@ -20162,7 +20879,8 @@ async function _gerarPDFInterno(data, turnoFocus) {
   }
 
   // EFETIVO DETALHADO
-  if (y < PH - 60) {
+  {
+    quebra(60);
     rect(ML, y, TW, 8, NAVY);
     sf(10, 'bold', [255, 255, 255]);
     tx('EFETIVO  ·  ' + totalEfetivo + ' pessoa' + (totalEfetivo>1?'s':'') + ' no canteiro', ML + 4, y + 5.5);
@@ -20241,7 +20959,8 @@ async function _gerarPDFInterno(data, turnoFocus) {
   }
 
   // EQUIPAMENTOS
-  if (totalEquip > 0 && y < PH - 50) {
+  if (totalEquip > 0) {
+    quebra(30);
     rect(ML, y, TW, 8, NAVY);
     sf(10, 'bold', [255, 255, 255]);
     tx('EQUIPAMENTOS  ·  ' + totalEquip + ' no canteiro', ML + 4, y + 5.5);
@@ -20286,44 +21005,40 @@ async function _gerarPDFInterno(data, turnoFocus) {
 
   // OBSERVAÇÕES
   const temObs = d.visitas || d.ocorrencias || d.observacoes_gerais;
-  if (temObs && y < PH - 35) {
+  if (temObs) {
+    quebra(16);
     rect(ML, y, TW, 6, [240, 235, 226]);
     sf(8, 'bold', TERRA_DARK);
     tx('OBSERVAÇÕES', ML + 3, y + 4);
     y += 6;
-    
-    sf(8, 'normal', [40, 40, 40]);
-    if (d.visitas) {
-      sf(7, 'bold', NAVY); tx('Visitas:', ML + 3, y + 3);
+    /* O texto sai INTEIRO. Antes eram 2 ou 3 linhas e o resto sumia — mas o
+       `y` andava pelo texto todo, abrindo um buraco em branco no lugar. */
+    const bloco = (rot, texto, recuo, largura) => {
+      if (!texto) return;
       sf(7, 'normal', [40, 40, 40]);
-      const ll = doc.splitTextToSize(d.visitas, TW - 24);
-      doc.text(ll.slice(0, 2), ML + 18, y + 3);
-      y += ll.length * 3.5 + 1;
-    }
-    if (d.ocorrencias) {
-      sf(7, 'bold', NAVY); tx('Ocorr.:', ML + 3, y + 3);
-      sf(7, 'normal', [40, 40, 40]);
-      const ll = doc.splitTextToSize(d.ocorrencias, TW - 22);
-      doc.text(ll.slice(0, 2), ML + 16, y + 3);
-      y += ll.length * 3.5 + 1;
-    }
-    if (d.observacoes_gerais) {
-      sf(7, 'bold', NAVY); tx('Geral:', ML + 3, y + 3);
-      sf(7, 'normal', [40, 40, 40]);
-      const ll = doc.splitTextToSize(d.observacoes_gerais, TW - 18);
-      doc.text(ll.slice(0, 3), ML + 14, y + 3);
-      y += ll.length * 3.5 + 1;
-    }
+      const ll = doc.splitTextToSize(String(texto), largura);
+      for (let k = 0; k < ll.length; k++) {
+        quebra(3.5);
+        if (k === 0) { sf(7, 'bold', NAVY); tx(rot, ML + 3, y + 3); sf(7, 'normal', [40, 40, 40]); }
+        doc.text(ll[k], ML + recuo, y + 3);
+        y += 3.5;
+      }
+      y += 1;
+    };
+    bloco('Visitas:', d.visitas, 18, TW - 24);
+    bloco('Ocorr.:', d.ocorrencias, 16, TW - 22);
+    bloco('Geral:', d.observacoes_gerais, 14, TW - 18);
   }
 
   // RODAPÉ COM NOME ESPECÍFICO DO APONTADOR
-  let rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—') + (d.apontador_noturno ? '  ·  Noturno: ' + d.apontador_noturno : '');
-  if (focus === 'diurno') rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—');
-  if (focus === 'noturno') rodapeTxt = 'Apontador Noturno: ' + (d.apontador_noturno || '—');
-
-  // virou função porque o anexo de fotos acrescenta páginas, e página de RDO
-  // sem o rodapé assinado não se identifica quando é impressa solta
+  // virou função porque o anexo de fotos (e agora a quebra de página)
+  // acrescenta páginas, e página de RDO sem o rodapé assinado não se
+  // identifica quando é impressa solta. O texto é montado na hora: a quebra
+  // pode pedir o rodapé antes desta linha do código ser alcançada.
   function rodape() {
+    let rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—') + (d.apontador_noturno ? '  ·  Noturno: ' + d.apontador_noturno : '');
+    if (focus === 'diurno') rodapeTxt = 'Apontador Diurno: ' + (d.apontador_diurno || '—');
+    if (focus === 'noturno') rodapeTxt = 'Apontador Noturno: ' + (d.apontador_noturno || '—');
     rect(0, PH - 14, PW, 14, NAVY);
     sf(8, 'bold', [255, 255, 255]);
     tx('GESTOR ENGENHARIA', ML, PH - 8);
@@ -20352,8 +21067,13 @@ async function _gerarPDFInterno(data, turnoFocus) {
 // BOOT
 // ====================================================================
 document.addEventListener('DOMContentLoaded', () => {
+  /* O perfil de campo não enxerga o Painel: abrir nele era cair em "Acesso
+     não liberado" a cada boot. Quem não vê o Painel começa no lançamento. */
+  if (!podeVer(STATE.currentPage)) STATE.currentPage = podeVer('executivo') ? 'executivo' : 'rdo';
   renderShell();
-  navigate('executivo');
+  // `navigate('executivo')` aqui não fazia nada (a tela já era essa), e o
+  // corpo ficava em branco até os CSVs chegarem: agora a espera se anuncia.
+  render();
   carregarTudo();
   carregarUsuariosNomes();
 
@@ -20386,7 +21106,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // sem nem receber o aviso. Voltar para a frente vira o momento de olhar.
     if (_swReg && _swReg.update) { try { _swReg.update(); } catch (e) {} }
     outboxFlush();
-    carregarTudo({ fundo: true });
+    // Voltar da câmera é "voltar para a frente" também: baixar os CSVs
+    // inteiros a cada foto gastava o 4G do canteiro à toa. Um minuto basta.
+    if (!STATE.lastSync || Date.now() - STATE.lastSync.getTime() > 60000) carregarTudo({ fundo: true });
     if (STATE.currentPage === 'notas' && typeof nfCarregar === 'function') {
       nfCarregar(obra().id, { fundo: true });
     }
@@ -20555,9 +21277,9 @@ function apSlideHTML(sl, d) {
 
   if (sl.tipo === 'capa') return `<div class="ap-slide ap-centro">
     <div class="ap-marca">${ic('obra')}</div>
-    <div class="ap-kicker">Contrato 084/SPOBRAS/2024 · CC 182 · Gestor Engenharia</div>
-    <h2>Av. Senador Teotônio Vilela</h2>
-    <div class="ap-sub ap-sub-c">Duplicação — planejamento, RDO de campo, apoio à medição
+    <div class="ap-kicker">${OBRA.contrato ? 'Contrato ' + escHtml(OBRA.contrato) + ' · ' : ''}Gestor Engenharia</div>
+    <h2>${escHtml(OBRA.nome || '')}</h2>
+    <div class="ap-sub ap-sub-c">${escHtml(OBRA.subtitulo || 'Obra')} — planejamento, RDO de campo, apoio à medição
       e prestação de contas em um só sistema.</div></div>`;
 
   if (sl.tipo === 'capacidades') {
@@ -20701,9 +21423,12 @@ function apSlideHTML(sl, d) {
 
   if (sl.tipo === 'equipamentos') {
     const ap = EQUIP.apontamentos;
-    const horas = ap.reduce((s, a) => s + (num(a.horas) || 0), 0);
+    /* numCampo, não num: o backend legado devolve "9.00" — ponto DECIMAL —,
+       e o num() do CSV lê ponto como milhar: 900 horas por apontamento, na
+       frente da fiscalização. */
+    const horas = ap.reduce((s, a) => s + (numCampo(a.horas) || 0), 0);
     const porEquip = {};
-    ap.forEach(a => { porEquip[a.equipamento] = (porEquip[a.equipamento] || 0) + (num(a.horas) || 0); });
+    ap.forEach(a => { porEquip[a.equipamento] = (porEquip[a.equipamento] || 0) + (numCampo(a.horas) || 0); });
     const top = Object.entries(porEquip).sort((a, b) => b[1] - a[1]).slice(0, 6);
     return `<div class="ap-slide"><div class="ap-kicker">Equipamentos</div>
       <h2>${horas.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} horas de máquina apontadas</h2>
@@ -20742,7 +21467,7 @@ function apSlideHTML(sl, d) {
 
   // fim
   return `<div class="ap-slide ap-centro">
-    <div class="ap-kicker">Av. Senador Teotônio Vilela</div>
+    <div class="ap-kicker">${escHtml(OBRA.nome || '')}</div>
     <h2>${apPct(d.pctPond)} executados</h2>
     <div class="ap-sub ap-sub-c">${d.rdos.length} lançamentos de serviço ·
       ${(STATE.rdodiario || []).length} RDOs diários · ${d.fotos.length} fotos —
@@ -20803,7 +21528,7 @@ function abrirApresentacao() {
   ov.innerHTML = `
     <div class="ap-top">
       <div class="ap-top-marca">${ic('obra')}</div>
-      <div><div class="t">Av. Senador Teotônio Vilela</div>
+      <div><div class="t">${escHtml(OBRA.nome || '')}</div>
            <div class="s">Modo apresentação</div></div>
       <div class="ap-prog">${APRES.slides.map(() => '<span class="seg"><i></i></span>').join('')}</div>
     </div>

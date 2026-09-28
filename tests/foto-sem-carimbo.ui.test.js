@@ -256,7 +256,9 @@ process.on('exit', () => { try { srv.kill(); } catch (e) {} });
   await p.waitForSelector('[id^="galbox-"]', { timeout: 8000 });
   const naGaleria = await p.evaluate(() => ({
     lote: !!document.querySelector('button[onclick*="galBaixarSemCarimbo"]'),
-    passaALimpa: /ampliarFoto\('COMCARIMBO','CBUQ','ORIGINAL'\)/.test(document.body.innerHTML)
+    // o argumento vai como literal JS seguro (jsArg): aspas simples ou duplas
+    passaALimpa: [...document.querySelectorAll('[onclick*="ampliarFoto"]')].some(e =>
+      /ampliarFoto\(["']COMCARIMBO["'],\s*["']CBUQ["'],\s*["']ORIGINAL["']\)/.test(e.getAttribute('onclick')))
   }));
   ok('a barra da Galeria oferece baixar o lote sem carimbo', naGaleria.lote);
   ok('e cada quadro leva o id da versão limpa para o visualizador', naGaleria.passaALimpa);

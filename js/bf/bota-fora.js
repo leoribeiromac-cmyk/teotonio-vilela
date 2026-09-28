@@ -228,8 +228,13 @@
     const w = canvas.clientWidth || 600, h = canvas.clientHeight || 200;
     canvas.width = w * ratio; canvas.height = h * ratio;
     ctx.scale(ratio, ratio);
+    /* Papel branco e tinta escura, em qualquer tema. A tinta vinha de
+       --text: no tema escuro ela é clara, e o PNG (transparente) saía com um
+       traço claro que some no papel — a assinatura do motorista, que é a
+       prova da viagem, impressa em branco. Mesmo desenho da assinar.html. */
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);
     ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--text') || '#111';
+    ctx.strokeStyle = '#101828';
     /* Remedir é obrigatório a cada abertura (canvas escondido mede 0), e
        mudar canvas.width já apaga o traço. Os OUVINTES entram uma vez só:
        reatá-los a cada abertura empilhava um mousemove por abertura. */
@@ -251,13 +256,20 @@
     const fim = () => { desenhando = false; };
     canvas.addEventListener('mousedown', inicio);
     canvas.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', fim);
+    // no canvas, não no window: cada tela montada deixava um ouvinte no
+    // window segurando o canvas velho
+    canvas.addEventListener('mouseup', fim);
+    canvas.addEventListener('mouseleave', fim);
     canvas.addEventListener('touchstart', inicio, { passive: false });
     canvas.addEventListener('touchmove', move, { passive: false });
     canvas.addEventListener('touchend', fim);
     canvas._temTraco = () => temTraco;
     canvas._zerarTraco = () => { temTraco = false; };
-    canvas._limpar = () => { ctx.clearRect(0, 0, canvas.width, canvas.height); temTraco = false; };
+    canvas._limpar = () => {
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.restore(); temTraco = false;
+    };
   }
 
   // ------------------------------------------------------------------
