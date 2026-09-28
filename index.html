@@ -15534,7 +15534,14 @@ async function unificarRDODiario(data, emLote) {
       if (pos === -1) pos = i;
       return false;
     });
-    if (unida) STATE.rdodiario.splice(Math.max(pos, 0), 0, unida);
+    if (unida) {
+      STATE.rdodiario.splice(Math.max(pos, 0), 0, unida);
+      /* O CSV publicado leva minutos para ver a união: a primeira recarga
+         (a de 5 em 5 min, ou a que um salvamento agendou) trazia as duas
+         linhas de volta, e o dia voltava a "duplicado" na tela. A linha
+         unida fica valendo até o CSV também mostrar uma só. */
+      diarioLocalGuardar(data, unida, 'uma-linha');
+    }
     setOficialRDO(data, '');
     if (!emLote) {
       toast(`RDO de ${fmtData(data)} unificado — agora é uma linha só.`, 'success');
@@ -18286,16 +18293,24 @@ function diarioLocalAplicar(linhas) {
       const rd = parseISODate(getCSVField(r, 'Data'));
       return rd && getLocalISODate(rd) === x.data;
     });
-    const alcancou = doDia.some(r => String(getCSVField(r, 'contribuicoes_json') || '') ===
-                                     String(x.linha.contribuicoes_json || ''));
+    /* "Alcançou" depende do que foi feito: a parte somada, quando o CSV traz
+       as mesmas contribuições; o dia UNIFICADO, quando o CSV também passa a
+       ter uma linha só naquela data. */
+    const alcancou = x.modo === 'uma-linha'
+      ? doDia.length === 1
+      : doDia.some(r => String(getCSVField(r, 'contribuicoes_json') || '') ===
+                        String(x.linha.contribuicoes_json || ''));
     if (alcancou) { delete _DIARIO_LOCAL[k]; return; }
     out = out.filter(r => doDia.indexOf(r) === -1).concat([x.linha]);
   });
   return out;
 }
-function diarioLocalGuardar(data, linha) {
+function diarioLocalGuardar(data, linha, modo) {
   if (!linha) return;
-  _DIARIO_LOCAL[OBRA.id + '|' + data] = { obra: OBRA.id, data, linha, em: Date.now() };
+  _DIARIO_LOCAL[OBRA.id + '|' + data] = { obra: OBRA.id, data, linha, em: Date.now(), modo: modo || '' };
+  // o dia unido já está no STATE (no lugar dele): aplicar agora compararia
+  // com a própria linha e daria "o CSV alcançou" antes de o CSV ser relido
+  if (modo === 'uma-linha') return;
   STATE.rdodiario = diarioLocalAplicar(STATE.rdodiario);
 }
 
