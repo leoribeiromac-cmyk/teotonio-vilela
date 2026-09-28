@@ -365,6 +365,38 @@ async function rabiscar(p) {
      O que a página NÃO pode fazer é entregar calado o arquivo velho a quem
      acabou de assinar: nos minutos entre a firma e a reposição do depósito,
      o que está para download é o RDO SEM a assinatura dele. */
+  /* O CELULAR GIROU NO MEIO DA ASSINATURA. O quadro muda de tamanho na
+     tela, mas o bitmap com o traço já feito fica — e o dedo tem de continuar
+     caindo onde a tinta aparece. Antes o ponto era lido em pixels da tela, e
+     depois de girar o traço novo saía deslocado do dedo. */
+  {
+    console.log('\nO celular gira no meio da assinatura');
+    const { ctx, p } = await abrirPagina(navegador, () => respostaAbrir());
+    await p.waitForSelector('#cartaoRdo:not(.oculto)', { timeout: 15000 });
+    await p.setViewportSize({ width: 390, height: 800 });
+    await p.waitForTimeout(300);
+    await p.locator('#tela').scrollIntoViewIfNeeded();
+    let c = await p.locator('#tela').boundingBox();
+    await p.mouse.move(c.x + 10, c.y + 10); await p.mouse.down(); await p.mouse.move(c.x + 30, c.y + 20); await p.mouse.up();
+    await p.setViewportSize({ width: 800, height: 390 });   // girou
+    await p.waitForTimeout(300);
+    await p.locator('#tela').scrollIntoViewIfNeeded();
+    c = await p.locator('#tela').boundingBox();
+    // toca no MEIO do quadro: a tinta tem de nascer no meio do bitmap
+    await p.mouse.move(c.x + c.width / 2, c.y + c.height / 2); await p.mouse.down();
+    await p.mouse.move(c.x + c.width / 2 + 4, c.y + c.height / 2); await p.mouse.up();
+    const meio = await p.evaluate(() => {
+      const t = document.getElementById('tela'), d = t.getContext('2d').getImageData(0, 0, t.width, t.height).data;
+      let x1 = t.width, x2 = -1;
+      const y = Math.round(t.height / 2);
+      for (let yy = y - 4; yy <= y + 4; yy++) for (let x = 0; x < t.width; x++) {
+        if (d[(yy * t.width + x) * 4] < 200) { x1 = Math.min(x1, x); x2 = Math.max(x2, x); }
+      }
+      return x2 < 0 ? null : ((x1 + x2) / 2) / t.width;
+    });
+    ok('o traço depois de girar cai onde o dedo tocou', meio !== null && Math.abs(meio - 0.5) < 0.05, meio);
+    await ctx.close();
+  }
   {
     console.log('\nQual via do RDO está para baixar');
     const { ctx, p } = await abrirPagina(navegador, () => respostaAbrir());

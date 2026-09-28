@@ -282,6 +282,8 @@ que você já mantém.
 | `Coeficientes` | **`Item Planilha`** | O mesmo código SIURB em capítulos diferentes deixa de somar numa linha só. |
 | `Coeficientes` | **`Material Estoque`** | O de-para do **Teórico × Real**: o nome do material como ele aparece na nota fiscal. Sem ele, a tela casa pela descrição e avisa que casou sozinha. |
 | `RDO_Diario` | **`paralisacoes_json`** | Criada sozinha pelo backend no primeiro turno salvo. Guarda a paralisação estruturada (motivo, horário, frente, efetivo e equipamento parados). |
+| `RDO_Diario` | **`visitas_diurno`**, **`ocorrencias_diurno`**, **`obs_diurno`** (e os `_noturno`) | Criadas sozinhas no primeiro turno salvo. O texto de cada turno fica na coluna dele, e as colunas `visitas`/`ocorrencias`/`observacoes_gerais` (as do PDF) são refeitas delas — corrigir o texto de um turno troca o texto, em vez de somá-lo ao errado. |
+| `RDO_Diario` | **`revisao`** | Criada sozinha. Um carimbo novo a cada gravação: é como o app sabe que o CSV publicado já alcançou o que ele acabou de salvar. Não edite à mão. |
 | — | aba **`Medicoes`** | Criada sozinha no primeiro fechamento. Guarda o que foi apresentado à fiscalização em cada competência. |
 
 **Fechar a medição do mês** (Apoio à Medição → escolha o mês → *Fechar medição
@@ -539,6 +541,17 @@ que o gatilho da manhã leva.
 As versões com argumento continuam existindo para quem chama de código:
 `conferirAssinaturasRDO(data)`, `reenviarRDOAssinado(data)`,
 `rdoAssinaturaCancelar(data, papel, motivo)`.
+
+#### Corrigir um RDO que já foi assinado
+
+Depois que alguém assina pelo link, o dia fica **travado**: o apontador que
+tentar salvar é avisado de que só o escritório reabre (o que ele digitou fica
+guardado no aparelho). Engenharia e admin, ao editar o turno, são avisados
+antes e, ao salvar, **reabrem** o RDO: as assinaturas dadas são canceladas, o
+link antigo deixa de abrir, o PDF é redepositado e o convite sai de novo para
+quem tem de assinar o RDO como ficou. Tudo fica na Auditoria
+(`reabrirRDOAssinado`). A firma arquivada do engenheiro não trava nada — ela
+volta sozinha no RDO reaberto.
 
 #### Ensaiar antes de o link chegar à fiscalização
 

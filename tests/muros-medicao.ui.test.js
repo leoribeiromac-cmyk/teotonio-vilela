@@ -90,7 +90,7 @@ function rdoCompleto() {
     const corpo = acao === 'login' ? { ok: true, usuario: 'Leonardo', perfil: 'admin', token: 't', obras: '*' }
                 : acao === 'usuariosNomes' ? { ok: true, usuarios: ['Leonardo'] }
                 : { ok: true };
-    route.fulfill({ status: 200, contentType: 'application/javascript', body: `${cb}(${JSON.stringify(corpo)})` });
+    route.fulfill({ status: 200, contentType: 'application/javascript', body: cb ? `${cb}(${JSON.stringify(corpo)})` : JSON.stringify(corpo) });
   });
 
   const recarregar = () => p.evaluate(() => carregarTudo());

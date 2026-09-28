@@ -592,6 +592,16 @@ function normObra(v) {
    Mesmo padrão que o addBatchRDO já usava para `clientId` e `usuario`:
    a planilha se ajusta sozinha na primeira gravação, sem ninguém precisar
    editar cabeçalho à mão antes de o campo poder lançar. */
+/* Várias de uma vez: UMA leitura do cabeçalho e uma escrita só para as que
+   faltam — é o caminho de todo salvamento de turno. */
+function garantirColunas(aba, nomes) {
+  var cab = cabecalhoNormalizado(aba);
+  // nome EXATO: o idxColuna aproximado acharia "visitas" para "visitas_diurno"
+  var faltam = nomes.filter(function (n) { return cab.indexOf(n) === -1; });
+  if (!faltam.length) return;
+  aba.getRange(1, aba.getLastColumn() + 1, 1, faltam.length).setValues([faltam]);
+}
+
 function garantirColuna(aba, nome) {
   var cab = cabecalhoNormalizado(aba);
   var i = idxColuna(cab, nome);
@@ -1187,7 +1197,13 @@ function climaDoDia(dataISO, obraId) {
    até alguma responder — e porque assim dá para testar a conta da chuva
    sem rede no caminho. */
 function climaDaEstacao_(molde, d, est) {
-  var url = molde.replace('{ini}', d).replace('{fim}', d).replace('{est}', est.cod);
+  // O dia do INMET é em UTC: 00h–23h UTC é 21h da VÉSPERA até 20h59 de São
+  // Paulo. Pedir só `d` punha a chuva das 21h de ontem na noite de hoje e
+  // perdia a das 21h–meia-noite de hoje. Pede-se d e d+1 e fica o que cai no
+  // dia LOCAL — salvo quando d+1 ainda nem começou em UTC (não há o que pedir).
+  var fim = diaISOMais_(d, 1);
+  if (fim > Utilities.formatDate(new Date(), 'UTC', 'yyyy-MM-dd')) fim = d;
+  var url = molde.replace('{ini}', d).replace('{fim}', fim).replace('{est}', est.cod);
   var linhas;
   try {
     var r = UrlFetchApp.fetch(url, { muteHttpExceptions: true, followRedirects: true });
@@ -1205,13 +1221,29 @@ function climaDaEstacao_(molde, d, est) {
   return somarChuva_(linhas, d, est);
 }
 
+/* 'aaaa-mm-dd' + n dias, sem fuso no caminho. */
+function diaISOMais_(d, n) {
+  var p = String(d).split('-');
+  var t = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2] + n));
+  return t.getUTCFullYear() + '-' + ('0' + (t.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + t.getUTCDate()).slice(-2);
+}
+
 /* Somatório de chuva por período do dia. A hora do INMET vem em UTC
-   ("HH00"); São Paulo é UTC-3, então 09 UTC = 06 local. */
+   ("HH00", com a data em DT_MEDICAO); São Paulo é UTC-3, então 09 UTC = 06
+   local e 01 UTC do dia seguinte = 22h local de hoje. Linha sem DT_MEDICAO
+   (provedor de CLIMA_URL que não a mande) é tida como do próprio `d`. */
 function somarChuva_(linhas, d, est) {
-  var soma = { manha: 0, tarde: 0, noite: 0 }, lidas = 0;
+  var soma = { manha: 0, tarde: 0, noite: 0 }, lidas = 0, comHora = 0;
   linhas.forEach(function (l) {
     var hh = parseInt(String(l.HR_MEDICAO == null ? '' : l.HR_MEDICAO).slice(0, 2), 10);
     if (!isFinite(hh)) return;
+    comHora++;
+    var dUtc = String(l.DT_MEDICAO == null ? '' : l.DT_MEDICAO).slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dUtc)) {
+      // a hora local volta 3 h: 00–02 UTC são 21–23 h do dia anterior
+      var diaLocal = hh < 3 ? diaISOMais_(dUtc, -1) : dUtc;
+      if (diaLocal !== d) return;
+    }
     var local = (hh - 3 + 24) % 24;
     var mm = parseFloat(String(l.CHUVA == null ? '' : l.CHUVA).replace(',', '.'));
     if (!isFinite(mm)) mm = 0;
@@ -1220,8 +1252,12 @@ function somarChuva_(linhas, d, est) {
     else if (local >= 12 && local < 18) soma.tarde += mm;
     else if (local >= 18) soma.noite += mm;
   });
-  if (!lidas) {
+  if (!comHora) {
     return { ok: false, motivo: 'Registro sem hora legível — provedor mudou o formato?' };
+  }
+  if (!lidas) {
+    return { ok: false, motivo: 'A estação ' + est.cod + ' não tem registro para ' + d +
+                                ' (dado costuma sair com algumas horas de atraso).' };
   }
 
   return {
@@ -2269,17 +2305,73 @@ function updateRDO(payloadJson, token) {
    o app manda os dois turnos juntos (a linha é uma só), e o aparelho do
    apontador do dia, aberto desde cedo, manda o noturno em branco. */
 var RDO_TURNO_PARTES = {
-  diurno:  { colunas: ['apontador_diurno', 'clima_manha', 'clima_tarde'],
+  diurno:  { colunas: ['apontador_diurno', 'clima_manha', 'clima_tarde',
+                       'visitas_diurno', 'ocorrencias_diurno', 'obs_diurno'],
              json: { efetivo_json: ['padrao_diurno', 'customIndireto_diurno', 'customDireto_diurno'],
                      equipamentos_json: ['padrao_diurno', 'custom_diurno'],
                      paralisacoes_json: ['diurno'] } },
-  noturno: { colunas: ['apontador_noturno', 'clima_noite'],
+  noturno: { colunas: ['apontador_noturno', 'clima_noite',
+                       'visitas_noturno', 'ocorrencias_noturno', 'obs_noturno'],
              json: { efetivo_json: ['padrao_noturno', 'customIndireto_noturno', 'customDireto_noturno'],
                      equipamentos_json: ['padrao_noturno', 'custom_noturno'],
                      paralisacoes_json: ['noturno'] } }
 };
 // Textos que o app grava como "do diurno / do noturno" numa célula só.
 var RDO_TEXTOS_JUNTADOS = ['visitas', 'ocorrencias', 'observacoes_gerais', 'paralisado_motivo'];
+
+/* OS TEXTOS DE CADA TURNO, CADA UM NA SUA COLUNA. Numa célula só ("do
+   diurno / do noturno"), o servidor não sabia que pedaço era de quem: o
+   aparelho que salvava um turno sem ter visto o outro JUNTAVA o texto novo
+   ao velho, e a ocorrência corrigida saía no RDO ao lado da errada. Agora o
+   texto de cada turno anda com o turno (está no RDO_TURNO_PARTES) e a
+   coluna juntada — a que o PDF, o e-mail e quem lê a planilha usam — é
+   REFEITA a partir delas a cada gravação. */
+var RDO_TEXTOS_POR_TURNO = { visitas: 'visitas_', ocorrencias: 'ocorrencias_', observacoes_gerais: 'obs_' };
+var RDO_TEXTOS_COLUNAS = ['visitas_diurno', 'ocorrencias_diurno', 'obs_diurno',
+                          'visitas_noturno', 'ocorrencias_noturno', 'obs_noturno'];
+
+/* Linha gravada antes das colunas por turno: o texto junto é o único que há.
+   Ele passa a ser do turno que a linha tem (o diurno, se tem os dois — é
+   onde o app sempre o mostrou), para a próxima gravação não o perder. */
+function rdoTextosSemear_(cab, linha) {
+  var dono = rdoTemTurno_(cab, linha, 'diurno') || !rdoTemTurno_(cab, linha, 'noturno') ? 'diurno' : 'noturno';
+  Object.keys(RDO_TEXTOS_POR_TURNO).forEach(function (c) {
+    var i = cab.indexOf(c), pre = RDO_TEXTOS_POR_TURNO[c];
+    var iD = cab.indexOf(pre + 'diurno'), iN = cab.indexOf(pre + 'noturno');
+    if (i === -1 || iD === -1 || iN === -1) return;
+    if (rdoVazio_(linha[iD]) && rdoVazio_(linha[iN]) && !rdoVazio_(linha[i])) {
+      linha[dono === 'diurno' ? iD : iN] = linha[i];
+    }
+  });
+  return linha;
+}
+function rdoTextosRecalcular_(cab, linha) {
+  Object.keys(RDO_TEXTOS_POR_TURNO).forEach(function (c) {
+    var i = cab.indexOf(c), pre = RDO_TEXTOS_POR_TURNO[c];
+    var iD = cab.indexOf(pre + 'diurno'), iN = cab.indexOf(pre + 'noturno');
+    if (i === -1 || iD === -1 || iN === -1) return;
+    linha[i] = [linha[iD], linha[iN]].map(function (x) { return String(x == null ? '' : x).trim(); })
+                                     .filter(function (x) { return x; }).join(' / ');
+  });
+  return linha;
+}
+function rdoTextosPorTurnoTem_(cab, linha) {
+  return RDO_TEXTOS_COLUNAS.some(function (c) { var i = cab.indexOf(c); return i !== -1 && !rdoVazio_(linha[i]); });
+}
+/* O resumo legível das paradas sai do registro delas, dos dois turnos — e
+   não do que o aparelho mandou, que pode ter trazido um turno só. */
+function rdoMotivoRecalcular_(cab, linha) {
+  var iM = cab.indexOf('paralisado_motivo'), iJ = cab.indexOf('paralisacoes_json');
+  if (iM === -1 || iJ === -1 || rdoVazio_(linha[iJ])) return linha;
+  var pj = rdoJsonObj_(linha[iJ]), motivos = '';
+  ['diurno', 'noturno'].forEach(function (t) {
+    (Array.isArray(pj[t]) ? pj[t] : []).forEach(function (x) {
+      if (x && x.motivo) motivos = motivos ? motivos + ' / ' + x.motivo : String(x.motivo);
+    });
+  });
+  linha[iM] = motivos;
+  return linha;
+}
 // A identidade do dia: vem da linha MAIS ANTIGA, que é o número já impresso.
 var RDO_IDENTIDADE = ['id', 'numero_rdo'];
 
@@ -2332,6 +2424,8 @@ function rdoTemTurno_(cab, linha, turno) {
 function rdoMesclarLinhas_(cab, linhas) {
   var base = linhas[0].slice();
   if (linhas.length === 1) return base;
+  // cada linha com os textos já no turno dela: é o turno que decide qual vence
+  linhas = linhas.map(function (l) { return rdoTextosSemear_(cab, l.slice()); });
   cab.forEach(function (c, i) {
     if (RDO_IDENTIDADE.indexOf(c) !== -1) {
       if (rdoVazio_(base[i])) {
@@ -2352,6 +2446,7 @@ function rdoMesclarLinhas_(cab, linhas) {
   });
   var iTem = cab.indexOf('tem_turno_noturno');
   if (iTem !== -1 && rdoTemTurno_(cab, base, 'noturno')) base[iTem] = 'true';
+  if (rdoTextosPorTurnoTem_(cab, base)) rdoTextosRecalcular_(cab, base);
   return base;
 }
 
@@ -2360,10 +2455,19 @@ function rdoMesclarLinhas_(cab, linhas) {
    — não é pedido para apagar. O app não tem como "desenviar" um turno, e o
    caminho para tirar um RDO é o Excluir do Histórico. */
 function rdoAplicarEnvio_(cab, base, registro) {
+  /* O app de agora manda o texto de CADA turno (visitas_diurno, …). O app
+     velho ainda em cache manda só o juntado — e para ele a linha volta a ser
+     "de texto junto", senão as colunas por turno ficariam com o texto de
+     antes e ganhariam da correção que ele acabou de mandar. */
+  var porTurno = RDO_TEXTOS_COLUNAS.some(function (c) { return registro.hasOwnProperty(c); });
+  base = porTurno ? rdoTextosSemear_(cab, base.slice()) : base.slice();
   var novo = base.slice();
   cab.forEach(function (c, i) {
     if (registro.hasOwnProperty(c)) novo[i] = registro[c];
   });
+  if (!porTurno) {
+    RDO_TEXTOS_COLUNAS.forEach(function (c) { var i = cab.indexOf(c); if (i !== -1) { novo[i] = ''; base[i] = ''; } });
+  }
   var preservou = false;
   Object.keys(RDO_TURNO_PARTES).forEach(function (t) {
     if (rdoTemTurno_(cab, novo, t) || !rdoTemTurno_(cab, base, t)) return;
@@ -2373,8 +2477,13 @@ function rdoAplicarEnvio_(cab, base, registro) {
   // Tem apontador do noturno, tem turno noturno — seja quem for que mandou.
   var iTem = cab.indexOf('tem_turno_noturno');
   if (iTem !== -1 && rdoTemTurno_(cab, novo, 'noturno')) novo[iTem] = 'true';
-  // Quem não viu o outro turno também não viu o texto dele: soma, não troca.
-  if (preservou) {
+  if (porTurno) {
+    // o texto do turno que ficou veio com ele (rdoTrazerTurno_): refaz o junto
+    rdoTextosRecalcular_(cab, novo);
+    rdoMotivoRecalcular_(cab, novo);
+  } else if (preservou) {
+    // App velho: quem não viu o outro turno também não viu o texto dele —
+    // soma, não troca.
     RDO_TEXTOS_JUNTADOS.forEach(function (c) {
       var i = cab.indexOf(c);
       if (i !== -1 && registro.hasOwnProperty(c)) novo[i] = rdoJuntarTextos_(registro[c], base[i]);
@@ -2592,11 +2701,18 @@ function rdoPartesAgregar_(cab, linha, partes) {
     eq['padrao_' + t] = rdoSomarMapas_(lista.map(function (x) { return q(x).padrao; }));
     eq['custom_' + t] = rdoSomarListas_(lista.map(function (x) { return q(x).custom; }));
     pa[t] = [].concat.apply([], lista.map(function (x) { return Array.isArray(x.paralisacoes) ? x.paralisacoes : []; }));
+    var doTurno = { visitas: '', ocorrencias: '', obs: '' };
     lista.forEach(function (x) {
       textos.visitas = rdoJuntarTextos_(textos.visitas, x.visitas);
       textos.ocorrencias = rdoJuntarTextos_(textos.ocorrencias, x.ocorrencias);
       textos.observacoes_gerais = rdoJuntarTextos_(textos.observacoes_gerais, x.observacoes);
+      doTurno.visitas = rdoJuntarTextos_(doTurno.visitas, x.visitas);
+      doTurno.ocorrencias = rdoJuntarTextos_(doTurno.ocorrencias, x.ocorrencias);
+      doTurno.obs = rdoJuntarTextos_(doTurno.obs, x.observacoes);
     });
+    put('visitas_' + t, doTurno.visitas);
+    put('ocorrencias_' + t, doTurno.ocorrencias);
+    put('obs_' + t, doTurno.obs);
     pa[t].forEach(function (p) { if (p && p.motivo) motivos = rdoJuntarTextos_(motivos, p.motivo); });
   });
   put('efetivo_json', JSON.stringify(ef));
@@ -2701,6 +2817,10 @@ function upsertRDODiario(p, deveExistir) {
      modo de falha que esta versão inteira foi feita para acabar. */
   garantirColuna(aba, 'paralisacoes_json');
   garantirColuna(aba, 'paralisado_motivo');
+  /* Os textos de cada turno (ver RDO_TEXTOS_POR_TURNO) e a `revisao`: um
+     carimbo novo a cada gravação, que é como o app sabe que o CSV publicado
+     já alcançou o que ele acabou de mandar. */
+  garantirColunas(aba, RDO_TEXTOS_COLUNAS.concat(['revisao']));
   // Parte de um apontador (obra com mais de um no mesmo turno): ver rdoPartesLer_.
   var envioParte = null;
   if (p.contribuicao) {
@@ -2722,6 +2842,31 @@ function upsertRDODiario(p, deveExistir) {
     // Ranário do dia 10 SOBRESCREVERIA o da Teotônio do dia 10 — um dia
     // inteiro de efetivo, clima e ocorrências apagado sem aviso.
     var doDia = rdoLinhasDoDia_(cab, dados, obraAlvo, dataAlvo, turno);
+
+    /* O RDO QUE ALGUÉM JÁ ASSINOU NÃO MUDA CALADO. A firma do fiscal é o
+       aceite daquele conteúdo: gravar por cima e redesenhar o PDF punha a
+       firma dele num documento que ele não viu. Mudar exige REABRIR — só o
+       escritório, que é quem manda o RDO —, e reabrir cancela as firmas
+       dadas: quem assinou recebe um link novo e assina o que ficou. */
+    var reabrir = null;
+    if (doDia.length) {
+      var firmasDadas = rdoFirmasDePessoa_(obraAlvo, dataAlvo);
+      if (firmasDadas.length) {
+        var quem = firmasDadas.map(function (x) {
+          return String(x.nomeAssinante || x.nome || x.papel || '');
+        }).join(', ');
+        if (String(p.reabrir) !== '1') {
+          return { ok: false, error: 'RDO_ASSINADO', assinaram: quem,
+                   mensagem: 'O RDO de ' + rdoDataBR_(dataAlvo) + ' já foi assinado (' + quem + '). ' +
+                             'Para alterar, o escritório reabre o RDO — as firmas são canceladas e o convite sai de novo.' };
+        }
+        var barrReab = exigirPodeEnviarRDO(p.token, 'reabrirRDOAssinado');
+        if (barrReab) return barrReab;
+        reabrir = firmasDadas;
+      }
+    }
+    var revisao = 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+    var iRev = cab.indexOf('revisao');
 
     var registro = {};
     Object.keys(p).forEach(function (chave) {
@@ -2766,14 +2911,20 @@ function upsertRDODiario(p, deveExistir) {
       // (mesmo efeito de migrarNumeroRdoPorObra, sem depender de alguém rodá-la).
       if (iId !== -1 && rdoVazio_(novo[iId])) novo[iId] = gerarIdDiario(dados, iId);
       if (iNum !== -1 && rdoVazio_(novo[iNum])) novo[iNum] = proximoNumeroRdo(dados, iNum, iObra, obraAlvo);
+      if (iRev !== -1) novo[iRev] = revisao;
       var unidas = rdoDiarioGravarUnificado_(aba, cab, dados, doDia, novo, sessD, dataAlvo);
       var idFinal = iId !== -1 ? String(novo[iId]) : '';
       registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'updateRDODiario', OBRA_ID,
         idFinal || dataAlvo, 'linha ' + (principal + 1), 'data ' + dataAlvo + (unidas ? ' · ' + unidas + ' linha(s) repetida(s) unida(s)' : '') + sobreParte);
       mapaChuvaAposGravar_(cab, novo);
+      var reaberto = reabrir ? rdoReabrirAssinaturas_(obraAlvo, dataAlvo, reabrir, sessD) : 0;
+      /* A linha como ficou vai de volta SEMPRE: o CSV publicado leva minutos
+         para vê-la, e o PDF oficial que o app deposita logo depois sai dela
+         — não do formulário, que pode ter o que não foi gravado. */
       return { ok: true, updated: true, id: idFinal || undefined, unidas: unidas,
                chave: resParte ? resParte.chave : undefined,
-               linha: resParte ? rdoLinhaObj_(cab, novo) : undefined };
+               reaberto: reaberto || undefined,
+               linha: rdoLinhaObj_(cab, novo) };
     } else {
       // INSERE nova linha, sempre com ID gerado (se a aba tem coluna ID).
       if (iId !== -1 && !registro['id']) {
@@ -2784,16 +2935,22 @@ function upsertRDODiario(p, deveExistir) {
       if (iNum !== -1 && !registro['numero_rdo']) {
         registro['numero_rdo'] = proximoNumeroRdo(dados, iNum, iObra, obraAlvo);
       }
+      registro['revisao'] = revisao;
       var linha = cab.map(function (nomeCol) {
         return registro.hasOwnProperty(nomeCol) ? registro[nomeCol] : '';
       });
+      // o texto junto sai dos textos de cada turno, como na atualização
+      if (RDO_TEXTOS_COLUNAS.some(function (c) { return registro.hasOwnProperty(c); })) {
+        rdoTextosRecalcular_(cab, linha);
+        rdoMotivoRecalcular_(cab, linha);
+      }
       aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
       registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'addRDODiario', OBRA_ID,
         registro['id'] || dataAlvo, '', 'data ' + dataAlvo + sobreParte);
       mapaChuvaAposGravar_(cab, linha);
       return { ok: true, inserted: true, id: registro['id'] || '',
                chave: resParte ? resParte.chave : undefined,
-               linha: resParte ? rdoLinhaObj_(cab, linha) : undefined };
+               linha: rdoLinhaObj_(cab, linha) };
     }
   } finally {
     lock.releaseLock();
@@ -4902,6 +5059,59 @@ function rdoAssinaturasDoDia(p) {
            noDeposito: rdoPdfAssinaturasNoDeposito_(obra, dataISO) };
 }
 
+/* As firmas que uma PESSOA deu naquele dia — pelo link, ou dadas antes de
+   existir a coluna `origem`. A firma arquivada do engenheiro não entra: ela
+   é aplicada sozinha a todo RDO, e volta sozinha ao reaberto. */
+function rdoFirmasDePessoa_(obra, dataISO) {
+  if (normObra(obra) !== OBRA_ID) return [];
+  try {
+    return rdoAssinLinhasDoDia_(obra, dataISO).filter(function (x) {
+      return String(x.status || '') === 'assinada' && String(x.origem || '') !== 'arquivada';
+    });
+  } catch (e) {
+    return [];
+  }
+}
+
+/* REABRIR o RDO assinado: cada firma dada volta a pendente, com link NOVO
+   (o velho deixa de abrir) e o rastro na observação e na Auditoria. A
+   origem volta a vazia — a firma arquivada do engenheiro, se houver, entra
+   de novo sozinha. E o e-mail do "RDO ASSINADO" daquele dia é esquecido:
+   quando as firmas entrarem de novo, a via nova vai para todos. */
+function rdoReabrirAssinaturas_(obra, dataISO, firmas, sess) {
+  var quem = (sess && sess.usuario) || 'desconhecido';
+  var agora = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss');
+  var n = 0;
+  firmas.forEach(function (f) {
+    var alvo = rdoAssinPorToken_(f.token);
+    if (!alvo) return;
+    registrarAuditoria(quem, sess && sess.perfil, 'reabrirRDOAssinado', obra, dataISO,
+                       String(f.papel || '') + ' · ' + String(f.nomeAssinante || '') + ' · ' + String(f.assinadoEm || ''),
+                       'RDO alterado depois da firma: firma cancelada, convite novo');
+    rdoAssinGravarCampo_(alvo, 'observacao', 'Reaberto em ' + agora + ' por ' + quem +
+                         ': o RDO mudou depois da firma de ' + String(f.nomeAssinante || '—') +
+                         ' (' + String(f.assinadoEm || '') + ')');
+    rdoAssinGravarCampo_(alvo, 'assinatura', '');
+    rdoAssinGravarCampo_(alvo, 'assinadoEm', '');
+    rdoAssinGravarCampo_(alvo, 'nomeAssinante', '');
+    rdoAssinGravarCampo_(alvo, 'documento', '');
+    rdoAssinGravarCampo_(alvo, 'token', rdoAssinToken_());
+    rdoAssinGravarCampo_(alvo, 'origem', '');
+    rdoAssinGravarCampo_(alvo, 'status', 'pendente');
+    rdoAssinGravarCampo_(alvo, 'convidadoEm', agora);
+    n++;
+  });
+  try {
+    var log = rdoAssinadoLogLer_();
+    var chave = normObra(obra) + '|' + dataISO;
+    if (log[chave]) {
+      delete log[chave];
+      PropertiesService.getScriptProperties().setProperty(RDO_ASSINADO_LOG, JSON.stringify(log));
+    }
+  } catch (e) {}
+  return n;
+}
+
 /* Cancelar uma assinatura — para rodar no editor. Assinatura dada por
    engano (papel trocado, dia errado) não se apaga da planilha à mão: isto
    deixa o rastro na Auditoria e sorteia um token novo, para quem tem de
@@ -6022,6 +6232,24 @@ function nfListar(obra) {
 }
 
 // upsert pelo clientId — reenviar a mesma nota nunca duplica a linha
+/* Regravar um registro que já existe (nota, saída de estoque): o id que o
+   aparelho manda acha a linha — mas ela é de UMA obra e de UM dono. Um id
+   repetido (ou forjado) de outra obra gravava por cima da nota de lá; e a
+   edição feita por outra pessoa passava a nota para o nome dela, que então
+   podia apagá-la. O dono e a data de criação ficam os da linha. */
+function regravarNaObra_(cab, antiga, linha, obra) {
+  var iObra = cab.indexOf('obra');
+  if (iObra !== -1 && String(antiga[iObra] == null ? '' : antiga[iObra]).trim() &&
+      normObra(antiga[iObra]) !== normObra(obra)) {
+    return { ok: false, error: 'OUTRA_OBRA', mensagem: 'Este registro é de outra obra — nada foi gravado.' };
+  }
+  ['usuario', 'criadoem'].forEach(function (c) {
+    var i = cab.indexOf(c);
+    if (i !== -1 && String(antiga[i] == null ? '' : antiga[i]).trim()) linha[i] = antiga[i];
+  });
+  return null;
+}
+
 function nfSalvar(p) {
   var a = getOrCreate(ABA_NF);
   // Nota de mais de uma folha guarda aqui os arquivos das páginas 2 em
@@ -6083,6 +6311,8 @@ function nfSalvar(p) {
     }
   }
   if (achou > -1) {
+    var barrada = regravarNaObra_(cab, dados[achou], linha, reg.obra);
+    if (barrada) return barrada;
     // preserva o arquivo do Drive quando o app reenvia a nota sem essa informação
     var iDid = idxCol(cab, 'driveid'), iDlk = idxCol(cab, 'drivelink'), iPag = idxCol(cab, 'paginas');
     if (iDid !== -1 && !reg.driveid) linha[iDid] = dados[achou][iDid];
@@ -6358,7 +6588,11 @@ function saidaSalvar(p) {
       if (String(dados[i][iId]).trim() === String(reg.id).trim()) { achou = i; break; }
     }
   }
-  if (achou > -1) a.getRange(achou + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
+  if (achou > -1) {
+    var barrada = regravarNaObra_(cab, dados[achou], linha, reg.obra);
+    if (barrada) return barrada;
+    a.getRange(achou + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
+  }
   else a.getRange(a.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
   registrarAuditoria(reg.usuario, perfilDoToken(p.token), achou > -1 ? 'saidaAlterar' : 'saidaRegistrar',
     reg.obra, reg.id, '', reg.descricao + ' - ' + reg.qtd + ' ' + reg.un);

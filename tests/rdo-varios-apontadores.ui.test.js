@@ -125,7 +125,8 @@ const servidor = () => {
     const l = linhaDoDiaRDO(DIARIO_V4.data);
     const o = JSON.parse(getCSVField(l, 'contribuicoes_json'));
     o.diurno.wallace.usuario = 'wallace';
-    diarioLocalGuardar(DIARIO_V4.data, Object.assign({}, l, { contribuicoes_json: JSON.stringify(o) }));
+    // `revisao` nova: é por ela que o app sabe se o CSV já alcançou a linha
+    diarioLocalGuardar(DIARIO_V4.data, Object.assign({}, l, { contribuicoes_json: JSON.stringify(o), revisao: 'r-teste' }));
   });
   await p.evaluate(k => abrirParteV4('diurno', k), chaveW);
   await p.waitForTimeout(300);

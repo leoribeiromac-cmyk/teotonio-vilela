@@ -32,8 +32,8 @@ async function abrir(csv) {
   await p.route('**://script.google.com/**', r => {
     const u = new URL(r.request().url()), cb = u.searchParams.get('callback');
     r.fulfill({ status: 200, contentType: 'application/javascript',
-      body: `${cb}(${JSON.stringify(u.searchParams.get('action') === 'login'
-        ? { ok: true, usuario: 'Leonardo', perfil: 'admin', token: 't', obras: '*' } : { ok: true })})` });
+      body: (x => cb ? `${cb}(${x})` : x)(JSON.stringify(u.searchParams.get('action') === 'login'
+        ? { ok: true, usuario: 'Leonardo', perfil: 'admin', token: 't', obras: '*' } : { ok: true })) });
   });
   await p.goto('http://localhost:8099/index.html', { waitUntil: 'load' });
   await p.evaluate(() => { localStorage.setItem('teotonio_user', 'Leonardo');

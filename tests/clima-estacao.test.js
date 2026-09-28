@@ -30,13 +30,20 @@ const CATALOGO = [
     DT_FIM_OPERACAO: '2019-01-01T00:00:00.000-03:00' },
 ];
 
-// Horas do INMET: HR_MEDICAO em UTC ("HH00"), CHUVA em mm com vírgula.
-function horas(porHoraLocal) {
+// Horas do INMET: o dia é em UTC — DT_MEDICAO + HR_MEDICAO ("HH00") —, CHUVA
+// em mm com vírgula. `porHoraLocal` é a chuva do dia LOCAL pedido (ini);
+// `outros` ({ 'aaaa-mm-dd': {hora local: mm} }) a de outros dias locais.
+const isoMais = (d, n) => { const t = new Date(d + 'T00:00:00Z'); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+function horas(ini, fim, porHoraLocal, outros) {
   const linhas = [];
-  for (let local = 0; local < 24; local++) {
-    const utc = (local + 3) % 24;
-    linhas.push({ HR_MEDICAO: String(utc).padStart(2, '0') + '00',
-                  CHUVA: String(porHoraLocal[local] || 0).replace('.', ',') });
+  for (let dia = ini; dia <= fim; dia = isoMais(dia, 1)) {
+    for (let utc = 0; utc < 24; utc++) {
+      const local = new Date(Date.parse(dia + 'T00:00:00Z') + (utc - 3) * 3600e3);
+      const dLocal = local.toISOString().slice(0, 10), hLocal = local.getUTCHours();
+      const tabela = dLocal === ini ? porHoraLocal : ((outros || {})[dLocal] || {});
+      linhas.push({ DT_MEDICAO: dia, HR_MEDICAO: String(utc).padStart(2, '0') + '00',
+                    CHUVA: String(tabela[hLocal] || 0).replace('.', ',') });
+    }
   }
   return linhas;
 }
@@ -49,6 +56,8 @@ const REDE = {
   fora: [],             // estações que respondem HTTP 500
   chuvaPorHora: {},     // por hora local, mm
   pedidos: [],          // códigos consultados, na ordem
+  janelas: [],          // 'ini/fim' de cada consulta
+  outrosDias: {},       // chuva de outros dias locais
 };
 
 const UrlFetchApp = {
@@ -58,11 +67,13 @@ const UrlFetchApp = {
       if (!REDE.catalogoNoAr) return { getResponseCode: () => 503, getContentText: () => '' };
       return { getResponseCode: () => 200, getContentText: () => JSON.stringify(CATALOGO) };
     }
-    const cod = url.split('/').pop();
+    const partes = url.split('/');
+    const cod = partes.pop(), fim = partes.pop(), ini = partes.pop();
+    REDE.janelas.push(ini + '/' + fim);
     REDE.pedidos.push(cod);
     if (REDE.fora.indexOf(cod) !== -1) return { getResponseCode: () => 500, getContentText: () => '' };
     if (REDE.mudas.indexOf(cod) !== -1) return { getResponseCode: () => 200, getContentText: () => '[]' };
-    return { getResponseCode: () => 200, getContentText: () => JSON.stringify(horas(REDE.chuvaPorHora)) };
+    return { getResponseCode: () => 200, getContentText: () => JSON.stringify(horas(ini, fim, REDE.chuvaPorHora, REDE.outrosDias)) };
   }
 };
 
@@ -207,6 +218,27 @@ t('a chuva é somada no período certo (hora do INMET vem em UTC)', () => {
   assert.strictEqual(r.tarde, 'Chuva');        // 1 mm
   assert.strictEqual(r.noite, 'Chuva forte');  // 10 mm
   assert.strictEqual(r.total_mm, 15);
+});
+
+t('a chuva das 21h–meia-noite é do dia dela, e não do seguinte', () => {
+  // 22h local de 10/08 = 01 UTC de 11/08; 22h de 09/08 = 01 UTC de 10/08
+  _cache = {};
+  REDE.chuvaPorHora = { 22: 6 };
+  REDE.outrosDias = { '2026-08-09': { 22: 30 } };
+  const r = ctx.climaDoDia('2026-08-10', 'teotonio');
+  REDE.outrosDias = {};
+  assert.strictEqual(r.mm.noite, 6, 'perdeu a chuva das 22h ou somou a da véspera: ' + JSON.stringify(r.mm));
+  assert.strictEqual(r.total_mm, 6);
+  assert.ok(REDE.janelas.includes('2026-08-10/2026-08-11'), REDE.janelas.join(','));
+});
+
+t('o dia de hoje não pede amanhã (em UTC ainda não começou)', () => {
+  _cache = {};
+  REDE.chuvaPorHora = {};
+  const amanhaUTC = new Date(Date.now() + 86400e3).toISOString().slice(0, 10);
+  const d = isoMais(amanhaUTC, -1);
+  ctx.climaDoDia(d, 'teotonio');
+  assert.ok(REDE.janelas[REDE.janelas.length - 1] === d + '/' + d, REDE.janelas.slice(-1)[0]);
 });
 
 t('dia seco vira Bom, e não Encoberto', () => {

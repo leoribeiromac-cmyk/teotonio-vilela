@@ -149,7 +149,8 @@ t('obra sem partes continua no envio de sempre (e o dia vai para o mapa de chuva
   const r = S.ctx.upsertRDODiario({ action: 'addRDODiario', obra: 'teotonio', data: DIA, apontador_diurno: 'Wallace',
     clima_manha: 'Chuva', clima_tarde: 'Bom', clima_noite: 'Bom', tem_turno_noturno: 'false',
     efetivo_json: '{}', equipamentos_json: '{}', paralisacoes_json: '{"diurno":[],"noturno":[]}' }, false);
-  assert.ok(r.ok && r.inserted && r.linha === undefined, JSON.stringify(r));
+  // a linha gravada volta sempre (o PDF oficial sai dela), mas sem partes
+  assert.ok(r.ok && r.inserted && r.linha && !r.linha.contribuicoes_json, JSON.stringify(r));
   assert.strictEqual(col('contribuicoes_json'), -1, 'criou coluna de partes sem precisar');
   const mapa = S.abas.Mapa_Chuva.dados;
   const cabM = mapa[0];

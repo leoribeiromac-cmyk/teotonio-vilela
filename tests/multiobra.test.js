@@ -465,6 +465,23 @@ t('reenviar a nota SEM as paginas nao apaga as que ja subiram', () => {
     'as paginas foram perdidas: ' + String(linha[cab.indexOf('paginas')]));
 });
 
+t('o id de uma nota de OUTRA obra não grava por cima dela', () => {
+  const r = ctx.nfSalvar({ clientId: 'cp1', id: 'cp1', obra: 'ranario', numero: '6666', vtotal: 1 });
+  assert.strictEqual(r.error, 'OUTRA_OBRA', JSON.stringify(r));
+  const cab = ABAS.NotasFiscais.dados[0].map(c => String(c).toLowerCase());
+  const linha = ABAS.NotasFiscais.dados.find(l => String(l[cab.indexOf('clientid')]) === 'cp1');
+  assert.strictEqual(String(linha[cab.indexOf('numero')]), '7001');
+});
+
+t('quem edita a nota de outro não vira o dono dela', () => {
+  const cab = ABAS.NotasFiscais.dados[0].map(c => String(c).toLowerCase());
+  const linha = () => ABAS.NotasFiscais.dados.find(l => String(l[cab.indexOf('clientid')]) === 'cp1');
+  linha()[cab.indexOf('usuario')] = 'Wallace';
+  ctx.nfSalvar({ clientId: 'cp1', id: 'cp1', obra: 'teotonio', numero: '7001', vtotal: 13, usuario: 'Pedro' });
+  assert.strictEqual(String(linha()[cab.indexOf('usuario')]), 'Wallace');
+  assert.strictEqual(Number(linha()[cab.indexOf('vtotal')]), 13);
+});
+
 t('nfListar devolve as paginas junto com a nota', () => {
   const n = ctx.nfListar('teotonio').notas.find(x => String(x.clientId) === 'cp1');
   assert.ok(n, 'nota nao voltou');
