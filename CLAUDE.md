@@ -92,6 +92,13 @@ caixa do engenheiro. A página avisa qual via está para download
 (`pdfComFirmas`) — quem acaba de assinar baixaria, calado, o RDO de antes da
 própria firma, porque o depósito só é reposto minutos depois.
 
+O `rdoAssinaturasDoDia` devolve o `link` só para engenharia e admin (ou com
+`EXIGIR_TOKEN` desligado): o quadro de andamento aparece para quem preenche
+o dia, e o link do fiscal na mão do apontador era assinar por ele. E o
+e-mail de "RDO ASSINADO" confere na PLANILHA que todas as firmas online
+foram dadas — o `assinaturas` que o app manda no depósito diz quantas o
+desenho trouxe, não quantas existem.
+
 Os papéis são TRÊS palavras que têm de bater dos dois lados — `engenheiro`,
 `fiscalizacao`, `supervisao`: `rdoPapeisAssinatura()` (index.html) e
 `RDO_ASSINANTES` (Code.gs). Trocar uma delas de um lado só põe a firma do
@@ -282,6 +289,78 @@ quem está preenchendo. São duas travas, e as duas são necessárias:
    digitação, `.agora()` quando anexa foto ou assinatura (não dá para
    esperar o debounce) e `.apagar()` quando grava ou descarta.
    `tests/rascunho-formulario.ui.test.js` recarrega a página de verdade.
+
+O gravador é da tela ABERTA: `navigate()` e `trocarObra()` gravam o que ela
+tem e o soltam (`_rascAtivo = null`). Deixado ligado, o `pagehide` de mais
+tarde chamava o coletor sem o formulário na tela — "não há nada digitado" —
+e APAGAVA o rascunho. E `trocarObra()` zera também o `DIARIO_V4` e as
+`MEDICOES_FECHADAS`: são da obra que sai.
+
+O RDO Diário de QUALQUER data abre por `abrirDiaV4(iso)`: rascunho presente
+(que não seja parte) manda sobre a planilha — é trabalho que não subiu. O
+turno que sobe pela FILA limpa o rascunho só se ele não foi editado depois
+de ir para a fila (`_salvoEm` × `rascunhoEm`) e deposita o PDF do dia.
+
+## Sem sinal, o app abre com a última carga boa
+
+Cada carga boa guarda o TEXTO dos CSVs no aparelho (`cargaGuardar`,
+IndexedDB `teotonioDados`, por obra, no máximo a cada 10 min). Abrindo sem
+sinal, `cargaFalhou()` usa essa cópia e a barra diz "dados guardados de
+DD/MM HH:MM" (`STATE.dadosDoAparelho`) — antes, todas as telas davam a
+tela de falha e não havia pacote para escolher no Lançar Serviço.
+
+O refresh de fundo compara os textos com a carga anterior (`_textosCarga`)
+e, se nada mudou, não reinterpreta nem redesenha. Voltar para a frente
+(câmera) só recarrega se a última carga tem mais de 1 min. Lançamento
+apagado fica em `_APAGADOS_LOCAL` até o CSV publicado também parar de
+trazê-lo — antes ele "voltava" 4 s depois de apagado.
+`tests/abrir-sem-sinal.ui.test.js`.
+
+## Texto de fora nunca vai cru para a tela
+
+Planilha, campo digitado e resposta de IA são texto de FORA. A sessão do
+admin mora no `localStorage`: um `<img onerror>` nas ocorrências que rode
+na tela dele apaga lançamento e arquiva firma. Três ferramentas:
+
+- `escHtml(v)` para conteúdo e atributo entre aspas duplas (escapa também `'`);
+- `jsArg(v)` para valor DENTRO de `onclick="fn(…)"` — sem aspas em volta:
+  `onclick="ampliarFoto(${jsArg(id)})"`. O navegador desfaz as entidades
+  antes de rodar o handler, então `'${escHtml(x)}'` NÃO protege (e
+  "caixa d'água" quebrava o clique);
+- `htmlSeguroIA(html)` para HTML que vem pronto (Analista IA): lista do que
+  pode ficar, sem atributo nenhum.
+
+`resumoRDO()` já devolve escapado (é só para tela). `tests/telas-seguras.ui.test.js`.
+
+O Histórico acha o lançamento pelo ID guardado na linha (`histLinha(idx)`,
+`data-id`), nunca pela posição: com a edição aberta o refresh troca o
+`STATE.rdoavanco`, e a posição andava para o lançamento vizinho.
+
+## Previsão do tempo da obra
+
+A Central de Campo (Painel) mostra os próximos 5 dias na coordenada do
+canteiro (`COORD_OBRAS` no index.html — as mesmas de `CLIMA_OBRAS` no
+Code.gs; obra nova declara nos dois). Vem do Open-Meteo (aberto, sem
+chave), fica guardada 1 h por obra e, sem sinal, a guardada aparece
+dizendo de quando é. Dia com ≥ 5 mm é risco; ≥ 20 mm, chuva forte. É apoio
+ao planejamento, NÃO registro: nada disso vai para o RDO. `api.open-meteo.com`
+está em `SO_REDE` no `sw.js`. `tests/previsao-tempo.ui.test.js`.
+
+## Repetir a equipe do último dia
+
+No formulário do turno, **Repetir efetivo e equipamentos do último dia**
+(`copiarEquipeDoUltimoDia`) traz as QUANTIDADES do último turno igual
+lançado — nunca apontador, paralisação ou texto, que são do dia. Na obra de
+várias partes vem a parte da MESMA pessoa (`turnoAnteriorParaCopiar` com a
+chave dela), não a soma do dia. `tests/repetir-equipe.ui.test.js`.
+
+## Feriados não acabam
+
+`feriadosDoAno(ano)` (index.html) e `feriadosDoAnoObra_` (Code.gs) fazem a
+conta: fixos nacionais + 25/01 e 09/07 de São Paulo, e os móveis
+(Carnaval, Sexta-feira Santa, Corpus Christi) pela Páscoa. Conferido igual à
+tabela manual de 2025–2028 que existia. Feriado municipal de outra cidade
+entra em `FERIADOS_FIXOS`.
 
 ## A foto é daquele serviço, daquela obra
 

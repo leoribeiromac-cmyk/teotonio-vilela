@@ -72,23 +72,23 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=62"></script>
-<script src="dados/ruas-de-terra.js?v=62"></script>
+<script src="dados/ranario.js?v=63"></script>
+<script src="dados/ruas-de-terra.js?v=63"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=62"></script>
+<script src="dados/teotonio-muros.js?v=63"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=62"></script>
-<script src="js/nf/adaptador.js?v=62"></script>
-<script src="js/nf/notas.js?v=62"></script>
-<script src="js/equip/equipamentos.js?v=62"></script>
+<script src="js/ui/icones.js?v=63"></script>
+<script src="js/nf/adaptador.js?v=63"></script>
+<script src="js/nf/notas.js?v=63"></script>
+<script src="js/equip/equipamentos.js?v=63"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=62"></script>
-<script src="js/rdo/mapa-chuva.js?v=62"></script>
+<script src="js/bf/bota-fora.js?v=63"></script>
+<script src="js/rdo/mapa-chuva.js?v=63"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -2206,6 +2206,10 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 .ai-barra { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
   margin-bottom:14px; padding-bottom:12px; border-bottom:1px dashed var(--border) }
 .ai-barra[hidden] { display:none }
+/* Repetir a equipe do último dia — fica entre a identificação e o efetivo */
+.copiar-equipe{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:10px 14px;
+  border:1px dashed var(--border-strong);border-radius:var(--r);background:var(--surface-2)}
+.copiar-equipe span{font-size:var(--fs-sm);color:var(--muted);flex:1;min-width:200px}
 .ai-carimbo { font-size:var(--fs-xs); color:var(--muted); font-family:'JetBrains Mono',monospace }
 .loader-spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--pri); border-radius: 50%; animation: spin 0.8s linear infinite; }
 
@@ -3361,6 +3365,154 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .hist-resumo > span:last-child{grid-column:1/-1;margin-left:0!important}
   .hist-acoes{width:100%}
   .hist-acoes > .btn,.hist-acoes > select{flex:1 1 45%;justify-content:center;min-height:42px}
+}
+
+/* ====================================================================
+   REVISÃO DE CONTRASTE, TECLADO E TEMA ESCURO (set/2026)
+   --------------------------------------------------------------------
+   Medido tela a tela (390 e 1440 px, claro e escuro). Fica no FIM da
+   folha de propósito: são correções por cima das regras de sempre, e
+   quem ler a regra original encontra aqui o porquê de ela ter mudado.
+   ==================================================================== */
+
+/* Tokens de TEXTO sobre fundo claro de pill/aviso: --grn e --blu são cores
+   de preenchimento, e como texto davam 2,97:1 e 3,65:1. Os de preenchimento
+   com texto branco (botão primário, terracota) ganham a versão que passa de
+   4,5:1 — no escuro o terracota fica, e o texto sobre ele é que escurece. */
+:root{
+  color-scheme:light;
+  --grn-d:oklch(0.48 0.14 150); --blu-d:oklch(0.48 0.17 250);
+  --pri-fill:var(--pri); --pri-fill-h:var(--pri-d);
+  --acc-fill:oklch(0.55 0.18 38); --acc-fill-h:oklch(0.48 0.18 38); --acc-fill-txt:#fff;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --grn-d:var(--grn); --blu-d:var(--blu);
+    --pri-fill:oklch(0.50 0.13 240); --pri-fill-h:oklch(0.45 0.13 240);
+    --acc-fill:var(--acc); --acc-fill-h:var(--acc-d); --acc-fill-txt:#1a1612;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --grn-d:var(--grn); --blu-d:var(--blu);
+  --pri-fill:oklch(0.50 0.13 240); --pri-fill-h:oklch(0.45 0.13 240);
+  --acc-fill:var(--acc); --acc-fill-h:var(--acc-d); --acc-fill-txt:#1a1612;
+}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --grn-d:oklch(0.48 0.14 150); --blu-d:oklch(0.48 0.17 250);
+  --pri-fill:var(--pri); --pri-fill-h:var(--pri-d);
+  --acc-fill:oklch(0.55 0.18 38); --acc-fill-h:oklch(0.48 0.18 38); --acc-fill-txt:#fff;
+}
+/* tokens que eram usados e nunca existiram */
+:root{ --amarelo:var(--ylw-d); --err:var(--red); }
+
+/* CAMPOS NO TEMA ESCURO. Fora do `.field`, input/select/textarea ficavam com
+   o fundo branco do navegador — e o <select> de mês da Medição, com fundo
+   escuro e texto preto, ficava INVISÍVEL (1,1:1). :where() não pesa nada:
+   qualquer regra do app continua mandando; isto só substitui o padrão do
+   navegador. `color-scheme` acima escurece calendário, relógio e barras. */
+:where(input:not([type=checkbox],[type=radio],[type=range],[type=color],[type=file]), select, textarea){
+  background-color:var(--surface); color:var(--text); border-color:var(--border-strong);
+}
+:where(input[type=checkbox], input[type=radio]){ accent-color:var(--acc); }
+/* controle de formulário não herda a fonte: caía em Arial na barra de baixo,
+   nos filtros e nos botões do Histórico */
+button, input, select, textarea{ font-family:inherit; }
+
+/* FOCO VISÍVEL para quem usa teclado (Tab): era o contorno preto de 1 px
+   do navegador, que some no escuro. Não aparece no toque. */
+:where(a, button, [role=button], summary, input, select, textarea, [tabindex], .nav-item, .chip):focus-visible{
+  outline:2px solid var(--acc); outline-offset:2px;
+}
+.exec-hero :focus-visible, .sidebar :focus-visible{ outline-color:#fff; }
+
+/* BOTÕES: primário no escuro era branco sobre azul claro (3,58:1) */
+.btn-primary{background:var(--pri-fill)}
+.btn-primary:hover{background:var(--pri-fill-h)}
+.btn-acc, .btn-pri{background:var(--acc-fill);border-color:var(--acc-fill);color:var(--acc-fill-txt)}
+.btn-acc:hover{background:var(--acc-fill-h)}
+.curva-hz-btn.on{background:var(--acc-fill);border-color:var(--acc-fill);color:var(--acc-fill-txt)}
+.nav-item.active .nav-counter{background:var(--acc-fill);color:var(--acc-fill-txt)}
+.conta-avatar:not(.conta-avatar--fora){background:var(--acc-fill);color:var(--acc-fill-txt)}
+a.btn{text-decoration:none}
+/* toque: o botão afunda de leve — no sol, é o retorno que se sente */
+@media (hover: none){ .btn:active{transform:scale(.97)} }
+
+/* TEXTO VERDE/AZUL: o token de texto, não o de preenchimento */
+.pill-grn{color:var(--grn-d)}
+.pill-blu{color:var(--blu-d)}
+.dia-pill.ok{color:var(--grn-d)}
+.dia-pill.falta{color:var(--muted)}
+
+/* MENU LATERAL: a lista não é mais uma caixa rolando dentro de outra. No
+   desktop de 900 px de altura, 9 das 16 telas — Lançar Serviço, RDO Diário,
+   Histórico — ficavam escondidas atrás do rodapé de acesso, e só uma barra
+   de rolagem que aparece no passar do mouse dizia que havia mais. Agora a
+   barra inteira rola; os itens vêm antes do rodapé. */
+.sidebar-nav{flex:none;min-height:0;overflow:visible}
+button.nav-item{
+  font:inherit;font-size:var(--fs-md);text-align:left;background:none;border:0;
+  width:calc(100% - 24px);
+}
+button.nav-item.active{background:var(--sidebar-active-bg)}
+.nav-label{opacity:1;color:rgba(242,237,227,.58)}
+.obra-sel-lbl, .sidebar-credito{opacity:1;color:rgba(242,237,227,.62)}
+
+/* HERO DO PAINEL (sempre escuro): o terracota do tema claro é escuro demais
+   sobre ele, e os rótulos a 40 % de branco não passavam de 3,8:1 */
+.exec-hero{--acc:oklch(0.72 0.16 38)}
+.hero-delta-title, .hero-value .pp{color:rgba(255,255,255,.62)}
+/* a linha do sparkline riscava o próprio rótulo */
+.hero-spark{height:82px}
+.hero-spark-label{position:static;display:block;margin-bottom:6px}
+
+/* "hoje" no escuro virava um marrom-avermelhado que lia como erro */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .dia-linha.hoje{background:color-mix(in oklch, var(--acc) 12%, var(--surface))}
+}
+:root[data-theme="dark"] .dia-linha.hoje{background:color-mix(in oklch, var(--acc) 12%, var(--surface))}
+
+/* mapa de calor: a faixa da linha estava em 8 px e 75 % de opacidade */
+.hm-row-label small{font-size:var(--fs-2xs);opacity:1;color:var(--muted)}
+
+/* Planta de avanço: o nome da frente era cortado pelo COMEÇO ("uros de
+   Contenção") e os números da régua atravessavam os traços */
+.pv-rotulo{justify-content:flex-end}
+.pv-rotulo .pv-rotulo-txt{overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pv-regua i{background:var(--surface);padding:0 2px;z-index:1}
+
+/* Histórico: Editar e Apagar tinham 25×19 px, um ao lado do outro — e um
+   deles apaga. Alvo mínimo de toque e respiro entre os dois. */
+.gantt-edit-btn{min-width:30px;min-height:30px;padding:5px 7px;font-size:var(--fs-xs);gap:4px}
+.celula-acoes .gantt-edit-btn + .gantt-edit-btn{margin-left:8px!important}
+@media (pointer: coarse){
+  .gantt-edit-btn{min-width:40px;min-height:40px}
+  details > summary{min-height:44px;display:flex;align-items:center}
+  .hero-ia-refresh, .hero-ritmo-btn{min-width:44px;min-height:40px}
+}
+
+/* celular: o título da tela tinha 45 px ("Paine…") — o "Novo Serviço" vira
+   só o ícone e o "Sair" do topo sai (ele continua no rodapé do menu) */
+@media (max-width: 560px){
+  .topbar-novo-txt{display:none}
+  #topbarActions .btn-primary{min-width:44px;justify-content:center}
+  #topbarActions .topbar-sair{display:none}
+  .exec-kpi-grid, .exec-kpi-grid.cinco{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .exec-kpi-grid.cinco > :last-child:nth-child(odd){grid-column:1/-1}
+}
+/* tabela mais larga que a tela: a borda direita esmaece — é o aviso de que
+   ela continua de lado (Usuários, Medição, detalhado por pacote) */
+@media (max-width: 768px){
+  .tbl-wrap, .heatmap-wrap{
+    -webkit-mask-image:linear-gradient(90deg,#000 88%,transparent);
+    mask-image:linear-gradient(90deg,#000 88%,transparent);
+  }
+  .tbl-wrap.no-fim, .heatmap-wrap.no-fim{-webkit-mask-image:none;mask-image:none}
+}
+@media (prefers-reduced-motion: reduce){
+  *, *::before, *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
 }
 </style>
 </head>
@@ -4709,7 +4861,10 @@ function _parseISODateTexto(s) {
     const p = str.split('/');
     // "12/05" (sem ano) derrubava a tela inteira com TypeError em p[2]
     if (p.length < 3) return null;
-    return new Date(parseInt(p[2].slice(0,4)), parseInt(p[1])-1, parseInt(p[0]));
+    // "10/05/26" é 2026, não 1926
+    let ano = parseInt(p[2].slice(0,4));
+    if (ano < 100) ano += 2000;
+    return new Date(ano, parseInt(p[1])-1, parseInt(p[0]));
   }
   if (str.includes('-') && str.length >= 10) {
      const parts = str.slice(0,10).split('-');
@@ -5317,13 +5472,32 @@ const PRODUTIVIDADE_PADRAO = {
 // Produtividade de um pacote (unid/dia): se a aba Pacotes tiver a coluna
 // opcional "Produtividade" preenchida, ela MANDA — dá pra ajustar o plano
 // direto na planilha, sem mexer no código. Senão vale o padrão acima.
-function produtividadeDe(pid) {
-  const p = STATE.pacotes.find(pp => getCSVField(pp, 'ID') === pid);
-  if (p) {
-    const v = num(getCSVField(p, 'Produtividade'));
-    if (v > 0) return v;
+/* O cadastro de pacotes lido UMA vez por carga. O Painel pergunta a
+   produtividade e o previsto de cada lançamento — com o `find` na lista
+   inteira a cada pergunta, e a pergunta "a obra pondera?" varrendo todos os
+   pacotes de novo DENTRO dela, a Ruas de Terra (48 serviços, sem
+   produtividade) gastava 149 dos 200 ms do desenho do Painel aqui. A
+   memória é da lista: carga nova é lista nova, e ela se refaz sozinha. */
+let _pacotesIdx = { ref: null, porId: null, pondera: false };
+function pacotesIndice() {
+  const lista = STATE.pacotes || [];
+  if (_pacotesIdx.ref !== lista) {
+    const porId = new Map();
+    lista.forEach(p => {
+      const id = getCSVField(p, 'ID');
+      if (porId.has(id)) return;                 // o primeiro vence, como no find
+      const v = num(getCSVField(p, 'Produtividade'));
+      porId.set(id, { pacote: p, prod: v > 0 ? v : (PRODUTIVIDADE_PADRAO[id] || 0),
+                      prev: num(getCSVField(p, 'Qtd Estimada')) });
+    });
+    const pondera = [...porId.values()].some(x => x.prod > 0);
+    _pacotesIdx = { ref: lista, porId, pondera };
   }
-  return PRODUTIVIDADE_PADRAO[pid] || 0;
+  return _pacotesIdx;
+}
+function produtividadeDe(pid) {
+  const x = pacotesIndice().porId.get(pid);
+  return x ? x.prod : (PRODUTIVIDADE_PADRAO[pid] || 0);
 }
 
 /* ------------------------------------------------------------------
@@ -5344,7 +5518,7 @@ function produtividadeDe(pid) {
    das duas bases está valendo (ver baseDoAvanco).
    ------------------------------------------------------------------ */
 function obraPonderaPorProdutividade() {
-  return (STATE.pacotes || []).some(p => produtividadeDe(getCSVField(p, 'ID')) > 0);
+  return pacotesIndice().pondera;
 }
 function baseDoAvanco() {
   return obraPonderaPorProdutividade()
@@ -5475,8 +5649,8 @@ function diasEquivalentes(qtdEstimada, pid) {
 function diasDoLancamento(qtd, pid) {
   const prod = produtividadeDe(pid);
   if (prod > 0) return qtd / prod;
-  const pac = STATE.pacotes.find(p => getCSVField(p, 'ID') === pid);
-  const prev = pac ? num(getCSVField(pac, 'Qtd Estimada')) : 0;
+  const x = pacotesIndice().porId.get(pid);
+  const prev = x ? x.prev : 0;
   return prev > 0 ? (qtd / prev) * diasEquivalentes(prev, pid) : 0;
 }
 
@@ -5493,8 +5667,17 @@ function transitionTo(actionFn) {
     void pageEl.offsetWidth; 
     pageEl.style.opacity = '1';
     pageEl.style.transform = 'translateY(0)';
-    setTimeout(montarGraficos, 50);
+    agendarGraficos();
   }, 160);
+}
+
+/* Um desenho de gráfico por troca de tela. `render()` e `transitionTo()`
+   agendavam cada um o seu: 4 Chart.js construídos para 2 canvas, e a
+   animação de entrada rodando duas vezes. */
+let _graficosAgendados = null;
+function agendarGraficos() {
+  if (_graficosAgendados) clearTimeout(_graficosAgendados);
+  _graficosAgendados = setTimeout(() => { _graficosAgendados = null; montarGraficos(); }, 50);
 }
 
 function navigate(page) {
@@ -5507,6 +5690,7 @@ function navigate(page) {
   STATE.currentPage = page;
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.page === page);
+    if (el.dataset.page === page) el.setAttribute('aria-current', 'page'); else el.removeAttribute('aria-current');
   });
   // a barra inferior do celular acompanha a mesma navegação
   const barra = document.querySelector('.bottom-nav-mobile');
@@ -6064,14 +6248,14 @@ window.atualizarBotoesTopo = function() {
      numa janela de 390px, fora do alcance justamente de quem só tem celular.
      Quem está logado continua sabendo quem é pelo rodapé do menu lateral. */
   const acesso = STATE.usuarioLogado
-    ? `<button class="btn btn-ghost btn-sm" onclick="fazerLogout()" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">${ic('sair')} <span class="topbar-acesso-txt">Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</span></button>`
+    ? `<button class="btn btn-ghost btn-sm topbar-sair" onclick="fazerLogout()" aria-label="Sair" title="Você está como ${escHtml(STATE.usuarioLogado)}, acesso de ${escHtml(perfilNome())}">${ic('sair')} <span class="topbar-acesso-txt">Sair (${escHtml(STATE.usuarioLogado)} · ${escHtml(perfilNome())})</span></button>`
     : `<button class="btn btn-outline btn-sm" onclick="irParaLogin()" title="Entrar para lançar serviços e RDOs">${ic('entrar')} <span class="topbar-acesso-txt">Entrar</span></button>`;
   /* "Novo Serviço" não aparece na PRÓPRIA tela de lançamento: ali ele é um
      botão que não leva a lugar nenhum, e o preço é caro — em 390 px os quatro
      botões deixavam ~70 px para o bloco do título, e é o subtítulo que diz
      onde o lançamento grava. Um botão a menos devolve a linha ao título. */
   const novo = (pode('lancarServico') && STATE.currentPage !== 'rdo')
-    ? `<button class="btn btn-primary btn-sm" onclick="navigate('rdo')">${ic('mais')} Novo Serviço</button>`
+    ? `<button class="btn btn-primary btn-sm" onclick="navigate('rdo')" aria-label="Novo Serviço" title="Novo Serviço">${ic('mais')}<span class="topbar-novo-txt"> Novo Serviço</span></button>`
     : '';
   tb.innerHTML = acesso +
     '<button class="btn btn-outline btn-sm btn-icone" onclick="buscaAbrir()" title="Buscar estaca, pacote, lançamento ou RDO (Ctrl+K)" aria-label="Buscar">' + ic('lupa') + '</button>' +
@@ -7688,11 +7872,14 @@ function consumoComSaldo(mes) {
    e grupo que ficou sem nenhum item some junto com o seu divisor, para não
    deixar título órfão na barra. */
 function itemNav(it) {
-  return `<div class="nav-item ${STATE.currentPage === it.id ? 'active' : ''}" data-page="${it.id}" onclick="navigate('${it.id}')">
+  /* <button>, não <div>: com div o Tab pulava a lista inteira de telas, e
+     leitor de tela não sabia qual é a aberta (aria-current). */
+  return `<button type="button" class="nav-item ${STATE.currentPage === it.id ? 'active' : ''}" data-page="${it.id}"
+            ${STATE.currentPage === it.id ? 'aria-current="page"' : ''} onclick="navigate('${it.id}')">
             <span class="nav-icon">${ic(it.icone)}</span>
             <span>${it.texto}</span>
             ${it.contador ? `<span class="nav-counter" id="${it.contador}">0</span>` : ''}
-          </div>`;
+          </button>`;
 }
 
 /* Quinze telas em fila, todas com o mesmo peso, é uma lista para procurar,
@@ -8337,7 +8524,7 @@ function render() {
   else if (STATE.currentPage === 'projetos') { pageEl.innerHTML = renderProjetos(); abrirPrancha(); }
   else if (STATE.currentPage === 'usuarios') { pageEl.innerHTML = renderUsuarios(); usuariosCarregarLista(); }
 
-  setTimeout(montarGraficos, 50);
+  agendarGraficos();
 }
 
 // ====================================================================
@@ -12566,7 +12753,7 @@ function renderPlantaAvanco() {
       }
       var nEst = Object.keys(fr.estacas).length;
       return '<div class="pv-rotulo" title="' + escHtml(f) + '">' + ic(icFrente(f), 13) +
-               '<span>' + escHtml(f) + '</span><small>' + nEst + ' est.</small></div>' +
+               '<span class="pv-rotulo-txt">' + escHtml(f) + '</span><small>' + nEst + ' est.</small></div>' +
              '<div class="pv-fx frente" style="width:' + larg + ';' + colunas + '">' + cels + '</div>';
     }).join('');
 
@@ -12938,7 +13125,13 @@ function renderHeatmap(av) {
                 const bg = v > 0 ?
                   `background:oklch(${0.95 - intensity * 0.45} 0.18 38)` :
                   `background:var(--bg)`;
-                const color = intensity > 0.5 ? '#fff' : 'var(--muted)';
+                /* A cor do número segue a CLAREZA da célula (a mesma conta do
+                   fundo): cinza sobre laranja médio dava 2:1 no claro e 1,3:1
+                   no escuro. Até L 0,62 o fundo é escuro o bastante para o
+                   branco; acima, texto escuro — nos dois temas, porque a
+                   célula preenchida tem a mesma cor nos dois. */
+                const claridade = 0.95 - intensity * 0.45;
+                const color = v > 0 ? (claridade <= 0.62 ? '#fff' : '#1a1712') : 'var(--muted)';
                 const title = `${e.rot} · ${escHtml(getCSVField(a.pacote, 'Pacote'))}: ${fmtNum(v, 1)} ${escHtml(getCSVField(a.pacote, 'Unidade Física')||'')}`;
                 return `<div class="hm-cell" style="${bg};color:${color}" title="${title}">${v > 0 ? fmtNum(v, 0) : ''}</div>`;
               }).join('')}
@@ -17427,6 +17620,9 @@ window.buscarClima = async function () {
       if (sel) { sel.value = valor; }
       DIARIO_V4[campo] = valor;
     });
+    // o clima que a estação preencheu é do rascunho também: recarregar antes
+    // de salvar o turno não pode devolver os três períodos em "Bom"
+    saveDiarioV4(DIARIO_V4);
     const mm = r.mm || {};
     if (fonte) {
       // Estação a mais de 20 km da obra não é contraprova do canteiro: o
@@ -17957,6 +18153,60 @@ function partesDoDiaRDO(data) {
   return o;
 }
 
+/* ------------------------------------------------------------------
+   REPETIR A EQUIPE DO ÚLTIMO DIA
+   ------------------------------------------------------------------
+   São 17 funções de efetivo indireto, as do direto e uma dúzia de
+   equipamentos — redigitados todo santo dia, quando a equipe quase não
+   muda de um dia para o outro. Um toque traz as quantidades do último
+   turno igual lançado; o apontador só corrige quem faltou.
+   Na obra de várias partes, vem a PARTE da mesma pessoa, não a soma do
+   dia — senão a frente dela herdaria o efetivo da outra rua.
+   Só as quantidades: apontador, paralisação e texto são do dia. */
+function turnoAnteriorParaCopiar(data, t, chaveParte) {
+  const datas = [...new Set((STATE.rdodiario || []).map(r => {
+    const d = parseISODate(getCSVField(r, 'Data'));
+    return d ? getLocalISODate(d) : '';
+  }))].filter(iso => iso && iso < data).sort().reverse();
+  for (const iso of datas.slice(0, 45)) {
+    if (chaveParte) {
+      const p = (partesDoDiaRDO(iso)[t] || {})[chaveParte];
+      if (p) return { data: iso, td: tdDaParte(p) };
+      continue;
+    }
+    const dia = carregarDiarioDaSheet(iso);
+    if (dia && dia[t] && dia[t].preenchido) return { data: iso, td: dia[t] };
+  }
+  return null;
+}
+
+window.copiarEquipeDoUltimoDia = function () {
+  const d = DIARIO_V4, t = DIARIO_TURNO_ATIVO;
+  if (!d || !t || !d[t]) return;
+  const td = d[t];
+  const chave = d.parte ? rdoChaveParte(td.apontador || (d.parte && d.parte.de) || STATE.usuarioLogado || '') : '';
+  const ant = turnoAnteriorParaCopiar(d.data, t, chave);
+  if (!ant) {
+    toast('Não achei um ' + t + (d.parte ? ' lançado por ' + (td.apontador || 'você') : '') +
+          ' em dia anterior para repetir.', 'info', 5000);
+    return;
+  }
+  const temQtd = o => Object.values(o || {}).some(v => numCampo(v) > 0);
+  const temLista = l => (l || []).some(f => f && numCampo(f.qtd) > 0);
+  const jaTem = temQtd(td.efetivo) || temQtd(td.equipamentos) ||
+                temLista(td.customDireto) || temLista(td.customIndireto) || temLista(td.customEquip);
+  if (jaTem && !confirm('Trocar o efetivo e os equipamentos já preenchidos pelos de ' + fmtData(ant.data) + '?')) return;
+  const copia = v => JSON.parse(JSON.stringify(v == null ? null : v));
+  td.efetivo = copia(ant.td.efetivo) || {};
+  td.equipamentos = copia(ant.td.equipamentos) || {};
+  td.customIndireto = copia(ant.td.customIndireto) || [];
+  td.customDireto = copia(ant.td.customDireto) || [];
+  td.customEquip = copia(ant.td.customEquip) || [];
+  saveDiarioV4(d);
+  transitionTo(render);
+  toast('Efetivo e equipamentos de ' + fmtData(ant.data) + ' repetidos. Confira quem veio hoje antes de salvar.', 'success', 6000);
+};
+
 function tdDaParte(p) {
   const c = v => JSON.parse(JSON.stringify(v == null ? null : v));
   const ef = p.efetivo || {}, eq = p.equipamentos || {};
@@ -18297,7 +18547,7 @@ function renderFormularioTurno() {
         <div style="font-size:var(--fs-xs);opacity:.85;font-weight:700;letter-spacing:.08em;text-transform:uppercase">Você está preenchendo</div>
         <div style="font-size:var(--fs-2xl);font-weight:700;margin-top:2px">${turnoIcon} TURNO ${turnoLabel} · ${fmtData(d.data)}</div>
       </div>
-      <button class="btn-outline" onclick="voltarSeletorTurnoV4()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff">${ic('voltar')} Voltar</button>
+      <button type="button" class="btn btn-sm" onclick="voltarSeletorTurnoV4()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;flex-shrink:0">${ic('voltar')} Voltar</button>
     </div>
     
     ${infoOutroHtml}
@@ -18343,6 +18593,10 @@ function renderFormularioTurno() {
       </div>
     </div>
     
+    <div class="copiar-equipe stagger-item">
+      <button type="button" class="btn btn-outline btn-sm" onclick="copiarEquipeDoUltimoDia()">${ic('copiar')} Repetir efetivo e equipamentos do último dia</button>
+      <span>Traz as quantidades do último ${turnoLabel} lançado${d.parte ? ' por você' : ''} — depois é só ajustar quem faltou ou chegou.</span>
+    </div>
     ${renderEfetivoV4('INDIRETO', CATEGORIAS_INDIRETO, td, 'indireto', cor)}
     ${renderEfetivoV4('DIRETO', CATEGORIAS_DIRETO, td, 'direto', cor)}
     
@@ -21070,6 +21324,10 @@ document.addEventListener('DOMContentLoaded', () => {
   /* O perfil de campo não enxerga o Painel: abrir nele era cair em "Acesso
      não liberado" a cada boot. Quem não vê o Painel começa no lançamento. */
   if (!podeVer(STATE.currentPage)) STATE.currentPage = podeVer('executivo') ? 'executivo' : 'rdo';
+  /* A fila offline, os rascunhos e as fotos moram no armazenamento do site.
+     Sem "persistente", o navegador pode apagá-lo inteiro sob pressão de
+     espaço — com lançamento que ainda não subiu dentro. */
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) {}
   renderShell();
   // `navigate('executivo')` aqui não fazia nada (a tela já era essa), e o
   // corpo ficava em branco até os CSVs chegarem: agora a espera se anuncia.
