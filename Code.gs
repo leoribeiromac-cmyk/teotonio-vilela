@@ -3312,12 +3312,10 @@ function configurarGatilhos() {
   // crescer sem fim (o teto do Apps Script é 500 KB no total).
   ScriptApp.newTrigger('limparSessoesAbandonadas').timeBased().everyDays(1).atHour(3).create();
   // O RDO sai por e-mail na manhã seguinte ao dia que ele relata. A hora é
-  // trocada pela Propriedade RDO_EMAIL_HORA, sem mexer no código — mas só
-  // vale depois de rodar esta função de novo.
-  var horaRDO = rdoEmailHora();
-  ScriptApp.newTrigger('enviarRDODeOntemPorEmail').timeBased().everyDays(1).atHour(horaRDO).create();
+  // trocada pela Propriedade RDO_EMAIL_HORA, sem mexer no código.
+  var horaRDO = rdoEmailGatilhoInstalar_();
   Logger.log('Gatilhos criados: backupDiario (02h), limparSessoesAbandonadas (03h), ' +
-             'registrarClimaAuto (05h) e enviarRDODeOntemPorEmail (' + horaRDO + 'h).');
+             'registrarClimaAuto (05h) e enviarRDODeOntemPorEmail (' + horaRDO + ').');
   return { ok: true };
 }
 
@@ -3345,7 +3343,7 @@ function configurarGatilhos() {
 //                  para a lista de destinatários, com o resumo do dia no
 //                  corpo do e-mail.
 //
-// O e-mail das 8h leva o RDO de ONTEM, não o de hoje. Às 8h o dia de hoje nem
+// O e-mail das 6h30 leva o RDO de ONTEM, não o de hoje. Às 6h30 o dia de hoje nem
 // começou: o que sairia para a fiscalização seria uma folha em branco. O que
 // se manda de manhã é o dia que FECHOU — com os dois turnos, o efetivo
 // inteiro e as ocorrências.
@@ -3354,7 +3352,7 @@ function configurarGatilhos() {
 // que não fechou o turno): NADA vai para a fiscalização. O aviso de que o
 // dia ficou sem RDO vai só para o dono do script — é problema de dentro de
 // casa, e mandar "ontem não teve RDO" para o cliente toda segunda-feira é a
-// forma mais rápida de o e-mail diário virar spam para quem o recebe. Às 8h
+// forma mais rápida de o e-mail diário virar spam para quem o recebe. Às 6h30
 // esse aviso ainda serve para alguma coisa: chega antes de o canteiro abrir,
 // e dá tempo de cobrar o apontador que não fechou o turno de ontem.
 //
@@ -3376,10 +3374,12 @@ function configurarGatilhos() {
 var RDO_EMAIL_DESTINOS = [
   'leonardo@gestorengenharia.com.br',
   'msantana@gestorengenharia.com.br',
+  'fabiolarufino@mobilidadepch.com.br',
   'terceiro.wbotelho@spobras.sp.gov.br'
 ];
 
-var RDO_EMAIL_HORA_PADRAO = 8;                         // Propriedade: RDO_EMAIL_HORA
+var RDO_EMAIL_HORA_PADRAO = '6:30';                    // Propriedade: RDO_EMAIL_HORA ('6:30', '6h30', '8')
+var RDO_EMAIL_GATILHO_CHAVE = 'RDO_EMAIL_GATILHO';     // a hora em que o gatilho está instalado
 var PASTA_RDO_PDF        = 'RDOs do dia em PDF (Teotônio Privado)';
 var RDO_EMAIL_LOG_CHAVE  = 'RDO_EMAIL_LOG';
 var RDO_EMAIL_LOG_MAX    = 60;                         // ~2 meses de histórico
@@ -3388,9 +3388,55 @@ var RDO_PDF_MAX_BYTES    = 12 * 1024 * 1024;           // teto de anexo do Gmail
 var RDO_DIA_DA_SEMANA = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira',
                          'quinta-feira', 'sexta-feira', 'sábado'];
 
-function rdoEmailHora() {
-  var h = parseInt(PropertiesService.getScriptProperties().getProperty('RDO_EMAIL_HORA'), 10);
-  return (!isNaN(h) && h >= 0 && h <= 23) ? h : RDO_EMAIL_HORA_PADRAO;
+/* A hora do envio, com minuto: { hora, minuto }. A Propriedade aceita '6:30',
+   '6h30' ou só a hora ('8'); o que não for hora de verdade cai no padrão. */
+function rdoEmailHorario_(txt) {
+  var m = String(txt == null ? '' : txt).trim().match(/^(\d{1,2})(?:\s*[:hH]\s*(\d{1,2})?)?$/);
+  if (!m) return null;
+  var h = parseInt(m[1], 10), min = m[2] ? parseInt(m[2], 10) : 0;
+  return (h >= 0 && h <= 23 && min >= 0 && min <= 59) ? { hora: h, minuto: min } : null;
+}
+function rdoEmailHorario() {
+  return rdoEmailHorario_(PropertiesService.getScriptProperties().getProperty('RDO_EMAIL_HORA')) ||
+         rdoEmailHorario_(RDO_EMAIL_HORA_PADRAO);
+}
+function rdoEmailHora() { return rdoEmailHorario().hora; }
+/* '6h30', '8h' — como a hora aparece no app e no diagnóstico. */
+function rdoEmailHoraTexto() {
+  var h = rdoEmailHorario();
+  return h.hora + 'h' + (h.minuto ? ('0' + h.minuto).slice(-2) : '');
+}
+
+/* Põe o gatilho do RDO na hora de rdoEmailHorario() e anota qual foi.
+   `nearMinute` é o mais perto de um minuto que o Apps Script chega: o
+   gatilho roda dentro de uns 15 min em volta dele. */
+function rdoEmailGatilhoInstalar_() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    var fn = t.getHandlerFunction();
+    if (fn === 'enviarRDODoDiaPorEmail' || fn === 'enviarRDODeOntemPorEmail') ScriptApp.deleteTrigger(t);
+  });
+  var h = rdoEmailHorario();
+  ScriptApp.newTrigger('enviarRDODeOntemPorEmail').timeBased().everyDays(1)
+    .atHour(h.hora).nearMinute(h.minuto).create();
+  var txt = rdoEmailHoraTexto();
+  PropertiesService.getScriptProperties().setProperty(RDO_EMAIL_GATILHO_CHAVE, txt);
+  return txt;
+}
+
+/* A hora mudou (no código ou na Propriedade) e ninguém rodou
+   configurarGatilhos()? O próprio gatilho se muda: depois de mandar o RDO,
+   reinstala-se na hora nova — o envio de amanhã já sai nela. O deploy
+   automático só troca o código, não os gatilhos. */
+function rdoEmailGatilhoAcertar_() {
+  try {
+    if (PropertiesService.getScriptProperties().getProperty(RDO_EMAIL_GATILHO_CHAVE) === rdoEmailHoraTexto()) return false;
+    var txt = rdoEmailGatilhoInstalar_();
+    Logger.log('Gatilho do RDO por e-mail mudou para ' + txt + '.');
+    return true;
+  } catch (e) {
+    Logger.log('Gatilho do RDO por e-mail não foi mudado: ' + e + ' — rode configurarGatilhos().');
+    return false;
+  }
 }
 
 function rdoEmailDestinatarios() {
@@ -3492,7 +3538,7 @@ function rdoPdfDoDia(p) {
                      dataISO, '', arq.getId());
 
   /* Chegou o depósito com TODAS as firmas: é a hora de mandar o RDO assinado
-     para a lista — o das 8h saiu com os quadros em branco, porque de manhã
+     para a lista — o das 6h30 saiu com os quadros em branco, porque de manhã
      ninguém tinha assinado ainda. Nunca derruba o depósito: o PDF já está
      guardado, e falha de e-mail não pode transformar isso em erro para o app. */
   var avisoAssinado = null;
@@ -3528,6 +3574,7 @@ function enviarRDODeOntemPorEmail() {
     return rdoEnviarPorEmail_(iso, OBRA_ID, false);
   } finally {
     trava.releaseLock();
+    rdoEmailGatilhoAcertar_();
   }
 }
 
@@ -3635,7 +3682,7 @@ function rdoDiagEmail(p) {
     assinaturasNoDeposito: rdoPdfAssinaturasNoDeposito_(obra, dataISO),
     saiuEm: saiu ? String(saiu.em || '') : '',
     saiuPara: (saiu && saiu.para) ? saiu.para : [],
-    horaDoEnvio: rdoEmailHora(),
+    horaDoEnvio: rdoEmailHoraTexto(),
     /* Quem está pré-assinado. Fica aqui porque "por que o engenheiro não
        recebeu link?" é a mesma pergunta que esta tela já responde — e a
        resposta é que ele não precisa de um. */
@@ -4128,7 +4175,7 @@ function conferirEnvioRDOEmail() {
        no meio da lista. */
     lista_vem_de: PropertiesService.getScriptProperties().getProperty('RDO_EMAILS')
       ? 'Propriedade RDO_EMAILS' : 'lista RDO_EMAIL_DESTINOS do Code.gs',
-    hora_do_envio: rdoEmailHora() + 'h',
+    hora_do_envio: rdoEmailHoraTexto(),
     gatilho_instalado: gatilho,
     pdf_desse_dia_depositado: !!arq,
     ja_enviado: rdoEmailJaEnviado_(OBRA_ID, alvo),
@@ -4146,7 +4193,7 @@ function conferirEnvioRDOEmail() {
 // e é por isso que, na prática, a folha ficava semanas sem as três firmas
 // que o contrato exige. A assinatura online fecha esse ciclo sem tirar
 // ninguém de onde está: o engenheiro e o fiscal recebem, cada um, um LINK
-// PESSOAL no mesmo e-mail das 8h, abrem no celular, leem o RDO daquele dia
+// PESSOAL no mesmo e-mail das 6h30, abrem no celular, leem o RDO daquele dia
 // e assinam com o dedo.
 //
 // O LINK É A CREDENCIAL. Não há login: quem recebe o e-mail já foi
@@ -4723,7 +4770,7 @@ function rdoAssinHorasEmTexto_(obj) {
 
 /* Cria o que faltar e devolve as linhas do dia. Chamada tanto pelo envio do
    e-mail quanto pelo app: o escritório precisa poder copiar o link de quem
-   perdeu o e-mail ANTES de as 8h do dia seguinte chegarem. Assinante que
+   perdeu o e-mail ANTES de as 6h30 do dia seguinte chegarem. Assinante que
    entra na lista depois ganha a linha dele na primeira chamada seguinte;
    quem sai da lista mantém a linha que já tem (e a assinatura que já deu —
    apagá-la reescreveria um documento assinado). */
@@ -4754,7 +4801,7 @@ function rdoAssinaturasGarantir_(obra, dataISO) {
     };
     /* A linha do papel com firma arquivada JÁ NASCE ASSINADA. Aqui, e não
        num passo depois: é uma gravação só, e o dia nunca chega a existir
-       com o quadro do engenheiro em branco — nem para o e-mail das 8h, que
+       com o quadro do engenheiro em branco — nem para o e-mail das 6h30, que
        é quem costuma chamar esta função primeiro. */
     var firma = rdoFirmaArquivadaDe_(a.papel);
     if (firma) {
@@ -5187,7 +5234,7 @@ function rdoAssinadoLogLer_() {
 }
 
 /* O depósito acabou de chegar com todas as firmas: manda o RDO ASSINADO
-   para a lista. Este é o documento que a fiscalização arquiva — o das 8h
+   para a lista. Este é o documento que a fiscalização arquiva — o das 6h30
    ainda tem os quadros em branco, porque de manhã ninguém assinou ainda.
 
    Sai UMA vez por dia de RDO: o app redeposita a cada geração do oficial, e
@@ -5368,7 +5415,7 @@ function verLinksDeAssinatura() {
 }
 
 /* Manda (ou remanda) o RDO do dia alvo para a lista, com o link pessoal de
-   cada assinante. É o caminho do RDO corrigido depois das 8h, e o do ensaio
+   cada assinante. É o caminho do RDO corrigido depois das 6h30, e o do ensaio
    com a Propriedade RDO_EMAILS apontando só para você. */
 function reenviarRDODoDiaAlvo() {
   return reenviarRDOPorEmail(dataAlvoAssinatura_());

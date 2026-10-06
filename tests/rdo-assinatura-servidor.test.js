@@ -1,7 +1,7 @@
 // A ASSINATURA ONLINE DO RDO — o lado do servidor
 //
 // O engenheiro e o fiscal assinam o RDO por um LINK que chega no e-mail das
-// 8h. Não há login: o token do link é a credencial. Isso põe todo o peso da
+// 6h30. Não há login: o token do link é a credencial. Isso põe todo o peso da
 // segurança neste arquivo — um token previsível, um link que vale pelo do
 // outro, ou uma assinatura que pode ser reescrita depois de dada, e o que
 // se perde é a validade de um documento que a fiscalização arquiva.
@@ -184,7 +184,7 @@ const ctx = {
   CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
   UrlFetchApp: { fetch: () => ({ getResponseCode: () => 500, getContentText: () => '' }) },
   ScriptApp: { getProjectTriggers: () => [],
-               newTrigger: () => ({ timeBased: () => ({ everyDays: () => ({ atHour: () => ({ create() {} }) }) }) }) },
+               newTrigger: () => ({ timeBased: () => ({ everyDays: () => ({ atHour: () => ({ nearMinute: () => ({ create() {} }) }) }) }) }) },
   XmlService: {},
 };
 ctx.global = ctx;
@@ -436,7 +436,7 @@ t('a Propriedade RDO_ASSINATURA_DIAS estica o prazo', () => {
   verdade(assinar('fiscalizacao').ok, 'não assinou com o prazo esticado');
 });
 
-console.log('\nO link pessoal no e-mail das 8h');
+console.log('\nO link pessoal no e-mail das 6h30');
 t('cada assinante recebe o SEU link, e só o dele', () => {
   depositar();
   ctx.reenviarRDOPorEmail(HOJE);
@@ -1253,7 +1253,7 @@ console.log('\nOs dias assinados que o app ainda tem de repor');
 
 t('dia assinado por todos com o depósito para trás entra na lista', () => {
   comDiario(ONTEM);
-  depositar({ data: ONTEM, assinaturas: 0 });   // o das 8h, com os quadros em branco
+  depositar({ data: ONTEM, assinaturas: 0 });   // o das 6h30, com os quadros em branco
   assinarTodosNoDia(ONTEM);
   const l = pendentes();
   eq(l.length, 1, JSON.stringify(l));

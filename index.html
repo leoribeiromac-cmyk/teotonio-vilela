@@ -4486,7 +4486,7 @@ async function outboxFlush(manual = false) {
         enviados++;
         /* O turno do RDO que subiu pela FILA não passava pelo que o envio
            direto faz depois de gravar: o PDF do dia não era depositado (o
-           e-mail das 8h ia sem ele, ou com um velho). */
+           e-mail das 6h30 ia sem ele, ou com um velho). */
         if (item.kind === 'diario' && item.params && item.params.data &&
             (item.params.obra || 'teotonio') === OBRA.id) {
           const dataDia = item.params.data;
@@ -18553,7 +18553,7 @@ function renderSeletorTurno() {
         ${botoesHtml}
         <!-- QUEM JÁ ASSINOU ESTE DIA. Existe por um motivo prático: quando o
              fiscal diz "não me chegou nada", o escritório precisa do link
-             dele à mão, sem esperar o e-mail das 8h do dia seguinte. -->
+             dele à mão, sem esperar o e-mail das 6h30 do dia seguinte. -->
         ${algumPreenchido && OBRAS_COM_ASSINATURA_ONLINE.indexOf(OBRA.id) !== -1 ? `
         <div class="rdo-assinaturas">
           <div class="rdo-assinaturas-titulo">${ic('assinatura', 14)} Assinatura online</div>
@@ -20035,7 +20035,7 @@ async function depositarRDOPdf(data, pacotePronto) {
    O RDO saía por e-mail com os quadros de assinatura em branco: quem
    recebia tinha de imprimir, assinar de caneta, digitalizar e devolver.
    Agora o engenheiro e o fiscal recebem, cada um, um LINK PESSOAL no
-   mesmo e-mail das 8h, abrem no celular e assinam com o dedo (a página é
+   mesmo e-mail das 6h30, abrem no celular e assinam com o dedo (a página é
    a `assinar.html`, fora do app: quem assina não tem usuário aqui).
 
    O QUE O APP FAZ COM ISSO. Quem desenha o RDO é o navegador — a mesma
@@ -20105,7 +20105,7 @@ async function reporDepositoSeAssinado(data) {
    --------------------------------------------------------------------
    `reporDepositoSeAssinado` só acontece quando alguém ABRE a tela do RDO
    daquele dia. E o dia em que a última firma entra quase nunca é o dia que
-   está na tela: o e-mail das 8h leva o RDO de ONTEM, o fiscal abre o link
+   está na tela: o e-mail das 6h30 leva o RDO de ONTEM, o fiscal abre o link
    dele no meio da tarde, e a essa altura ninguém do escritório tem a tela
    de ontem aberta. O resultado era um RDO assinado na planilha cujo PDF
    guardado ainda trazia o quadro do fiscal em branco — e que só saía
@@ -20175,7 +20175,7 @@ function podeEnviarRDOParaAssinatura() {
 
 /* O painel na tela do RDO. Existe por um motivo prático: quando o fiscal
    diz "não me chegou nada", o escritório precisa do link dele à mão, sem
-   esperar o e-mail das 8h do dia seguinte. */
+   esperar o e-mail das 6h30 do dia seguinte. */
 function painelAssinaturasHtml(lista, noDeposito, data) {
   if (!lista || !lista.length) {
     return `<div class="ass-vazio">${ic('info', 14)} A assinatura online deste dia ainda não foi aberta.</div>`;
@@ -20202,7 +20202,7 @@ function painelAssinaturasHtml(lista, noDeposito, data) {
         >${ic('copiar', 13)} Link</button>`}
     </div>`;
   }).join('');
-  /* MANDAR AGORA. O e-mail das 8h leva o RDO de ONTEM, uma vez — o dia que
+  /* MANDAR AGORA. O e-mail das 6h30 leva o RDO de ONTEM, uma vez — o dia que
      ficou para trás (o domingo e o feriado que só foram lançados depois, o
      turno fechado tarde, o RDO corrigido) não tem segunda chance sozinho.
      Este botão é essa segunda chance, sem ninguém precisar abrir o editor
@@ -20238,8 +20238,8 @@ function painelAssinaturasHtml(lista, noDeposito, data) {
       ${atrasado
         ? 'Repondo o PDF assinado no servidor…'
         : (porLink.length === lista.length
-            ? 'O link pessoal de cada um vai no e-mail diário das 8h.'
-            : `Quem tem firma arquivada já sai assinado; o link das 8h vai para ${
+            ? 'O link pessoal de cada um vai no e-mail diário das 6h30.'
+            : `Quem tem firma arquivada já sai assinado; o link das 6h30 vai para ${
                 porLink.map(a => escHtml(a.rotulo || a.papel)).join(' e ') || 'ninguém'}.`)}</div>
     <div class="ass-acoes">${enviar}${conferir}${firma}</div>
     <div id="rdoEnvioDiag"></div>`;
@@ -20272,7 +20272,7 @@ async function conferirEnvioRDO(data) {
       ['PDF no servidor', r.pdfDepositado
         ? `guardado, com ${r.assinaturasNoDeposito} assinatura(s) desenhada(s)`
         : 'NÃO está guardado — sem ele o e-mail sai sem anexo'],
-      ['Envio automático', `${r.horaDoEnvio}h, com o RDO do dia anterior`],
+      ['Envio automático', `${escHtml(/h/.test(r.horaDoEnvio) ? r.horaDoEnvio : r.horaDoEnvio + 'h')}, com o RDO do dia anterior`],
       ['Firma arquivada', (r.firmasArquivadas || []).length
         ? (r.firmasArquivadas || []).map(f =>
             `${escHtml(f.papel)}: ${escHtml(f.nome)}` +
