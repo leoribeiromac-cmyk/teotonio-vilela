@@ -29,8 +29,8 @@ para a navegação, então a mudança chega sem precisar limpar cache.
 
 ## O RDO do dia sai por e-mail sozinho
 
-Quem MANDA o e-mail é o `Code.gs` (gatilho de tempo, 8h, com o RDO de ONTEM —
-às 8h o dia de hoje nem começou). Quem DESENHA o PDF
+Quem MANDA o e-mail é o `Code.gs` (gatilho de tempo, 6h30, com o RDO de ONTEM —
+às 6h30 o dia de hoje nem começou). Quem DESENHA o PDF
 oficial é o navegador (`_gerarPDFDiario`, jsPDF). O servidor não redesenha o
 RDO — dois desenhos do mesmo documento divergem no primeiro ajuste de um lado
 só, e este é um papel que a fiscalização assina.
@@ -78,7 +78,7 @@ envio, lembre que o servidor só tem o que o app deixou lá. `tests/rdo-email.ui
 ## A assinatura do RDO é online, e o link é a credencial
 
 O engenheiro e o fiscal assinam pelo LINK PESSOAL que vai no mesmo e-mail das
-8h — um e-mail por pessoa, porque num e-mail único o link do fiscal chegaria
+6h30 — um e-mail por pessoa, porque num e-mail único o link do fiscal chegaria
 também ao engenheiro. Não há login: quem assina não tem usuário no app.
 `assinar.html` é a página de quem assina, **fora** do app de propósito (nada de
 tela de login, nada de PWA de 1 MB, nenhum acesso ao resto da obra).
@@ -181,7 +181,7 @@ sabe que o PDF guardado ficou para trás de quem assinou depois.
 ### Ninguém precisa lembrar de abrir a tela do dia
 
 O fiscal assina à tarde, e a tela daquele dia está fechada em todo lugar —
-o e-mail das 8h leva o RDO de ONTEM. O RDO assinado ficava esperando alguém
+o e-mail das 6h30 leva o RDO de ONTEM. O RDO assinado ficava esperando alguém
 do escritório abrir aquele dia e gerar o oficial de novo.
 
 Agora o app VARRE: `rdoAssinadosPendentes` (Code.gs) devolve os dias da

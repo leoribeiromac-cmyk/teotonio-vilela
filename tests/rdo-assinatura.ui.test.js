@@ -728,7 +728,7 @@ async function comOAppDeVerdade() {
      (await s.p.locator('#rdoAssinaturasPainel button[onclick^="copiarLinkAssinatura"]').count()) === 1,
      await s.p.locator('#rdoAssinaturasPainel button[onclick^="copiarLinkAssinatura"]').count());
 
-  /* MANDAR AGORA. O e-mail das 8h leva o RDO de ONTEM, uma vez: o domingo e
+  /* MANDAR AGORA. O e-mail das 6h30 leva o RDO de ONTEM, uma vez: o domingo e
      o feriado sem serviço, lançados depois, já perderam o gatilho deles.
      Sem este botão, mandá-los exige o editor do Apps Script — e a folha
      fica sem as firmas que o contrato exige. */
@@ -929,8 +929,8 @@ async function comOAppDeVerdade() {
   const painelFirma = await s.p.textContent('#rdoAssinaturasPainel').catch(() => '');
   ok('o painel marca quem está pré-assinado, em vez de deixar passar por firma do dia',
      painelFirma.includes('firma arquivada'), painelFirma);
-  ok('e o rodapé diz que o link das 8h vai só para a fiscalização',
-     /link das 8h vai para Cliente \/ Fiscalização/.test(painelFirma), painelFirma);
+  ok('e o rodapé diz que o link das 6h30 vai só para a fiscalização',
+     /link das 6h30 vai para Cliente \/ Fiscalização/.test(painelFirma), painelFirma);
   ok('o escritório tem o botão de arquivar a firma',
      (await s.p.locator('#rdoAssinaturasPainel button[onclick^="abrirFirmaArquivada"]').count()) === 1);
 

@@ -121,6 +121,7 @@ const MailApp = {
 };
 
 const _props = {};
+const GATILHOS = [];   // os gatilhos de tempo instalados, como o ScriptApp os guarda
 const PROPS = {
   getProperty: k => (k in _props ? _props[k] : null),
   setProperty: (k, v) => { _props[k] = String(v); },
@@ -160,7 +161,15 @@ const ctx = {
   ContentService: { createTextOutput: () => ({ setMimeType: () => ({}) }), MimeType: {} },
   CacheService: { getScriptCache: () => ({ get: () => null, put() {}, remove() {} }) },
   UrlFetchApp: { fetch: () => ({ getResponseCode: () => 500, getContentText: () => '' }) },
-  ScriptApp: { getProjectTriggers: () => [], newTrigger: () => ({ timeBased: () => ({ everyDays: () => ({ atHour: () => ({ create() {} }) }) }) }) },
+  ScriptApp: {
+    getProjectTriggers: () => GATILHOS.slice(),
+    deleteTrigger: (g) => { GATILHOS.splice(GATILHOS.indexOf(g), 1); },
+    newTrigger: (fn) => ({ timeBased: () => ({ everyDays: () => ({ atHour: (hora) => {
+      const g = { fn, hora, minuto: null, getHandlerFunction: () => fn };
+      return { create() { GATILHOS.push(g); },
+               nearMinute: (minuto) => ({ create() { g.minuto = minuto; GATILHOS.push(g); } }) };
+    } }) }) }),
+  },
   XmlService: {},
 };
 ctx.global = ctx;
@@ -382,7 +391,7 @@ t('o e-mail é do dia certo mesmo com outra obra na mesma data', () => {
   verdade(e.body.indexOf('Outro Apontador') === -1, 'vazou apontador da outra obra');
 });
 
-/* O gatilho da manhã leva o RDO de ONTEM — o dia que fechou. Às 8h o dia de
+/* O gatilho da manhã leva o RDO de ONTEM — o dia que fechou. Às 6h30 o dia de
    hoje nem começou, e mandar o de hoje seria despachar para a fiscalização uma
    folha em branco. Estes dois testes usam a data de verdade, que é o que prova
    que a conta do gatilho bate. */
@@ -413,7 +422,7 @@ t('conferirEnvioRDOEmail() olha o dia que vai ser enviado, não o de hoje', () =
   verdade(d.proximo_envio_leva_o_RDO_de.indexOf(ONTEM_DE_VERDADE) === 0,
           'olhou o dia errado: ' + d.proximo_envio_leva_o_RDO_de);
   verdade(d.pdf_desse_dia_depositado, 'não viu o depósito de ontem');
-  eq(d.hora_do_envio, '8h');
+  eq(d.hora_do_envio, '6h30');
 });
 
 console.log('\nO registro do que já saiu');
@@ -432,14 +441,52 @@ t('log estragado não impede o envio de hoje', () => {
 });
 
 console.log('\nA hora do envio');
-t('8h por padrão', () => { eq(ctx.rdoEmailHora(), 8); });
+t('6h30 por padrão', () => {
+  eq(ctx.rdoEmailHora(), 6);
+  eq(ctx.rdoEmailHorario().minuto, 30);
+  eq(ctx.rdoEmailHoraTexto(), '6h30');
+});
 t('a Propriedade RDO_EMAIL_HORA troca a hora', () => {
   PROPS.setProperty('RDO_EMAIL_HORA', '17');
   eq(ctx.rdoEmailHora(), 17);
+  eq(ctx.rdoEmailHoraTexto(), '17h');
+});
+t('a Propriedade aceita minuto: 7:15 e 7h15', () => {
+  PROPS.setProperty('RDO_EMAIL_HORA', '7:15');
+  eq(ctx.rdoEmailHoraTexto(), '7h15');
+  PROPS.setProperty('RDO_EMAIL_HORA', '7h15');
+  eq(ctx.rdoEmailHoraTexto(), '7h15');
 });
 t('hora sem sentido volta para o padrão', () => {
   PROPS.setProperty('RDO_EMAIL_HORA', '99');
-  eq(ctx.rdoEmailHora(), 8);
+  eq(ctx.rdoEmailHoraTexto(), '6h30');
+  PROPS.setProperty('RDO_EMAIL_HORA', '6:75');
+  eq(ctx.rdoEmailHoraTexto(), '6h30');
+});
+t('configurarGatilhos põe o gatilho do RDO às 6h30 — um só', () => {
+  GATILHOS.length = 0;
+  GATILHOS.push({ fn: 'enviarRDODeOntemPorEmail', hora: 8, getHandlerFunction: () => 'enviarRDODeOntemPorEmail' });
+  ctx.configurarGatilhos();
+  const rdo = GATILHOS.filter(g => g.fn === 'enviarRDODeOntemPorEmail');
+  eq(rdo.length, 1, 'gatilhos do RDO');
+  eq(rdo[0].hora, 6); eq(rdo[0].minuto, 30);
+});
+/* O deploy automático troca o código, não os gatilhos: o das 8h, instalado
+   antes, continuaria às 8h para sempre se dependesse de alguém rodar
+   configurarGatilhos() no editor. */
+t('o gatilho velho das 8h se muda sozinho para 6h30 depois de mandar', () => {
+  GATILHOS.length = 0;
+  GATILHOS.push({ fn: 'enviarRDODeOntemPorEmail', hora: 8, getHandlerFunction: () => 'enviarRDODeOntemPorEmail' });
+  PROPS.deleteProperty('RDO_EMAIL_GATILHO');
+  depositar({ data: ONTEM_DE_VERDADE });
+  verdade(ctx.enviarRDODeOntemPorEmail().ok, 'mandou');
+  const rdo = GATILHOS.filter(g => g.fn === 'enviarRDODeOntemPorEmail');
+  eq(rdo.length, 1, 'gatilhos do RDO');
+  eq(rdo[0].hora, 6); eq(rdo[0].minuto, 30);
+  // já na hora certa: não mexe de novo
+  const antes = rdo[0];
+  ctx.enviarRDODeOntemPorEmail();
+  verdade(GATILHOS.indexOf(antes) >= 0, 'reinstalou à toa');
 });
 
 
