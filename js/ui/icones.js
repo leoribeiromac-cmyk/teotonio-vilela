@@ -70,6 +70,8 @@ var ICONES = {
   galeria: '<rect x="3.2" y="4.8" width="17.6" height="14.4" rx="2.2"/><circle cx="8.6" cy="9.8" r="1.7"/><path d="M3.6 16.8l4.6-4.4 3.4 3.2 3.6-3.6 5.2 5"/>',
   // projetos: prancha de desenho
   projetos: '<path d="M3.2 6.4a2.6 2.6 0 0 1 2.6-2.6h12.4a2.6 2.6 0 0 1 2.6 2.6v11.2a2.6 2.6 0 0 1-2.6 2.6H5.8a2.6 2.6 0 0 1-2.6-2.6z"/><path d="M3.2 8.6h17.6M8 8.6v11.6M3.2 14.4H8"/><path d="M11 12.2h6.4M11 16.2h4"/>',
+  // modelo 3D: caixa em perspectiva (as três faces que se veem)
+  cubo: '<path d="M12 2.8l8.2 4.5v9.4L12 21.2l-8.2-4.5V7.3z"/><path d="M3.8 7.3L12 11.8l8.2-4.5M12 11.8v9.4"/>',
   // suprimentos / estoque: caixa
   caixa: '<path d="M3.6 8.2 12 4l8.4 4.2v7.6L12 20l-8.4-4.2z"/><path d="M3.6 8.2 12 12.4l8.4-4.2M12 12.4V20"/>',
   // preço: etiqueta com o furo

@@ -25,7 +25,7 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v64'; // v64: RDO — PDF oficial do gravado, turno que não é deste aparelho sobe em branco, texto por turno, RDO assinado só muda reaberto; login por POST
+const VERSAO = 'teotonio-v65'; // v65: Modelo 3D da Teotônio dentro do app, pintado com os serviços lançados por estaca
 // As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
 // app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
 // Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no
@@ -42,9 +42,17 @@ const VERSAO_VENDOR = 'teotonio-vendor-v1';
 // em quase-sem-perdas — mesmas URLs, conteúdo melhor e menor — e sem trocar o
 // balde o celular seguiria servindo os quadrados com artefato do cache.
 const VERSAO_PRANCHAS = 'teotonio-pranchas-v2';
-const BALDES = [VERSAO, VERSAO_VENDOR, VERSAO_PRANCHAS];
+// O MODELO 3D (modelo3d/<obra>/: trechos .bin, texturas, entorno) também tem
+// balde próprio, pela mesma razão das pranchas: são ~3 MB no modo Leve e ~15 MB
+// no Alta, que não podem ser baixados de novo a cada linha de código mudada.
+// Suba este número ao REIMPORTAR um modelo (ferramentas/modelo3d-importar.py):
+// os nomes dos arquivos não mudam, e sem isso o celular segue com o modelo velho.
+const VERSAO_MODELO3D = 'teotonio-modelo3d-v1';
+const BALDES = [VERSAO, VERSAO_VENDOR, VERSAO_PRANCHAS, VERSAO_MODELO3D];
 // Quadrado de prancha: o conteúdo de cada URL nunca muda dentro de uma versão.
-const IMUTAVEL = /\/projetos\/.+\/\d+\/\d+_\d+\.webp$/;
+// Idem os arquivos do modelo 3D — revalidar 40 arquivos em segundo plano a cada
+// abertura da tela seria gastar o 4G do canteiro para receber o mesmo modelo.
+const IMUTAVEL = /\/projetos\/.+\/\d+\/\d+_\d+\.webp$|\/modelo3d\/[^/]+\/.+/;
 // brasilapi/minhareceita: cadastro de CNPJ do fornecedor da nota fiscal. Não
 // pode entrar no balde de estáticos — lá a regra é cache-primeiro, e a razão
 // social do fornecedor ficaria congelada no aparelho para sempre. Quem guarda
@@ -58,6 +66,8 @@ const SO_REDE = ['docs.google.com', 'script.google.com', 'script.googleuserconte
 function baldeDe(url) {
   if (url.pathname.indexOf('/vendor/') !== -1) return VERSAO_VENDOR;
   if (url.pathname.indexOf('/projetos/') !== -1) return VERSAO_PRANCHAS;
+  // só os DADOS (modelo3d/<obra>/…); o código do visor (js/modelo3d/) é do app
+  if (/\/modelo3d\/[^/]+\//.test(url.pathname)) return VERSAO_MODELO3D;
   return VERSAO;
 }
 
@@ -161,7 +171,7 @@ self.addEventListener('fetch', (e) => {
   //    obriga a perguntar ao servidor.
   const balde = baldeDe(url);
 
-  // Quadrado de prancha já guardado: entrega e acabou. Nada de revalidar.
+  // Quadrado de prancha (ou arquivo do modelo 3D) já guardado: entrega e acabou.
   if (IMUTAVEL.test(url.pathname)) {
     e.respondWith(
       caches.match(e.request).then(hit => hit || fetch(e.request).then(resp => {

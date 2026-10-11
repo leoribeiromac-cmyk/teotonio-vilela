@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<!--
+  Sistema de controle de obra — Av. Senador Teotônio Vilela
+  Copyright © 2026 Leonardo Maciel. Todos os direitos reservados.
+
+  Software proprietário. O código estar visível não autoriza uso, cópia
+  nem obra derivada — ver LICENSE, na raiz do repositório.
+  ============================================================
+  MODELO 3D DA OBRA — o visor
+
+  É uma página SEPARADA do app, como a assinar.html, e a tela "Modelo 3D"
+  do index.html a mostra num <iframe>. Três razões:
+   · o visor tem os seus próprios #info, #hud, #toast… e o CSS dele, que
+     no mesmo documento brigariam com os do app;
+   · sair da tela tira o iframe da página, e o navegador devolve de uma vez
+     a memória e o contexto WebGL — no celular do canteiro isso importa;
+   · ela abre sozinha também (modelo3d.html?obra=teotonio), em tela cheia.
+
+  O app conversa com ela por postMessage (mesma origem): manda as estacas
+  com serviço lançado e a cor de cada uma, e recebe de volta a estaca que
+  foi tocada no 3D. Ver "PONTE COM O APP" em js/modelo3d/visor.js.
+
+  Bibliotecas: three.js r160, de vendor/three/ (nunca CDN: o app abre
+  offline no canteiro). Os dados vêm de modelo3d/<obra>/, gerados por
+  ferramentas/modelo3d-importar.py a partir da página do modelo.
+  ============================================================
+-->
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1612">
+<title>Modelo 3D — Teotônio Vilela</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:400;font-display:swap;src:url('vendor/fontes/space-grotesk-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:500;font-display:swap;src:url('vendor/fontes/space-grotesk-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:600;font-display:swap;src:url('vendor/fontes/space-grotesk-latin-600-normal.woff2') format('woff2')}
+@font-face{font-family:'Space Grotesk';font-style:normal;font-weight:700;font-display:swap;src:url('vendor/fontes/space-grotesk-latin-700-normal.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:400;font-display:swap;src:url('vendor/fontes/jetbrains-mono-latin-400-normal.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:500;font-display:swap;src:url('vendor/fontes/jetbrains-mono-latin-500-normal.woff2') format('woff2')}
+@font-face{font-family:'JetBrains Mono';font-style:normal;font-weight:600;font-display:swap;src:url('vendor/fontes/jetbrains-mono-latin-600-normal.woff2') format('woff2')}
+:root{
+  --panel: rgba(246,246,242,.93);
+  --panel-solid:#f6f6f2;
+  --ink:#1b2125;
+  --muted:#5b666d;
+  --line:#d6d9d2;
+  --chip:#ebece6;
+  --accent:#c85e14;
+  --accent-ink:#ffffff;
+  --focus:#1f6fd1;
+  --bg:#dfe3e2;
+  --warn:#b3261e;
+  --shadow: 0 6px 24px rgba(20,28,32,.16);
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --panel: rgba(19,23,26,.9); --panel-solid:#13171a; --ink:#e6e9e5; --muted:#9aa4a9; --line:#2d3539; --chip:#222a2e;
+    --accent:#f0893c; --accent-ink:#1a1206; --focus:#6aa8ff; --bg:#1a1f22; --warn:#ff8a7a; --shadow: 0 6px 24px rgba(0,0,0,.45);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --panel: rgba(19,23,26,.9); --panel-solid:#13171a; --ink:#e6e9e5; --muted:#9aa4a9; --line:#2d3539; --chip:#222a2e;
+  --accent:#f0893c; --accent-ink:#1a1206; --focus:#6aa8ff; --bg:#1a1f22; --warn:#ff8a7a; --shadow: 0 6px 24px rgba(0,0,0,.45);
+  color-scheme: dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:"Space Grotesk",Arial,sans-serif;font-size:14px;overflow:hidden}
+#stage{position:fixed;inset:0}
+#stage canvas{display:block;width:100%;height:100%;touch-action:none}
+.mono{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+.panel{background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:6px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#hud{position:fixed;left:16px;top:calc(16px + env(safe-area-inset-top,0px));width:340px;max-width:calc(100vw - 32px);max-height:calc(100% - 120px);display:flex;flex-direction:column;gap:10px;z-index:3}
+#titleblock{padding:12px 14px 10px;display:grid;gap:4px}
+#titleblock h1{margin:0;font-size:22px;line-height:1.05;font-weight:700;letter-spacing:.01em;text-wrap:balance}
+#titleblock .sub{color:var(--muted);font-size:14px;font-weight:500}
+.trecho{display:flex;align-items:center;gap:8px;margin-top:4px}
+.trecho span{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:11px;font-weight:600}
+.trecho select{flex:1;min-width:0;font-size:14px;padding:3px 6px}
+.tb-row{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin-top:6px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px}
+.tb-row dt{color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:11px;font-weight:600;align-self:center}
+.tb-row dd{margin:0}
+#layers{padding:6px 0 8px;overflow:auto;min-height:0}
+#layers h2,.sect h2{margin:6px 14px 4px;font-size:11.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+.lyr{display:grid;grid-template-columns:14px 34px 1fr auto;align-items:center;gap:8px;padding:5px 14px;cursor:pointer;font-size:14.5px;font-weight:500}
+.lyr:hover{background:var(--chip)}
+.lyr .sw{width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.18)}
+.lyr .code{font-family:"JetBrains Mono",monospace;font-size:11.5px;color:var(--muted)}
+.lyr input{appearance:none;-webkit-appearance:none;width:30px;height:18px;border-radius:9px;background:var(--line);position:relative;cursor:pointer;margin:0;transition:background .15s}
+.lyr input::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--panel-solid);transition:transform .15s}
+.lyr input:checked{background:var(--accent)}
+.lyr input:checked::after{transform:translateX(12px)}
+.lyr input:focus-visible,.chip:focus-visible,button:focus-visible,input[type=range]:focus-visible,select:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.ctrl{padding:6px 14px;display:grid;gap:6px;font-size:14px}
+.ctrl label{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ctrl input[type=range]{width:100%;accent-color:var(--accent)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+.seg button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--ink);padding:3px 9px;cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink)}
+#views{position:fixed;left:0;right:0;margin-inline:auto;width:max-content;bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;gap:6px;padding:6px;z-index:3;flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 32px)}
+.chip{font:inherit;font-weight:600;font-size:14px;border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:4px;padding:6px 11px;cursor:pointer;white-space:nowrap}
+.chip[aria-pressed=true]{background:var(--ink);color:var(--panel-solid);border-color:var(--ink)}
+#info{position:fixed;right:16px;top:calc(16px + env(safe-area-inset-top,0px));width:310px;max-width:calc(100vw - 32px);padding:12px 14px;z-index:4;display:grid;gap:8px}
+#info h3{margin:0;font-size:19px;font-weight:700;line-height:1.1}
+#info .disc{font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--accent);font-weight:700}
+#info dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:0;font-size:13.5px}
+#info dt{color:var(--muted)}
+#info dd{margin:0;font-family:"JetBrains Mono",monospace;font-size:12.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#info .src{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:6px}
+#info .x{position:absolute;right:8px;top:6px;border:0;background:transparent;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
+#readout{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));padding:7px 11px;font-size:12px;z-index:3;display:grid;gap:2px;min-width:260px}
+#readout .k{color:var(--muted);font-family:"Space Grotesk",sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+#compass{position:fixed;right:calc(16px + 270px + 10px);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:46px;height:46px;z-index:3;display:grid;place-items:center;border-radius:50%}
+body.mm-off #compass{right:16px;bottom:calc(92px + env(safe-area-inset-bottom,0px))}
+#compass svg{width:34px;height:34px}
+#mini{position:fixed;right:16px;bottom:calc(84px + env(safe-area-inset-bottom,0px));width:270px;height:132px;z-index:3;overflow:hidden;padding:0}
+#mini canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none}
+#mini .x{position:absolute;right:4px;top:2px;border:0;background:transparent;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:2px 4px}
+#mini .lbl{position:absolute;left:8px;top:5px;font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;pointer-events:none}
+body.mm-off #mini{display:none}
+#prog{position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:3;padding:6px 10px 7px;font-size:12.5px;font-weight:600;display:grid;gap:5px;min-width:190px;max-width:calc(100vw - 32px)}
+#prog .bar{height:3px;background:var(--line);border-radius:2px;overflow:hidden}
+#prog .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .35s}
+#prog.warn #progT{color:var(--warn)}
+#premissas{position:fixed;inset:0;display:grid;place-items:center;background:rgba(10,14,16,.35);z-index:10;padding:16px}
+#premissas .box{max-width:640px;width:100%;max-height:85%;overflow:auto;padding:18px 20px}
+#premissas h3{margin:0 0 8px;font-size:21px}
+#premissas table{border-collapse:collapse;width:100%;font-size:14px}
+#premissas td{border-top:1px solid var(--line);padding:6px 8px 6px 0;vertical-align:top}
+#premissas td:first-child{font-weight:600;white-space:nowrap;padding-right:14px}
+.tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:1px 6px;border-radius:3px;margin-right:6px}
+.tag.ok{background:#2f7d4a;color:#fff}.tag.est{background:#b7791f;color:#fff}.tag.ad{background:#6b7280;color:#fff}
+#toggleHud{display:none}
+#loading{position:fixed;inset:0;display:grid;place-items:center;z-index:20;background:var(--bg);font-size:18px;font-weight:600;text-align:center}
+#loading small{display:block;font-size:14px;font-weight:500;color:var(--muted);margin-top:6px}
+@media (max-width:760px){
+  #hud{width:auto;right:16px;max-height:calc(100% - 150px)}
+  #hud.collapsed #layers{display:none}
+  #toggleHud{display:inline-block}
+  #titleblock h1{font-size:19px}
+  .tb-row{display:none}
+  #info{top:auto;bottom:calc(72px + env(safe-area-inset-bottom,0px));right:16px;left:16px;width:auto}
+  #readout,#compass,#mini{display:none!important}
+  #views{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;width:auto;left:16px;right:16px;max-width:none;scrollbar-width:none}
+  #views::-webkit-scrollbar{display:none}
+  #views .chip{font-size:13.5px;padding:5px 10px}
+  #prog{bottom:calc(72px + env(safe-area-inset-bottom,0px));min-width:0;font-size:12px}
+}
+
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;padding:6px 6px 0;border-bottom:1px solid var(--line)}
+.tabs button{font:inherit;font-weight:600;font-size:13.5px;border:0;background:transparent;color:var(--muted);padding:7px 2px 8px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs button:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.tp{padding:4px 0 10px}
+.tool{padding:8px 14px;border-top:1px solid var(--line);display:grid;gap:7px}
+.tool:first-child{border-top:0}
+.tool h4{margin:0;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.btn{font:inherit;font-weight:600;font-size:13.5px;border:1px solid var(--line);background:var(--chip);color:var(--ink);border-radius:4px;padding:5px 10px;cursor:pointer}
+.btn.sm{padding:2px 8px;font-size:14px;line-height:1.2}
+.btn[aria-pressed=true],.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+.btn:focus-visible,.inp:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.inp{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--panel-solid);color:var(--ink);border-radius:4px;padding:5px 8px;min-width:0}
+.out{font-family:"JetBrains Mono",monospace;font-size:12.5px;background:var(--chip);border-radius:4px;padding:7px 9px;display:grid;gap:2px;font-variant-numeric:tabular-nums}
+.out:empty{display:none}
+.hint{font-size:12.5px;color:var(--muted);line-height:1.35}
+#results{display:grid;gap:2px;max-height:190px;overflow:auto}
+#results button{font:inherit;font-size:13.5px;text-align:left;border:0;background:transparent;color:var(--ink);padding:4px 6px;border-radius:3px;cursor:pointer}
+#results button:hover,#results button:focus-visible{background:var(--chip)}
+#results small{color:var(--muted);display:block;font-size:11.5px}
+.qt{width:100%;border-collapse:collapse;font-size:13px}
+.qt th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--accent);padding:10px 0 3px;font-weight:700}
+.qt td{padding:4px 0;border-top:1px solid var(--line);vertical-align:top}
+.qt td.n{text-align:right;font-family:"JetBrains Mono",monospace;font-variant-numeric:tabular-nums;white-space:nowrap;padding-left:8px}
+.qt td small{display:block;color:var(--muted);font-size:11.5px}
+.qwrap{padding:0 14px;max-height:none}
+.exp{display:grid;gap:8px;padding:8px 14px}
+.exp .it{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.exp .it b{font-size:14.5px}
+.exp .it span{grid-column:1;font-size:12.5px;color:var(--muted)}
+.exp .it .eb{grid-row:1/span 2;grid-column:2;display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end;max-width:190px}
+.exp .it .eb .btn{padding:5px 9px;min-width:34px}
+.exp .it .enote{font-size:12px;color:var(--muted);text-align:right;max-width:150px}
+#dock{position:fixed;left:calc(16px + 340px + 12px);right:16px;bottom:calc(72px + env(safe-area-inset-bottom,0px));height:320px;z-index:4;display:grid;grid-template-rows:auto 1fr;overflow:hidden}
+#dock header{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 12px;border-bottom:1px solid var(--line)}
+#dock header h3{margin:0;font-size:16px;font-weight:700;margin-right:auto}
+#dock .cw{position:relative;min-height:0}
+#dock canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#dock .x{border:0;background:transparent;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
+#dock label{font-size:13px;display:flex;gap:5px;align-items:center}
+#secS{width:260px;accent-color:var(--accent)}
+#secLbl{min-width:190px}
+body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:none}
+#shot{position:fixed;inset:0;display:grid;place-items:center;background:rgba(10,14,16,.45);z-index:11;padding:16px}
+#shot .box{padding:14px;max-width:min(900px,100%);display:grid;gap:8px}
+#shot img{max-width:100%;border-radius:4px}
+#gal{position:fixed;inset:0;z-index:11;background:#0b0e10;display:grid;grid-template-rows:auto 1fr auto;gap:10px;padding:14px 16px calc(14px + env(safe-area-inset-bottom,0px))}
+#gal header{display:flex;align-items:center;gap:10px;color:#e8ecef}#gal header b{font-size:15px}#gal header span{color:#aab4bb;font-size:13px;flex:1;min-width:0}
+#gal .big{min-height:0;display:grid;place-items:center}#gal .big img{max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#gal .th{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}#gal .th button{flex:0 0 auto;border:2px solid transparent;border-radius:5px;padding:0;background:none;cursor:pointer;line-height:0}
+#gal .th button[aria-current=true]{border-color:var(--accent)}#gal .th img{height:64px;width:auto;border-radius:3px}
+#gal .nav{font:inherit;font-size:22px;line-height:1;background:rgba(255,255,255,.1);color:#fff;border:0;border-radius:6px;width:40px;height:40px;cursor:pointer}
+#toast{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:12;padding:8px 14px;font-size:14px;font-weight:600;max-width:calc(100vw - 32px)}
+@media (max-width:1100px){#secS{width:180px}}
+@media (max-width:760px){#dock{left:16px;height:320px;bottom:calc(72px + env(safe-area-inset-bottom,0px))}#dock header{gap:6px;padding:6px 8px}#dock header h3,.vext{display:none}#secCtl{flex:1 1 auto;min-width:0}#secS{flex:1;width:auto;min-width:80px}#secLbl{min-width:0;font-size:12px}#dock .x{margin-left:auto}}
+
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+
+/* ---------- dentro do app (iframe da tela "Modelo 3D") ---------- */
+.embed #toggleHud{display:inline-block}
+.embed #hud.collapsed #layers{display:none}
+.embed #hud{max-height:calc(100% - 96px)}
+.embed #titleblock h1{font-size:18px}
+.embed .tb-row{display:none}
+/* celular, dentro do app: o bloco do título encolhe ao nome da obra e ao botão
+   "Camadas"; a galeria e o seletor de trecho voltam quando o painel abre */
+@media (max-width:760px){
+  .embed #hud.collapsed #sub,.embed #hud.collapsed #galBtn,.embed #hud.collapsed .trecho{display:none}
+  .embed #titleblock{padding:8px 10px}
+  .embed #titleblock h1{font-size:15px}
+  /* a lista completa da estaca está logo abaixo do 3D, na tela do app: aqui, o resumo */
+  .embed #info{max-height:52%;overflow:auto;gap:6px;padding:10px 12px}
+  .embed #info dl dt:nth-of-type(n+6),.embed #info dl dd:nth-of-type(n+6),.embed #info .src{display:none}
+}
+#info .acoes{display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--line);padding-top:8px}
+#info .acoes .btn{font-size:13px;padding:5px 9px}
+#info .acoes .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+#info .cor{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:baseline}
+#erro{position:fixed;inset:0;display:grid;place-items:center;z-index:30;background:var(--bg);padding:24px;text-align:center}
+#erro div{max-width:440px;display:grid;gap:10px;font-size:15px}
+#erro b{font-size:18px}
+</style>
+<script>
+  /* Tema antes do primeiro desenho: o mesmo que o app escolheu neste aparelho. */
+  try { const t = localStorage.getItem('teotonio_tema_v1'); if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+  if (window.parent !== window || /[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');
+</script>
+</head>
+<body>
+<div id="loading"><div>Montando o modelo…<small id="loadingSub">lendo o índice da avenida</small></div></div>
+<div id="stage"></div>
+
+<div id="hud" class="collapsed">
+  <div id="titleblock" class="panel">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">
+      <h1 id="ttl">Teotônio Vilela</h1>
+      <button id="toggleHud" class="chip" aria-expanded="false" aria-controls="layers">Camadas</button>
+    </div>
+    <div class="sub" id="sub"></div>
+    <button class="chip" id="galBtn" hidden style="margin:6px 0 2px;width:100%">Imagens fotorrealistas</button>
+    <label class="trecho" id="trechoRow" for="trechoSel"><span>Trecho</span><select class="inp" id="trechoSel" aria-label="Ir para trecho da avenida"></select></label>
+    <dl class="tb-row">
+      <dt>PD</dt><dd class="mono" id="tbPD"></dd>
+      <dt>PE</dt><dd class="mono" id="tbPE"></dd>
+      <dt>Fontes</dt><dd>5F · 5P · 5H · 5U/5L · 5S · CET · 4E · 5T</dd>
+    </dl>
+  </div>
+  <div id="layers" class="panel">
+    <div class="tabs" role="tablist" aria-label="Painel">
+      <button role="tab" id="tb-lyr" aria-controls="t-lyr" aria-selected="true">Camadas</button>
+      <button role="tab" id="tb-tools" aria-controls="t-tools" aria-selected="false">Ferramentas</button>
+      <button role="tab" id="tb-q" aria-controls="t-q" aria-selected="false">Quantidades</button>
+    </div>
+    <section class="tp" id="t-lyr" role="tabpanel" aria-labelledby="tb-lyr">
+      <h2>Disciplinas do projeto</h2>
+      <div id="lyrlist"></div>
+      <div class="sect"><h2>Visualização</h2></div>
+      <div class="ctrl">
+        <label for="opac">Superfície (terreno e pavimento) <span class="mono" id="opacv">100%</span></label>
+        <input id="opac" type="range" min="10" max="100" value="100" step="5">
+        <label>Árvores <span class="seg" role="group" aria-label="Porte das árvores"><button id="tAdult" aria-pressed="true">porte adulto</button><button id="tMuda" aria-pressed="false">plantio</button></span></label>
+        <label for="ext">Destacar terreno sem levantamento <input id="ext" type="checkbox"></label>
+        <button class="chip" id="openPrem" style="justify-self:start;margin-top:2px">Premissas e fontes</button>
+      </div>
+    </section>
+    <section class="tp" id="t-tools" role="tabpanel" aria-labelledby="tb-tools" hidden>
+      <div class="tool"><h4>Mouse (padrão AutoCAD)</h4>
+        <div class="hint">Roda: zoom no ponto do cursor · Botão esquerdo ou Shift + roda pressionada: girar em volta do ponto clicado · Botão direito ou roda pressionada: arrastar</div>
+      </div>
+      <div class="tool"><h4>Medir</h4>
+        <div class="row"><button class="btn" id="mDist" aria-pressed="false">Distância e declividade</button><button class="btn" id="mArea" aria-pressed="false">Área</button><button class="btn" id="mClear">Limpar</button></div>
+        <div class="hint" id="mHint">Clique em dois pontos do modelo. Esc cancela.</div>
+        <div class="out" id="mOut"></div>
+      </div>
+      <div class="tool"><h4>Ir para estaca</h4>
+        <div class="row"><select class="inp" id="gPista" aria-label="Eixo"></select><input class="inp" id="gEst" value="231+03" size="9" aria-label="Estaca (ex.: 231+03)"><button class="btn" id="gGo">Ir</button></div>
+        <div class="hint" id="gRange"></div>
+        <div class="out" id="gOut"></div>
+      </div>
+      <div class="tool"><h4>Seção e perfil</h4>
+        <div class="row"><button class="btn" id="oSec">Seção transversal</button><button class="btn" id="oPerf">Perfil longitudinal</button></div>
+        <div class="hint">A seção percorre as estacas da PD e mostra projeto, camadas do pavimento, terreno natural, tubos cortados e as áreas de corte e aterro.</div>
+      </div>
+      <div class="tool"><h4>Percorrer a avenida</h4>
+        <div class="row"><select class="inp" id="dPista" aria-label="Pista e sentido"><option value="PD">PD – sentido crescente</option><option value="PE">PE – sentido decrescente</option></select></div>
+        <label class="row" for="dVel" style="justify-content:space-between">Velocidade <span class="mono" id="dVelV">30 km/h</span></label>
+        <input id="dVel" type="range" min="10" max="60" step="5" value="30" style="accent-color:var(--accent)">
+        <div class="row"><button class="btn" id="dGo">Percorrer</button><button class="btn" id="dStop" disabled>Parar</button></div>
+      </div>
+      <div class="tool"><h4>Buscar elemento</h4>
+        <input class="inp" id="sQ" placeholder="PV-6, R-1, Ipê, guia chapéu…" aria-label="Buscar elemento">
+        <div id="results" role="list"></div>
+      </div>
+      <div class="tool"><h4>Sol e sombras</h4>
+        <div class="row"><select class="inp" id="sunM" aria-label="Mês"></select><span class="mono" id="sunHV">15:00</span></div>
+        <input id="sunH" type="range" min="6" max="18" step="0.25" value="15" aria-label="Hora do dia" style="accent-color:var(--accent)">
+      </div>
+      <div class="tool"><h4>Tela</h4>
+        <div class="row"><button class="btn" id="shotBtn">Capturar imagem</button><button class="btn" id="fsBtn">Tela cheia</button><button class="btn" id="mmBtn" aria-pressed="true">Mini-mapa</button></div>
+        <div class="row"><button class="btn" id="qBtn" title="Alta: texturas fotográficas, árvores detalhadas, nuvens e oclusão de ambiente. Leve: para celular e computador mais simples.">Qualidade: …</button></div>
+      </div>
+    </section>
+    <section class="tp" id="t-q" role="tabpanel" aria-labelledby="tb-q" hidden>
+      <div class="tool"><div class="hint" id="qHint">Quantidades geométricas do modelo. Servem para conferência e não substituem a memória de cálculo da medição.</div>
+        <div class="row"><button class="btn" id="qCopy">Copiar tabela</button><button class="btn" id="qCsv">Baixar CSV</button></div></div>
+      <div class="qwrap"><table class="qt" id="qTable"></table></div>
+    </section>
+  </div>
+</div>
+
+<div id="dock" class="panel" hidden>
+  <header>
+    <h3 id="dockT">Seção transversal</h3>
+    <span id="secCtl" class="row">
+      <button class="btn sm" id="secPrev" aria-label="Estaca anterior (−1 m)">‹</button>
+      <input id="secS" type="range" min="0" max="1" step="0.5" value="0" aria-label="Estaca da seção na PD">
+      <button class="btn sm" id="secNext" aria-label="Próxima estaca (+1 m)">›</button>
+      <span class="mono" id="secLbl"></span>
+      <label for="secClip"><input id="secClip" type="checkbox"> cortar<span class="vext">o modelo</span></label>
+      <select class="inp" id="secSide" aria-label="Lado mantido" hidden><option value="a">manter antes</option><option value="d">manter depois</option></select>
+    </span>
+    <span id="perfCtl" class="row" hidden>
+      <span class="seg" role="group" aria-label="Pista"><button id="pfPD" aria-pressed="true">PD</button><button id="pfPE" aria-pressed="false">PE</button></span>
+      <span class="seg" role="group" aria-label="Janela do perfil"><button id="pfAll" aria-pressed="true">inteiro</button><button id="pfWin" aria-pressed="false">200 m na seção</button></span>
+    </span>
+    <label for="vex"><span class="vext">exagero</span> <select class="inp" id="vex"><option value="0" selected>ajustar</option><option value="1">1×</option><option value="2">2×</option><option value="5">5×</option><option value="10">10×</option></select></label>
+    <button class="x" id="dockX" aria-label="Fechar">×</button>
+  </header>
+  <div class="cw"><canvas id="dockC"></canvas></div>
+</div>
+
+<div id="gal" hidden role="dialog" aria-modal="true" aria-label="Imagens fotorrealistas"><header><b id="galT"></b><span id="galD"></span><button class="nav" id="galP" aria-label="Anterior">‹</button><button class="nav" id="galN" aria-label="Próxima">›</button><button class="btn" id="galS">Baixar</button><button class="btn" id="galX">Fechar</button></header><div class="big"><img id="galI" alt=""></div><div class="th" id="galTh"></div></div>
+<div id="shot" hidden><div class="box panel"><b>Imagem da vista</b><span class="hint">Clique com o botão direito (ou toque e segure) para salvar.</span><img id="shotImg" alt="Captura da vista atual do modelo"><button class="btn" id="shotX" style="justify-self:start">Fechar</button></div></div>
+<div id="toast" class="panel" role="status" hidden></div>
+
+<div id="views" class="panel" role="group" aria-label="Vistas"></div>
+
+<div id="info" class="panel" hidden>
+  <button class="x" id="infoX" aria-label="Fechar">×</button>
+  <div class="disc" id="infoDisc"></div>
+  <h3 id="infoT"></h3>
+  <dl id="infoDl"></dl>
+  <div class="acoes" id="infoAcoes" hidden></div>
+  <div class="src" id="infoSrc"></div>
+</div>
+
+<div id="compass" class="panel" aria-hidden="true"><svg viewBox="-20 -20 40 40"><g id="needle"><path d="M0,-15 L5,2 L0,-2 L-5,2 Z" fill="var(--accent)"/><path d="M0,15 L5,2 L0,-2 L-5,2 Z" fill="var(--muted)" opacity=".6"/></g></svg></div>
+<div id="mini" class="panel"><canvas id="miniC" aria-label="Mini-mapa em planta: clique para levar a câmera ao ponto"></canvas><span class="lbl">Planta</span><button class="x" id="mmX" aria-label="Ocultar mini-mapa">×</button></div>
+<div id="readout" class="panel mono"><span class="k">Cursor</span><span id="roA">Passe o cursor sobre o modelo</span><span id="roB"></span></div>
+<div id="prog" class="panel" role="status" aria-live="polite" hidden><span id="progT">Carregando trechos</span><span class="bar"><i id="progB"></i></span></div>
+
+<div id="premissas" hidden>
+  <div class="box panel">
+    <h3>Premissas e fontes</h3>
+    <table><tbody id="premBody"></tbody></table>
+    <button class="chip" id="closePrem" style="margin-top:12px">Fechar</button>
+  </div>
+</div>
+<div id="erro" hidden><div><b>Não foi possível abrir o modelo 3D</b><span id="erroTxt"></span><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>
+
+<script type="importmap">{"imports":{"three":"./vendor/three/three.module.min.js","three/addons/":"./vendor/three/addons/","@dgreenheck/ez-tree":"./vendor/three/ez-tree/ez-tree.es.js"}}</script>
+<script type="module" src="js/modelo3d/visor.js?v=65"></script>
+</body>
+</html>

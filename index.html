@@ -72,23 +72,24 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=64"></script>
-<script src="dados/ruas-de-terra.js?v=64"></script>
+<script src="dados/ranario.js?v=65"></script>
+<script src="dados/ruas-de-terra.js?v=65"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=64"></script>
+<script src="dados/teotonio-muros.js?v=65"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=64"></script>
-<script src="js/nf/adaptador.js?v=64"></script>
-<script src="js/nf/notas.js?v=64"></script>
-<script src="js/equip/equipamentos.js?v=64"></script>
+<script src="js/ui/icones.js?v=65"></script>
+<script src="js/nf/adaptador.js?v=65"></script>
+<script src="js/nf/notas.js?v=65"></script>
+<script src="js/equip/equipamentos.js?v=65"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=64"></script>
-<script src="js/rdo/mapa-chuva.js?v=64"></script>
+<script src="js/bf/bota-fora.js?v=65"></script>
+<script src="js/rdo/mapa-chuva.js?v=65"></script>
+<script src="js/modelo3d/tela.js?v=65"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -940,6 +941,74 @@ html,body{
 .btn-refresh{display:flex;align-items:center;justify-content:center;gap:8px}
 .btn-refresh .ic{width:14px;height:14px;vertical-align:0;opacity:.9}
 .btn-apresentar{margin-top:6px}
+
+/* ===================== MODELO 3D =====================
+   O visor é um <iframe> (modelo3d.html): a altura dele é a da caixa
+   .m3d-visor, e o modelo ocupa tudo. No celular a caixa fica em 62% da
+   tela — o resto é a lista de estacas, que é o caminho por toque. */
+.m3d-card{overflow:hidden}
+.m3d-header{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.m3d-header .card-title .ic{width:17px;height:17px;vertical-align:-3px}
+.m3d-acoes{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto}
+.m3d-acoes .ic{width:14px;height:14px;vertical-align:-2px}
+.m3d-filtros{display:flex;gap:8px 10px;flex-wrap:wrap;align-items:center;padding:10px 16px;border-top:1px solid var(--border);background:var(--surface-2)}
+.m3d-filtros label,.m3d-cor-rot{font-size:var(--fs-2xs);font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.m3d-filtros select,.m3d-filtros input{padding:6px 9px;font-size:var(--fs-md);border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);max-width:230px;font-family:inherit}
+.m3d-seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:6px;overflow:hidden}
+.m3d-seg button{border:0;background:transparent;padding:6px 10px;font:inherit;font-size:var(--fs-sm);color:var(--text-2);cursor:pointer}
+.m3d-seg button + button{border-left:1px solid var(--border)}
+.m3d-seg button[aria-pressed="true"]{background:var(--acc-fill);color:var(--acc-fill-txt)}
+.m3d-visor{position:relative;height:min(72vh,780px);min-height:380px;background:var(--bg-2)}
+.m3d-visor iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
+.m3d-visor:fullscreen{height:100vh}
+.m3d-legenda{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;padding:10px 16px;font-size:var(--fs-sm);color:var(--text-2);border-top:1px solid var(--border)}
+.m3d-legenda i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:var(--sp-3);vertical-align:-1px}
+.m3d-legenda small{color:var(--muted)}
+.m3d-legenda .rampa{width:96px;height:10px;border-radius:3px;display:inline-block}
+.m3d-legenda-nota{margin-left:auto;color:var(--muted);font-size:var(--fs-xs)}
+.m3d-legenda-nota .ic{width:13px;height:13px;vertical-align:-2px}
+.m3d-lados{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
+.m3d-lados .card-header{display:flex;gap:10px;align-items:flex-start}
+.m3d-lados .card-header > div{flex:1;min-width:0}
+.m3d-lados .card-title .ic{width:16px;height:16px;vertical-align:-3px}
+.m3d-lista-eixo{font-size:var(--fs-xs);font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin:12px 0 6px}
+.m3d-lista-eixo small{text-transform:none;font-weight:500;letter-spacing:0}
+.m3d-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:6px;max-height:300px;overflow:auto}
+.m3d-est{display:flex;gap:var(--sp-4);align-items:center;min-height:36px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface);color:var(--text);cursor:pointer;font:inherit;font-size:var(--fs-sm);text-align:left}
+.m3d-est:hover{background:var(--bg-2)}
+.m3d-est.on{border-color:var(--acc);box-shadow:0 0 0 2px var(--acc-l)}
+.m3d-est i{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.m3d-est b{font-family:'JetBrains Mono',ui-monospace,monospace;font-weight:600}
+.m3d-est small{color:var(--muted);margin-left:auto}
+.m3d-ir{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.m3d-ir label{font-size:var(--fs-sm);color:var(--muted)}
+.m3d-ir input,.m3d-ir select{padding:6px 9px;font-size:var(--fs-md);border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);font-family:inherit}
+.m3d-ir input{width:90px}
+.m3d-det-acoes{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.m3d-det-acoes .ic{width:14px;height:14px;vertical-align:-2px}
+.m3d-lanc{display:flex;gap:10px;font-size:var(--fs-sm);padding:6px 0;border-top:1px solid var(--border);align-items:baseline}
+.m3d-lanc-data{color:var(--muted);white-space:nowrap}
+.m3d-lanc-pac{flex:1;min-width:0}
+.m3d-lanc-pac small{display:block;color:var(--muted);font-size:var(--fs-xs);margin-top:var(--sp-1)}
+.m3d-lanc-qtd{white-space:nowrap}
+.m3d-vazio{font-size:var(--fs-md);color:var(--muted);padding:6px 0}
+/* atalho "ver no 3D" ao lado de uma estaca, em outras telas */
+.m3d-txt{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left;text-decoration:underline dotted;text-underline-offset:3px}
+.m3d-txt:hover{color:var(--acc-d)}
+.m3d-link{display:inline-flex;align-items:center;gap:var(--sp-1);border:1px solid var(--border-strong);background:var(--surface);color:var(--text-2);border-radius:5px;padding:2px 6px;font-family:inherit;font-size:var(--fs-2xs);font-weight:600;cursor:pointer;vertical-align:1px;margin-left:4px}
+.m3d-link:hover{border-color:var(--acc);color:var(--acc-d)}
+.m3d-link .ic{width:12px;height:12px}
+@media(max-width:900px){ .m3d-lados{grid-template-columns:1fr} .m3d-visor{height:62vh;min-height:320px} .m3d-legenda-nota{margin-left:0} }
+/* No celular os filtros viram uma grade de duas colunas sem rótulo visível (o
+   rótulo continua lá para o leitor de tela): rótulo + campo em fila, quebrando
+   linha a linha, empurravam o 3D para a metade de baixo da tela. */
+@media(max-width:600px){
+  .m3d-filtros{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);padding:10px 12px}
+  .m3d-filtros label,.m3d-cor-rot{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+  .m3d-filtros select,.m3d-filtros input{max-width:none;width:100%;min-width:0}
+  .m3d-seg{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr)}
+  .m3d-acoes .m3d-so-pc{display:none}
+}
 
 /* ===================== PROJETOS ===================== */
 .proj-wrap{display:flex;gap:16px;align-items:flex-start}
@@ -1856,6 +1925,10 @@ table.t tr.summary .summary-nota{margin-left:8px;font-weight:400;text-transform:
 #apres .ap-tab .dim{color:rgba(245,239,230,.55)}
 
 #apres .ap-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
+#apres .ap-m3d{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:22px}
+#apres .ap-m3d figure{margin:0}
+#apres .ap-m3d img{width:100%;aspect-ratio:16/9;object-fit:cover;border-radius:10px;display:block;background:rgba(255,255,255,.06)}
+#apres .ap-m3d figcaption{font-size:var(--fs-md);opacity:.75;margin-top:var(--sp-3)}
 #apres .ap-tag{padding:6px 12px;border-radius:20px;font-size:var(--fs-md);
   background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1)}
 #apres .ap-tag b{color:var(--acc);margin-left:4px}
@@ -3694,6 +3767,13 @@ const OBRAS_CFG = {
         tiles: 'projetos/teotonio/implantacao/',
         arquivo: 'projetos/teotonio/implantacao.pdf' },
     ],
+    /* O MODELO 3D da avenida (tela "Modelo 3D", js/modelo3d/). `pasta` é o
+       que a ferramentas/modelo3d-importar.py gera a partir da página do
+       modelo; `eixos` diz qual eixo do PROJETO é cada eixo do app — o
+       Centro→Bairro (E99–E141) é a pista PE (100+12 a 141+13) e o
+       Bairro→Centro (E201–E244), a PD (203+01 a 243+09). A estaca tem o
+       mesmo número nos dois vocabulários: E212 do app é a PD 212+00. */
+    modelo3d: { pasta: 'modelo3d/teotonio/', eixos: { CB: 'PE', BC: 'PD' } },
   }
 };
 
@@ -5948,25 +6028,25 @@ const PERFIS = {
   campo: {
     nome: 'Campo',
     desc: 'Apontador — lança a produção do dia',
-    telas: ['rdo', 'rdodiario', 'historico', 'avancofisico', 'galeria', 'projetos', 'equip', 'botafora', 'notas'],
+    telas: ['rdo', 'rdodiario', 'historico', 'avancofisico', 'galeria', 'projetos', 'modelo3d', 'equip', 'botafora', 'notas'],
     pode: ['lancarServico', 'lancarDiario', 'apontarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque', 'botaFora']
   },
   administrativo: {
     nome: 'Administrativo',
     desc: 'Escritório — acompanha, confere e exporta',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'historico', 'galeria', 'projetos', 'equip', 'botafora', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'historico', 'galeria', 'projetos', 'modelo3d', 'equip', 'botafora', 'notas'],
     pode: ['exportar', 'relatorio', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'saidaEstoque', 'botaFora']
   },
   engenharia: {
     nome: 'Engenharia',
     desc: 'Engenheiro da obra — lança, confere e analisa',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'projetos', 'equip', 'botafora', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'analista', 'rdo', 'rdodiario', 'historico', 'galeria', 'projetos', 'modelo3d', 'equip', 'botafora', 'notas'],
     pode: ['lancarServico', 'lancarDiario', 'editar', 'exportar', 'relatorio', 'analiseIA', 'apontarEquip', 'cadastrarEquip', 'lancarNota', 'anexarFoto', 'saidaEstoque', 'botaFora']
   },
   diretoria: {
     nome: 'Diretoria',
     desc: 'Consulta — acompanha sem lançar',
-    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'analista', 'historico', 'galeria', 'projetos', 'notas'],
+    telas: ['executivo', 'avancofisico', 'cronograma', 'medicao', 'improdutivos', 'teoricoreal', 'analista', 'historico', 'galeria', 'projetos', 'modelo3d', 'notas'],
     pode: ['exportar', 'relatorio', 'analiseIA']
   },
   admin: { nome: 'Administrador', desc: 'Acesso completo', telas: '*', pode: '*' }
@@ -6028,7 +6108,8 @@ function telaBloqueada(tela) {
     rdodiario: 'o RDO Diário', historico: 'o Histórico', usuarios: 'a gestão de usuários',
     equip: 'os Equipamentos', galeria: 'a Galeria de Fotos', notas: 'as Notas Fiscais',
     botafora: 'o Controle de Bota-Fora',
-    projetos: 'os Projetos'
+    projetos: 'os Projetos',
+    modelo3d: 'o Modelo 3D'
   };
   return `<div class="card" style="max-width:520px;margin:40px auto;border-top:4px solid var(--ylw)">
     <div class="card-body" style="text-align:center;padding:28px">
@@ -7526,9 +7607,16 @@ async function carregarTudo(opts = {}) {
     if (dc) dc.textContent = (STATE.rdodiario || []).length;
     return;
   }
+  /* O Modelo 3D também não se redesenha por baixo de quem olha: o iframe
+     recarregaria o modelo inteiro e a câmera voltaria ao início. Os dados
+     novos vão para o visor e só as listas ao lado são refeitas. */
+  let telaViva = false;
+  if (fundo && STATE.currentPage === 'modelo3d' && typeof m3dRefrescar === 'function') {
+    try { telaViva = m3dRefrescar(); } catch (e) { console.error('modelo3d', e); }
+  }
   /* Erro de DESENHO não é erro de rede: dentro do try da carga, uma tela
      quebrada virava "Sem conexão com Google Sheets" e escondia o defeito. */
-  try { render(); } catch (e) { console.error('render', e); }
+  if (!telaViva) { try { render(); } catch (e) { console.error('render', e); } }
 
   /* Os dias já assinados cujo PDF guardado ficou para trás: redesenha e
      redeposita, e é o depósito que manda o RDO ASSINADO para a lista.
@@ -7914,7 +8002,8 @@ function itemNav(it) {
    que se abrem quando um número não bate, não todo dia. Fechadas por
    padrão; abrir uma delas mantém o grupo aberto. */
 function grupoNav(titulo, itens, dobravel) {
-  const vis = itens.filter(it => podeVer(it.id));
+  // o Modelo 3D só existe para a obra que tem modelo (OBRA.modelo3d)
+  const vis = itens.filter(it => podeVer(it.id) && (it.id !== 'modelo3d' || !!OBRA.modelo3d));
   if (!vis.length) return '';
   const divisor = titulo === 'Análise' ? '' : '<hr class="nav-divider">';
   if (dobravel) {
@@ -8056,6 +8145,7 @@ const TELAS_BUSCAVEIS = [
   ['equip',        'Equipamentos',       'frota, horímetro, horas paradas, combustível'],
   ['galeria',      'Galeria de Fotos',   'registro fotográfico carimbado'],
   ['projetos',     'Projetos',           'pranchas do executivo, desenho, planta'],
+  ['modelo3d',     'Modelo 3D',          'avenida em 3D, maquete, onde foi lançado, estaca no mapa'],
   ['notas',        'Notas Fiscais',      'DANFE, fornecedor, estoque, entrada de material'],
   ['usuarios',     'Usuários',           'acesso, perfil, senha, permissão'],
 ];
@@ -8111,6 +8201,19 @@ function buscaCalcular(termo) {
       sub: `${data}${estaca ? ' · ' + estaca : ''} · ${fmtNum(num(getCSVField(r, 'Quantidade')))} ${getCSVField(r, 'Unidade') || ''}`.trim(),
       ir: () => { HIST_FILTRO.busca = estaca || getCSVField(r, 'ID'); HIST_LIMITE = 100; navigate('historico'); },
     });
+  }
+
+  // ---- a estaca no Modelo 3D ("E212", "212"): depois dos lançamentos, para o
+  // Enter continuar levando ao Histórico filtrado, que é o caminho de sempre
+  if (m3dDisponivel()) {
+    const mEst = /^e?\s*(\d{2,3})$/.exec(t);
+    if (mEst) {
+      const n = parseInt(mEst[1], 10);
+      eixosDaObraAtiva().filter(x => n >= x.ini && n <= x.fim && m3dEixoModelo(x.id)).forEach(x => {
+        itens.push({ grupo: 'Modelo 3D', icone: 'cubo', titulo: `E${n} · ${x.label}`,
+                     sub: 'ver a estaca no modelo 3D, com o que foi lançado nela', ir: () => m3dIrEstaca(x.id, n) });
+      });
+    }
   }
 
   // ---- RDOs diários (por data, escrita como for)
@@ -8268,6 +8371,7 @@ function renderShell() {
           { id: 'botafora',  icone: 'saida',        texto: 'Bota-Fora' },
           { id: 'galeria',   icone: 'galeria',      texto: 'Galeria de Fotos' },
           { id: 'projetos',  icone: 'projetos',     texto: 'Projetos' },
+          { id: 'modelo3d',  icone: 'cubo',         texto: 'Modelo 3D' },
         ])}
 
         ${grupoNav('Suprimentos', [
@@ -8503,6 +8607,7 @@ function render() {
     notas: ['Notas Fiscais', 'DANFE, estoque de material e histórico de preço'],
     galeria: ['Galeria de Fotos', 'Registro fotográfico dos serviços lançados'],
     projetos: ['Projetos', 'Prancha do executivo · amplia até a cota, e abre sem sinal'],
+    modelo3d: ['Modelo 3D', 'A avenida em 3D, pintada com o que foi lançado em cada estaca'],
     usuarios: ['Usuários', 'Quem entra no sistema e com qual acesso'],
   };
   const [t, s] = titles[STATE.currentPage] || ['', ''];
@@ -8549,6 +8654,7 @@ function render() {
   }
   else if (STATE.currentPage === 'galeria') { pageEl.innerHTML = renderGaleria(); carregarImagensGaleria(); }
   else if (STATE.currentPage === 'projetos') { pageEl.innerHTML = renderProjetos(); abrirPrancha(); }
+  else if (STATE.currentPage === 'modelo3d') { pageEl.innerHTML = renderModelo3D(); m3dMontar(); }
   else if (STATE.currentPage === 'usuarios') { pageEl.innerHTML = renderUsuarios(); usuariosCarregarLista(); }
 
   agendarGraficos();
@@ -9485,12 +9591,25 @@ function galeriaFiltrada() {
     return p ? getCSVField(p, 'Frente') : '';
   };
   const termo = String(GAL_FILTRO.busca || '').trim().toLowerCase();
+  /* Estaca que se LÊ como estaca ("E212", "E212 (BC)") casa pela leitura:
+     a foto de um trecho "E210 a E215" é também foto da E212 — que é o que o
+     Modelo 3D e o Histórico mostram para a mesma estaca. O resto (um pedaço
+     de texto qualquer) continua casando pelo texto, como sempre. */
+  const estAlvo = GAL_FILTRO.estaca ? lerLocalEstaca(GAL_FILTRO.estaca) : [];
+  // sem o eixo escrito ("E5"), vale o número em qualquer eixo: nas Ruas de Terra
+  // as duas ruas têm uma E5, e o filtro sempre trouxe as fotos das duas
+  const estComEixo = /\(\s*[A-Z0-9]{2,6}\s*\)/i.test(GAL_FILTRO.estaca || '');
   return fotosDaObra().filter(f => {
     if (STATE.galPacote && STATE.galPacote !== 'Todos' && f.pacote !== STATE.galPacote) return false;
     if (STATE.galMes && STATE.galMes !== 'Todos' && String(f.data).slice(0, 7) !== STATE.galMes) return false;
     if (GAL_FILTRO.frente && frenteDoPacote(f.pacoteId) !== GAL_FILTRO.frente) return false;
     if (GAL_FILTRO.apontador && f.apontador !== GAL_FILTRO.apontador) return false;
-    if (GAL_FILTRO.estaca && !String(f.estaca).toLowerCase().includes(GAL_FILTRO.estaca.toLowerCase())) return false;
+    if (GAL_FILTRO.estaca) {
+      if (estAlvo.length) {
+        const daFoto = lerLocalEstaca(f.estaca);
+        if (!daFoto.some(e => estAlvo.some(a => a.num === e.num && (!estComEixo || a.eixo === e.eixo)))) return false;
+      } else if (!String(f.estaca).toLowerCase().includes(GAL_FILTRO.estaca.toLowerCase())) return false;
+    }
     if (GAL_FILTRO.de && String(f.data) < GAL_FILTRO.de) return false;
     if (GAL_FILTRO.ate && String(f.data) > GAL_FILTRO.ate) return false;
     if (termo) {
@@ -9585,6 +9704,7 @@ function renderGaleria() {
     </div></div></div>`;
 
   const marcada = f => !GAL_SELECAO || GAL_SELECAO.has(f.fileId);
+  const com3d = m3dDisponivel();
   const cartoes = fs.map(f => `<div class="card" style="overflow:hidden;padding:0${GAL_MODO_SELECAO && !marcada(f) ? ';opacity:.4' : ''}">
     ${GAL_MODO_SELECAO ? `<label style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer;font-size:var(--fs-sm)">
       <input type="checkbox" ${marcada(f) ? 'checked' : ''} onchange="galMarcar('${f.fileId}', this.checked)">
@@ -9602,7 +9722,7 @@ function renderGaleria() {
     <div style="padding:11px 13px">
       <div style="font-weight:600;font-size:var(--fs-md);line-height:1.3">${escHtml(f.pacote)}</div>
       <div style="font-size:var(--fs-xs);color:var(--muted);margin-top:3px">
-        ${escHtml(f.estaca)}${f.turno ? ' · ' + escHtml(f.turno) : ''}</div>
+        ${escHtml(f.estaca)}${f.turno ? ' · ' + escHtml(f.turno) : ''}${com3d && f.estaca && lerLocalEstaca(f.estaca).some(e => m3dEixoModelo(e.eixo)) ? `<button type="button" class="m3d-link" onclick="m3dIrLancamento(${jsArg(f.estaca)})" title="Ver onde a foto foi tirada, no modelo 3D">${ic('cubo')} 3D</button>` : ''}</div>
       <div style="font-size:var(--fs-xs);color:var(--muted)">
         ${f.qtd ? fmtNum(num(f.qtd)) + ' ' + escHtml(f.un) : ''}${f.apontador ? ' · por ' + escHtml(f.apontador) : ''}</div>
     </div></div>`).join('');
@@ -11027,6 +11147,8 @@ function renderAvenida3D(rdosAtivos, pacotesAtivos) {
         <div class="avenue-header-stats">
           <div class="avenue-meta-stat"><div class="avenue-meta-num">${ativas}</div><div class="avenue-meta-lbl">ativas</div></div>
           <div class="avenue-meta-stat"><div class="avenue-meta-num" style="color:var(--muted-2)">${inativas}</div><div class="avenue-meta-lbl">sem RDO</div></div>
+          ${m3dDisponivel() ? `<button type="button" class="btn btn-outline btn-sm" onclick="navigate('modelo3d')"
+            title="A avenida em 3D, com cada estaca pintada pelo que foi lançado">${ic('cubo')} Ver no modelo 3D</button>` : ''}
         </div>
       </div>
       <div class="card-body">${cenas.join('')}
@@ -12813,12 +12935,15 @@ function renderPlantaAvanco() {
     var eixo = eixoPorId(PV.sel.eixo);
     var linhas = lancamentosNaEstaca(PV.sel.eixo, PV.sel.num);
     var titulo = 'Estaca E' + PV.sel.num + ' · ' + escHtml(eixo ? eixo.label : PV.sel.eixo);
+    // a mesma estaca no modelo 3D (quando a obra tem modelo e o eixo está nele)
+    var no3d = m3dDisponivel() && m3dEixoModelo(PV.sel.eixo)
+      ? '<button type="button" class="m3d-link" onclick="m3dIrEstaca(' + jsArg(PV.sel.eixo) + ',' + PV.sel.num + ')" title="Ver esta estaca no modelo 3D">' + ic('cubo') + ' 3D</button>' : '';
     if (!linhas.length) {
       return '<div style="margin-top:12px;padding:12px 14px;background:var(--bg);border-radius:var(--r);font-size:var(--fs-md);color:var(--muted)">' +
-        '<strong style="color:var(--text)">' + titulo + '</strong> — nenhum serviço lançado nesta estaca ainda.</div>';
+        '<strong style="color:var(--text)">' + titulo + '</strong> — nenhum serviço lançado nesta estaca ainda.' + no3d + '</div>';
     }
     return '<div style="margin-top:12px;padding:12px 14px;background:var(--bg);border-radius:var(--r)">' +
-      '<div style="font-size:var(--fs-md);font-weight:600;margin-bottom:8px">' + titulo + ' — ' + linhas.length + ' lançamento' + (linhas.length > 1 ? 's' : '') + '</div>' +
+      '<div style="font-size:var(--fs-md);font-weight:600;margin-bottom:8px">' + titulo + ' — ' + linhas.length + ' lançamento' + (linhas.length > 1 ? 's' : '') + no3d + '</div>' +
       linhas.slice(0, 12).map(function (r) {
         var pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
         var p = STATE.pacotes.find(function (pp) { return getCSVField(pp, 'ID') === pid; });
@@ -12872,7 +12997,9 @@ function renderPlantaAvanco() {
     '<div class="card-header"><div>' +
       '<div class="card-title">' + ic('mapa') + ' Planta de avanço</div>' +
       '<div class="card-title-sub">A via em proporção real, se preenchendo a cada apontamento</div>' +
-    '</div></div>' +
+    '</div>' +
+    (m3dDisponivel() ? '<button type="button" class="btn btn-outline btn-sm" onclick="navigate(\'modelo3d\')">' + ic('cubo') + ' Ver no modelo 3D</button>' : '') +
+    '</div>' +
     '<div class="card-body">' + corpo + '</div>' +
   '</div>';
 }
@@ -14542,7 +14669,10 @@ function renderHistorico() {
    numa obra de 669 dias) e `busca` casa ID, estaca, pacote e observação —
    que é como as pessoas procuram: pela estaca, não pela data. `limite` é a
    paginação, no lugar do corte cego que existia em 100. */
-let HIST_FILTRO = { mes: '', frente: '', apontador: '', data: '', busca: '' };
+/* `estaca` ('BC:212') vem do Modelo 3D e da Planta: casa pela LEITURA da
+   estaca (lerLocalEstaca), não pelo texto — "E210 a E215 (BC)" passa pela E212,
+   e a busca livre por "E212" não acharia esse trecho. */
+let HIST_FILTRO = { mes: '', frente: '', apontador: '', data: '', busca: '', estaca: '' };
 const HIST_PAGINA = 100;
 let HIST_LIMITE = HIST_PAGINA;
 
@@ -14571,7 +14701,7 @@ window.setHistBusca = function(valor) {
   }, 350);
 };
 window.limparHistFiltro = function() {
-  HIST_FILTRO = { mes: '', frente: '', apontador: '', data: '', busca: '' };
+  HIST_FILTRO = { mes: '', frente: '', apontador: '', data: '', busca: '', estaca: '' };
   HIST_LIMITE = HIST_PAGINA;
   transitionTo(render);
 };
@@ -14614,7 +14744,9 @@ function renderHistoricoServicos() {
     return l.charAt(0).toUpperCase() + l.slice(1);
   };
   const filtroAtivo = HIST_FILTRO.mes || HIST_FILTRO.frente || HIST_FILTRO.apontador
-                   || HIST_FILTRO.data || HIST_FILTRO.busca;
+                   || HIST_FILTRO.data || HIST_FILTRO.busca || HIST_FILTRO.estaca;
+  const [estEixo, estNumTxt] = String(HIST_FILTRO.estaca || '').split(':');
+  const estNum = parseInt(estNumTxt, 10);
   const termo = String(HIST_FILTRO.busca || '').trim().toLowerCase();
 
   // Mantém o índice canônico (posição no array revertido) e filtra depois,
@@ -14632,6 +14764,8 @@ function renderHistoricoServicos() {
         if (!d || getLocalISODate(d) !== HIST_FILTRO.data) return false;
       }
       if (HIST_FILTRO.apontador && getCSVField(r, 'Apontador') !== HIST_FILTRO.apontador) return false;
+      if (HIST_FILTRO.estaca && !lerLocalEstaca(getCSVField(r, 'Local_Estaca'))
+            .some(e => e.eixo === estEixo && e.num === estNum)) return false;
       if (HIST_FILTRO.frente) {
         const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
         if (frenteDoPacote(pid) !== HIST_FILTRO.frente) return false;
@@ -14679,6 +14813,8 @@ function renderHistoricoServicos() {
       </select>
       <input type="date" value="${escHtml(HIST_FILTRO.data)}" onchange="setHistFiltro('data', this.value)"
              title="Um dia exato" style="padding:6px 9px;font-size:var(--fs-md);border:1px solid var(--border-strong);border-radius:6px">
+      ${HIST_FILTRO.estaca && isFinite(estNum) ? `<span class="pill" title="Lançamentos que passam por esta estaca">Estaca E${estNum}${eixoPorId(estEixo) ? ' · ' + escHtml(eixoPorId(estEixo).label) : ''}
+        <button type="button" class="m3d-link" onclick="setHistFiltro('estaca', '')" aria-label="Tirar o filtro de estaca">${ic('fechar')}</button></span>` : ''}
       ${filtroAtivo ? `<div class="filter-clear" onclick="limparHistFiltro()">Limpar ${ic('fechar')}</div><span style="font-size:var(--fs-xs);color:var(--muted)">${visiveis.length} de ${rdos.length}</span>` : ''}
     </div>`;
 
@@ -14688,6 +14824,7 @@ function renderHistoricoServicos() {
   } else if (visiveis.length === 0) {
     bodyContent = '<div class="empty"><div class="empty-icon">≡</div><div class="empty-title">Nenhum serviço com esses filtros</div><div class="empty-sub">Ajuste ou limpe os filtros acima.</div></div>';
   } else {
+    const com3d = m3dDisponivel();
     const tableRows = visiveis.slice(0, HIST_LIMITE).map(({ r, i: idx }) => {
       const id         = getCSVField(r, 'ID') || '';
       const dataVal    = getCSVField(r, 'Data') || '';
@@ -14734,7 +14871,10 @@ function renderHistoricoServicos() {
           <td style="font-size:var(--fs-sm)" data-rot="Data">${fmtData(dataVal)}</td>
           <td data-rot="Turno"><span class="pill ${turno==='Noturno'?'pill-blu':'pill-ylw'}">${turno}</span></td>
           <td class="t-num" data-rot="Quantidade">${fmtNum(num(qtd))} ${escHtml(getCSVField(r,'Unidade')||'')}</td>
-          <td class="t-mono" style="font-size:var(--fs-xs)" data-rot="Estaca">${escHtml(localEstaca||'—')}</td>
+          <td class="t-mono" style="font-size:var(--fs-xs)" data-rot="Estaca">${com3d && localEstaca && lerLocalEstaca(localEstaca).some(e => m3dEixoModelo(e.eixo))
+            // a própria estaca é o atalho: um nó a mais por linha, e não um ícone (o Histórico tem teto de DOM)
+            ? `<button type="button" class="m3d-txt" onclick="m3dIrLancamento(${jsArg(localEstaca)})" title="Ver onde fica, no modelo 3D">${escHtml(localEstaca)}</button>`
+            : escHtml(localEstaca||'—')}</td>
           <td style="font-size:var(--fs-sm)" data-rot="Equipe">${escHtml(equipe||'—')}</td>
           <td style="font-size:var(--fs-sm)" data-rot="Apontador">${escHtml(apontador||'—')}</td>
           <td class="celula-acoes" style="text-align:center;white-space:nowrap">
@@ -18539,7 +18679,11 @@ function renderSeletorTurno() {
         <!-- O PDF oficial é o ENTREGÁVEL que a fiscalização assina, e estava
              no botão mais escondido da tela: rodapé, contorno, depois de dois
              cartões. Sobe para o cabeçalho, ao lado do dia a que se refere. -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+        ${m3dDisponivel() ? `<button class="btn btn-outline btn-sm" onclick="m3dAbrirDia('${d.data}')"
+          title="Os serviços lançados neste dia, no modelo 3D da obra">${ic('cubo')} Ver o dia no 3D</button>` : ''}
         ${algumPreenchido ? `<button class="btn btn-primary btn-sm" onclick="gerarPDFDiarioV4('${DIARIO_V4.data}')">${ic('pdf')} Gerar PDF Oficial</button>` : ''}
+        </div>
       </div>
       <div class="card-body">
         <div style="margin-top:0">
@@ -21650,6 +21794,8 @@ function apMontarSlides(d) {
   if ((STATE.rdodiario || []).length) s.push({ tipo: 'diario' });
   if (EQUIP && EQUIP.carregado && EQUIP.apontamentos.length) s.push({ tipo: 'equipamentos' });
   if (d.fotos.length) s.push({ tipo: 'registro' });
+  // o projeto em 3D, com as imagens fotorrealistas (só a obra que tem modelo)
+  if (OBRA.modelo3d) s.push({ tipo: 'modelo3d' });
   s.push({ tipo: 'fim' });
   return s;
 }
@@ -21666,6 +21812,24 @@ function apSlideHTML(sl, d) {
     <h2>${escHtml(OBRA.nome || '')}</h2>
     <div class="ap-sub ap-sub-c">${escHtml(OBRA.subtitulo || 'Obra')} — planejamento, RDO de campo, apoio à medição
       e prestação de contas em um só sistema.</div></div>`;
+
+  /* As imagens vêm do índice do modelo (modelo3d/<obra>/index.json), que é
+     buscado na hora: o slide nasce com o texto e as imagens chegam depois. */
+  if (sl.tipo === 'modelo3d') {
+    const est = calcAvancoPorEstaca(STATE.rdoavanco || [], STATE.pacotes || []);
+    const ativas = Object.values(est).filter(e => e.lancamentos > 0).length;
+    setTimeout(() => m3dRenders().then(rs => {
+      const box = document.getElementById('apM3d');
+      if (!box || !rs.length) return;
+      box.innerHTML = rs.slice(0, 3).map(r => `<figure><img src="${escHtml(r.f)}" alt="${escHtml(r.t)}" loading="lazy">
+        <figcaption>${escHtml(r.t)}</figcaption></figure>`).join('');
+    }).catch(() => {}), 0);
+    return `<div class="ap-slide"><div class="ap-kicker">Modelo 3D do projeto</div>
+      <h2>A avenida projetada, estaca por estaca</h2>
+      <div class="ap-sub">Pista, guias, drenagem, sinalização, paisagismo e o entorno — e, no app, cada
+        estaca pintada pelo que o campo lançou (${ativas} estaca${ativas !== 1 ? 's' : ''} com serviço até agora).</div>
+      <div class="ap-m3d" id="apM3d"></div></div>`;
+  }
 
   if (sl.tipo === 'capacidades') {
     const caps = [

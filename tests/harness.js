@@ -144,10 +144,14 @@ function gerarCronograma({ linhas = 300 } = {}) {
  *   offline      — true → context.setOffline(true) logo após a carga
  *   cpuThrottle  — fator (ex. 4) via CDP
  *   redeLenta    — 'lenta3g' | 'off' — via CDP Network.emulateNetworkConditions
+ *   webgl        — true → WebGL por software (para o Modelo 3D)
  */
 async function abrir(opts = {}) {
   await garantirServidor(8099);
-  const b = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'] });
+  // `webgl: true` liga o WebGL por software (SwiftShader): o headless não tem GPU,
+  // e o Modelo 3D (modelo3d.html) não abre sem WebGL
+  const b = await chromium.launch({ executablePath: CHROME, args: ['--no-sandbox'].concat(opts.webgl
+    ? ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] : []) });
   const ctx = await b.newContext(Object.assign(
     opts.mobile
       ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 3 }

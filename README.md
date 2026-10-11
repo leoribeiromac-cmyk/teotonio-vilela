@@ -900,6 +900,54 @@ pelo fatiador. `arquivo` é sempre o PDF, que alimenta os botões Abrir e Baixar
 Todos os perfis enxergam a tela — inclusive Campo, que é quem mais precisa saber
 o que construir.
 
+## Modelo 3D
+
+Tela **Modelo 3D** (menu Operação): o modelo 3D da avenida — o mesmo da página
+publicada pelo pipeline do modelo, com pista, guias, drenagem, sinalização,
+paisagismo, terreno, córrego e as edificações do entorno — **pintado com o que
+foi lançado no RDO**. Cada estaca com serviço ganha uma faixa colorida sobre a
+pista do seu sentido (Centro→Bairro = pista PE, Bairro→Centro = pista PD):
+
+- **Filtros**: toda a obra, últimos 7/30 dias, um mês, ou **um dia de RDO**;
+  frente e pacote. Filtrar Drenagem deixa a superfície transparente, porque a
+  drenagem é enterrada.
+- **Cor**: pela frente (a mesma cor da frente no resto do app), pelo volume de
+  lançamentos ou pela recência do último.
+- **Tocar uma faixa** abre a estaca: os lançamentos dela, as fotos, e os
+  botões **Ver lançamentos** (Histórico filtrado pela estaca), **Fotos**
+  (Galeria) e **Lançar serviço aqui** (o Lançar Serviço chega com a estaca
+  preenchida, num serviço em branco — nada do rascunho é apagado).
+- **De outras telas para o 3D**: "Ver no modelo 3D" no Painel e na Planta de
+  avanço, "Ver o dia no 3D" no RDO Diário, a estaca de cada lançamento no
+  Histórico e de cada foto na Galeria, e a busca (Ctrl+K → "E212").
+- O visor traz as ferramentas da página do modelo: camadas por disciplina,
+  medir distância/área, ir para estaca, seção transversal e perfil, percorrer a
+  avenida, sol e sombras, quantidades do modelo (referência — não substituem a
+  medição), imagens fotorrealistas. Qualidade **Leve** (padrão no celular) ou
+  **Alta** (padrão no computador).
+- **Offline**: o botão guarda o modelo no aparelho (~3 MB no Leve, ~15 MB no
+  Alta) para abrir no canteiro sem sinal.
+
+### Trazer um modelo novo (ou reimportar)
+
+```
+python3 ferramentas/modelo3d-importar.py <pasta publicada do modelo> modelo3d/<obra>/
+```
+
+A pasta publicada é a que o `mkpub.py` do pipeline gera (ou o que o Artifact do
+modelo devolve): `index.html` com o índice embutido, `tiles/`, `tex/`,
+`entorno.json`, `edif.json`, `renders/`. Os trechos viram `.bin` compactados
+(15 MB de JSON → 2,4 MB, a 0,5 mm do original), as texturas viram WebP quando
+sai menor, e as exportações de CAD (DXF, SketchUp, OBJ, GLB, LandXML) ficam de
+fora — continuam na página do modelo. Depois, na configuração da obra:
+
+```js
+modelo3d: { pasta: 'modelo3d/teotonio/', eixos: { CB: 'PE', BC: 'PD' } },
+```
+
+`eixos` diz qual eixo do projeto é cada eixo do app. **Reimportar exige subir o
+`VERSAO_MODELO3D` do `sw.js`**, senão o celular segue com o modelo guardado.
+
 ## Estaqueamento: o eixo é da obra
 
 Onde o serviço foi executado é dito por **estaca**, e a estaca pertence a um
@@ -1133,6 +1181,9 @@ agregando por código, como sempre foi.
 | `js/ui/icones.js` | Conjunto de ícones do app — traço único na grade de 24, cor herdada do tema. Cobre navegação, ações e frentes de serviço (`icFrente()` escolhe pelo nome da frente) |
 | `js/equip/equipamentos.js` | Tela de Equipamentos: apontamento de hora de máquina, correção de apontamento, painel e medição mensal |
 | `js/bf/bota-fora.js` | Tela de Bota-Fora: a viagem de caminhão com as três provas, e a planilha no formato da aba FRETE |
+| `modelo3d.html` + `js/modelo3d/visor.js` | O visor do modelo 3D (aberto num iframe pela tela Modelo 3D, ou sozinho) |
+| `js/modelo3d/tela.js` | A tela Modelo 3D: filtros, estacas, e as pontes com Histórico, Galeria e Lançar Serviço |
+| `modelo3d/<obra>/` | O modelo 3D da obra, gerado pela `ferramentas/modelo3d-importar.py` |
 | `vendor/` | Bibliotecas servidas pelo próprio site (ver abaixo) |
 
 ### Bibliotecas vendorizadas, carregadas sob demanda
@@ -1147,6 +1198,7 @@ Pages, e o service worker guarda junto com o app.
 | `vendor/xlsx/` | xlsx-js-style 1.2.0 | ao exportar Excel |
 | `vendor/pdfjs/` | PDF.js (Mozilla) | na leitura da DANFE e nas pranchas ainda em PDF |
 | `vendor/fontes/` | Space Grotesk + JetBrains Mono | na abertura (140 KB, subconjunto latino) |
+| `vendor/three/` | three.js r160 (+ complementos) e ez-tree 1.1.0 | só na tela Modelo 3D (o ez-tree, só no modo Alta) |
 
 **Nenhuma das quatro primeiras entra no `<head>`.** Somadas são 1,3 MB, e
 enquanto o navegador as baixava e compilava a tela ficava branca — 13 segundos
