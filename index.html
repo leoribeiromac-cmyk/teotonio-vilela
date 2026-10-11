@@ -72,24 +72,24 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=65"></script>
-<script src="dados/ruas-de-terra.js?v=65"></script>
+<script src="dados/ranario.js?v=66"></script>
+<script src="dados/ruas-de-terra.js?v=66"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=65"></script>
+<script src="dados/teotonio-muros.js?v=66"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=65"></script>
-<script src="js/nf/adaptador.js?v=65"></script>
-<script src="js/nf/notas.js?v=65"></script>
-<script src="js/equip/equipamentos.js?v=65"></script>
+<script src="js/ui/icones.js?v=66"></script>
+<script src="js/nf/adaptador.js?v=66"></script>
+<script src="js/nf/notas.js?v=66"></script>
+<script src="js/equip/equipamentos.js?v=66"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=65"></script>
-<script src="js/rdo/mapa-chuva.js?v=65"></script>
-<script src="js/modelo3d/tela.js?v=65"></script>
+<script src="js/bf/bota-fora.js?v=66"></script>
+<script src="js/rdo/mapa-chuva.js?v=66"></script>
+<script src="js/modelo3d/tela.js?v=66"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -958,9 +958,17 @@ html,body{
 .m3d-seg button{border:0;background:transparent;padding:6px 10px;font:inherit;font-size:var(--fs-sm);color:var(--text-2);cursor:pointer}
 .m3d-seg button + button{border-left:1px solid var(--border)}
 .m3d-seg button[aria-pressed="true"]{background:var(--acc-fill);color:var(--acc-fill-txt)}
-.m3d-visor{position:relative;height:min(72vh,780px);min-height:380px;background:var(--bg-2)}
-.m3d-visor iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
+.m3d-visor{position:relative;height:min(72vh,780px);min-height:380px;background:var(--bg-2);display:flex;flex-direction:column}
+.m3d-visor iframe{flex:1 1 auto;min-height:0;width:100%;border:0;display:block}
 .m3d-visor:fullscreen{height:100vh}
+/* a linha do tempo (4D): embaixo do 3D, dentro da caixa — vai junto na tela cheia */
+.m3d-tempo{display:flex;gap:var(--sp-4) var(--sp-5);align-items:center;flex-wrap:wrap;padding:8px 12px;border-top:1px solid var(--border);background:var(--surface-2)}
+.m3d-tempo[hidden]{display:none}
+.m3d-tempo .ic{width:14px;height:14px;vertical-align:-2px}
+.m3d-tempo input[type=range]{flex:1 1 160px;min-width:0;accent-color:var(--acc)}
+.m3d-tempo-ext{font-size:var(--fs-xs);color:var(--muted)}
+.m3d-tempo-data{font-size:var(--fs-md);white-space:nowrap;min-width:9.5em}
+.m3d-tempo select{padding:4px 8px;font-size:var(--fs-sm);border:1px solid var(--border-strong);border-radius:6px;background:var(--surface);color:var(--text);font-family:inherit}
 .m3d-legenda{display:flex;gap:6px 14px;flex-wrap:wrap;align-items:center;padding:10px 16px;font-size:var(--fs-sm);color:var(--text-2);border-top:1px solid var(--border)}
 .m3d-legenda i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:var(--sp-3);vertical-align:-1px}
 .m3d-legenda small{color:var(--muted)}
@@ -992,6 +1000,19 @@ html,body{
 .m3d-lanc-pac small{display:block;color:var(--muted);font-size:var(--fs-xs);margin-top:var(--sp-1)}
 .m3d-lanc-qtd{white-space:nowrap}
 .m3d-vazio{font-size:var(--fs-md);color:var(--muted);padding:6px 0}
+/* a escada da pista na estaca aberta: o que já foi feito, com a data do último lançamento */
+.m3d-etapas-tit{font-size:var(--fs-sm);color:var(--text-2);margin:2px 0 6px}
+.m3d-etapas{display:flex;flex-wrap:wrap;gap:var(--sp-2) var(--sp-3);margin-bottom:10px}
+.m3d-etapas span{display:inline-flex;align-items:center;gap:var(--sp-2);padding:2px 8px;border:1px dashed var(--border-strong);border-radius:var(--r-sm);font-size:var(--fs-xs);color:var(--muted)}
+.m3d-etapas span.on{border-style:solid;color:var(--text);background:var(--surface)}
+.m3d-etapas i{width:8px;height:8px;border-radius:2px;background:var(--border)}
+.m3d-etapas .ic{width:12px;height:12px}
+.m3d-etapas small{color:var(--muted)}
+/* as miniaturas da estaca (as mesmas da Galeria) */
+.m3d-fotos{display:flex;gap:var(--sp-3);overflow-x:auto;margin-bottom:10px;padding-bottom:2px}
+.m3d-fotos button{flex:0 0 auto;width:88px;height:66px;padding:0;border:1px solid var(--border);border-radius:var(--r-sm);background:var(--surface-2);cursor:zoom-in;overflow:hidden;display:grid;place-items:center;color:var(--muted)}
+.m3d-fotos img{width:100%;height:100%;object-fit:cover;display:block}
+.m3d-fotos .ic{width:18px;height:18px}
 /* atalho "ver no 3D" ao lado de uma estaca, em outras telas */
 .m3d-txt{border:0;background:none;padding:0;font:inherit;color:inherit;cursor:pointer;text-align:left;text-decoration:underline dotted;text-underline-offset:3px}
 .m3d-txt:hover{color:var(--acc-d)}
@@ -1006,7 +1027,10 @@ html,body{
   .m3d-filtros{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);padding:10px 12px}
   .m3d-filtros label,.m3d-cor-rot{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   .m3d-filtros select,.m3d-filtros input{max-width:none;width:100%;min-width:0}
-  .m3d-seg{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,1fr)}
+  .m3d-seg{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr)}
+  .m3d-tempo{padding:8px 10px}
+  .m3d-tempo-ext{display:none}
+  .m3d-tempo-data{min-width:0;font-size:var(--fs-sm)}
   .m3d-acoes .m3d-so-pc{display:none}
 }
 
@@ -5794,6 +5818,11 @@ function navigate(page) {
      bloqueado em outra tela) chamava o coletor sem o formulário na tela —
      "não há nada digitado" — e APAGAVA o rascunho do Bota-Fora. */
   if (_rascAtivo) { try { _rascAtivo.agora(); } catch (e) {} _rascAtivo = null; }
+  /* A linha do tempo do Modelo 3D tocando para AQUI, na saída. O relógio dela
+     também confere a tela, mas o visor roda no mesmo processo do app (iframe
+     de mesma origem): ocupado, ele atrasa esse relógio, e a reprodução seguia
+     trabalhando para uma tela que já não existe. */
+  if (typeof m3dParar === 'function') m3dParar();
   STATE.currentPage = page;
   document.querySelectorAll('.nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.page === page);

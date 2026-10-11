@@ -13,6 +13,11 @@
 //    câmera de volta ao início) — só manda os dados novos;
 //  · Histórico e Galeria filtram pela LEITURA da estaca (o trecho E210–E215
 //    passa pela E212), e a busca acha a estaca no 3D sem roubar o Enter;
+//  · a LINHA DO TEMPO (4D) mostra o que existia até a data, anda sozinha mês a
+//    mês, conta a recência a partir da data da linha e para ao sair da tela;
+//  · a ETAPA da pista é a mais alta lançada na estaca, e vai para o 3D;
+//  · estaca com FOTO ganha pino no 3D, e a estaca aberta mostra a miniatura
+//    da Galeria — no app e no painel do 3D, que recebe a imagem, não o id;
 //  · guardado pelo botão Offline, o modelo abre sem sinal;
 //  · obra sem modelo não mostra a tela.
 //
@@ -43,8 +48,18 @@ function rdoCsv() {
   return H.csv(rows);
 }
 
+// 1×1 px: o que o "Drive" devolve de miniatura
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+const pedidosFoto = [];
+function gas(acao, params) {
+  if (acao === 'obterFoto') { pedidosFoto.push(params.fileId + (params.mini ? ':mini' : '')); return { ok: true, mini: true, dataUri: PNG }; }
+  if (acao === 'usuariosNomes') return { ok: true, usuarios: ['Leonardo', 'Wallace', 'Guilherme'] };
+  if (acao === 'login') return { ok: true, usuario: params.usuario, perfil: 'admin', token: 'tok-falso', obras: '*' };
+  return { ok: true };
+}
+
 (async () => {
-  const s = await H.abrir({ logar: { usuario: 'Leonardo', perfil: 'admin' }, rdo: rdoCsv(), webgl: true });
+  const s = await H.abrir({ logar: { usuario: 'Leonardo', perfil: 'admin' }, rdo: rdoCsv(), webgl: true, gas });
   ok('o app carregou', s.carregou);
   // o modo Leve: o Alta (texturas, árvores ez-tree) só atrasaria o WebGL por software
   await s.p.evaluate(() => localStorage.setItem('tv3d_qualidade', 'leve'));
@@ -90,6 +105,101 @@ function rdoCsv() {
   ok('"Ver o dia no 3D" mostra só o que foi lançado naquele dia', doDia.length === 7 && doDia.includes('CB:120') && !doDia.includes('BC:225'), JSON.stringify(doDia));
   await s.p.evaluate(() => m3dFiltro('periodo', 'tudo'));
 
+  console.log('\n── linha do tempo (4D) ──');
+  await s.p.evaluate(() => m3dFiltro('periodo', 'linha'));
+  await s.p.waitForTimeout(300);
+  const lt = await s.p.evaluate(() => ({ ate: M3D.ate, barra: !document.getElementById('m3dTempo').hidden,
+    max: +(document.getElementById('m3dTempoR') || {}).max, n: _m3dUltimo.faixas.length,
+    dentro: document.getElementById('m3dVisor').contains(document.getElementById('m3dTempo')) }));
+  ok('a linha do tempo abre no último dia lançado, com a barra embaixo do 3D', lt.ate === '2025-03-11' && lt.barra, JSON.stringify(lt));
+  ok('…dentro da caixa do visor (vai junto na tela cheia)', lt.dentro);
+  ok('…e vai do primeiro lançamento (06/01) ao último (11/03)', lt.max === 64, lt.max);
+  ok('no último dia, a linha mostra a obra inteira', lt.n === app.n, lt.n + ' × ' + app.n);
+  const arrastar = v => s.p.evaluate(v => { const r = document.getElementById('m3dTempoR'); r.value = v; r.dispatchEvent(new Event('input')); }, v);
+  await arrastar(4);
+  await s.p.waitForTimeout(400);
+  const cedo = await s.p.evaluate(() => ({ ate: M3D.ate, fx: _m3dUltimo.faixas.map(f => f.chave).sort().join() }));
+  ok('arrastar a linha até 10/01 mostra só o que existia até ali', cedo.ate === '2025-01-10' && cedo.fx === 'BC:225,BC:226,BC:227,BC:228,BC:229', JSON.stringify(cedo));
+  await fr.waitForFunction(() => window.__rdo.n === 5, null, { timeout: 15000 }).catch(() => {});
+  ok('…e o visor acompanha', await fr.evaluate(() => window.__rdo.n) === 5);
+  const carimbo = await fr.evaluate(() => ({ vis: !document.getElementById('carimbo').hidden, t: document.getElementById('carimboT').textContent }));
+  ok('o 3D mostra a data da linha no alto', carimbo.vis && /10\/01\/2025/.test(carimbo.t), JSON.stringify(carimbo));
+  await s.p.evaluate(() => m3dFiltro('cor', 'recencia'));
+  await arrastar(12);
+  await s.p.waitForTimeout(400);
+  const rec = await s.p.evaluate(() => [M3D.ate, _m3dUltimo.est.get('BC:237').cor, _m3dUltimo.est.get('BC:225').cor].join('|'));
+  ok('na linha do tempo a recência conta da data da linha, não de hoje', rec === '2025-01-18|#e0452a|#f08a24', rec);
+  const cache = await fr.evaluate(() => window.__rdo.cacheFaixas);
+  await arrastar(4); await s.p.waitForTimeout(300); await arrastar(12); await s.p.waitForTimeout(400);
+  ok('voltar e avançar a linha reaproveita a geometria das faixas (não refaz)', await fr.evaluate(() => window.__rdo.cacheFaixas) === cache, cache);
+  // a estaca aberta acompanha a data: a E225 tem um lançamento em 06/01 e outro em 21/01
+  const lancNoPainel = () => fr.evaluate(() => { const dl = document.getElementById('infoDl'); const dt = [...dl.querySelectorAll('dt')].find(x => x.textContent === 'Lançamentos');
+    return document.getElementById('info').hidden ? 'oculto' : (dt ? dt.nextElementSibling.textContent : '?'); });
+  await s.p.evaluate(() => m3dSelecionar('BC:225'));
+  await fr.waitForFunction(() => window.__rdo.aberta === 'BC:225', null, { timeout: 5000 }).catch(() => {});
+  const antes = await lancNoPainel();
+  await arrastar(25);
+  await s.p.waitForFunction(() => M3D.ate === '2025-01-31' && _m3dUltimo.est.get('BC:225').linhas.length === 2, null, { timeout: 5000 }).catch(() => {});
+  await fr.waitForFunction(() => /Lançamentos2/.test(document.getElementById('infoDl').textContent), null, { timeout: 5000 }).catch(() => {});
+  const depois = await lancNoPainel();
+  ok('o painel da estaca aberta no 3D acompanha a linha do tempo', antes === '1' && depois === '2', antes + ' → ' + depois);
+  await s.p.evaluate(() => { m3dFiltro('passo', 'mes'); M3D.ate = '2025-03-11'; m3dTocar(); });
+  const tocou = await s.p.evaluate(() => ({ tocando: !!M3D.tocando, ate: M3D.ate, botao: document.getElementById('m3dPlay').textContent.trim() }));
+  ok('o ▶ no fim da linha recomeça do primeiro dia', tocou.tocando && tocou.ate === '2025-01-06' && /Pausar/.test(tocou.botao), JSON.stringify(tocou));
+  await s.p.waitForFunction(() => !M3D.tocando, null, { timeout: 10000 }).catch(() => {});
+  const parou = await s.p.evaluate(() => ({ tocando: !!M3D.tocando, ate: M3D.ate, n: _m3dUltimo.faixas.length }));
+  ok('…anda mês a mês e para no último dia, com a obra inteira', !parou.tocando && parou.ate === '2025-03-11' && parou.n === app.n, JSON.stringify(parou));
+  await s.p.evaluate(() => { m3dFiltro('cor', 'frente'); m3dFiltro('periodo', 'tudo'); });
+  await s.p.waitForTimeout(300);
+  ok('fora da linha do tempo a barra e a data do 3D somem', await s.p.evaluate(() => document.getElementById('m3dTempo').hidden) &&
+     await fr.evaluate(() => document.getElementById('carimbo').hidden));
+
+  console.log('\n── etapa da pista ──');
+  await s.p.evaluate(() => m3dFiltro('cor', 'etapa'));
+  await s.p.waitForTimeout(300);
+  const et = await s.p.evaluate(() => {
+    const g = k => _m3dUltimo.est.get(k), fx = _m3dUltimo.faixas.find(f => f.chave === 'BC:212');
+    return { e212: g('BC:212').etapa, c212: fx.cor, e120: g('CB:120').etapa, c120: g('CB:120').cor,
+      linha: (fx.rows.find(r => r[0] === 'Etapa') || [])[1], leg: document.getElementById('m3dLegenda').textContent };
+  });
+  ok('a estaca fica na etapa MAIS ALTA lançada nela (redes, sobre a terraplenagem)', et.e212 === 2 && et.c212 === '#4f8fd6', JSON.stringify(et));
+  ok('a E120, só com terraplenagem, fica na terraplenagem', et.e120 === 1 && et.c120 === '#b98a4e', JSON.stringify(et));
+  ok('a ficha da estaca no 3D diz a etapa', et.linha === 'Drenagem e redes', et.linha);
+  ok('a legenda conta as estacas por etapa', /Drenagem e redes/.test(et.leg) && /Terraplenagem/.test(et.leg), et.leg.slice(0, 160));
+  await s.p.evaluate(() => m3dSelecionar('BC:212'));
+  await s.p.waitForTimeout(300);
+  const esc = await s.p.evaluate(() => ({ feitas: document.querySelectorAll('#m3dDetalhe .m3d-etapas span.on').length,
+    total: document.querySelectorAll('#m3dDetalhe .m3d-etapas span').length, tit: (document.querySelector('#m3dDetalhe .m3d-etapas-tit') || {}).textContent }));
+  ok('a estaca aberta mostra a escada: duas etapas feitas, das dez', esc.feitas === 2 && esc.total === 10 && /Drenagem e redes/.test(esc.tit || ''), JSON.stringify(esc));
+  await s.p.evaluate(() => m3dFiltro('cor', 'frente'));
+
+  console.log('\n── fotos no 3D ──');
+  await fr.waitForFunction(() => window.__rdo.pinos.length >= 6, null, { timeout: 15000 }).catch(() => {});
+  const pinos = await fr.evaluate(() => window.__rdo.pinos);
+  ok('estaca com foto ganha o pino de câmera (a foto do trecho E210–E215)',
+     [210, 211, 212, 213, 214, 215].every(n => pinos.includes('BC:' + n)) && !pinos.includes('CB:120'), JSON.stringify(pinos));
+  await s.p.waitForFunction(() => document.querySelectorAll('#m3dFotos img').length > 0, null, { timeout: 10000 }).catch(() => {});
+  ok('a estaca aberta mostra a miniatura no app', await s.p.evaluate(() => document.querySelectorAll('#m3dFotos img').length) === 1);
+  ok('…pedida como MINIATURA, como na Galeria', pedidosFoto.includes('fotoTrecho:mini'), JSON.stringify(pedidosFoto));
+  await fr.waitForFunction(() => document.querySelectorAll('#infoFotos img').length > 0, null, { timeout: 10000 }).catch(() => {});
+  ok('…e no painel da estaca, dentro do 3D', await fr.evaluate(() => document.querySelectorAll('#infoFotos img').length) === 1);
+  ok('o visor recebe a imagem, não o id do Drive', await fr.evaluate(() => !document.getElementById('info').innerHTML.includes('fotoTrecho')));
+  await fr.click('#infoFotos button');
+  await s.p.waitForFunction(() => !!document.getElementById('fotoAmp'), null, { timeout: 5000 }).catch(() => {});
+  ok('tocar a miniatura no 3D abre a foto no app', await s.p.evaluate(() => !!document.getElementById('fotoAmp')));
+  await s.p.evaluate(() => { const j = document.getElementById('fotoAmp'); if (j) j.parentElement.remove(); });
+  // o pino DE VERDADE: só a camada de fotos à vista, e um clique em cima dele
+  await fr.waitForFunction(() => !window.__rdo.voando, null, { timeout: 5000 }).catch(() => {});
+  await fr.evaluate(() => { document.getElementById('info').hidden = true; for (const g of ['est', 'ilus', 'siv', 'ilu', 'pai', 'edi', 'rdo']) window.__dbg.GRP[g].visible = false; window.__invalidar(3); });
+  await s.p.screenshot();
+  await s.p.evaluate(() => { M3D.sel = null; });
+  const pp = await fr.evaluate(() => window.__rdo.pino('BC:212'));
+  const cx = await (await s.p.$('#m3dFrame')).boundingBox();
+  if (pp) await s.p.mouse.click(cx.x + pp[0], cx.y + pp[1]);
+  await s.p.waitForTimeout(800);
+  ok('clicar o pino da foto no 3D abre a estaca', await s.p.evaluate(() => M3D.sel) === 'BC:212', JSON.stringify(pp));
+  await fr.evaluate(() => { for (const g of ['est', 'ilus', 'siv', 'ilu', 'pai', 'edi', 'rdo']) window.__dbg.GRP[g].visible = true; window.__invalidar(3); });
+
   console.log('\n── do 3D para o app ──');
   await s.p.evaluate(() => window.postMessage({ m3d: 1, tipo: 'acao', acao: 'lancar', chave: 'BC:212' }, location.origin));
   await s.p.waitForTimeout(400);
@@ -133,8 +243,11 @@ function rdoCsv() {
     Object.assign(STATE.draft.servicos[0], { frente: 'Drenagem', pacoteId: 'P01', sentido: 'BC', estacaIni: 'E200', estacaFim: 'E201', quantidade: '3' });
     saveDraft(STATE.draft);
   });
+  await s.p.evaluate(() => { m3dFiltro('passo', 'dia'); M3D.ate = '2025-01-06'; m3dTocar(); });
   await fr.evaluate(() => window.parent.postMessage({ m3d: 1, tipo: 'acao', acao: 'lancar', chave: 'BC:212' }, location.origin));
   await s.p.waitForTimeout(900);
+  ok('a linha do tempo tocando para sozinha quando se sai da tela', await s.p.evaluate(() => M3D.tocando === 0));
+  await s.p.evaluate(() => m3dFiltro('periodo', 'tudo'));
   const lanc = await s.p.evaluate(() => ({ tela: STATE.currentPage, sv: STATE.draft.servicos.map(x => [x.pacoteId, x.sentido, x.estacaIni, x.estacaFim, x.quantidade]) }));
   ok('"Lançar serviço aqui" abre o Lançar Serviço', lanc.tela === 'rdo', lanc.tela);
   ok('o serviço que já estava no rascunho ficou intacto', JSON.stringify(lanc.sv[0]) === JSON.stringify(['P01', 'BC', 'E200', 'E201', '3']), JSON.stringify(lanc.sv));
@@ -208,6 +321,13 @@ function rdoCsv() {
   });
   ok('no celular o 3D ocupa a largura e boa parte da altura', lay.larg <= lay.vw && lay.alt >= 300, JSON.stringify(lay));
   ok('e a página não rola de lado', !lay.rola, JSON.stringify(lay));
+  await m.p.evaluate(() => m3dFiltro('periodo', 'linha'));
+  await m.p.waitForTimeout(400);
+  const lay2 = await m.p.evaluate(() => {
+    const t = document.getElementById('m3dTempo').getBoundingClientRect(), v = document.getElementById('m3dVisor').getBoundingClientRect();
+    return { alt: t.height, dentro: t.bottom <= v.bottom + 1 && t.right <= v.right + 1, rola: document.documentElement.scrollWidth > innerWidth + 1 };
+  });
+  ok('no celular a barra da linha do tempo cabe na caixa do 3D, sem rolar de lado', lay2.dentro && lay2.alt < 120 && !lay2.rola, JSON.stringify(lay2));
   ok('nenhum erro de JS no celular', m.erros.length === 0, m.erros.slice(0, 3).join(' | '));
   await m.fechar();
 

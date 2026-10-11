@@ -24,7 +24,11 @@
      à vista.
    · PONTE COM O APP — a camada "Serviços lançados (RDO)": o app manda as
      estacas com serviço e a cor de cada uma, o visor deita uma faixa sobre
-     a pista de cada estaca e devolve ao app a estaca que foi tocada.
+     a pista de cada estaca e devolve ao app a estaca que foi tocada. Estaca
+     com foto ganha um pino de câmera (camada "Fotos do RDO"), e o app manda
+     as miniaturas prontas da estaca aberta. Na linha do tempo do app as
+     faixas chegam a cada quadro: a geometria de cada uma fica guardada
+     (_geoFx) e só é refeita quando um trecho novo do modelo chega.
    · Saíram as exportações (DXF, SketchUp, OBJ, GLB, LandXML) e os ganchos
      de exportação do pipeline: são para o escritório, e ficam na página do
      modelo.
@@ -469,6 +473,7 @@ const LYR = [
   { id: 'edi', code: 'OSM', name: 'Edificações existentes (OSM/PMSP)', sw: '#cdb89c', on: true },
   { id: 'est', code: 'EST', name: 'Estacas das pistas', sw: '#c85e14', on: true },
   { id: 'rdo', code: 'RDO', name: 'Serviços lançados (RDO)', sw: '#e0662a', on: true },
+  { id: 'fot', code: 'FOT', name: 'Fotos do RDO', sw: '#2f6fd0', on: true },
   { id: 'ilus', code: '—', name: 'Arbustos, carros e pessoas (ilustrativo)', sw: '#8a8f94', on: true },
 ];
 if (Q_ALTA) LYR.push({ id: 'ent', code: '—', name: 'Entorno ilustrativo (terreno e vegetação)', sw: '#6f8f4a', on: true });
@@ -1112,7 +1117,7 @@ for (const l of LYR) {
   const row = document.createElement('label'); row.className = 'lyr'; row.htmlFor = 'L_' + l.id;
   row.innerHTML = `<span class="sw" style="background:${l.sw}"></span><span class="code">${l.code}</span><span>${l.name}</span><input type="checkbox" id="L_${l.id}" ${l.on ? 'checked' : ''}>`;
   lyrlist.appendChild(row); row.querySelector('input').addEventListener('change', ev => { GRP[l.id].visible = ev.target.checked; });
-  if (l.id === 'rdo' && !EMBED) row.hidden = true;   // fora do app não há RDO para mostrar
+  if ((l.id === 'rdo' || l.id === 'fot') && !EMBED) row.hidden = true;   // fora do app não há RDO para mostrar
 }
 const hud = $('hud'); const tHud = $('toggleHud');
 tHud.addEventListener('click', () => { const c = hud.classList.toggle('collapsed'); tHud.setAttribute('aria-expanded', String(!c)); });
@@ -1173,8 +1178,17 @@ function showInfo(I) {
   // estaca do RDO: marca no 3D e avisa o app (que abre a lista de lançamentos dela)
   const chave = I && I.chave ? I.chave : null;
   if (chave !== RDO.sel) { RDO.sel = chave; marcarSel(); }
+  // as miniaturas são da estaca: outra coisa tocada, a faixa delas sai; a mesma estaca, ficam
+  const fb = $('infoFotos');
+  if (!chave || fb.dataset.chave !== chave) { fb.innerHTML = ''; fb.dataset.chave = chave || ''; fb.hidden = true;
+    if (chave && PAI && I.fotos > 0) { const s = document.createElement('span'); s.className = 'aviso'; s.textContent = 'Carregando as fotos…'; fb.appendChild(s); fb.hidden = false; } }
   if (chave) avisarApp({ tipo: 'estaca', chave });
+  RDO.aberta = chave;
   if (!I) { info.hidden = true; return; }
+  preencherInfo(I);
+}
+function preencherInfo(I) {
+  const chave = I.chave || null;
   const disc = $('infoDisc'); disc.textContent = I.disc || '';
   if (I.cor) { const sw = document.createElement('span'); sw.className = 'cor'; sw.style.background = String(I.cor); disc.prepend(sw); }
   $('infoT').textContent = I.t || '';
@@ -1185,13 +1199,15 @@ function showInfo(I) {
   ac.hidden = !ac.children.length;
   $('infoSrc').textContent = I.src ? 'Fonte: ' + I.src : ''; info.hidden = false;
 }
-$('infoX').onclick = () => { info.hidden = true; if (RDO.sel) { RDO.sel = null; marcarSel(); } };
+$('infoX').onclick = () => { info.hidden = true; RDO.aberta = null; if (RDO.sel) { RDO.sel = null; marcarSel(); } $('infoFotos').dataset.chave = ''; };
 let down = null;
 renderer.domElement.addEventListener('pointerdown', e => down = e.button === 0 ? [e.clientX, e.clientY] : null);   // info/measure: left click only
 renderer.domElement.addEventListener('pointerup', e => {
   if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return; const r = renderer.domElement.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
   ray.setFromCamera(ndc, camera); const hit = ray.intersectObjects(pickables.filter(isVis), true)[0];
   if (window.__measureClick && window.__measureClick(hit)) return;
+  const pin = pinNoPonto(e.clientX, e.clientY, hit);
+  if (pin != null) { showInfo(RDO.infos[pin]); return; }
   showInfo(hit ? infoOf(hit.object, hit.object.userData.faceB ? hit.object.userData.faceB[hit.faceIndex] : hit.instanceId) : null);
 });
 // ---------- mouse navigation (AutoCAD-style)
@@ -1661,7 +1677,7 @@ for (const [k, m] of Object.entries(MAT)) if (!m.name) m.name = k; for (const [k
    e, quando alguém a toca, devolve a chave ({tipo:'estaca', chave}). Regra de
    RDO não mora aqui: a estaca do 3D é a mesma conta da Avanço Físico, feita uma
    vez só, no app (lerLocalEstaca). Mensagem de outra origem é ignorada. */
-const RDO = { dados: null, mesh: null, selMesh: null, sel: null, infos: [], porChave: new Map(), timer: 0, rot: {} };
+const RDO = { dados: null, mesh: null, selMesh: null, sel: null, aberta: null, infos: [], porChave: new Map(), timer: 0, rot: {}, pinos: null };
 function avisarApp(msg) { if (!PAI) return; try { PAI.postMessage(Object.assign({ m3d: 1 }, msg), location.origin); } catch (e) { } }
 /* A faixa cobre a PISTA daquele eixo, e a pista se acha no próprio modelo: o LB
    da PD e o da PE correm no MEIO de cada pista (asfalto de -4,5 a +4,5 m, com a
@@ -1684,38 +1700,98 @@ const MRDO = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true
 const MSEL = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .38, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -10, polygonOffsetUnits: -10, toneMapped: false, fog: false });
 const LSEL = new THREE.LineBasicMaterial({ color: 0xff7a1a, depthTest: false, toneMapped: false });
 function agendarRDO(ms = 300) { if (!RDO.dados) return; clearTimeout(RDO.timer); RDO.timer = setTimeout(montarRDO, ms); }
+/* A GEOMETRIA DE CADA FAIXA FICA GUARDADA. A linha do tempo do app manda as
+   faixas a cada quadro (450 ms), e cada faixa custa ~70 consultas à
+   superfície do modelo (sampleTop) — refazer todas a cada quadro era o que
+   travava o celular. A faixa de uma estaca não muda com a data, só com o
+   modelo: o cache é esvaziado quando um trecho novo chega (loadTiles). */
+const _geoFx = new Map(), NT_RDO = 7;
+function geoFaixa(A, a, b) {
+  const k = A.key + '|' + a.toFixed(2) + '|' + b.toFixed(2); let G = _geoFx.get(k); if (G) return G;
+  const ns = Math.max(2, Math.ceil((b - a) / 2) + 1), pos = new Float32Array(ns * NT_RDO * 3), borda = [[], []];
+  let q = 0;
+  for (let i = 0; i < ns; i++) {
+    const s = a + (b - a) * i / (ns - 1), [t0, t1] = faixaDaPista(A, s), p = A.pos(s), d = A.dir(s), r = [d[1], -d[0]];
+    for (let j = 0; j < NT_RDO; j++) {
+      const t = t0 + (t1 - t0) * j / (NT_RDO - 1), x = p[0] + r[0] * t, y = p[1] + r[1] * t;
+      const h = sampleTop(x, y, TOP); let z = h ? h.z : A.z(s); if (!fin(z)) z = groundZ(x, y);
+      const w = V(x, y, z + .06); pos[q++] = w.x; pos[q++] = w.y; pos[q++] = w.z;
+      if (j === 0) borda[0].push(w.clone().setY(w.y + .06)); if (j === NT_RDO - 1) borda[1].push(w.clone().setY(w.y + .06));
+    }
+  }
+  // o pino da foto: no meio da faixa, 2 m acima da pista
+  const im = (ns >> 1) * NT_RDO + (NT_RDO >> 1);
+  const pino = new THREE.Vector3(pos[3 * im], pos[3 * im + 1] + 2, pos[3 * im + 2]);
+  G = { pos, ns, borda: [...borda[0], ...borda[1].reverse()], pino };
+  _geoFx.set(k, G); return G;
+}
+/* O pino de câmera: um ponto com sprite (um só desenho para todos), do mesmo
+   tamanho na tela a qualquer distância. O toque nele é achado na TELA
+   (pinNoPonto), não pelo raio: ponto não tem área para o raio acertar. */
+const MPIN = new THREE.PointsMaterial({ size: 30, sizeAttenuation: false, transparent: true, alphaTest: .35, depthWrite: false, toneMapped: false, fog: false,
+  map: canvasTex(64, g => {
+    g.clearRect(0, 0, 64, 64);
+    g.fillStyle = '#1d4f91'; g.strokeStyle = '#ffffff'; g.lineWidth = 4; g.beginPath(); g.arc(32, 32, 27, 0, 2 * Math.PI); g.fill(); g.stroke();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.roundRect(15, 23, 34, 22, 4); g.fill(); g.fillRect(25, 19, 14, 6);
+    g.fillStyle = '#1d4f91'; g.beginPath(); g.arc(32, 34, 7, 0, 2 * Math.PI); g.fill();
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(32, 34, 3.5, 0, 2 * Math.PI); g.fill();
+  }, { repeat: false }) });
+function pinNoPonto(cx, cy, hit) {   // -> índice em RDO.infos do pino sob o toque, ou null
+  const P = RDO.pinos; if (!P || !P.pts.length || !isVis(P.obj)) return null;
+  const R = renderer.domElement.getBoundingClientRect(); camera.updateMatrixWorld();
+  let best = null, bd = 20, bz = 0; const q = new THREE.Vector3();
+  P.pts.forEach((p, k) => { q.copy(p).project(camera); if (q.z < -1 || q.z > 1) return;
+    const d = Math.hypot(R.left + (q.x + 1) / 2 * R.width - cx, R.top + (1 - q.y) / 2 * R.height - cy); if (d < bd) { bd = d; best = k; bz = p.distanceTo(camera.position); } });
+  if (best == null) return null;
+  // atrás de um prédio o pino não aparece (depthTest): também não pega o toque
+  if (hit && hit.object !== RDO.mesh && hit.distance < bz - 1.5) return null;
+  return P.ii[best];
+}
 function montarRDO() {
   RDO.timer = 0;
   if (RDO.mesh) { GRP.rdo.remove(RDO.mesh); RDO.mesh.geometry.dispose(); const i = pickables.indexOf(RDO.mesh); if (i >= 0) pickables.splice(i, 1); RDO.mesh = null; }
+  if (RDO.pinos) { GRP.fot.remove(RDO.pinos.obj); RDO.pinos.obj.geometry.dispose(); RDO.pinos = null; }
   RDO.infos = []; RDO.porChave.clear();
-  const pos = [], col = [], idx = [], faceB = [], c = new THREE.Color(), NT = 7;
+  const fx = [], c = new THREE.Color(), pinos = { pts: [], ii: [] };
+  let nv = 0, ni = 0;
   for (const f of (RDO.dados && RDO.dados.faixas) || []) {
     const A = ALN[f.eixo]; if (!A || !fin(+f.m0) || !fin(+f.m1)) continue;
     // um respiro de 0,3 m entre estacas vizinhas: duas da mesma cor ainda se leem como duas
     const a = Math.max(A.m0, +f.m0 + .3), b = Math.min(A.m1, +f.m1 - .3); if (!(b - a > .5)) continue;
-    const ii = RDO.infos.length;
-    RDO.infos.push({ disc: f.disc || 'Serviços lançados (RDO)', t: f.titulo || f.chave, resumo: f.resumo || '', rows: Array.isArray(f.rows) ? f.rows : [], src: f.src || '', acoes: Array.isArray(f.acoes) ? f.acoes : [], cor: f.cor, chave: String(f.chave) });
-    c.set(f.cor || '#e0662a');
-    const ns = Math.max(2, Math.ceil((b - a) / 2) + 1), v0 = pos.length / 3, i0 = idx.length, borda = [[], []];
-    for (let i = 0; i < ns; i++) {
-      const s = a + (b - a) * i / (ns - 1), [t0, t1] = faixaDaPista(A, s), p = A.pos(s), d = A.dir(s), r = [d[1], -d[0]];
-      for (let j = 0; j < NT; j++) {
-        const t = t0 + (t1 - t0) * j / (NT - 1), x = p[0] + r[0] * t, y = p[1] + r[1] * t;
-        const h = sampleTop(x, y, TOP); let z = h ? h.z : A.z(s); if (!fin(z)) z = groundZ(x, y);
-        const w = V(x, y, z + .06); pos.push(w.x, w.y, w.z); col.push(c.r, c.g, c.b);
-        if (j === 0) borda[0].push(w.clone().setY(w.y + .06)); if (j === NT - 1) borda[1].push(w.clone().setY(w.y + .06));
-      }
-    }
-    for (let i = 0; i < ns - 1; i++) for (let j = 0; j < NT - 1; j++) { const q = v0 + i * NT + j; idx.push(q, q + NT, q + 1, q + 1, q + NT, q + NT + 1); faceB.push(ii, ii); }
-    RDO.porChave.set(String(f.chave), { A, a, b, ii, i0, i1: idx.length, borda: [...borda[0], ...borda[1].reverse()] });
+    const ii = RDO.infos.length, G = geoFaixa(A, a, b);
+    RDO.infos.push({ disc: f.disc || 'Serviços lançados (RDO)', t: f.titulo || f.chave, resumo: f.resumo || '', rows: Array.isArray(f.rows) ? f.rows : [], src: f.src || '', acoes: Array.isArray(f.acoes) ? f.acoes : [], cor: f.cor, chave: String(f.chave), fotos: +f.fotos || 0 });
+    fx.push({ f, G, ii, A, a, b });
+    nv += G.ns * NT_RDO; ni += (G.ns - 1) * (NT_RDO - 1) * 6;
+    if (+f.fotos > 0) { pinos.pts.push(G.pino); pinos.ii.push(ii); }
   }
-  if (idx.length) {
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeBoundingSphere();
-    const m = new THREE.Mesh(g, MRDO); m.renderOrder = 5; m.userData.noAO = true; m.userData.faceB = Int32Array.from(faceB); m.userData.stype = 'rdo';
+  if (ni) {
+    const pos = new Float32Array(nv * 3), col = new Float32Array(nv * 3), idx = new Uint32Array(ni), faceB = new Int32Array(ni / 3);
+    let v0 = 0, k = 0;
+    for (const { f, G, ii, A, a, b } of fx) {
+      c.set(f.cor || '#e0662a');
+      pos.set(G.pos, v0 * 3);
+      for (let v = 0; v < G.ns * NT_RDO; v++) { col[3 * (v0 + v)] = c.r; col[3 * (v0 + v) + 1] = c.g; col[3 * (v0 + v) + 2] = c.b; }
+      const i0 = k;
+      for (let i = 0; i < G.ns - 1; i++) for (let j = 0; j < NT_RDO - 1; j++) { const q = v0 + i * NT_RDO + j; faceB[k / 3] = ii; faceB[k / 3 + 1] = ii; idx[k++] = q; idx[k++] = q + NT_RDO; idx[k++] = q + 1; idx[k++] = q + 1; idx[k++] = q + NT_RDO; idx[k++] = q + NT_RDO + 1; }
+      RDO.porChave.set(String(f.chave), { A, a, b, ii, i0, i1: k, borda: G.borda });
+      v0 += G.ns * NT_RDO;
+    }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeBoundingSphere();
+    const m = new THREE.Mesh(g, MRDO); m.renderOrder = 5; m.userData.noAO = true; m.userData.faceB = faceB; m.userData.stype = 'rdo';
     RDO.mesh = m; addInst('rdo', m, RDO.infos, false);
   }
+  if (pinos.pts.length) {
+    const g = new THREE.BufferGeometry().setFromPoints(pinos.pts); g.computeBoundingSphere();
+    const o = new THREE.Points(g, MPIN); o.renderOrder = 8; o.userData.noAO = true; o.raycast = () => { };
+    GRP.fot.add(o); RDO.pinos = { obj: o, pts: pinos.pts, ii: pinos.ii };
+  }
   if (clipOn) applyClip(true);
-  marcarSel(); invalidar(3);
+  marcarSel();
+  /* A estaca aberta acompanha os dados novos: na linha do tempo, o painel
+     dizia "Último 12/03" com a linha em 25/02. Sem a estaca nesta data, o
+     painel some — e volta quando ela ganha serviço de novo. */
+  if (RDO.aberta) { const e = RDO.porChave.get(RDO.aberta); if (e) preencherInfo(RDO.infos[e.ii]); else info.hidden = true; }
+  invalidar(3);
 }
 function marcarSel() {
   if (RDO.selMesh) { GRP.rdo.remove(RDO.selMesh); RDO.selMesh.traverse(o => { if (o.geometry && o.geometry !== (RDO.mesh && RDO.mesh.geometry)) o.geometry.dispose(); }); RDO.selMesh = null; }
@@ -1751,6 +1827,25 @@ function irPara(d) {   // {chave} de uma estaca com serviço, ou {eixo, m} de qu
   }
   invalidar();
 }
+/* As miniaturas da estaca aberta, que o app baixou (a Galeria dele, com o
+   login dele). Chegam como imagem pronta (data:image/…); qualquer outra coisa
+   vira quadro vazio. O toque devolve só o ÍNDICE: quem sabe qual foto é, e
+   abre a foto inteira, é o app. */
+const FOTO_OK = /^data:image\/(jpeg|jpg|png|webp|gif);base64,[A-Za-z0-9+/=]+$/;
+function mostrarMiniaturas(d) {
+  const chave = String(d.chave || ''); if (!chave || chave !== RDO.sel) return;
+  const fb = $('infoFotos'); fb.innerHTML = ''; fb.dataset.chave = chave;
+  if (d.aviso) { const s = document.createElement('span'); s.className = 'aviso'; s.textContent = String(d.aviso); fb.appendChild(s); }
+  (Array.isArray(d.itens) ? d.itens.slice(0, 8) : []).forEach((it, i) => {
+    const b = document.createElement('button'); b.type = 'button'; const leg = String((it && it.legenda) || '');
+    b.title = leg; b.setAttribute('aria-label', 'Ampliar a foto' + (leg ? ': ' + leg : ''));
+    const src = String((it && it.src) || '');
+    if (FOTO_OK.test(src)) { const img = document.createElement('img'); img.alt = ''; img.src = src; b.appendChild(img); } else b.classList.add('vazio');
+    b.onclick = () => avisarApp({ tipo: 'foto', chave, i });
+    fb.appendChild(b);
+  });
+  fb.hidden = !fb.children.length; invalidar();
+}
 // filtro de frente no app → o que o 3D precisa para mostrar aquela disciplina
 let opacAntes = null;
 function realce(camada) {
@@ -1766,15 +1861,25 @@ window.addEventListener('message', e => {
     RDO.dados = d; RDO.rot = d.rotulos && typeof d.rotulos === 'object' ? d.rotulos : {};
     $('sub').textContent = d.resumo ? String(d.resumo) : (M.subtitle || '');
     for (const o of $('gPista').options) if (RDO.rot[o.value]) o.textContent = `${o.value} – ${RDO.rot[o.value]}`;
-    agendarRDO(0);
-  } else if (d.tipo === 'ir') irPara(d);
-  else if (d.tipo === 'soltar') { RDO.sel = null; marcarSel(); info.hidden = true; }   // o app fechou a estaca
+    // a data da linha do tempo (ou do dia de RDO), no alto do 3D
+    const cb = d.carimbo && typeof d.carimbo === 'object' ? d.carimbo : null;
+    $('carimbo').hidden = !cb; $('carimboT').textContent = cb ? String(cb.t || '') : ''; $('carimboS').textContent = cb ? String(cb.s || '') : '';
+    // já, e não num setTimeout: o 'ir' que o app manda logo depois tem de achar as faixas NOVAS
+    clearTimeout(RDO.timer); montarRDO();
+  } else if (d.tipo === 'miniaturas') mostrarMiniaturas(d);
+  else if (d.tipo === 'ir') irPara(d);
+  else if (d.tipo === 'soltar') { RDO.sel = null; RDO.aberta = null; marcarSel(); info.hidden = true; }   // o app fechou a estaca
   else if (d.tipo === 'realce') realce(d.camada || null);
   else if (d.tipo === 'tema') { if (d.tema === 'dark' || d.tema === 'light') document.documentElement.setAttribute('data-theme', d.tema); else document.documentElement.removeAttribute('data-theme'); mm.sig = ''; invalidar(); }
 });
 // o app troca o tema no MESMO aparelho: o localStorage avisa este documento também
 window.addEventListener('storage', e => { if (e.key !== 'teotonio_tema_v1') return; const t = e.newValue; if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); mm.sig = ''; invalidar(); });
 window.__rdo = { montar: montarRDO, ir: irPara, get n() { return RDO.infos.length; }, get sel() { return RDO.sel; }, get voando() { return !!tween; }, larg: (P, s) => faixaDaPista(ALN[P], s),
+  get pinos() { return RDO.pinos ? RDO.pinos.ii.map(i => RDO.infos[i].chave) : []; }, get cacheFaixas() { return _geoFx.size; }, get aberta() { return RDO.aberta; },
+  // teste/diagnóstico: onde, na tela, cai o pino de foto de uma estaca (px do canvas)
+  pino: chave => { const P = RDO.pinos; if (!P) return null; const k = P.ii.findIndex(i => RDO.infos[i].chave === String(chave)); if (k < 0) return null;
+    camera.updateMatrixWorld(); const q = P.pts[k].clone().project(camera); const R = renderer.domElement.getBoundingClientRect();
+    return [R.left + (q.x + 1) / 2 * R.width, R.top + (1 - q.y) / 2 * R.height]; },
   // teste/diagnóstico: onde, na tela, cai o meio da faixa de uma estaca (px do canvas)
   ponto: chave => { const e = RDO.porChave.get(String(chave)); if (!e) return null; const s = (e.a + e.b) / 2 + (e.b - e.a) * .2, [t0, t1] = faixaDaPista(e.A, s);
     const p = e.A.pos(s), d = e.A.dir(s), r = [d[1], -d[0]], t = (t0 + t1) / 2, x = p[0] + r[0] * t, y = p[1] + r[1] * t, h = sampleTop(x, y, TOP);
@@ -1807,7 +1912,7 @@ async function loadTiles() {
     const f = focusHint && performance.now() - focusHint.t < 30000 ? focusHint.p : [controls.target.x, -controls.target.z];
     pend.sort((a, b) => tileDist(a, f) - tileDist(b, f)); const t = pend[0]; t.st = 'load'; updProg();
     try {
-      const T = await lerArquivo(t.file); await buildTile(T, t); t.st = 'ok'; invalidar(3); agendarRDO();
+      const T = await lerArquivo(t.file); await buildTile(T, t); t.st = 'ok'; invalidar(3); _geoFx.clear(); agendarRDO();
     } catch (e) {
       t.st = 'fail'; console.warn(`Trecho ${t.id} não carregado:`, e && e.message ? e.message : e);
       toast(`Não foi possível carregar o trecho ${t.id}${t.s ? ` (s ${fmt(t.s[0], 0)} a ${fmt(t.s[1], 0)} m)` : ''}. Os demais continuam carregando.`, 5000);

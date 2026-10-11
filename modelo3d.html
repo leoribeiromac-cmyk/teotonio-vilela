@@ -226,11 +226,26 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
   /* a lista completa da estaca está logo abaixo do 3D, na tela do app: aqui, o resumo */
   .embed #info{max-height:52%;overflow:auto;gap:6px;padding:10px 12px}
   .embed #info dl dt:nth-of-type(n+6),.embed #info dl dd:nth-of-type(n+6),.embed #info .src{display:none}
+  /* as miniaturas também: o cartão da estaca, logo abaixo, tem as mesmas — aqui elas empurravam os botões para fora */
+  .embed #info .fotos{display:none}
 }
 #info .acoes{display:flex;flex-wrap:wrap;gap:6px;border-top:1px solid var(--line);padding-top:8px}
 #info .acoes .btn{font-size:13px;padding:5px 9px}
 #info .acoes .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 #info .cor{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:baseline}
+/* as miniaturas da estaca (o app manda prontas; o toque abre a foto no app) */
+#info .fotos{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+#info .fotos button{flex:0 0 auto;width:68px;height:52px;padding:0;border:1px solid var(--line);border-radius:4px;background:var(--chip);cursor:zoom-in;overflow:hidden;line-height:0}
+#info .fotos button.vazio{background:repeating-linear-gradient(135deg,var(--chip) 0 6px,var(--line) 6px 8px)}
+#info .fotos img{width:100%;height:100%;object-fit:cover}
+#info .fotos .aviso{font-size:12.5px;color:var(--muted)}
+/* a data da linha do tempo do app (ou do dia de RDO): na coluna do título,
+   que se arranja sozinha — solta no alto, ela batia no botão "Camadas" */
+#carimbo{padding:7px 14px 8px;display:grid;gap:1px;pointer-events:none;flex:0 0 auto}
+#carimbo b{font-family:"JetBrains Mono",monospace;font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.01em;line-height:1.1}
+#carimbo span{font-size:12px;color:var(--muted)}
+/* celular: a data já está na barra do app, logo abaixo do 3D */
+@media (max-width:760px){#carimbo{display:none!important}}
 #erro{position:fixed;inset:0;display:grid;place-items:center;z-index:30;background:var(--bg);padding:24px;text-align:center}
 #erro div{max-width:440px;display:grid;gap:10px;font-size:15px}
 #erro b{font-size:18px}
@@ -260,6 +275,7 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
       <dt>Fontes</dt><dd>5F · 5P · 5H · 5U/5L · 5S · CET · 4E · 5T</dd>
     </dl>
   </div>
+  <div id="carimbo" class="panel" hidden><b id="carimboT"></b><span id="carimboS"></span></div>
   <div id="layers" class="panel">
     <div class="tabs" role="tablist" aria-label="Painel">
       <button role="tab" id="tb-lyr" aria-controls="t-lyr" aria-selected="true">Camadas</button>
@@ -355,6 +371,7 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
   <div class="disc" id="infoDisc"></div>
   <h3 id="infoT"></h3>
   <dl id="infoDl"></dl>
+  <div class="fotos" id="infoFotos" hidden></div>
   <div class="acoes" id="infoAcoes" hidden></div>
   <div class="src" id="infoSrc"></div>
 </div>
@@ -374,6 +391,6 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
 <div id="erro" hidden><div><b>Não foi possível abrir o modelo 3D</b><span id="erroTxt"></span><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>
 
 <script type="importmap">{"imports":{"three":"./vendor/three/three.module.min.js","three/addons/":"./vendor/three/addons/","@dgreenheck/ez-tree":"./vendor/three/ez-tree/ez-tree.es.js"}}</script>
-<script type="module" src="js/modelo3d/visor.js?v=65"></script>
+<script type="module" src="js/modelo3d/visor.js?v=66"></script>
 </body>
 </html>

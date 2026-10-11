@@ -908,11 +908,27 @@ paisagismo, terreno, córrego e as edificações do entorno — **pintado com o 
 foi lançado no RDO**. Cada estaca com serviço ganha uma faixa colorida sobre a
 pista do seu sentido (Centro→Bairro = pista PE, Bairro→Centro = pista PD):
 
-- **Filtros**: toda a obra, últimos 7/30 dias, um mês, ou **um dia de RDO**;
-  frente e pacote. Filtrar Drenagem deixa a superfície transparente, porque a
-  drenagem é enterrada.
-- **Cor**: pela frente (a mesma cor da frente no resto do app), pelo volume de
-  lançamentos ou pela recência do último.
+- **Filtros**: toda a obra, últimos 7/30 dias, um mês, **um dia de RDO** ou a
+  **linha do tempo**; frente e pacote. Filtrar Drenagem deixa a superfície
+  transparente, porque a drenagem é enterrada.
+- **Linha do tempo (4D)**: uma barra embaixo do 3D com a data — o modelo mostra
+  o que estava lançado até ali. O **Reproduzir** anda sozinho (um dia, uma
+  semana ou um mês por passo) e a avenida vai sendo pintada; a data aparece no
+  alto do 3D, e a barra vai junto para a tela cheia. Nesse modo a recência
+  conta a partir da data da linha.
+- **Cor**: pela frente (a mesma cor da frente no resto do app), pela **etapa
+  da pista**, pelo volume de lançamentos ou pela recência do último.
+- **Etapa da pista**: até onde a pista chegou em cada estaca — demolição,
+  terraplenagem, drenagem e redes, guias e sarjetas, sub-base, base,
+  imprimação, binder, capa/placa, sinalização. Vale a etapa mais alta lançada
+  na estaca, e ela sai do **nome do pacote** ("BGTC" é base, "SMA - Capa de
+  rolamento" é capa); sem nome que diga, da frente. Muro, passeio, rampa e
+  desapropriação ficam fora da escada (cinza). A estaca aberta mostra a escada
+  inteira, com a data do último lançamento de cada etapa.
+- **Fotos**: estaca com foto ganha um pino de câmera no 3D (camada "Fotos do
+  RDO"). Aberta a estaca, as miniaturas aparecem no painel do 3D e no cartão da
+  estaca — as mesmas da Galeria, com o mesmo acesso (é preciso estar logado) —
+  e tocar uma abre a foto inteira, com o "Baixar sem carimbo".
 - **Tocar uma faixa** abre a estaca: os lançamentos dela, as fotos, e os
   botões **Ver lançamentos** (Histórico filtrado pela estaca), **Fotos**
   (Galeria) e **Lançar serviço aqui** (o Lançar Serviço chega com a estaca
