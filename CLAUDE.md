@@ -26,6 +26,10 @@ para a navegação, então a mudança chega sem precisar limpar cache.
 - `js/bf/bota-fora.js` — tela de Bota-Fora: a viagem de caminhão com foto da
   carga/placa, assinatura do motorista e foto do ticket, e a exportação no
   formato da aba FRETE do fechamento. Só fala com o `Code.gs`.
+- `modelo3d.html` + `js/modelo3d/visor.js` — o visor do modelo 3D da obra
+  (three.js r160 de `vendor/three/`), aberto num iframe pela tela "Modelo 3D".
+  `js/modelo3d/tela.js` é o lado do app (filtros, estacas, ações). Os dados
+  ficam em `modelo3d/<obra>/`. Ver "O modelo 3D amarrado ao RDO".
 
 ## O RDO do dia sai por e-mail sozinho
 
@@ -293,6 +297,106 @@ As travas:
 `tests/rdo-varios-apontadores-servidor.test.js` e
 `tests/rdo-varios-apontadores.ui.test.js` (o app de verdade falando com o
 `Code.gs` de verdade, via `tests/servidor-falso.js`).
+
+## O modelo 3D amarrado ao RDO
+
+O modelo 3D da Teotônio (o mesmo da página publicada pelo pipeline do modelo:
+montar → conferir → publicar) mora DENTRO do app, na tela **Modelo 3D**
+(`modelo3d`, menu Operação). O visor é a página `modelo3d.html`, num iframe —
+separada como a `assinar.html`: o visor tem os próprios `#info`, `#hud`,
+`#toast` e CSS, e sair da tela devolve de uma vez a memória e o WebGL.
+
+**O que amarra os dois é a ESTACA.** O app lê o `RDO_Avanco`, passa cada
+`Local_Estaca` pelo `lerLocalEstaca` (a mesma leitura da Avanço Físico, da
+Galeria e do Painel), filtra (período, dia de RDO, linha do tempo, frente,
+pacote), dá a cor (frente, etapa, volume ou recência) e manda ao visor, por
+postMessage, FAIXAS DE EIXO
+já no vocabulário do projeto: `OBRA.modelo3d.eixos` diz que o CB do app é a
+pista PE e o BC é a PD (o número da estaca é o mesmo: E212 = PD 212+00), e a
+estaca N cobre de N×20 − 10 a N×20 + 10 m. O visor só desenha — deita a faixa
+sobre a pista daquele eixo (achada no próprio modelo: o LB corre no meio de
+cada pista, `faixaDaPista`) e devolve a chave (`BC:212`) da estaca tocada.
+Regra de RDO não mora no visor.
+
+Os caminhos que entram e saem da tela: "Ver no modelo 3D" no Painel e na
+Planta de avanço, "Ver o dia no 3D" no RDO Diário, a estaca do Histórico e da
+Galeria (`m3dIrLancamento`), a busca global ("E212"); e, do 3D, **Ver
+lançamentos** (Histórico com `HIST_FILTRO.estaca`), **Fotos** (Galeria) e
+**Lançar serviço aqui**.
+
+As travas:
+
+- **A carga de fundo NÃO redesenha a tela** (`m3dRefrescar` no
+  `carregarTudo`): o iframe recarregaria o modelo inteiro (20 s no 4G) e a
+  câmera voltaria ao início. Os dados novos vão por mensagem.
+- **"Lançar serviço aqui" não apaga nada do rascunho**: a estaca vai para o
+  primeiro serviço em branco, ou para um serviço novo no fim
+  (`m3dLancarNaEstaca`). É o mesmo princípio de "Formulário aberto é dado do
+  apontador".
+- **Mensagem só da mesma origem E do próprio iframe** (`e.source`), dos dois
+  lados. Texto de lançamento chega ao visor como dado e é escrito lá com
+  `textContent`.
+- **Histórico e Galeria filtram pela LEITURA da estaca**, não pelo texto: o
+  trecho "E210 a E215 (BC)" passa pela E212. Na Galeria, estaca sem eixo
+  escrito ("E5") casa em qualquer eixo (as duas ruas das Ruas de Terra têm
+  E5), e o que não se lê como estaca continua casando pelo texto.
+- **O visor desenha só quando algo muda** (`invalidar()`): a câmera andou (o
+  `change` do OrbitControls), um trecho chegou, um toque mexeu numa camada.
+  Parado, não gasta quadro — no celular era bateria e calor. Coisa nova na
+  cena que não venha de toque nem de câmera chama `invalidar()`.
+- **Sem CDN**: three.js, complementos e ez-tree em `vendor/three/` (o
+  ez-tree com as 20 texturas tiradas do base64, carregadas só quando uma
+  árvore as usa). Complemento novo entra no vendor E na `M3D_VENDOR` do
+  `tela.js` (é o que o botão "Offline" guarda).
+- **Obra sem `modelo3d` no cadastro não vê a tela** (o item some do menu).
+- **A câmera de uma estaca olha do canteiro** (`voarParaFaixa`): o "Ir para
+  estaca" das ferramentas olha do lado de fora, e ali caía dentro das casas.
+
+Três leituras a mais do mesmo dado, todas no app (o visor só desenha):
+
+- **Linha do tempo (4D)** — período `linha`: o que estava lançado ATÉ
+  `M3D.ate`, com o ▶ andando dia/semana/mês (`m3dTocar`). A barra mora DENTRO
+  do `#m3dVisor`, irmã do iframe (vai junto na tela cheia; recriar o iframe
+  recarregaria o modelo), e é só ATUALIZADA a cada quadro. A recência, nesse
+  modo, conta da data da linha. A reprodução para no `navigate()`
+  (`m3dParar`): o relógio dela também confere a tela, mas o visor roda no
+  MESMO processo do app (iframe de mesma origem) e, ocupado, atrasa esse
+  relógio — a parada não pode depender dele. Cada
+  quadro reenvia as faixas: o app lê cada lançamento UMA vez por carga
+  (`m3dBase`, cache pela referência do `STATE.rdoavanco`, que é trocado e
+  nunca mexido no lugar) e o visor guarda a geometria de cada faixa
+  (`_geoFx`, esvaziado quando chega trecho novo). O `realce` (transparência)
+  só vai quando a frente muda — reenviar recompilava os materiais a cada
+  quadro. O visor monta as faixas NA HORA em que a `execucao` chega (o `ir`
+  que vem logo atrás tem de achar as novas), e o painel da estaca aberta
+  (`RDO.aberta`) é refeito a cada montagem — senão dizia "Último 12/03" com
+  a linha em 25/02.
+- **Etapa da pista** — cor `etapa`: até onde a pista chegou, numa escada de
+  dez (`M3D_ETAPAS`); a estaca fica na MAIS ALTA lançada nela. A etapa sai do
+  NOME do pacote (`m3dEtapaDe`), e na falta, da frente. A ordem dos testes
+  não é a da escada: muro/desapropriação primeiro ("Muro D — 2. Sapata
+  (base)" não é base da pista; "Demolição de muros" não é demolição da
+  pista). Pacote novo com nome que engane: acrescente o caso em
+  `tests/modelo3d-etapas.test.js`, que roda a função de verdade sobre os
+  nomes reais.
+- **Fotos** — estaca com foto ganha pino (camada `fot`, um `THREE.Points`;
+  o toque é achado na TELA, `pinNoPonto`). A estaca aberta mostra as
+  miniaturas da Galeria (`baixarFotoServidor(id, true)`, com o login do
+  app). O visor recebe só a imagem pronta (`data:image/…`, conferida lá) e
+  devolve só o ÍNDICE; o id do Drive fica no app (`M3D.fotos`).
+
+**O modelo entra pela `ferramentas/modelo3d-importar.py`** (`<pasta publicada>
+modelo3d/<obra>/`): os trechos viram `.bin` ("M3DP": milímetro em diferença,
+bytes embaralhados, gzip — 15 MB de JSON → 2,4 MB), as texturas viram WebP
+quando sai menor, e as exportações de CAD ficam de fora (são do escritório, e
+continuam na página do modelo). O decodificador é o `desempacotar()` do
+visor: **mudou um, mude o outro**. Reimportar exige subir o
+`VERSAO_MODELO3D` do `sw.js` (o balde do modelo é cache-primeiro, como o das
+pranchas). O visor carrega `js/modelo3d/visor.js?v=` com a versão do app.
+`tests/modelo3d.ui.test.js` (o app e o visor de verdade, com WebGL por
+software), `tests/modelo3d-manifesto.test.js` (os .bin abrem no
+decodificador de verdade, índice × arquivos, vendor × lista do Offline) e
+`tests/modelo3d-etapas.test.js` (a etapa de cada pacote real).
 
 ## O mapa de chuva sai do RDO
 
