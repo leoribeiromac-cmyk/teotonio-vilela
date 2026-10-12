@@ -2309,8 +2309,11 @@ function gravacaoIniciar() {
   APRES.grav = { rec, cv, g, partes, tipo, salvar: false };
   /* O vídeo pronto vira um LINK para tocar: o download tem de nascer de um toque
      (o fim da apresentação não é um, e o navegador pode barrar o arquivo). */
-  rec.onstop = () => { const G = APRES.grav; APRES.grav = null; if (!G || !G.salvar || !partes.length) return; const ext = /mp4/.test(tipo) ? 'mp4' : 'webm';
-    const nome = 'apresentacao-' + (M.title || 'modelo').normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 40) + '.' + ext;
+  rec.onstop = () => { const G = APRES.grav; APRES.grav = null; if (!G || !G.salvar) return;
+    // sem um quadro gravado (aba escondida, aparelho que não desenhou), avisa em vez de sumir calado
+    if (!partes.length || !partes.some(b => b.size > 0)) { toast('Nada foi gravado: o 3D não chegou a desenhar durante a apresentação. Tente de novo com a tela à vista.', 6000); return; }
+    const ext = /mp4/.test(tipo) ? 'mp4' : 'webm';
+    const nome = 'apresentacao-' + (M.title || 'modelo').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 40) + '.' + ext;
     const a = $('gravLink'), velho = a.href; a.href = URL.createObjectURL(new Blob(partes, { type: tipo.split(';')[0] })); a.download = nome; if (velho && velho.startsWith('blob:')) URL.revokeObjectURL(velho);
     $('gravMB').textContent = (partes.reduce((s, b) => s + b.size, 0) / 1048576).toFixed(1).replace('.', ',') + ' MB · ' + ext.toUpperCase(); $('gravPronto').hidden = false; };
   rec.start(1000); $('cineGrav').hidden = false;

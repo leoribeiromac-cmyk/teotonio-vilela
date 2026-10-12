@@ -120,7 +120,8 @@ function gas(acao, params) {
   ok('no último dia, a linha mostra a obra inteira', lt.n === app.n, lt.n + ' × ' + app.n);
   const arrastar = v => s.p.evaluate(v => { const r = document.getElementById('m3dTempoR'); r.value = v; r.dispatchEvent(new Event('input')); }, v);
   await arrastar(4);
-  await s.p.waitForTimeout(400);
+  // o app sincroniza 80 ms depois do arraste: espera a pintura nova, não um tempo fixo
+  await s.p.waitForFunction(() => M3D.ate === '2025-01-10' && _m3dUltimo && _m3dUltimo.faixas.length === 5, null, { timeout: 15000 }).catch(() => {});
   const cedo = await s.p.evaluate(() => ({ ate: M3D.ate, fx: _m3dUltimo.faixas.map(f => f.chave).sort().join() }));
   ok('arrastar a linha até 10/01 mostra só o que existia até ali', cedo.ate === '2025-01-10' && cedo.fx === 'BC:225,BC:226,BC:227,BC:228,BC:229', JSON.stringify(cedo));
   await fr.waitForFunction(() => window.__rdo.n === 5, null, { timeout: 15000 }).catch(() => {});
@@ -129,11 +130,14 @@ function gas(acao, params) {
   ok('o 3D mostra a data da linha no alto', carimbo.vis && /10\/01\/2025/.test(carimbo.t), JSON.stringify(carimbo));
   await s.p.evaluate(() => m3dFiltro('cor', 'recencia'));
   await arrastar(12);
-  await s.p.waitForTimeout(400);
-  const rec = await s.p.evaluate(() => [M3D.ate, _m3dUltimo.est.get('BC:237').cor, _m3dUltimo.est.get('BC:225').cor].join('|'));
+  // espera a linha chegar ao dia (na máquina da CI, 400 ms não bastavam)
+  await s.p.waitForFunction(() => M3D.ate === '2025-01-18' && _m3dUltimo && _m3dUltimo.est.get('BC:237'), null, { timeout: 15000 }).catch(() => {});
+  const rec = await s.p.evaluate(() => { const g = k => (_m3dUltimo.est.get(k) || {}).cor; return [M3D.ate, g('BC:237'), g('BC:225')].join('|'); });
   ok('na linha do tempo a recência conta da data da linha, não de hoje', rec === '2025-01-18|#e0452a|#f08a24', rec);
   const cache = await fr.evaluate(() => window.__rdo.cacheFaixas);
-  await arrastar(4); await s.p.waitForTimeout(300); await arrastar(12); await s.p.waitForTimeout(400);
+  await arrastar(4); await s.p.waitForFunction(() => M3D.ate === '2025-01-10' && _m3dUltimo.faixas.length === 5, null, { timeout: 15000 }).catch(() => {});
+  await arrastar(12); await s.p.waitForFunction(() => M3D.ate === '2025-01-18' && _m3dUltimo.est.get('BC:237'), null, { timeout: 15000 }).catch(() => {});
+  await fr.waitForFunction(n => window.__rdo.n === n, await s.p.evaluate(() => _m3dUltimo.faixas.length), { timeout: 15000 }).catch(() => {});
   ok('voltar e avançar a linha reaproveita a geometria das faixas (não refaz)', await fr.evaluate(() => window.__rdo.cacheFaixas) === cache, cache);
   // a estaca aberta acompanha a data: a E225 tem um lançamento em 06/01 e outro em 21/01
   const lancNoPainel = () => fr.evaluate(() => { const dl = document.getElementById('infoDl'); const dt = [...dl.querySelectorAll('dt')].find(x => x.textContent === 'Lançamentos');
@@ -336,6 +340,22 @@ function gas(acao, params) {
   await s.p.waitForFunction(() => M3D.apresentando === false, null, { timeout: 10000 }).catch(() => {});
   ok('um toque no 3D interrompe a apresentação', await s.p.evaluate(() => M3D.apresentando === false));
   await s.p.evaluate(() => m3dFiltro('periodo', 'tudo'));
+  // gravar o vídeo da apresentação: o arquivo vira um link para tocar (o download nasce de um toque)
+  // (no WebGL por software dentro do iframe o 3D quase não desenha, e o gravador pode fechar vazio:
+  // aí vale o aviso "Nada foi gravado" — o que não pode é terminar calado)
+  await fr.evaluate(() => { window.__apresVel = 8; document.getElementById('gravBtn').click(); });
+  await fr.waitForFunction(() => document.documentElement.classList.contains('cine-on'), null, { timeout: 20000 }).catch(() => {});
+  const gravando = await fr.evaluate(() => !document.getElementById('cineGrav').hidden);
+  let grav = {};
+  for (let i = 0; i < 120; i++) {
+    grav = await fr.evaluate(() => ({ pronto: !document.getElementById('gravPronto').hidden, href: document.getElementById('gravLink').href.slice(0, 5), nome: document.getElementById('gravLink').download,
+      aviso: document.getElementById('toast').hidden ? '' : document.getElementById('toast').textContent }));
+    if (grav.pronto || /Nada foi gravado/.test(grav.aviso)) break;
+    await s.p.screenshot();
+  }
+  ok('"Gravar vídeo da apresentação" grava durante o voo e termina num link (ou no aviso de que nada foi gravado)', gravando &&
+    ((grav.pronto && grav.href === 'blob:' && /^apresentacao-av-sen-teotonio-vilela-duplicacao\.(mp4|webm)$/.test(grav.nome)) || /Nada foi gravado/.test(grav.aviso)), JSON.stringify({ gravando, grav }));
+  await fr.evaluate(() => { window.__apresVel = 1; document.getElementById('gravX').click(); });
   // o sol baixo é dourado: a cor da luz muda com a altura do sol
   const sol = await fr.evaluate(() => { const D = window.__dbg; D.setSun(false, 12, 4); const meio = D.sun.color.clone(); D.setSun(false, 16.8, 4); const tarde = D.sun.color.clone(); D.setSun(false); return { meio: [meio.r, meio.g, meio.b], tarde: [tarde.r, tarde.g, tarde.b] }; });
   ok('o sol das 16h48 sai mais alaranjado que o do meio-dia', sol.tarde[2] < sol.meio[2] * 0.75 && sol.tarde[1] < sol.meio[1], JSON.stringify(sol));
