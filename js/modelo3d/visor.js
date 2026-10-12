@@ -236,6 +236,13 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = Q_ALTA ? 0.75 : 0.62;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+/* SOMBRA ESTÁTICA. A cena não se mexe: o mapa de sombra só é redesenhado
+   quando o enquadramento da sombra anda (updSun), o sol muda ou a cena muda
+   (trecho, camada, árvore, corte) — invalidarSombra(). Refeito a cada quadro,
+   eram ~760 objetos desenhados de novo só para repetir a mesma sombra: quase
+   metade das chamadas de desenho de cada quadro ao girar a câmera. */
+renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true;
+function invalidarSombra() { renderer.shadowMap.needsUpdate = true; }
 renderer.localClippingEnabled = true;
 stage.appendChild(renderer.domElement);
 const scene = new THREE.Scene();
@@ -295,12 +302,14 @@ const SH = 90, sc = sun.shadow.camera; sc.left = -SH; sc.right = SH; sc.top = SH
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
 scene.add(sun); scene.add(sun.target);
 scene.add(new THREE.HemisphereLight(0xdfe9f2, 0x6b5a45, Q_ALTA ? 0.12 : 0.55));
-// shadow frustum (±90 m) follows the camera target, snapped to shadow texels
-const _sr = new THREE.Vector3(), _su = new THREE.Vector3(), _st = new THREE.Vector3(), sunKey = { k: '' };
+// shadow frustum (±90 m) follows the camera target, snapped to shadow texels — mas só
+// quando o alvo se afasta mais de 18 m do centro atual: girar e aproximar não refazem a sombra
+const _sr = new THREE.Vector3(), _su = new THREE.Vector3(), _st = new THREE.Vector3(), sunKey = { a: NaN, b: NaN, c: NaN };
 function updSun(force) {
   const t = controls.target; _sr.crossVectors(new THREE.Vector3(0, 1, 0), sunDir).normalize(); _su.crossVectors(sunDir, _sr).normalize();
   const tx = 2 * SH / sun.shadow.mapSize.x; const a = Math.round(t.dot(_sr) / tx) * tx, b = Math.round(t.dot(_su) / tx) * tx, c = t.dot(sunDir);
-  const k = a + '|' + b + '|' + Math.round(c); if (!force && k === sunKey.k) return; sunKey.k = k;
+  if (!force && Math.hypot(a - sunKey.a, b - sunKey.b) < 18 && Math.abs(c - sunKey.c) < 18) return;
+  sunKey.a = a; sunKey.b = b; sunKey.c = c; invalidarSombra();
   _st.copy(_sr).multiplyScalar(a).addScaledVector(_su, b).addScaledVector(sunDir, c);
   sun.target.position.copy(_st); sun.target.updateMatrixWorld(); sun.position.copy(_st).addScaledVector(sunDir, 220);
 }
@@ -484,6 +493,7 @@ function idxAdd(o, I, iid) { const txt = [I.t, I.disc, ...(I.rows || []).map(r =
 function addTo(gid, obj, info) { if (info) { obj.userData.info = info; pickables.push(obj); idxAdd(obj, info); } (GRP[gid] || GRP.geo).add(obj); return obj; }
 function addInst(gid, im, infos, search = true) { im.userData.infos = infos; pickables.push(im); if (search) infos.forEach((I, k) => I && idxAdd(im, I, k)); (GRP[gid] || GRP.geo).add(im); return im; }
 const isVis = o => { let p = o; while (p) { if (!p.visible) return false; p = p.parent; } return true; };
+const ehIlustrativo = o => { let p = o; while (p) { if (p === GRP.ilus) return true; p = p.parent; } return false; };
 
 // surface registries filled as tiles arrive
 const TOP = [];    // {mesh, G}: top surfaces for sections/drive (grid in plan)
@@ -611,7 +621,9 @@ async function buildTile(T, meta) {
 const mConc = new THREE.MeshStandardMaterial({ color: 0xbab6ad, roughness: .85 });
 const mGalv = new THREE.MeshStandardMaterial({ color: 0x9aa1a6, roughness: .35, metalness: .85 });
 const mDark = new THREE.MeshStandardMaterial({ color: 0x1d2124, roughness: .5, metalness: .3 });
-const mGlass = new THREE.MeshPhysicalMaterial({ color: 0xcfe3ea, roughness: .05, transmission: .6, transparent: true, opacity: .35, metalness: 0 });
+// vidro SEM `transmission`: com ela o three.js redesenha a cena opaca inteira num passe
+// extra, a cada quadro em que um abrigo aparece — e o refratado não se vê nesta escala
+const mGlass = new THREE.MeshStandardMaterial({ color: 0xcfe3ea, roughness: .05, metalness: .1, transparent: true, opacity: .35, depthWrite: false });
 const mLens = new THREE.MeshStandardMaterial({ color: 0xfff7e0, emissive: 0xfff2cc, emissiveIntensity: .4 });
 const cyl = (r1, r2, h, s = 16) => new THREE.CylinderGeometry(r1, r2, h, s);
 function at(obj, p) { obj.position.copy(V(p[0], p[1], p[2])); return obj; }
@@ -654,7 +666,9 @@ function treeProto(sp, seed) {
   for (let i = 0; i < 4; i++) { const br = cyl(.03, .065, H * .3, 6); const an = i * 1.57 + r() * .8; _o.position.set(Math.cos(an) * .28 * w, H * (tf + .05), Math.sin(an) * .28 * w); _o.rotation.set(Math.sin(an) * .75, 0, -Math.cos(an) * .75); _o.scale.set(1, 1, 1); _o.updateMatrix(); br.applyMatrix4(_o.matrix); tparts.push(br); }
   const parts = []; const nb = (sp.nb || 7) + Math.floor(r() * 3); const leaf = new THREE.Color(sp.leaf), fl = new THREE.Color(sp.flower), fl2 = sp.flower2 ? new THREE.Color(sp.flower2) : fl; const off = r() * 50;
   for (let i = 0; i < nb; i++) {
-    const rad0 = cr * (0.44 + r() * .26); let g = new THREE.IcosahedronGeometry(rad0, 3); g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g); const pos = g.attributes.position; const col = new Float32Array(pos.count * 3);
+    // detalhe 2 (320 triângulos por bolota): o 3 tinha 4× mais e, com o ruído deformando a bolota, não se via a diferença —
+    // estas copas só existem no modo Leve (o Alta usa o ez-tree), que é o do celular
+    const rad0 = cr * (0.44 + r() * .26); let g = new THREE.IcosahedronGeometry(rad0, 2); g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g); const pos = g.attributes.position; const col = new Float32Array(pos.count * 3);
     const ang = r() * Math.PI * 2, rad = cr * .62 * w * Math.sqrt(r()); const cx = Math.cos(ang) * rad, cy = H * base + (r() - .4) * cr * .6 * vh, cz = Math.sin(ang) * rad;
     const hx = Math.sqrt(w), hy = .82 * vh;
     for (let j = 0; j < pos.count; j++) { const x = pos.getX(j), y = pos.getY(j), z = pos.getZ(j); const n = vnoise(x * 1.6 + off, y * 1.6, z * 1.6 + i) - .5; const s = 1 + n * .6; pos.setXYZ(j, x * s * hx, y * s * hy, z * s * hx);
@@ -746,7 +760,7 @@ async function plantEZ() {
       list.forEach((a, k) => { const m = instMatrix(a.p, a.r, a.s * 1.3, a.s, a.s * 1.3); tm.setMatrixAt(k, m); cm.setMatrixAt(k, m); }); for (const im of [tm, cm]) { im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); }
       const infos = list.map(() => B.info); addInst(B.gid, tm, infos, false); addInst(B.gid, cm, infos, false); }); }
   HQ.mod = mod; HQ.bushP = bushP;
-  tileVer++; envK(); invalidar(3);
+  tileVer++; envK(); invalidar(3); invalidarSombra();
 }
 // ---------- entorno ilustrativo (Alta): ground ring + low-detail trees and bushes
 async function loadEntorno() {
@@ -760,7 +774,7 @@ async function loadEntorno() {
     const info = { disc: 'Ilustrativo', t: 'Entorno ilustrativo', rows: [['Observação', 'continuação suavizada do terreno da borda do modelo, com vegetação aleatória, só para dar horizonte e contexto — não é levantamento nem projeto']], src: 'modelo' };
     addTo('ent', tm, info);
     const sk = new THREE.Mesh(geomFrom(E.skirt, MAT.sk_solo.userData.tile, false), MAT.sk_solo); sk.receiveShadow = true; addTo('ent', sk, null);
-    HQ.entOK = true; scene.traverse(o => { if (o.userData.sideSkirt) o.visible = false; });
+    HQ.entOK = true; scene.traverse(o => { if (o.userData.sideSkirt) o.visible = false; }); invalidarSombra();
     if (E.agua) { const wm = new THREE.Mesh(triplanarGeo(unindex(dec(E.agua.p), dec(E.agua.i)), SOLID.agua.userData.tile), SOLID.agua); wm.receiveShadow = true; wm.renderOrder = 2; wm.userData.noAO = true; wm.geometry.computeBoundingSphere(); AGUAS.push(wm);
       addTo('ent', wm, { disc: 'Córrego (fora do modelo)', t: 'Córrego – continuação', rows: [['Traçado', 'levantamento do córrego e, além dele, o curso do OpenStreetMap (waterway=stream)'], ['Água', 'nível do levantamento prolongado pela declividade média; canal de 2 m ilustrativo']], src: 'Lev Canal Teotonio · OpenStreetMap (ODbL)' }); }
     const mod = await ezP; await plantDone;
@@ -777,7 +791,7 @@ async function loadEntorno() {
         idx.forEach((i, k) => { const s = S[6 * i + 3] * 1.6; const m = instMatrix([S[6 * i], S[6 * i + 1], S[6 * i + 2]], S[6 * i + 5], s * 1.3, s, s * 1.3); bm.setMatrixAt(k, m); lm.setMatrixAt(k, m); });
         for (const im of [bm, lm]) { im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); } addInst('ent', bm, idx.map(() => info), false); addInst('ent', lm, idx.map(() => info), false); });
     }
-    if (clipOn) applyClip(true); envK(); tileVer++; invalidar(3);
+    if (clipOn) applyClip(true); envK(); tileVer++; invalidar(3); invalidarSombra();
   } catch (e) { console.warn('Entorno ilustrativo não carregado:', e && e.message); }
 }
 let plantDone = null;
@@ -929,7 +943,8 @@ plantTreesQ(feat('arvores_exist'), 'exi', (a, k) => {
   if (shr.length && !Q_ALTA) {
     const PAL = [[0x3f6b2a, 0x3f6b2a, 0], [0x557d33, 0x557d33, 0], [0x2f5626, 0xd9c22c, .18], [0x4a7430, 0xc76fa0, .2]];
     const protos = PAL.map(([leaf, fl, fr], v) => { const r = rng(700 + v); const parts = [];
-      for (let i = 0; i < 3; i++) { let g = new THREE.IcosahedronGeometry(.42 + r() * .18, 2); g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g); const pos = g.attributes.position, colA = new Float32Array(pos.count * 3); const c0 = new THREE.Color(leaf), c1 = new THREE.Color(fl);
+      // arbusto de 0,5 m: 80 triângulos por bolota bastam (detalhe 1; eram 320)
+      for (let i = 0; i < 3; i++) { let g = new THREE.IcosahedronGeometry(.42 + r() * .18, 1); g.deleteAttribute('normal'); g.deleteAttribute('uv'); g = mergeVertices(g); const pos = g.attributes.position, colA = new Float32Array(pos.count * 3); const c0 = new THREE.Color(leaf), c1 = new THREE.Color(fl);
         for (let j = 0; j < pos.count; j++) { const x = pos.getX(j), y = pos.getY(j), z = pos.getZ(j); const n = vnoise(x * 3 + v * 7, y * 3, z * 3 + i) - .5; const sc = 1 + n * .5; pos.setXYZ(j, x * sc, Math.max(-.05, y * sc * .72), z * sc);
           const c = (fr && vnoise(x * 6, y * 6 + i, z * 6) > 1 - fr) ? c1.clone() : c0.clone(); c.multiplyScalar(.75 + .35 * Math.max(0, y + .3) + hash(x, y, z) * .1); colA.set([c.r, c.g, c.b], 3 * j); }
         g.setAttribute('color', new THREE.BufferAttribute(colA, 3)); g.translate((r() - .5) * .5, .32, (r() - .5) * .5); g.computeVertexNormals(); parts.push(g); }
@@ -1108,6 +1123,64 @@ function labelSprite(txt, sub) {
     addTo('est', grp, { disc: 'Geometria', t: `Estaca ${e.pista} ${e.lab}`, rows: [['Cota do greide (LB≡LP)', `${fmt(e.cota)} m`]], src: 'Perfil 5F-352-B/353-1' });
   } }
 
+// ---------- JUNTAR O QUE É ESTÁTICO (menos chamadas de desenho)
+/* Placa, semáforo, tubo, abrigo, tampão: cada peça era um objeto, e cada objeto
+   uma chamada de desenho — 834 só nas placas e semáforos, 421 na drenagem (um
+   tubo eram 6). No celular, o que pesa no quadro é o NÚMERO de chamadas, não
+   os triângulos. Aqui as peças de um grupo que usam o mesmo material viram UMA
+   malha, e cada triângulo guarda de qual ficha veio (faceB → infos): o toque, a
+   busca (com a caixa da peça guardada) e as camadas continuam iguais. Só o que
+   nasce do índice: superfícies dos trechos (TOP/READ), instanciados, sprites e
+   linhas ficam como estão. */
+const usaUV = m => ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'alphaMap', 'bumpMap', 'emissiveMap'].some(k => m[k]);
+function consolidar(gid) {
+  const G = GRP[gid]; if (!G) return 0; G.updateMatrixWorld(true);
+  const inv = new THREE.Matrix4().copy(G.matrixWorld).invert(), lotes = new Map(), infos = [], tops = [];
+  for (const top of [...G.children]) {
+    const pecas = [], soltos = []; let fora = false;
+    top.traverse(o => { if (o.isInstancedMesh || (o.isMesh && (Array.isArray(o.material) || o.userData.stype || o.userData.noAO))) fora = true;
+      else if (o.isSprite || o.isPoints || o.isLine) soltos.push(o); else if (o.isMesh) pecas.push(o); });
+    if (fora || !pecas.length || !top.visible || (top.isSprite || top.isPoints || top.isLine)) continue;
+    const I = top.userData.info || null, ii = I ? infos.push(I) - 1 : -1;
+    // e por trecho de 400 m da avenida: uma malha do tamanho da obra inteira não sairia nunca do quadro (recorte de visão)
+    // e faria o raio do toque e do zoom testar todos os triângulos dela
+    const box = new THREE.Box3().setFromObject(top), c = box.getCenter(new THREE.Vector3()), cel = Math.floor((c.x * Uv[0] - c.z * Uv[1]) / 400);
+    for (const o of pecas) {
+      if (!o.visible) continue;
+      const m = o.material, uv = usaUV(m), k = m.uuid + '|' + o.castShadow + '|' + o.receiveShadow + '|' + o.renderOrder + '|' + cel;
+      let g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone();
+      for (const a of Object.keys(g.attributes)) if (!(a === 'position' || a === 'normal' || (a === 'uv' && uv))) g.deleteAttribute(a);
+      if (!g.attributes.normal) g.computeVertexNormals();
+      if (uv && !g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld));
+      let L = lotes.get(k); if (!L) lotes.set(k, L = { m, cast: o.castShadow, recv: o.receiveShadow, ord: o.renderOrder, geos: [], faces: [] });
+      L.geos.push(g); L.faces.push([ii, g.attributes.position.count / 3]);
+    }
+    tops.push({ top, ii, box, soltos });
+  }
+  if (!tops.length) return 0;
+  const porInfo = new Map();
+  for (const L of lotes.values()) {
+    const g = mergeGeometries(L.geos); if (!g) continue; L.geos.forEach(x => x.dispose());
+    const faceB = new Int32Array(g.attributes.position.count / 3); let f = 0;
+    for (const [ii, n] of L.faces) { faceB.fill(ii, f, f + n); f += n; }
+    g.computeBoundingSphere(); g.computeBoundingBox();
+    const mesh = new THREE.Mesh(g, L.m); mesh.castShadow = L.cast; mesh.receiveShadow = L.recv; mesh.renderOrder = L.ord;
+    mesh.userData.faceB = faceB; mesh.userData.infos = infos; mesh.name = gid + ':' + (L.m.name || L.m.type);
+    G.add(mesh); pickables.push(mesh);
+    for (const [ii] of L.faces) if (ii >= 0 && !porInfo.has(ii)) porInfo.set(ii, mesh);
+  }
+  for (const { top, ii, box, soltos } of tops) {
+    // o rótulo (sprite) da estaca não se junta: sai do grupo da peça e fica no da camada, com a mesma ficha
+    for (const o of soltos) { G.attach(o); if (ii >= 0) { o.userData.info = infos[ii]; pickables.push(o); } }
+    G.remove(top); const j = pickables.indexOf(top); if (j >= 0) pickables.splice(j, 1);
+    for (const e of searchIdx) if (e.o === top) { e.box = box; e.o = porInfo.get(ii) || soltos[0] || G; }
+  }
+  return tops.length;
+}
+{ const t0 = performance.now(); const n = ['siv', 'dre', 'urb', 'sih', 'est'].reduce((a, g) => a + consolidar(g), 0);
+  window.__consolidados = { pecas: n, ms: Math.round(performance.now() - t0) }; }
+
 // ---------- title, layers UI
 $('ttl').textContent = M.title || 'Modelo 3D'; $('sub').textContent = M.subtitle || '';
 $('tbPD').textContent = ALN.PD ? `${estStr(ALN.PD.m0)} → ${estStr(ALN.PD.m1)}` : '—';
@@ -1116,7 +1189,7 @@ const lyrlist = $('lyrlist');
 for (const l of LYR) {
   const row = document.createElement('label'); row.className = 'lyr'; row.htmlFor = 'L_' + l.id;
   row.innerHTML = `<span class="sw" style="background:${l.sw}"></span><span class="code">${l.code}</span><span>${l.name}</span><input type="checkbox" id="L_${l.id}" ${l.on ? 'checked' : ''}>`;
-  lyrlist.appendChild(row); row.querySelector('input').addEventListener('change', ev => { GRP[l.id].visible = ev.target.checked; });
+  lyrlist.appendChild(row); row.querySelector('input').addEventListener('change', ev => { GRP[l.id].visible = ev.target.checked; invalidarSombra(); });
   if ((l.id === 'rdo' || l.id === 'fot') && !EMBED) row.hidden = true;   // fora do app não há RDO para mostrar
 }
 const hud = $('hud'); const tHud = $('toggleHud');
@@ -1131,7 +1204,7 @@ function setOpacity(v) {
 $('opac').addEventListener('input', e => setOpacity(e.target.value / 100));
 $('ext').addEventListener('change', e => window.__setExt(e.target.checked));
 const tA = $('tAdult'), tM = $('tMuda');
-function treeMode(adult) { TREE_F = adult ? 1 : 0.2; tA.setAttribute('aria-pressed', adult); tM.setAttribute('aria-pressed', !adult); for (const S of TREESETS) if (S.scalable) setTreeMatrices(S, TREE_F); }
+function treeMode(adult) { TREE_F = adult ? 1 : 0.2; tA.setAttribute('aria-pressed', adult); tM.setAttribute('aria-pressed', !adult); for (const S of TREESETS) if (S.scalable) setTreeMatrices(S, TREE_F); invalidarSombra(); }
 tA.onclick = () => treeMode(true); tM.onclick = () => treeMode(false);
 // premissas (index.sources)
 {
@@ -1161,6 +1234,7 @@ function goView(k, instant) {
   const v = VIEWS[k]; if (!v) return; pressView(k); $('trechoSel').value = '';
   setOpacity(v.opac); for (const l of LYR) { const want = v.layers[l.id] ?? (k === 'drenagem' ? l.on : null); if (want !== null && want !== undefined) { GRP[l.id].visible = want; $('L_' + l.id).checked = want; } }
   if (k === 'drenagem') { GRP.dre.visible = true; $('L_dre').checked = true; }
+  invalidarSombra();
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (instant || reduce) { tween = null; camera.position.copy(v.pos); controls.target.copy(v.tgt); controls.update(); hint(v.tgt.x, -v.tgt.z); return; }
   flyTo(v.pos.clone(), v.tgt.clone());
@@ -1189,6 +1263,8 @@ function showInfo(I) {
 }
 function preencherInfo(I) {
   const chave = I.chave || null;
+  // a linha curta da estaca ("Base · 101 lançamentos · último 19/11/25"): no celular é ela que aparece, no lugar da tabela
+  $('infoLinha').textContent = I.linha || ''; info.classList.toggle('tem-linha', !!I.linha);
   const disc = $('infoDisc'); disc.textContent = I.disc || '';
   if (I.cor) { const sw = document.createElement('span'); sw.className = 'cor'; sw.style.background = String(I.cor); disc.prepend(sw); }
   $('infoT').textContent = I.t || '';
@@ -1204,7 +1280,10 @@ let down = null;
 renderer.domElement.addEventListener('pointerdown', e => down = e.button === 0 ? [e.clientX, e.clientY] : null);   // info/measure: left click only
 renderer.domElement.addEventListener('pointerup', e => {
   if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return; const r = renderer.domElement.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
-  ray.setFromCamera(ndc, camera); const hit = ray.intersectObjects(pickables.filter(isVis), true)[0];
+  // o toque ATRAVESSA o ilustrativo (carro, pessoa, arbusto): quem toca a faixa da estaca com um carro em cima quer a estaca,
+  // não a ficha "elemento ilustrativo"; só tocando o ilustrativo sozinho é que a ficha dele aparece
+  ray.setFromCamera(ndc, camera); const hits = ray.intersectObjects(pickables.filter(isVis), true);
+  const hit = hits.find(h => !ehIlustrativo(h.object)) || hits[0];
   if (window.__measureClick && window.__measureClick(hit)) return;
   const pin = pinNoPonto(e.clientX, e.clientY, hit);
   if (pin != null) { showInfo(RDO.infos[pin]); return; }
@@ -1320,7 +1399,7 @@ renderer.domElement.addEventListener('pointermove', e => {
   const a = nearestAxis(x, y); const rot = a && RDO.rot[a.P] ? ` (${RDO.rot[a.P]})` : '';
   roB.textContent = a ? `${a.P} ${estStr(a.m)}${rot} · afast. ${a.D >= 0 ? '+' : ''}${fmt(a.D, 2)} m` : '';
   // por cima de uma faixa do RDO: o que foi lançado ali
-  if (RDO.mesh && isVis(RDO.mesh)) { const hr = ray.intersectObject(RDO.mesh, false)[0]; if (hr) { const I = RDO.infos[RDO.mesh.userData.faceB[hr.faceIndex]]; if (I) roB.textContent = I.t + (I.resumo ? ' · ' + I.resumo : ''); } }
+  if (RDO.mesh && isVis(RDO.mesh)) { const hr = ray.intersectObject(RDO.mesh, false)[0]; if (hr) { const I = RDO.infos[RDO.mesh.userData.faceB[hr.faceIndex]]; if (I) roB.textContent = I.t + ' · ' + (I.linha || I.resumo || ''); } }
 });
 
 // ================= tools =================
@@ -1417,7 +1496,7 @@ const T0 = -45, T1 = 30, DT = 0.1, NS = Math.round((T1 - T0) / DT);
 const planeMesh = new THREE.Mesh(new THREE.PlaneGeometry(T1 - T0, 22), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: .14, side: THREE.DoubleSide, depthWrite: false })); planeMesh.visible = false; scene.add(planeMesh);
 // clipping: section plane, limited to ±90 m across the axis (clipIntersection) so far parts of the avenue are not cut
 const CLIP = [new THREE.Plane(), new THREE.Plane(), new THREE.Plane()], LAT = 90; let clipOn = false;
-function applyClip(on) { clipOn = on; const seen = new Set(); for (const id in GRP) GRP[id].traverse(o => { if (!o.material) return; for (const m of Array.isArray(o.material) ? o.material : [o.material]) { if (seen.has(m)) continue; seen.add(m); m.clippingPlanes = on ? CLIP : null; m.clipIntersection = true; m.needsUpdate = true; } }); }
+function applyClip(on) { clipOn = on; const seen = new Set(); for (const id in GRP) GRP[id].traverse(o => { if (!o.material) return; for (const m of Array.isArray(o.material) ? o.material : [o.material]) { if (seen.has(m)) continue; seen.add(m); m.clippingPlanes = on ? CLIP : null; m.clipIntersection = true; m.needsUpdate = true; } }); invalidarSombra(); }
 function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function fitCanvas() { const r = dc.getBoundingClientRect(), k = Math.min(devicePixelRatio, 2); dc.width = Math.max(10, r.width * k); dc.height = Math.max(10, r.height * k); const g = dc.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0); return [g, r.width, r.height]; }
 let secM = null;
@@ -1555,12 +1634,13 @@ function driveStep(now) {
 // ---------- search
 function focusEntry(h) {
   const o = h.o; const b = new THREE.Box3();
-  if (o.isInstancedMesh && h.iid != null) { if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); const mt = new THREE.Matrix4(); o.getMatrixAt(h.iid, mt); b.copy(o.geometry.boundingBox).applyMatrix4(mt).applyMatrix4(o.matrixWorld); }
+  if (h.box) b.copy(h.box);   // peça que foi juntada às outras do mesmo material (consolidar)
+  else if (o.isInstancedMesh && h.iid != null) { if (!o.geometry.boundingBox) o.geometry.computeBoundingBox(); const mt = new THREE.Matrix4(); o.getMatrixAt(h.iid, mt); b.copy(o.geometry.boundingBox).applyMatrix4(mt).applyMatrix4(o.matrixWorld); }
   else b.setFromObject(o);
   if (b.isEmpty()) return; const c = b.getCenter(new THREE.Vector3()); const sz = b.getSize(new THREE.Vector3()).length();
   const dir = camera.position.clone().sub(controls.target).normalize(); if (dir.y < .25) dir.y = .35; dir.normalize();
   flyTo(c.clone().addScaledVector(dir, Math.max(7, Math.min(120, sz * 1.8))), c);
-  if (!isVis(o)) { let p = o; while (p && p !== scene) { p.visible = true; p = p.parent; } for (const l of LYR) $('L_' + l.id).checked = GRP[l.id].visible; }
+  if (!isVis(o)) { let p = o; while (p && p !== scene) { p.visible = true; p = p.parent; } for (const l of LYR) $('L_' + l.id).checked = GRP[l.id].visible; invalidarSombra(); }
   showInfo(h.I);
   const bh = new THREE.Box3Helper(b, 0xff7a1a); bh.material.depthTest = false; bh.renderOrder = 12; scene.add(bh); setTimeout(() => { scene.remove(bh); invalidar(); }, 3500);
 }
@@ -1696,7 +1776,7 @@ function faixaDaPista(A, s) {   // -> [t0, t1], afastamentos (m) da pista nesta 
   const ate = sg => { let ult = c, falha = 0; for (let t = c + sg * .5; Math.abs(t) <= 6; t += sg * .5) { const q = tipo(t); if (PAV.has(q) || BORDA.has(q)) { ult = t; falha = 0; } else if (++falha > 1) break; } return ult + sg * .25; };
   const v = [ate(-1), ate(1)]; _larg.set(k, v); return v;
 }
-const MRDO = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: .62, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8, toneMapped: false, fog: false });
+const MRDO = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 1, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -8, toneMapped: false, fog: false });
 const MSEL = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: .38, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -10, polygonOffsetUnits: -10, toneMapped: false, fog: false });
 const LSEL = new THREE.LineBasicMaterial({ color: 0xff7a1a, depthTest: false, toneMapped: false });
 function agendarRDO(ms = 300) { if (!RDO.dados) return; clearTimeout(RDO.timer); RDO.timer = setTimeout(montarRDO, ms); }
@@ -1705,30 +1785,50 @@ function agendarRDO(ms = 300) { if (!RDO.dados) return; clearTimeout(RDO.timer);
    superfície do modelo (sampleTop) — refazer todas a cada quadro era o que
    travava o celular. A faixa de uma estaca não muda com a data, só com o
    modelo: o cache é esvaziado quando um trecho novo chega (loadTiles). */
-const _geoFx = new Map(), NT_RDO = 7;
+/* A SEÇÃO DA FAIXA: miolo translúcido e uma borda cheia de 35 cm de cada lado
+   da pista. Chapada a 62%, a faixa escondia o asfalto e a sinalização — o
+   projeto sumia debaixo da cor. Assim a cor da estaca se lê pela borda e o
+   pavimento aparece por baixo, como numa camada de mapa. As colunas 1–2 e 5–6
+   ficam no mesmo lugar: é a costura entre o alfa da borda e o do miolo. */
+const _geoFx = new Map(), FX_NC = 8, FX_QUADS = [0, 2, 3, 4, 6], FX_BORDA = .35, FX_A_BORDA = .95, FX_A_MIOLO = .4;
+const fxAlfa = j => (j <= 1 || j >= 6) ? FX_A_BORDA : FX_A_MIOLO;
 function geoFaixa(A, a, b) {
   const k = A.key + '|' + a.toFixed(2) + '|' + b.toFixed(2); let G = _geoFx.get(k); if (G) return G;
-  const ns = Math.max(2, Math.ceil((b - a) / 2) + 1), pos = new Float32Array(ns * NT_RDO * 3), borda = [[], []];
+  const ns = Math.max(2, Math.ceil((b - a) / 2) + 1), pos = new Float32Array(ns * FX_NC * 3), borda = [[], []];
   let q = 0;
   for (let i = 0; i < ns; i++) {
     const s = a + (b - a) * i / (ns - 1), [t0, t1] = faixaDaPista(A, s), p = A.pos(s), d = A.dir(s), r = [d[1], -d[0]];
-    for (let j = 0; j < NT_RDO; j++) {
-      const t = t0 + (t1 - t0) * j / (NT_RDO - 1), x = p[0] + r[0] * t, y = p[1] + r[1] * t;
-      const h = sampleTop(x, y, TOP); let z = h ? h.z : A.z(s); if (!fin(z)) z = groundZ(x, y);
-      const w = V(x, y, z + .06); pos[q++] = w.x; pos[q++] = w.y; pos[q++] = w.z;
-      if (j === 0) borda[0].push(w.clone().setY(w.y + .06)); if (j === NT_RDO - 1) borda[1].push(w.clone().setY(w.y + .06));
+    const e = Math.min(FX_BORDA, (t1 - t0) / 4), L = t1 - t0;
+    const cols = [t0, t0 + e, t0 + e, t0 + L / 3, t0 + 2 * L / 3, t1 - e, t1 - e, t1];
+    let ult = null;
+    for (let j = 0; j < FX_NC; j++) {
+      const t = cols[j];
+      let w = ult;
+      if (!(j === 2 || j === 6)) {   // a costura repete o ponto da coluna anterior
+        const x = p[0] + r[0] * t, y = p[1] + r[1] * t;
+        const h = sampleTop(x, y, TOP); let z = h ? h.z : A.z(s); if (!fin(z)) z = groundZ(x, y);
+        w = V(x, y, z + .06);
+      }
+      ult = w; pos[q++] = w.x; pos[q++] = w.y; pos[q++] = w.z;
+      if (j === 0) borda[0].push(w.clone().setY(w.y + .06)); if (j === FX_NC - 1) borda[1].push(w.clone().setY(w.y + .06));
     }
   }
-  // o pino da foto: no meio da faixa, 2 m acima da pista
-  const im = (ns >> 1) * NT_RDO + (NT_RDO >> 1);
-  const pino = new THREE.Vector3(pos[3 * im], pos[3 * im + 1] + 2, pos[3 * im + 2]);
+  // o pino da foto: no meio da faixa, 3,4 m acima da pista — o rótulo da estaca do projeto ("PD 212+00")
+  // fica no eixo a 1,95 m, e com o pino a 2 m os dois se sobrepunham (no Alta, uma barra escura no ícone)
+  const im = (ns >> 1) * FX_NC + 3, im2 = im + 1;
+  const pino = new THREE.Vector3((pos[3 * im] + pos[3 * im2]) / 2, (pos[3 * im + 1] + pos[3 * im2 + 1]) / 2 + 3.4, (pos[3 * im + 2] + pos[3 * im2 + 2]) / 2);
   G = { pos, ns, borda: [...borda[0], ...borda[1].reverse()], pino };
   _geoFx.set(k, G); return G;
 }
-/* O pino de câmera: um ponto com sprite (um só desenho para todos), do mesmo
-   tamanho na tela a qualquer distância. O toque nele é achado na TELA
-   (pinNoPonto), não pelo raio: ponto não tem área para o raio acertar. */
-const MPIN = new THREE.PointsMaterial({ size: 30, sizeAttenuation: false, transparent: true, alphaTest: .35, depthWrite: false, toneMapped: false, fog: false,
+/* O pino de câmera: um ponto com sprite (um só desenho para todos) com TAMANHO
+   DE VERDADE — 1,8 m de ícone: de perto ele cresce (até 46 px), de longe
+   encolhe e, abaixo de 8 px, some. Em tamanho fixo, na vista geral os pinos
+   de 60 estacas viravam uma corrente de círculos por cima das faixas. O toque
+   nele é achado na TELA (pinNoPonto), com o mesmo tamanho: ponto não tem área
+   para o raio acertar. */
+const PIN_M = 1.8, PIN_MIN = 8, PIN_MAX = 46, _tanFov = () => Math.tan(camera.fov * Math.PI / 360);
+const pinPx = dist => Math.min(PIN_MAX, PIN_M * renderer.domElement.clientHeight / (2 * dist * _tanFov()));   // px de CSS
+const MPIN = new THREE.PointsMaterial({ size: 1, sizeAttenuation: true, transparent: true, alphaTest: .35, depthWrite: false, toneMapped: false, fog: false,
   map: canvasTex(64, g => {
     g.clearRect(0, 0, 64, 64);
     g.fillStyle = '#1d4f91'; g.strokeStyle = '#ffffff'; g.lineWidth = 4; g.beginPath(); g.arc(32, 32, 27, 0, 2 * Math.PI); g.fill(); g.stroke();
@@ -1736,12 +1836,18 @@ const MPIN = new THREE.PointsMaterial({ size: 30, sizeAttenuation: false, transp
     g.fillStyle = '#1d4f91'; g.beginPath(); g.arc(32, 34, 7, 0, 2 * Math.PI); g.fill();
     g.fillStyle = '#ffffff'; g.beginPath(); g.arc(32, 34, 3.5, 0, 2 * Math.PI); g.fill();
   }, { repeat: false }) });
+// three: gl_PointSize = size·pr · (altura CSS / 2) / distância → em px de CSS, size·altura/(2·dist); o tamanho de verdade é PIN_M/tan(fov/2)
+{ const pr = renderer.getPixelRatio(); MPIN.size = PIN_M / _tanFov();
+  MPIN.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <logdepthbuf_vertex>',
+    `gl_PointSize = gl_PointSize < ${(PIN_MIN * pr).toFixed(1)} ? 0.0 : min(gl_PointSize, ${(PIN_MAX * pr).toFixed(1)});\n#include <logdepthbuf_vertex>`); };
+  MPIN.customProgramCacheKey = () => 'pinoRDO'; }
 function pinNoPonto(cx, cy, hit) {   // -> índice em RDO.infos do pino sob o toque, ou null
   const P = RDO.pinos; if (!P || !P.pts.length || !isVis(P.obj)) return null;
   const R = renderer.domElement.getBoundingClientRect(); camera.updateMatrixWorld();
-  let best = null, bd = 20, bz = 0; const q = new THREE.Vector3();
+  let best = null, bd = Infinity, bz = 0; const q = new THREE.Vector3();
   P.pts.forEach((p, k) => { q.copy(p).project(camera); if (q.z < -1 || q.z > 1) return;
-    const d = Math.hypot(R.left + (q.x + 1) / 2 * R.width - cx, R.top + (1 - q.y) / 2 * R.height - cy); if (d < bd) { bd = d; best = k; bz = p.distanceTo(camera.position); } });
+    const dist = p.distanceTo(camera.position), px = pinPx(dist); if (px < PIN_MIN) return;   // longe demais: o pino nem aparece
+    const d = Math.hypot(R.left + (q.x + 1) / 2 * R.width - cx, R.top + (1 - q.y) / 2 * R.height - cy); if (d < Math.max(14, px / 2 + 4) && d < bd) { bd = d; best = k; bz = dist; } });
   if (best == null) return null;
   // atrás de um prédio o pino não aparece (depthTest): também não pega o toque
   if (hit && hit.object !== RDO.mesh && hit.distance < bz - 1.5) return null;
@@ -1759,24 +1865,24 @@ function montarRDO() {
     // um respiro de 0,3 m entre estacas vizinhas: duas da mesma cor ainda se leem como duas
     const a = Math.max(A.m0, +f.m0 + .3), b = Math.min(A.m1, +f.m1 - .3); if (!(b - a > .5)) continue;
     const ii = RDO.infos.length, G = geoFaixa(A, a, b);
-    RDO.infos.push({ disc: f.disc || 'Serviços lançados (RDO)', t: f.titulo || f.chave, resumo: f.resumo || '', rows: Array.isArray(f.rows) ? f.rows : [], src: f.src || '', acoes: Array.isArray(f.acoes) ? f.acoes : [], cor: f.cor, chave: String(f.chave), fotos: +f.fotos || 0 });
+    RDO.infos.push({ disc: f.disc || 'Serviços lançados (RDO)', t: f.titulo || f.chave, resumo: f.resumo || '', linha: f.linha ? String(f.linha) : '', rows: Array.isArray(f.rows) ? f.rows : [], src: f.src || '', acoes: Array.isArray(f.acoes) ? f.acoes : [], cor: f.cor, chave: String(f.chave), fotos: +f.fotos || 0 });
     fx.push({ f, G, ii, A, a, b });
-    nv += G.ns * NT_RDO; ni += (G.ns - 1) * (NT_RDO - 1) * 6;
+    nv += G.ns * FX_NC; ni += (G.ns - 1) * FX_QUADS.length * 6;
     if (+f.fotos > 0) { pinos.pts.push(G.pino); pinos.ii.push(ii); }
   }
   if (ni) {
-    const pos = new Float32Array(nv * 3), col = new Float32Array(nv * 3), idx = new Uint32Array(ni), faceB = new Int32Array(ni / 3);
+    const pos = new Float32Array(nv * 3), col = new Float32Array(nv * 4), idx = new Uint32Array(ni), faceB = new Int32Array(ni / 3);
     let v0 = 0, k = 0;
     for (const { f, G, ii, A, a, b } of fx) {
       c.set(f.cor || '#e0662a');
       pos.set(G.pos, v0 * 3);
-      for (let v = 0; v < G.ns * NT_RDO; v++) { col[3 * (v0 + v)] = c.r; col[3 * (v0 + v) + 1] = c.g; col[3 * (v0 + v) + 2] = c.b; }
+      for (let v = 0; v < G.ns * FX_NC; v++) { const o = 4 * (v0 + v); col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b; col[o + 3] = fxAlfa(v % FX_NC); }
       const i0 = k;
-      for (let i = 0; i < G.ns - 1; i++) for (let j = 0; j < NT_RDO - 1; j++) { const q = v0 + i * NT_RDO + j; faceB[k / 3] = ii; faceB[k / 3 + 1] = ii; idx[k++] = q; idx[k++] = q + NT_RDO; idx[k++] = q + 1; idx[k++] = q + 1; idx[k++] = q + NT_RDO; idx[k++] = q + NT_RDO + 1; }
+      for (let i = 0; i < G.ns - 1; i++) for (const j of FX_QUADS) { const q = v0 + i * FX_NC + j; faceB[k / 3] = ii; faceB[k / 3 + 1] = ii; idx[k++] = q; idx[k++] = q + FX_NC; idx[k++] = q + 1; idx[k++] = q + 1; idx[k++] = q + FX_NC; idx[k++] = q + FX_NC + 1; }
       RDO.porChave.set(String(f.chave), { A, a, b, ii, i0, i1: k, borda: G.borda });
-      v0 += G.ns * NT_RDO;
+      v0 += G.ns * FX_NC;
     }
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeBoundingSphere();
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.BufferAttribute(col, 4)); g.setIndex(new THREE.BufferAttribute(idx, 1)); g.computeBoundingSphere();
     const m = new THREE.Mesh(g, MRDO); m.renderOrder = 5; m.userData.noAO = true; m.userData.faceB = faceB; m.userData.stype = 'rdo';
     RDO.mesh = m; addInst('rdo', m, RDO.infos, false);
   }
@@ -1849,7 +1955,7 @@ function mostrarMiniaturas(d) {
 // filtro de frente no app → o que o 3D precisa para mostrar aquela disciplina
 let opacAntes = null;
 function realce(camada) {
-  if (camada === 'dre') { if (opacAntes == null) opacAntes = +$('opac').value / 100; setOpacity(.3); GRP.dre.visible = true; $('L_dre').checked = true; }
+  if (camada === 'dre') { if (opacAntes == null) opacAntes = +$('opac').value / 100; setOpacity(.3); GRP.dre.visible = true; $('L_dre').checked = true; invalidarSombra(); }
   else if (opacAntes != null) { setOpacity(opacAntes); opacAntes = null; }
   invalidar();
 }
@@ -1876,6 +1982,9 @@ window.addEventListener('message', e => {
 window.addEventListener('storage', e => { if (e.key !== 'teotonio_tema_v1') return; const t = e.newValue; if (t === 'dark' || t === 'light') document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme'); mm.sig = ''; invalidar(); });
 window.__rdo = { montar: montarRDO, ir: irPara, get n() { return RDO.infos.length; }, get sel() { return RDO.sel; }, get voando() { return !!tween; }, larg: (P, s) => faixaDaPista(ALN[P], s),
   get pinos() { return RDO.pinos ? RDO.pinos.ii.map(i => RDO.infos[i].chave) : []; }, get cacheFaixas() { return _geoFx.size; }, get aberta() { return RDO.aberta; },
+  // diagnóstico: o tamanho (px) do pino de uma estaca na câmera atual, e as chamadas de desenho de um quadro sem refazer a sombra
+  pinoPx: chave => { const P = RDO.pinos; if (!P) return null; const k = P.ii.findIndex(i => RDO.infos[i].chave === String(chave)); return k < 0 ? null : +pinPx(P.pts[k].distanceTo(camera.position)).toFixed(1); },
+  quadro: () => { renderer.shadowMap.needsUpdate = false; renderNow(); const r = renderer.info.render; return { chamadas: r.calls, triangulos: r.triangles }; },
   // teste/diagnóstico: onde, na tela, cai o pino de foto de uma estaca (px do canvas)
   pino: chave => { const P = RDO.pinos; if (!P) return null; const k = P.ii.findIndex(i => RDO.infos[i].chave === String(chave)); if (k < 0) return null;
     camera.updateMatrixWorld(); const q = P.pts[k].clone().project(camera); const R = renderer.domElement.getBoundingClientRect();
@@ -1912,7 +2021,7 @@ async function loadTiles() {
     const f = focusHint && performance.now() - focusHint.t < 30000 ? focusHint.p : [controls.target.x, -controls.target.z];
     pend.sort((a, b) => tileDist(a, f) - tileDist(b, f)); const t = pend[0]; t.st = 'load'; updProg();
     try {
-      const T = await lerArquivo(t.file); await buildTile(T, t); t.st = 'ok'; invalidar(3); _geoFx.clear(); agendarRDO();
+      const T = await lerArquivo(t.file); await buildTile(T, t); t.st = 'ok'; invalidar(3); invalidarSombra(); _geoFx.clear(); agendarRDO();
     } catch (e) {
       t.st = 'fail'; console.warn(`Trecho ${t.id} não carregado:`, e && e.message ? e.message : e);
       toast(`Não foi possível carregar o trecho ${t.id}${t.s ? ` (s ${fmt(t.s[0], 0)} a ${fmt(t.s[1], 0)} m)` : ''}. Os demais continuam carregando.`, 5000);
@@ -1958,7 +2067,7 @@ const _d = new THREE.Vector3();
    no modo Alta e com o córrego dentro do quadro. */
 controls.addEventListener('change', () => invalidar());
 THREE.DefaultLoadingManager.onProgress = () => invalidar();
-THREE.DefaultLoadingManager.onLoad = () => invalidar(3);
+THREE.DefaultLoadingManager.onLoad = () => { invalidar(3); invalidarSombra(); };   // textura de folha (alphaTest) muda a sombra
 for (const ev of ['pointerdown', 'pointerup', 'keydown', 'wheel', 'input', 'change', 'click'])
   document.addEventListener(ev, () => invalidar(), { capture: true, passive: true });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) invalidar(3); });
@@ -2000,8 +2109,8 @@ $('loadingSub').textContent = TILES.length ? 'carregando o primeiro trecho…' :
 const tilesDone = loadTiles();
 $('qBtn').textContent = 'Qualidade: ' + (Q_ALTA ? 'Alta' : 'Leve') + ' → mudar para ' + (Q_ALTA ? 'Leve' : 'Alta');
 $('qBtn').onclick = () => { try { localStorage.setItem(Q_KEY, Q_ALTA ? 'leve' : 'alta'); } catch { } const u = new URL(location.href); u.searchParams.delete('q'); try { location.replace(u.toString()); } catch { location.reload(); } };
-if (Q_ALTA) { window.__hqDone = false; plantDone = plantEZ(); Promise.all([tilesDone.then(() => loadEntorno()).then(() => loadEdif()), plantDone]).then(() => { window.__hqDone = true; carregando = false; invalidar(3); }); $('sunH').value = 9.5; setSun(true); }
-else { window.__edifDone = false; tilesDone.then(() => loadEdif()).then(() => { window.__edifDone = true; carregando = false; invalidar(3); }); }
+if (Q_ALTA) { window.__hqDone = false; plantDone = plantEZ(); Promise.all([tilesDone.then(() => loadEntorno()).then(() => loadEdif()), plantDone]).then(() => { window.__hqDone = true; carregando = false; invalidar(3); invalidarSombra(); }); $('sunH').value = 9.5; setSun(true); }
+else { window.__edifDone = false; tilesDone.then(() => loadEdif()).then(() => { window.__edifDone = true; carregando = false; invalidar(3); invalidarSombra(); }); }
 window.__gz = (x, y) => groundZ(x, y);
 // pronto para receber o RDO: o app só manda depois disto (antes, ninguém escutava)
 avisarApp({ tipo: 'pronto', eixos: Object.fromEntries(AXES.map(k => [k, [ALN[k].m0, ALN[k].m1]])) });
@@ -2064,6 +2173,6 @@ async function loadEdif() {
   if (tanks.length) { const tg = mergeGeometries([new THREE.CylinderGeometry(.6, .55, .95, 14).translate(0, .475, 0), new THREE.CylinderGeometry(.66, .66, .08, 14).translate(0, .98, 0)]);
     const im = new THREE.InstancedMesh(tg, EDM.k, tanks.length); const mt = new THREE.Matrix4(); tanks.forEach((t, k) => { mt.makeTranslation(t[0], t[2], -t[1]); im.setMatrixAt(k, mt); }); im.castShadow = im.receiveShadow = true; im.computeBoundingSphere();
     addInst('edi', im, tanks.map(() => ({ disc: 'Ilustrativo', t: 'Caixa-d\u2019água (ilustrativa)', rows: [['Observação', 'colocada só para dar escala; não vem do OSM']], src: 'modelo' })), false); }
-  if (clipOn) applyClip(true); envK(); tileVer++; invalidar(3);
+  if (clipOn) applyClip(true); envK(); tileVer++; invalidar(3); invalidarSombra();
 }
-window.__dbg = { THREE, scene, renderer, sun, sky, su, MAT, PAINT, get composer() { return composer; }, get gtao() { return gtao; }, pmrem, envScene, setSun, camera, controls, GRP, HQ };
+window.__dbg = { THREE, scene, renderer, sun, sky, su, MAT, PAINT, get composer() { return composer; }, get gtao() { return gtao; }, pmrem, envScene, setSun, updSun, camera, controls, GRP, HQ };

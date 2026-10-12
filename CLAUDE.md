@@ -326,9 +326,10 @@ lançamentos** (Histórico com `HIST_FILTRO.estaca`), **Fotos** (Galeria) e
 
 As travas:
 
-- **A carga de fundo NÃO redesenha a tela** (`m3dRefrescar` no
-  `carregarTudo`): o iframe recarregaria o modelo inteiro (20 s no 4G) e a
-  câmera voltaria ao início. Os dados novos vão por mensagem.
+- **Carga NENHUMA redesenha a tela** (`m3dRefrescar` no `carregarTudo`) — nem
+  a de fundo, nem o ⟳ do cabeçalho: o iframe recarregaria o modelo inteiro
+  (20 s no 4G) e a câmera voltaria ao início. Os dados novos vão por mensagem.
+  O `m3dRefrescar` só recusa quando o iframe é de OUTRA obra (`trocarObra`).
 - **"Lançar serviço aqui" não apaga nada do rascunho**: a estaca vai para o
   primeiro serviço em branco, ou para um serviço novo no fim
   (`m3dLancarNaEstaca`). É o mesmo princípio de "Formulário aberto é dado do
@@ -351,9 +352,49 @@ As travas:
 - **Obra sem `modelo3d` no cadastro não vê a tela** (o item some do menu).
 - **A câmera de uma estaca olha do canteiro** (`voarParaFaixa`): o "Ir para
   estaca" das ferramentas olha do lado de fora, e ali caía dentro das casas.
+- **O toque atravessa o ilustrativo** (`ehIlustrativo`): carro, pessoa e
+  arbusto em cima da faixa não roubam o toque da estaca.
+- **O pino de foto tem tamanho de verdade** (1,8 m, `PIN_M`): some abaixo de
+  8 px e não passa de 46. Em tamanho fixo, na vista geral, os pinos de 60
+  estacas viravam uma corrente de círculos por cima das faixas. O toque
+  (`pinNoPonto`) usa o mesmo tamanho.
+- **A faixa é borda cheia + miolo translúcido** (cor com alfa por vértice,
+  `FX_*`): chapada, ela escondia o asfalto e a sinalização do projeto.
+
+**O visor é leve por construção — e tem de continuar.** No celular o que pesa
+no quadro é o NÚMERO de chamadas de desenho; a primeira versão fazia 3.351
+por quadro no modo Leve (hoje ~600):
+
+- **Peças estáticas do índice são juntadas por material** (`consolidar`, logo
+  antes da interface de camadas): placa, semáforo, tubo (eram 6 malhas por
+  tubo), abrigo, tampão, legenda. Cada triângulo guarda a ficha de onde veio
+  (`userData.faceB` → `userData.infos`), a busca guarda a CAIXA da peça
+  (`focusEntry` usa `h.box`) e o rótulo (sprite) sai do grupo com a mesma
+  ficha. Objeto novo no índice entra sozinho, desde que seja malha simples;
+  superfície que o modelo LÊ (`userData.stype`, TOP/READ), instanciado,
+  sprite e linha ficam de fora.
+- **A sombra é estática** (`shadowMap.autoUpdate = false`): só é redesenhada
+  quando o enquadramento dela anda mais de 18 m (`updSun`), o sol muda ou a
+  cena muda — e quem muda a cena (camada, trecho, árvore, corte) chama
+  `invalidarSombra()`.
+- **Material com `transmission` é proibido**: o three.js redesenha a cena
+  opaca inteira num passe extra a cada quadro em que ele aparece (era o vidro
+  dos abrigos).
+- **As copas e arbustos do modo Leve** são icosaedros de detalhe 2 e 1 (eram
+  3 e 2: 4× mais triângulos, sem diferença que se veja com o ruído).
+`window.__rdo.quadro()` devolve as chamadas de um quadro; o teste exige menos
+de 1.000.
 
 Três leituras a mais do mesmo dado, todas no app (o visor só desenha):
 
+- **Cor padrão: Etapa** (a escolha de quem troca fica no aparelho,
+  `teotonio_m3d_cor`): "Frente" pintava quase toda estaca de Pav. Flexível.
+  O Volume vai do MENOR ao maior do filtro, não de 1. A escada da estaca só
+  mostra as etapas que a obra TEM (`m3dEtapasDaObra`). As partes da tela só
+  trocam de HTML quando ele mudou (`m3dPor`), devolvendo a rolagem das listas
+  — a reprodução redesenhava tudo a cada 450 ms. No celular o painel da estaca
+  no 3D é só a linha curta (`linha`) e os botões: o cartão abaixo tem o resto,
+  e a tabela cobria a estaca recém-tocada.
 - **Linha do tempo (4D)** — período `linha`: o que estava lançado ATÉ
   `M3D.ate`, com o ▶ andando dia/semana/mês (`m3dTocar`). A barra mora DENTRO
   do `#m3dVisor`, irmã do iframe (vai junto na tela cheia; recriar o iframe
@@ -444,6 +485,14 @@ O RDO Diário de QUALQUER data abre por `abrirDiaV4(iso)`: rascunho presente
 (que não seja parte) manda sobre a planilha — é trabalho que não subiu. O
 turno que sobe pela FILA limpa o rascunho só se ele não foi editado depois
 de ir para a fila (`_salvoEm` × `rascunhoEm`) e deposita o PDF do dia.
+
+## A tela nova começa do topo
+
+O `.main` é quem rola, e guardava a rolagem da tela anterior: quem tocava
+"Ver no modelo 3D" no pé do Painel chegava com o 3D fora da vista — e o mesmo
+em qualquer tela comprida. O `navigate()` zera a rolagem DEPOIS de desenhar a
+tela nova (zerar antes fazia a que sai pular durante o esmaecer). Rolar até um
+ponto da tela nova (`scrollIntoView`) vem depois disso, nunca antes.
 
 ## Sem sinal, o app abre com a última carga boa
 

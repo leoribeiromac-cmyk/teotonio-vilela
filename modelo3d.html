@@ -112,7 +112,9 @@ body{background:var(--bg);color:var(--ink);font-family:"Space Grotesk",Arial,san
 #info dd{margin:0;font-family:"JetBrains Mono",monospace;font-size:12.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 #info .src{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:6px}
 #info .x{position:absolute;right:8px;top:6px;border:0;background:transparent;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
-#readout{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));padding:7px 11px;font-size:12px;z-index:3;display:grid;gap:2px;min-width:260px}
+#readout{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));padding:7px 11px;font-size:12px;z-index:3;display:grid;gap:2px;min-width:260px;max-width:min(420px,calc(100vw - 32px))}
+/* a estaca sob o cursor numa linha só: comprida, a leitura crescia por cima da barra de vistas */
+#readout #roB{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #readout .k{color:var(--muted);font-family:"Space Grotesk",sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:600}
 #compass{position:fixed;right:calc(16px + 270px + 10px);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:46px;height:46px;z-index:3;display:grid;place-items:center;border-radius:50%}
 body.mm-off #compass{right:16px;bottom:calc(92px + env(safe-area-inset-bottom,0px))}
@@ -217,6 +219,10 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
 .embed #hud{max-height:calc(100% - 96px)}
 .embed #titleblock h1{font-size:18px}
 .embed .tb-row{display:none}
+/* dentro do app o resumo já está no cabeçalho da tela, e o botão da galeria,
+   solto no alto do 3D, pegava o toque de quem mirava a faixa: os dois voltam
+   quando o painel "Camadas" abre */
+.embed #hud.collapsed #sub,.embed #hud.collapsed #galBtn{display:none}
 /* celular, dentro do app: o bloco do título encolhe ao nome da obra e ao botão
    "Camadas"; a galeria e o seletor de trecho voltam quando o painel abre */
 @media (max-width:760px){
@@ -226,6 +232,11 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
   /* a lista completa da estaca está logo abaixo do 3D, na tela do app: aqui, o resumo */
   .embed #info{max-height:52%;overflow:auto;gap:6px;padding:10px 12px}
   .embed #info dl dt:nth-of-type(n+6),.embed #info dl dd:nth-of-type(n+6),.embed #info .src{display:none}
+  /* estaca do RDO: título, a linha curta e os botões — a tabela inteira está no cartão logo abaixo do 3D,
+     e aqui ela cobria a estaca que acabou de ser tocada */
+  .embed #info.tem-linha dl{display:none}
+  .embed #info.tem-linha .linha{display:block}
+  .embed #info.tem-linha h3{font-size:17px}
   /* as miniaturas também: o cartão da estaca, logo abaixo, tem as mesmas — aqui elas empurravam os botões para fora */
   .embed #info .fotos{display:none}
 }
@@ -233,6 +244,7 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
 #info .acoes .btn{font-size:13px;padding:5px 9px}
 #info .acoes .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 #info .cor{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:baseline}
+#info .linha{display:none;margin:0;font-size:13.5px;color:var(--muted)}
 /* as miniaturas da estaca (o app manda prontas; o toque abre a foto no app) */
 #info .fotos{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
 #info .fotos button{flex:0 0 auto;width:68px;height:52px;padding:0;border:1px solid var(--line);border-radius:4px;background:var(--chip);cursor:zoom-in;overflow:hidden;line-height:0}
@@ -370,6 +382,7 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
   <button class="x" id="infoX" aria-label="Fechar">×</button>
   <div class="disc" id="infoDisc"></div>
   <h3 id="infoT"></h3>
+  <p class="linha" id="infoLinha"></p>
   <dl id="infoDl"></dl>
   <div class="fotos" id="infoFotos" hidden></div>
   <div class="acoes" id="infoAcoes" hidden></div>
@@ -391,6 +404,6 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
 <div id="erro" hidden><div><b>Não foi possível abrir o modelo 3D</b><span id="erroTxt"></span><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>
 
 <script type="importmap">{"imports":{"three":"./vendor/three/three.module.min.js","three/addons/":"./vendor/three/addons/","@dgreenheck/ez-tree":"./vendor/three/ez-tree/ez-tree.es.js"}}</script>
-<script type="module" src="js/modelo3d/visor.js?v=66"></script>
+<script type="module" src="js/modelo3d/visor.js?v=67"></script>
 </body>
 </html>

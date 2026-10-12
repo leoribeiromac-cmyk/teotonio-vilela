@@ -60,13 +60,20 @@ var M3D = window.M3D = {
   passo: 'semana',   // quanto a linha do tempo anda a cada quadro: 'dia' | 'semana' | 'mes'
   tocando: 0,        // o setInterval da reprodução (0 = parada)
   frente: '', pacote: '',
-  cor: 'frente',     // 'frente' | 'etapa' | 'qtd' | 'recencia'
+  cor: 'etapa',      // 'frente' | 'etapa' | 'qtd' | 'recencia' — a escolhida fica lembrada no aparelho (m3dCorGuardada)
   sel: null,         // chave da estaca aberta ('BC:212')
   fotos: null,       // { chave, itens:[{fileId, limpa, legenda, src}] } — as fotos da estaca aberta
   pronto: false,     // o visor do iframe já escuta
   irPendente: null,  // estaca pedida por outra tela antes de o visor ficar pronto
   guardando: false,
 };
+
+/* A cor nasce em "Etapa": na avenida, "Frente" pinta quase tudo de Pav.
+   Flexível (é a frente com mais lançamentos em quase toda estaca), e a
+   pergunta de quem abre o 3D é até onde a pista chegou. A escolha de quem
+   trocou fica lembrada neste aparelho. */
+var M3D_LS_COR = 'teotonio_m3d_cor';
+(function () { try { var c = localStorage.getItem(M3D_LS_COR); if (['frente', 'etapa', 'qtd', 'recencia'].indexOf(c) >= 0) M3D.cor = c; } catch (e) { } })();
 
 function m3dDisponivel() {
   return !!(typeof OBRA !== 'undefined' && OBRA && OBRA.modelo3d && OBRA.modelo3d.eixos) && podeVer('modelo3d');
@@ -267,6 +274,18 @@ function m3dEstacas() {
   });
   return out;
 }
+/* As etapas que ESTA obra tem: alguma pacote dela cai na etapa. A escada da
+   estaca mostrava "Terraplenagem" pendente numa obra sem pacote de
+   terraplenagem — trabalho por fazer que não existe. */
+var _m3dEtapasObra = { pac: null, set: null };
+function m3dEtapasDaObra() {
+  if (_m3dEtapasObra.pac === STATE.pacotes && _m3dEtapasObra.set) return _m3dEtapasObra.set;
+  var set = {};
+  (STATE.pacotes || []).forEach(function (p) { var e = m3dEtapaDe(getCSVField(p, 'Pacote'), getCSVField(p, 'Frente')); if (e >= 0) set[e] = 1; });
+  _m3dEtapasObra = { pac: STATE.pacotes, set: set };
+  return set;
+}
+
 /* O começo e o fim da linha do tempo: do primeiro lançamento com estaca até
    o último (nunca depois de hoje). */
 function m3dTempoLimites() {
@@ -286,8 +305,9 @@ function m3dDiasDesde(iso) {
   if (!iso) return Infinity;
   return m3dDiasEntre(iso, M3D.periodo === 'linha' && M3D.ate ? M3D.ate : m3dHoje());
 }
-function m3dCorDe(a, maxN) {
-  if (M3D.cor === 'qtd') return m3dCorQtd(a.linhas.length / maxN);
+function m3dCorDe(a, maxN, minN) {
+  // do menor ao maior volume DO FILTRO: de 1 ao máximo, numa obra em que toda estaca tem 70 a 100 lançamentos, saía tudo da mesma cor
+  if (M3D.cor === 'qtd') return m3dCorQtd(maxN > minN ? (a.linhas.length - minN) / (maxN - minN) : 1);
   if (M3D.cor === 'etapa') return a.etapa >= 0 ? M3D_ETAPAS[a.etapa].cor : M3D_FORA_COR;
   if (M3D.cor === 'recencia') {
     var dias = m3dDiasDesde(a.ultima);
@@ -307,13 +327,16 @@ function m3dPodeLancar() { return !!(STATE.usuarioLogado && pode('lancarServico'
    pacote, frente nem RDO. */
 function m3dDados() {
   var est = m3dEstacas(), lista = Array.from(est.values());
-  var maxN = Math.max.apply(null, [1].concat(lista.map(function (a) { return a.linhas.length; })));
+  var ns = lista.map(function (a) { return a.linhas.length; });
+  var maxN = Math.max.apply(null, [1].concat(ns)), minN = ns.length ? Math.min.apply(null, ns) : 1;
   var passo = pvMetrosPorEstaca(), lancar = m3dPodeLancar(), faixas = [];
   lista.forEach(function (a) {
     var eixoM = m3dEixoModelo(a.eixo);
     if (!eixoM) return;
     var eixo = eixoPorId(a.eixo), n = a.linhas.length;
-    var fr = m3dFrentesOrdenadas(a).map(function (f) { return f + ' (' + a.frentes[f] + ')'; }).join(', ');
+    // as três frentes com mais lançamentos e quantas mais: a lista inteira ocupava seis linhas do painel do 3D
+    var frs = m3dFrentesOrdenadas(a), fr = frs.slice(0, 3).map(function (f) { return f + ' (' + a.frentes[f] + ')'; }).join(', ') +
+      (frs.length > 3 ? ' +' + (frs.length - 3) : '');
     var rows = [['Lançamentos', String(n)], ['Último', a.ultima ? fmtData(a.ultima) : '—']];
     rows.push(['Etapa', a.etapa >= 0 ? M3D_ETAPAS[a.etapa].nome : 'fora da pista']);
     rows.push(['Frentes', fr]);
@@ -325,15 +348,17 @@ function m3dDados() {
     var acoes = [['Ver lançamentos', 'historico']];
     if (a.fotos) acoes.push(['Fotos (' + a.fotos + ')', 'galeria']);
     if (lancar) acoes.push(['Lançar serviço aqui', 'lancar', true]);
-    a.cor = m3dCorDe(a, maxN);
+    a.cor = m3dCorDe(a, maxN, minN);
     faixas.push({
       chave: a.chave, eixo: eixoM, m0: a.num * passo - passo / 2, m1: a.num * passo + passo / 2, cor: a.cor, fotos: a.fotos,
       titulo: 'E' + a.num + ' · ' + (eixo ? eixo.label : a.eixo),
+      linha: (a.etapa >= 0 ? M3D_ETAPAS[a.etapa].nome + ' · ' : '') + n + ' lançamento' + (n > 1 ? 's' : '') +
+        (a.ultima ? ' · último ' + fmtData(a.ultima) : '') + (a.fotos ? ' · ' + a.fotos + ' foto' + (a.fotos > 1 ? 's' : '') : ''),
       resumo: n + ' lançamento' + (n > 1 ? 's' : '') + ' · ' + m3dFrentesOrdenadas(a).join(', '),
       rows: rows, acoes: acoes, src: 'serviços lançados no app (RDO_Avanco) · ' + m3dDescFiltro(),
     });
   });
-  return { est: est, lista: lista, faixas: faixas, maxN: maxN };
+  return { est: est, lista: lista, faixas: faixas, maxN: maxN, minN: minN };
 }
 
 /* "PD — Bairro→Centro": o rótulo que o visor põe ao lado da estaca do projeto */
@@ -397,9 +422,9 @@ function renderModelo3D() {
           '<div class="card-title-sub" id="m3dResumo">Carregando o modelo…</div>' +
         '</div>' +
         '<div class="m3d-acoes">' +
-          '<button type="button" class="btn btn-sm" onclick="m3dTelaCheia()" title="O modelo na tela inteira">' + ic('apresentar') + ' Tela cheia</button>' +
+          '<button type="button" class="btn btn-sm" onclick="m3dTelaCheia()" title="O modelo na tela inteira" aria-label="Tela cheia">' + ic('apresentar') + '<span class="m3d-rot"> Tela cheia</span></button>' +
           '<a class="btn btn-sm m3d-so-pc" href="' + escHtml(m3dSrc().replace('&embed=1', '')) + '" target="_blank" rel="noopener" title="Abrir o modelo sozinho, em outra aba">' + ic('enviar') + ' Abrir</a>' +
-          '<button type="button" class="btn btn-sm" id="m3dBtnGuardar" onclick="m3dGuardarOffline()" title="Baixar o modelo para abrir no canteiro sem sinal">' + ic('nuvem') + ' Offline</button>' +
+          '<button type="button" class="btn btn-sm" id="m3dBtnGuardar" onclick="m3dGuardarOffline()" title="Baixar o modelo para abrir no canteiro sem sinal" aria-label="Guardar para abrir sem sinal">' + ic('nuvem') + '<span class="m3d-rot"> Offline</span></button>' +
         '</div>' +
       '</div>' +
       '<div id="m3dFiltros">' + m3dFiltrosHtml() + '</div>' +
@@ -465,19 +490,31 @@ window.m3dFiltro = function (campo, valor) {
     var p = valor && m3dPacotePorId().get(valor);
     if (p) M3D.frente = getCSVField(p, 'Frente') || M3D.frente;
   }
-  else if (campo === 'cor') M3D.cor = valor;
+  else if (campo === 'cor') { M3D.cor = valor; try { localStorage.setItem(M3D_LS_COR, valor); } catch (e) { } }
   var box = document.getElementById('m3dFiltros');
   if (box) box.innerHTML = m3dFiltrosHtml();
   m3dSincronizar();
 };
+
+/* Troca o HTML de uma parte da tela SÓ quando ele mudou, e devolve a rolagem
+   das listas de dentro. A linha do tempo redesenha tudo a cada 450 ms: a lista
+   de estacas voltava para o topo no meio da rolagem, e as miniaturas piscavam. */
+function m3dPor(el, html) {
+  if (!el || el._m3dHtml === html) return false;
+  var rol = [].map.call(el.querySelectorAll('.m3d-lista, .m3d-fotos'), function (x) { return x.scrollTop || x.scrollLeft ? [x.scrollTop, x.scrollLeft] : null; });
+  el.innerHTML = html; el._m3dHtml = html;
+  [].forEach.call(el.querySelectorAll('.m3d-lista, .m3d-fotos'), function (x, i) { if (rol[i]) { x.scrollTop = rol[i][0]; x.scrollLeft = rol[i][1]; } });
+  return true;
+}
 
 function m3dDesenharPartes(D) {
   D = D || _m3dUltimo || m3dDados();
   var res = document.getElementById('m3dResumo');
   if (res) {
     var nL = 0; D.lista.forEach(function (a) { nL += a.linhas.length; });
-    res.textContent = D.lista.length ? (D.lista.length + ' estaca' + (D.lista.length !== 1 ? 's' : '') + ' com serviço · ' + m3dDescFiltro() + ' — toque numa faixa colorida para ver o que foi lançado ali')
-      : 'Nenhum serviço com estaca em ' + m3dDescFiltro() + '.';
+    m3dPor(res, D.lista.length ? escHtml(D.lista.length + ' estaca' + (D.lista.length !== 1 ? 's' : '') + ' com serviço · ' + m3dDescFiltro()) +
+        '<span class="m3d-dica"> — toque numa faixa colorida para ver o que foi lançado ali</span>'
+      : escHtml('Nenhum serviço com estaca em ' + m3dDescFiltro() + '.'));
   }
   m3dDesenharLegenda(D);
   m3dDesenharLista(D);
@@ -490,7 +527,7 @@ function m3dDesenharLegenda(D) {
   if (!el) return;
   var h = '';
   if (M3D.cor === 'qtd') {
-    h = '<span>Volume de lançamentos</span><span>1</span><span class="rampa" style="background:linear-gradient(90deg,' +
+    h = '<span>Volume de lançamentos</span><span>' + (D.minN || 1) + '</span><span class="rampa" style="background:linear-gradient(90deg,' +
       m3dCorQtd(0) + ',' + m3dCorQtd(0.5) + ',' + m3dCorQtd(1) + ')"></span><span>' + D.maxN + '</span>';
   } else if (M3D.cor === 'recencia') {
     h = '<span>Último lançamento' + (M3D.periodo === 'linha' ? ' (contado da data da linha)' : '') + ':</span>' +
@@ -510,7 +547,7 @@ function m3dDesenharLegenda(D) {
       return '<span><i style="background:' + m3dCorFrente(f) + '"></i>' + escHtml(f) + ' <small>(' + cont[f] + ')</small></span>';
     }).join('') : '<span>Nenhuma estaca com serviço neste filtro.</span>';
   }
-  el.innerHTML = h + '<span class="m3d-legenda-nota">' + ic('info') + ' cada faixa cobre a pista da estaca (meia estaca para cada lado)</span>';
+  m3dPor(el, h + '<span class="m3d-legenda-nota">' + ic('info') + ' cada faixa cobre a pista da estaca (meia estaca para cada lado)</span>');
 }
 
 function m3dDesenharLista(D) {
@@ -527,7 +564,7 @@ function m3dDesenharLista(D) {
           '<i style="background:' + escHtml(a.cor || '#999') + '"></i><b>E' + a.num + '</b><small>' + a.linhas.length + '</small></button>';
       }).join('') + '</div>' : '<div class="m3d-vazio">Nada lançado com estaca neste eixo, neste filtro.</div>');
   }).join('');
-  el.innerHTML = '<div class="card-header"><div><div class="card-title">Estacas com serviço</div>' +
+  m3dPor(el, '<div class="card-header"><div><div class="card-title">Estacas com serviço</div>' +
     '<div class="card-title-sub">Toque para levar o 3D até a estaca</div></div></div>' +
     '<div class="card-body">' +
       '<div class="m3d-ir"><label for="m3dIrNum">Ir para a estaca</label>' +
@@ -536,7 +573,7 @@ function m3dDesenharLista(D) {
         '<button type="button" class="btn btn-outline btn-sm" onclick="m3dIrDigitada()">' + ic('lupa') + ' Ir</button>' +
         '<div class="field-error" id="m3dIrErro" style="display:none;flex-basis:100%"></div>' +
       '</div>' + porEixo +
-    '</div>';
+    '</div>');
 }
 
 function m3dDesenharDetalhe(D) {
@@ -544,10 +581,10 @@ function m3dDesenharDetalhe(D) {
   if (!el) return;
   D = D || _m3dUltimo;
   if (!M3D.sel) {
-    el.innerHTML = '<div class="card-header"><div><div class="card-title">' + ic('pino') + ' Estaca</div>' +
+    m3dPor(el, '<div class="card-header"><div><div class="card-title">' + ic('pino') + ' Estaca</div>' +
       '<div class="card-title-sub">O que foi lançado onde você tocar</div></div></div>' +
       '<div class="card-body"><div class="m3d-vazio">Toque numa faixa colorida no modelo, ou numa estaca da lista, ' +
-      'para ver os serviços lançados nela' + (m3dPodeLancar() ? ' — e lançar um serviço novo ali mesmo' : '') + '.</div></div>';
+      'para ver os serviços lançados nela' + (m3dPodeLancar() ? ' — e lançar um serviço novo ali mesmo' : '') + '.</div></div>');
     return;
   }
   var partes = M3D.sel.split(':'), eixoId = partes[0], n = +partes[1];
@@ -581,6 +618,7 @@ function m3dDesenharDetalhe(D) {
   var escada = topo < 0 ? '' :
     '<div class="m3d-etapas-tit">Até onde a pista chegou: <b>' + escHtml(M3D_ETAPAS[topo].nome) + '</b></div>' +
     '<div class="m3d-etapas" role="list" aria-label="Etapas da pista nesta estaca">' + M3D_ETAPAS.map(function (e, i) {
+      if (!feitas[i] && !m3dEtapasDaObra()[i]) return '';   // etapa que a obra não tem não é pendência
       return feitas[i]
         ? '<span role="listitem" class="on" title="' + escHtml(e.nome + ' — último lançamento em ' + fmtData(feitas[i])) + '"><i style="background:' + e.cor + '"></i>' + ic('check') + escHtml(e.nome) + ' <small>' + escHtml(fmtData(feitas[i])) + '</small></span>'
         : '<span role="listitem"><i></i>' + escHtml(e.nome) + '</span>';
@@ -588,7 +626,7 @@ function m3dDesenharDetalhe(D) {
   var aviso = !todas.length ? 'Nenhum serviço lançado nesta estaca ainda.'
     : !noFiltro.length ? 'Nada nesta estaca no filtro atual — abaixo, tudo o que já foi lançado nela.'
     : (noFiltro.length < todas.length ? noFiltro.length + ' de ' + todas.length + ' lançamentos (filtro: ' + escHtml(m3dDescFiltro()) + ')' : '');
-  el.innerHTML = '<div class="card-header"><div><div class="card-title">' + ic('pino') + ' Estaca E' + n + ' · ' + escHtml(eixo ? eixo.label : eixoId) + '</div>' +
+  m3dPor(el, '<div class="card-header"><div><div class="card-title">' + ic('pino') + ' Estaca E' + n + ' · ' + escHtml(eixo ? eixo.label : eixoId) + '</div>' +
       '<div class="card-title-sub">' + todas.length + ' lançamento' + (todas.length !== 1 ? 's' : '') + ' no total' + (fotos ? ' · ' + fotos + ' foto' + (fotos > 1 ? 's' : '') : '') + '</div></div>' +
       '<button type="button" class="btn btn-ghost btn-sm" onclick="m3dSelecionar(null)" aria-label="Fechar a estaca">' + ic('fechar') + '</button></div>' +
     '<div class="card-body">' +
@@ -603,7 +641,7 @@ function m3dDesenharDetalhe(D) {
       (aviso ? '<div class="m3d-vazio">' + aviso + '</div>' : '') +
       lista.slice(0, 15).map(linha).join('') +
       (lista.length > 15 ? '<div class="m3d-vazio">+ ' + (lista.length - 15) + ' mais — veja no Histórico</div>' : '') +
-    '</div>';
+    '</div>');
   if (fotos) m3dDesenharFotos();
 }
 
@@ -651,12 +689,12 @@ function m3dEnviarFotos() {
 function m3dDesenharFotos() {
   var el = document.getElementById('m3dFotos'), F = M3D.fotos;
   if (!el) return;
-  if (!F || F.chave !== M3D.sel || !F.itens.length) { el.innerHTML = ''; return; }
-  if (!STATE.usuarioLogado) { el.innerHTML = '<span class="m3d-vazio">' + ic('cadeado') + ' entre para ver as fotos desta estaca</span>'; return; }
-  el.innerHTML = F.itens.map(function (it, i) {
+  if (!F || F.chave !== M3D.sel || !F.itens.length) { m3dPor(el, ''); return; }
+  if (!STATE.usuarioLogado) { m3dPor(el, '<span class="m3d-vazio">' + ic('cadeado') + ' entre para ver as fotos desta estaca</span>'); return; }
+  m3dPor(el, F.itens.map(function (it, i) {
     return '<button type="button" onclick="m3dVerFoto(' + i + ')" title="' + escHtml(it.legenda) + '" aria-label="' + escHtml('Ampliar a foto: ' + it.legenda) + '">' +
       (it.src ? '<img src="' + escHtml(it.src) + '" alt="">' : '<span>' + ic('camera') + '</span>') + '</button>';
-  }).join('');
+  }).join(''));
 }
 /* O índice vem do visor (ou do clique aqui): o id do Drive é o que ESTA tela
    guardou, nunca o que chega por mensagem. */
@@ -699,7 +737,7 @@ function m3dDesenharTempo() {
   if (dt) dt.textContent = m3dDataLonga(M3D.ate);
   var b = document.getElementById('m3dPlay');
   if (b) {
-    b.innerHTML = ic(M3D.tocando ? 'pausa' : 'play') + (M3D.tocando ? ' Pausar' : ' Reproduzir');
+    m3dPor(b, ic(M3D.tocando ? 'pausa' : 'play') + (M3D.tocando ? ' Pausar' : ' Reproduzir'));
     b.setAttribute('aria-pressed', M3D.tocando ? 'true' : 'false');
   }
 }
@@ -718,7 +756,7 @@ window.m3dTempoIr = function (v) {
 function m3dParar() {
   if (M3D.tocando) { clearInterval(M3D.tocando); M3D.tocando = 0; }
   var b = document.getElementById('m3dPlay');
-  if (b) { b.innerHTML = ic('play') + ' Reproduzir'; b.setAttribute('aria-pressed', 'false'); }
+  if (b) { m3dPor(b, ic('play') + ' Reproduzir'); b.setAttribute('aria-pressed', 'false'); }
 }
 window.m3dTocar = function () {
   if (M3D.tocando) { m3dParar(); return; }
@@ -843,6 +881,16 @@ window.m3dLancarNaEstaca = function (eixo, n) {
   var e = eixoPorId(eixo);
   navigate('rdo');
   toast('Estaca E' + n + ' (' + (e ? e.label : eixo) + ') no serviço ' + (i + 1) + ' — confira o trecho e preencha o resto.', 'success', 6000);
+  /* A tela nova começa do topo; o serviço que recebeu a estaca pode estar lá
+     embaixo. Depois do desenho (o navigate troca a tela em ~160 ms), a tela
+     desce até o campo da estaca e o marca por um instante. */
+  setTimeout(function () {
+    var el = document.querySelector('[data-svc="' + i + '"][data-field="estacaIni"]');
+    if (!el || STATE.currentPage !== 'rdo') return;
+    if (el.scrollIntoView) el.scrollIntoView({ block: 'center' });
+    el.classList.add('m3d-destaque');
+    setTimeout(function () { el.classList.remove('m3d-destaque'); }, 2600);
+  }, 400);
 };
 
 window.m3dTelaCheia = function () {
@@ -902,7 +950,7 @@ window.m3dGuardarOffline = async function () {
   } finally {
     M3D.guardando = false;
     var b2 = document.getElementById('m3dBtnGuardar');
-    if (b2) b2.innerHTML = ic('nuvem') + ' Offline';
+    if (b2) b2.innerHTML = ic('nuvem') + '<span class="m3d-rot"> Offline</span>';
   }
 };
 
@@ -931,7 +979,9 @@ function m3dMontar() {
 /* A carga de fundo trouxe dados novos e a tela é esta: NÃO redesenha a página
    (o iframe recarregaria o modelo), só reenvia os dados e refaz as partes. */
 function m3dRefrescar() {
-  if (STATE.currentPage !== 'modelo3d' || !document.getElementById('m3dFrame')) return false;
+  var f = document.getElementById('m3dFrame');
+  if (STATE.currentPage !== 'modelo3d' || !f) return false;
+  if (!OBRA.modelo3d || f.getAttribute('src') !== m3dSrc()) return false;   // o iframe é de outra obra: redesenha
   var box = document.getElementById('m3dFiltros');
   var foco = document.activeElement && box && box.contains(document.activeElement);
   if (box && !foco) box.innerHTML = m3dFiltrosHtml();

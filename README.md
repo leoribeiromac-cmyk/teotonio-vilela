@@ -916,8 +916,11 @@ pista do seu sentido (Centro→Bairro = pista PE, Bairro→Centro = pista PD):
   semana ou um mês por passo) e a avenida vai sendo pintada; a data aparece no
   alto do 3D, e a barra vai junto para a tela cheia. Nesse modo a recência
   conta a partir da data da linha.
-- **Cor**: pela frente (a mesma cor da frente no resto do app), pela **etapa
-  da pista**, pelo volume de lançamentos ou pela recência do último.
+- **Cor**: pela **etapa da pista** (o padrão), pela frente (a mesma cor da
+  frente no resto do app), pelo volume de lançamentos (do menor ao maior do
+  filtro) ou pela recência do último. A escolha fica lembrada no aparelho.
+  Cada faixa tem borda cheia e miolo translúcido: a cor se lê sem esconder o
+  asfalto e a sinalização do projeto.
 - **Etapa da pista**: até onde a pista chegou em cada estaca — demolição,
   terraplenagem, drenagem e redes, guias e sarjetas, sub-base, base,
   imprimação, binder, capa/placa, sinalização. Vale a etapa mais alta lançada
@@ -926,7 +929,7 @@ pista do seu sentido (Centro→Bairro = pista PE, Bairro→Centro = pista PD):
   desapropriação ficam fora da escada (cinza). A estaca aberta mostra a escada
   inteira, com a data do último lançamento de cada etapa.
 - **Fotos**: estaca com foto ganha um pino de câmera no 3D (camada "Fotos do
-  RDO"). Aberta a estaca, as miniaturas aparecem no painel do 3D e no cartão da
+  RDO"), com tamanho de verdade — aparece ao se aproximar e some na vista geral. Aberta a estaca, as miniaturas aparecem no painel do 3D e no cartão da
   estaca — as mesmas da Galeria, com o mesmo acesso (é preciso estar logado) —
   e tocar uma abre a foto inteira, com o "Baixar sem carimbo".
 - **Tocar uma faixa** abre a estaca: os lançamentos dela, as fotos, e os
@@ -943,6 +946,10 @@ pista do seu sentido (Centro→Bairro = pista PE, Bairro→Centro = pista PD):
   **Alta** (padrão no computador).
 - **Offline**: o botão guarda o modelo no aparelho (~3 MB no Leve, ~15 MB no
   Alta) para abrir no canteiro sem sinal.
+- **Leve no celular**: as peças estáticas (placas, semáforos, tubos, abrigos)
+  são juntadas por material e a sombra só é refeita quando a câmera vai longe
+  — ~600 chamadas de desenho por quadro no modo Leve (eram 3.351). Atualizar
+  os dados (⟳) não recarrega o modelo.
 
 ### Trazer um modelo novo (ou reimportar)
 
