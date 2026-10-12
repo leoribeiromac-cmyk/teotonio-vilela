@@ -944,6 +944,17 @@ pista do seu sentido (Centro→Bairro = pista PE, Bairro→Centro = pista PD):
   avenida, sol e sombras, quantidades do modelo (referência — não substituem a
   medição), imagens fotorrealistas. Qualidade **Leve** (padrão no celular) ou
   **Alta** (padrão no computador).
+- **Apresentar a obra**: um voo guiado pela avenida, trecho a trecho, com o
+  nome e as estacas de cada um na legenda — para mostrar o projeto a quem não
+  o conhece. Termina no que o RDO já lançou. Qualquer toque devolve a câmera.
+  Em Ferramentas › Tela, **Gravar vídeo da apresentação** grava o voo com as
+  legendas num arquivo de vídeo para mandar a quem não tem o app.
+- **Legenda de etapas**: tocar uma etapa realça só as estacas dela; abaixo, o
+  **avanço da pista por etapa** — quantas das estacas do eixo já chegaram a
+  cada etapa (mede extensão; a medição continua na Avanço Físico).
+- **Sol e sombras**: o sol baixo da manhã e do fim da tarde sai dourado.
+- **Seção transversal** com "cortar o modelo": a face cortada mostra as
+  camadas do pavimento (CBUQ, BGTC, BGS…), o solo e os tubos cortados.
 - **Offline**: o botão guarda o modelo no aparelho (~3 MB no Leve, ~15 MB no
   Alta) para abrir no canteiro sem sinal.
 - **Leve no celular**: as peças estáticas (placas, semáforos, tubos, abrigos)
@@ -1206,6 +1217,7 @@ agregando por código, como sempre foi.
 | `js/bf/bota-fora.js` | Tela de Bota-Fora: a viagem de caminhão com as três provas, e a planilha no formato da aba FRETE |
 | `modelo3d.html` + `js/modelo3d/visor.js` | O visor do modelo 3D (aberto num iframe pela tela Modelo 3D, ou sozinho) |
 | `js/modelo3d/tela.js` | A tela Modelo 3D: filtros, estacas, e as pontes com Histórico, Galeria e Lançar Serviço |
+| `js/modelo3d/cine.js` | O cinema do visor: a apresentação guiada da obra e o gravador do vídeo do modelo |
 | `modelo3d/<obra>/` | O modelo 3D da obra, gerado pela `ferramentas/modelo3d-importar.py` |
 | `vendor/` | Bibliotecas servidas pelo próprio site (ver abaixo) |
 

@@ -72,24 +72,24 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=67"></script>
-<script src="dados/ruas-de-terra.js?v=67"></script>
+<script src="dados/ranario.js?v=68"></script>
+<script src="dados/ruas-de-terra.js?v=68"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=67"></script>
+<script src="dados/teotonio-muros.js?v=68"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=67"></script>
-<script src="js/nf/adaptador.js?v=67"></script>
-<script src="js/nf/notas.js?v=67"></script>
-<script src="js/equip/equipamentos.js?v=67"></script>
+<script src="js/ui/icones.js?v=68"></script>
+<script src="js/nf/adaptador.js?v=68"></script>
+<script src="js/nf/notas.js?v=68"></script>
+<script src="js/equip/equipamentos.js?v=68"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=67"></script>
-<script src="js/rdo/mapa-chuva.js?v=67"></script>
-<script src="js/modelo3d/tela.js?v=67"></script>
+<script src="js/bf/bota-fora.js?v=68"></script>
+<script src="js/rdo/mapa-chuva.js?v=68"></script>
+<script src="js/modelo3d/tela.js?v=68"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -974,6 +974,21 @@ html,body{
 .m3d-legenda small{color:var(--muted)}
 .m3d-legenda .rampa{width:96px;height:10px;border-radius:3px;display:inline-block}
 .m3d-legenda-nota{margin-left:auto;color:var(--muted);font-size:var(--fs-xs)}
+/* a legenda de etapas é clicável: realça só as estacas daquela etapa */
+.m3d-leg-bt{font:inherit;color:inherit;background:transparent;border:1px solid transparent;border-radius:6px;padding:2px 6px;cursor:pointer;display:inline-flex;align-items:center}
+.m3d-leg-bt:hover{border-color:var(--border)}
+.m3d-leg-bt[aria-pressed=true]{border-color:var(--acc);background:var(--acc-l);color:var(--text)}
+.m3d-avanco{flex-basis:100%;margin-top:4px;border-top:1px dashed var(--border);padding-top:8px}
+.m3d-avanco summary{cursor:pointer;font-weight:600;color:var(--text)}
+.m3d-avanco summary small{font-weight:400;color:var(--muted);margin-left:6px}
+.m3d-avanco-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 18px;margin-top:8px}
+.m3d-av{font:inherit;color:inherit;display:grid;grid-template-columns:minmax(96px,auto) 1fr 40px;gap:8px;align-items:center;background:transparent;border:1px solid transparent;border-radius:6px;padding:3px 6px;cursor:pointer;text-align:left}
+.m3d-av:hover{border-color:var(--border)}
+.m3d-av[aria-pressed=true]{border-color:var(--acc);background:var(--acc-l)}
+.m3d-av-barra{height:8px;border-radius:4px;background:var(--border);overflow:hidden}
+.m3d-av-barra i{display:block;height:100%;border-radius:4px}
+.m3d-av-pc{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text)}
+.m3d-av-nota{font-size:var(--fs-xs);color:var(--muted);margin-top:6px}
 .m3d-legenda-nota .ic{width:13px;height:13px;vertical-align:-2px}
 .m3d-lados{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
 .m3d-lados .card-header{display:flex;gap:10px;align-items:flex-start}

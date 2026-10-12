@@ -233,7 +233,7 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, Q_ALTA || WEAK ? 1.5 : 
 renderer.setSize(stage.clientWidth, stage.clientHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = Q_ALTA ? 0.75 : 0.62;
+const EXPO0 = Q_ALTA ? 0.75 : 0.62; renderer.toneMappingExposure = EXPO0;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 /* SOMBRA ESTÁTICA. A cena não se mexe: o mapa de sombra só é redesenhado
@@ -292,26 +292,39 @@ if (Q_ALTA) {
   const dome = new THREE.Mesh(new THREE.SphereGeometry(4000, 48, 24), cloudMat(false)); dome.renderOrder = -1; dome.frustumCulled = false; dome.userData.noAO = true; scene.add(dome); sky.userData.noAO = true; sky.userData.dome = dome;
   const dome2 = new THREE.Mesh(new THREE.SphereGeometry(900, 48, 24), cloudMat(true)); envScene.add(dome2);
 }
-scene.environment = pmrem.fromScene(envScene).texture;
-scene.fog = Q_ALTA ? new THREE.FogExp2(0xb9c9d6, 0.00026) : new THREE.Fog(0xcfd8dc, 900, 4200);
+let envRT = pmrem.fromScene(envScene); scene.environment = envRT.texture;
+const NEVOA0 = 0.00026, NEVOA_COR0 = Q_ALTA ? 0xb9c9d6 : 0xcfd8dc; scene.fog = Q_ALTA ? new THREE.FogExp2(NEVOA_COR0, NEVOA0) : new THREE.Fog(NEVOA_COR0, 900, 4200);
 
 const SUN_I = Q_ALTA ? 3.4 : 3.2;
 const sun = new THREE.DirectionalLight(0xfff1dc, SUN_I);
 sun.castShadow = true; sun.shadow.mapSize.set(WEAK && !Q_ALTA ? 2048 : 4096, WEAK && !Q_ALTA ? 2048 : 4096);   // 4096² são 64 MB de GPU: no celular, 2048
-const SH = 90, sc = sun.shadow.camera; sc.left = -SH; sc.right = SH; sc.top = SH; sc.bottom = -SH; sc.near = 1; sc.far = 520;
+let SH = 90, SOL_D = 220; const sc = sun.shadow.camera; sc.left = -SH; sc.right = SH; sc.top = SH; sc.bottom = -SH; sc.near = 1; sc.far = 520;
 sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04;
+/* SOMBRA AMPLA (cinema): para as vistas do alto, uma sombra só, parada, cobrindo
+   a obra inteira — a padrão (±90 m em volta do alvo) deixava sem sombra tudo o
+   que ficava longe, e era refeita a cada 18 m de voo. null volta à padrão. */
+const SOMBRA = { centro: null };
+function sombraConfig(cfg) {
+  const meia = cfg ? cfg.meia || 450 : 90, mapa = cfg ? cfg.mapa || 8192 : (WEAK && !Q_ALTA ? 2048 : 4096);
+  SH = meia; SOL_D = cfg ? meia * 1.6 : 220;
+  sc.left = -SH; sc.right = SH; sc.top = SH; sc.bottom = -SH; sc.far = cfg ? meia * 3.4 : 520; sc.updateProjectionMatrix();
+  sun.shadow.normalBias = cfg ? 0.04 * meia / 90 * .5 : 0.04;
+  if (sun.shadow.mapSize.x !== mapa) { sun.shadow.mapSize.set(mapa, mapa); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
+  SOMBRA.centro = cfg && cfg.centro ? V(cfg.centro[0], cfg.centro[1], cfg.centro[2] || 0) : null;
+  sunKey.a = NaN; updSun(true);
+}
 scene.add(sun); scene.add(sun.target);
-scene.add(new THREE.HemisphereLight(0xdfe9f2, 0x6b5a45, Q_ALTA ? 0.12 : 0.55));
+const hemi = new THREE.HemisphereLight(0xdfe9f2, 0x6b5a45, Q_ALTA ? 0.12 : 0.55); scene.add(hemi);
 // shadow frustum (±90 m) follows the camera target, snapped to shadow texels — mas só
 // quando o alvo se afasta mais de 18 m do centro atual: girar e aproximar não refazem a sombra
 const _sr = new THREE.Vector3(), _su = new THREE.Vector3(), _st = new THREE.Vector3(), sunKey = { a: NaN, b: NaN, c: NaN };
 function updSun(force) {
-  const t = controls.target; _sr.crossVectors(new THREE.Vector3(0, 1, 0), sunDir).normalize(); _su.crossVectors(sunDir, _sr).normalize();
+  const t = SOMBRA.centro || controls.target; _sr.crossVectors(new THREE.Vector3(0, 1, 0), sunDir).normalize(); _su.crossVectors(sunDir, _sr).normalize();
   const tx = 2 * SH / sun.shadow.mapSize.x; const a = Math.round(t.dot(_sr) / tx) * tx, b = Math.round(t.dot(_su) / tx) * tx, c = t.dot(sunDir);
   if (!force && Math.hypot(a - sunKey.a, b - sunKey.b) < 18 && Math.abs(c - sunKey.c) < 18) return;
   sunKey.a = a; sunKey.b = b; sunKey.c = c; invalidarSombra();
   _st.copy(_sr).multiplyScalar(a).addScaledVector(_su, b).addScaledVector(sunDir, c);
-  sun.target.position.copy(_st); sun.target.updateMatrixWorld(); sun.position.copy(_st).addScaledVector(sunDir, 220);
+  sun.target.position.copy(_st); sun.target.updateMatrixWorld(); sun.position.copy(_st).addScaledVector(sunDir, SOL_D);
 }
 
 // ---------- procedural textures
@@ -1229,7 +1242,7 @@ for (const [k, v] of Object.entries(M.views || {})) { if (!v || !v.pos || !v.tgt
 if (!Object.keys(VIEWS).length) { const E = M.extent || { xmin: -50, xmax: 50, ymin: -50, ymax: 50 }; const cx = (E.xmin + E.xmax) / 2, cy = (E.ymin + E.ymax) / 2, R = Math.max(E.xmax - E.xmin, E.ymax - E.ymin); VIEWS.geral = { pos: V(cx - Uv[0] * R * .5 + Rv[0] * R * .45, cy - Uv[1] * R * .5 + Rv[1] * R * .45, R * .45), tgt: V(cx, cy, 3), opac: 1, layers: {}, nome: 'Visão geral' }; }
 const vbar = $('views');
 for (const [k, v] of Object.entries(VIEWS)) { const b = document.createElement('button'); b.className = 'chip'; b.dataset.view = k; b.textContent = v.nome; b.setAttribute('aria-pressed', 'false'); b.addEventListener('click', () => goView(k)); vbar.appendChild(b); }
-function pressView(k) { for (const b of vbar.querySelectorAll('.chip')) b.setAttribute('aria-pressed', b.dataset.view === k); }
+function pressView(k) { for (const b of vbar.querySelectorAll('.chip[data-view]')) b.setAttribute('aria-pressed', b.dataset.view === k); }
 function goView(k, instant) {
   const v = VIEWS[k]; if (!v) return; pressView(k); $('trechoSel').value = '';
   setOpacity(v.opac); for (const l of LYR) { const want = v.layers[l.id] ?? (k === 'drenagem' ? l.on : null); if (want !== null && want !== undefined) { GRP[l.id].visible = want; $('L_' + l.id).checked = want; } }
@@ -1494,9 +1507,92 @@ const thick = L => L.reduce((a, l) => a + l[1], 0);
 const TOPCOL = { asfalto: '#2a2c2f', rigido: '#9a978f', sarjeta: '#bdbab2', passeio: '#b9b7b0', plataforma: '#cfcbc3', ciclovia: '#b3261e', rampa: '#c3c0b8', grama: '#4f7a31', guia: '#e6e3dc', muro: '#8f8c85', tampa: '#a3a098', grelha: '#2b2b2b', terreno: '#6b7f3a' };
 const T0 = -45, T1 = 30, DT = 0.1, NS = Math.round((T1 - T0) / DT);
 const planeMesh = new THREE.Mesh(new THREE.PlaneGeometry(T1 - T0, 22), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: .14, side: THREE.DoubleSide, depthWrite: false })); planeMesh.visible = false; scene.add(planeMesh);
+/* ---------- FATIA 3D (cinema): a pista cortada de verdade numa estaca, com as
+   camadas na face do corte. O modelo só tem as camadas nas bordas (as "saias"
+   sk_*); aqui um plano de corte global tira tudo o que está à frente da estaca
+   e uma TAMPA desenha, na face, a estrutura de cada superfície (a mesma
+   STRUCT da seção do painel: CBUQ, BGTC, BGS, concreto, brita…), o solo por
+   baixo e o anel de cada tubo que atravessa o plano. */
+const FATIA = { mesh: null, plano: new THREE.Plane(), chave: '' };
+// sob a pista, o subleito compactado (0,60 m) antes do solo natural — como na seção do projeto
+const ESTR_FATIA = Object.assign({}, STRUCT, { asfalto: [...STRUCT.asfalto, ['Subleito', .6]], rigido: [...STRUCT.rigido, ['Subleito', .6]],
+  guia: [['Concreto', .30]], muro: [['Concreto', 1.2]], terreno: [['Solo', .25]] });
+const MAT_OCO = new THREE.MeshBasicMaterial({ color: 0x0b0d0e, side: THREE.DoubleSide });
+/* As cores da face são as da seção do painel (STRUCT), sobre um grão neutro: com as
+   texturas das saias, BGTC e BGS saíam do mesmo cinza e o solo, de um laranja que
+   tomava a imagem. */
+const COR_CAMADA = { CBUQ: '#1e1f21', BGTC: '#8d8c84', BGS: '#b3a588', Concreto: '#c4c1b9', CCR: '#9d9b93', Brita: '#7e7a72', 'C. magro': '#9d9b93', Solo: '#5d4430', Subleito: '#8a6b4c', solo: '#6a4b34' };
+let _graoFatia = null; const _matFatia = new Map();
+function matFatia(nome) {
+  let m = _matFatia.get(nome); if (m) return m;
+  if (!_graoFatia) _graoFatia = canvasTex(128, (g, S) => speckle(g, S, '#8a8a8a', 2600, ['#727272', '#a3a3a3', '#5e5e5e'], .4, 1.3, 91));
+  m = new THREE.MeshStandardMaterial({ color: new THREE.Color(COR_CAMADA[nome] || COR_CAMADA.solo).multiplyScalar(1.12), map: _graoFatia, roughness: .95, side: THREE.DoubleSide });
+  m.name = 'fatia_' + nome; m.userData.tile = 1.2; _matFatia.set(nome, m); return m;
+}
+/* A TAMPA: a face cortada na estaca m, de t0 a t1 (m, + à direita do eixo),
+   com o solo até `prof` abaixo da superfície mais baixa. lado = −1: fica o que
+   vem antes da estaca (a tampa encosta desse lado do plano); +1: o que vem depois. */
+function tampaDaFatia(A, m, t0, t1, prof, lado) {
+  const passo = .25, p = A.pos(m), d = A.dir(m), r = [d[1], -d[0]], ox = d[0] * .02 * lado, oy = d[1] * .02 * lado;
+  const amostras = []; let zmin = Infinity;
+  for (let t = t0; t <= t1 + 1e-6; t += passo) {
+    const x = p[0] + r[0] * t, y = p[1] + r[1] * t, h = sampleTop(x, y, TOP); let z = h ? h.z : ngZ(x, y); if (!fin(z)) z = A.z(m);
+    const st = h ? h.o.userData.stype : 'terreno'; amostras.push({ t, z, st }); zmin = Math.min(zmin, z);
+  }
+  const base = zmin - prof, porMat = new Map();
+  const quad = (k, ta, za0, za1, tb, zb0, zb1) => {   // za0/zb0 em cima, za1/zb1 embaixo
+    let g = porMat.get(k); if (!g) porMat.set(k, g = { p: [], uv: [], i: [] });
+    const tile = 1.2, n0 = g.p.length / 3;
+    for (const [t, z] of [[ta, za0], [tb, zb0], [tb, zb1], [ta, za1]]) { const w = V(p[0] + r[0] * t + ox, p[1] + r[1] * t + oy, z); g.p.push(w.x, w.y, w.z); g.uv.push(t / tile, z / tile); }
+    g.i.push(n0, n0 + 1, n0 + 2, n0, n0 + 2, n0 + 3);
+  };
+  for (let i = 0; i < amostras.length - 1; i++) {
+    const a = amostras[i], b = amostras[i + 1], L = ESTR_FATIA[a.st] || ESTR_FATIA.terreno;
+    let da = 0;
+    for (const [nome, esp] of L) { quad(nome, a.t, a.z - da, a.z - da - esp, b.t, b.z - da, b.z - da - esp); da += esp; }
+    quad('solo', a.t, a.z - da, base, b.t, b.z - da, base);
+  }
+  const grp = new THREE.Group();
+  for (const [k, g] of porMat) {
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(g.p, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(g.uv, 2)); geo.setIndex(g.i); geo.computeVertexNormals();
+    // sem sombra na face: o que foi cortado fora continua lançando sombra (o passe de sombra ignora o corte global)
+    const mesh = new THREE.Mesh(geo, matFatia(k)); mesh.receiveShadow = false; grp.add(mesh);
+  }
+  // tubos que atravessam o plano: anel de concreto e o oco escuro
+  for (const tb of TUBOS) {
+    const da = (tb.a[0] - p[0]) * d[0] + (tb.a[1] - p[1]) * d[1], db = (tb.b[0] - p[0]) * d[0] + (tb.b[1] - p[1]) * d[1];
+    if (da * db > 0 || Math.abs(da - db) < 1e-6) continue;
+    const f = da / (da - db), x = tb.a[0] + f * (tb.b[0] - tb.a[0]), y = tb.a[1] + f * (tb.b[1] - tb.a[1]), tc = (x - p[0]) * r[0] + (y - p[1]) * r[1];
+    if (tc < t0 || tc > t1) continue;
+    const zc = tb.a[2] + f * (tb.b[2] - tb.a[2]), ri = tb.d / 2, re = ri + (tb.wall || .08), N = 32, pa = [], ia = [], oco = [];
+    const ponto = (t, z, k) => V(p[0] + r[0] * t + ox * k, p[1] + r[1] * t + oy * k, z);
+    for (let k = 0; k <= N; k++) { const a = k / N * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a);
+      const e = ponto(tc + c * re, zc + s2 * re, 1.5), i2 = ponto(tc + c * ri, zc + s2 * ri, 1.5); pa.push(e.x, e.y, e.z, i2.x, i2.y, i2.z);
+      if (k < N) { const q = 2 * k; ia.push(q, q + 1, q + 3, q, q + 3, q + 2); }
+      oco.push(ponto(tc + c * ri, zc + s2 * ri, 1.75)); }
+    const ga = new THREE.BufferGeometry(); ga.setAttribute('position', new THREE.Float32BufferAttribute(pa, 3)); ga.setIndex(ia); ga.computeVertexNormals();
+    grp.add(new THREE.Mesh(ga, matFatia('Concreto')));
+    const go = new THREE.BufferGeometry().setFromPoints([ponto(tc, zc, 1.75), ...oco]); const io = []; for (let k = 1; k <= N; k++) io.push(0, k, k + 1); go.setIndex(io);
+    grp.add(new THREE.Mesh(go, MAT_OCO));
+  }
+  grp.traverse(o => { o.raycast = () => { }; });
+  return grp;
+}
+function largarTampa(g) { if (g) { scene.remove(g); g.traverse(o => o.geometry && o.geometry.dispose()); } }
+function fatiaConfig(cfg) {
+  if (!cfg) { largarTampa(FATIA.mesh); FATIA.mesh = null; renderer.clippingPlanes = []; FATIA.chave = ''; invalidarSombra(); invalidar(2); return; }
+  const A = ALN[cfg.eixo || 'PD']; if (!A) return;
+  const m = Math.max(A.m0 + 1, Math.min(A.m1 - 1, +cfg.m)), t0 = cfg.t0 ?? -40, t1 = cfg.t1 ?? 30, prof = cfg.prof ?? 14;
+  const chave = [A.key, m.toFixed(3), t0, t1, prof].join('|'); if (chave === FATIA.chave) return; FATIA.chave = chave;
+  const p = A.pos(m), d = A.dir(m);
+  FATIA.plano.setFromNormalAndCoplanarPoint(new THREE.Vector3(-d[0], 0, d[1]), V(p[0], p[1], 0));   // fica o que vem ANTES da estaca
+  renderer.clippingPlanes = [FATIA.plano];
+  largarTampa(FATIA.mesh); FATIA.mesh = tampaDaFatia(A, m, t0, t1, prof, -1); scene.add(FATIA.mesh); invalidarSombra(); invalidar(2);
+}
 // clipping: section plane, limited to ±90 m across the axis (clipIntersection) so far parts of the avenue are not cut
 const CLIP = [new THREE.Plane(), new THREE.Plane(), new THREE.Plane()], LAT = 90; let clipOn = false;
-function applyClip(on) { clipOn = on; const seen = new Set(); for (const id in GRP) GRP[id].traverse(o => { if (!o.material) return; for (const m of Array.isArray(o.material) ? o.material : [o.material]) { if (seen.has(m)) continue; seen.add(m); m.clippingPlanes = on ? CLIP : null; m.clipIntersection = true; m.needsUpdate = true; } }); invalidarSombra(); }
+let secTampa = null, secTampaChave = '';
+function applyClip(on) { clipOn = on; if (!on && secTampa) { largarTampa(secTampa); secTampa = null; secTampaChave = ''; } const seen = new Set(); for (const id in GRP) GRP[id].traverse(o => { if (!o.material) return; for (const m of Array.isArray(o.material) ? o.material : [o.material]) { if (seen.has(m)) continue; seen.add(m); m.clippingPlanes = on ? CLIP : null; m.clipIntersection = true; m.needsUpdate = true; } }); invalidarSombra(); }
 function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function fitCanvas() { const r = dc.getBoundingClientRect(), k = Math.min(devicePixelRatio, 2); dc.width = Math.max(10, r.width * k); dc.height = Math.max(10, r.height * k); const g = dc.getContext('2d'); g.setTransform(k, 0, 0, k, 0, 0); return [g, r.width, r.height]; }
 let secM = null;
@@ -1522,6 +1618,8 @@ function drawSection(hoverT) {
   planeMesh.position.copy(V(p[0] + r[0] * tc, p[1] + r[1] * tc, zc + 2)); planeMesh.lookAt(planeMesh.position.clone().add(d3)); planeMesh.visible = true;
   const keepBefore = $('secSide').value === 'a'; const n1 = d3.clone().multiplyScalar(keepBefore ? -1 : 1);
   CLIP[0].set(n1, -n1.dot(P0)); CLIP[1].set(r3.clone(), -r3.dot(P0) - LAT); CLIP[2].set(r3.clone().negate(), r3.dot(P0) - LAT);
+  // cortado, o modelo mostra na face as camadas da seção (era oco: só a casca da superfície)
+  if (clipOn) { const ch = m.toFixed(2) + '|' + keepBefore + '|' + tileVer; if (ch !== secTampaChave) { secTampaChave = ch; largarTampa(secTampa); secTampa = tampaDaFatia(A, m, T0, T1, 3, keepBefore ? -1 : 1); scene.add(secTampa); invalidar(2); } }
   // sample along the normal
   const tops = visTops(); const pts = []; let corte = 0, aterro = 0, hits = 0;
   for (let i = 0; i <= NS; i++) {
@@ -1654,8 +1752,10 @@ $('sQ').addEventListener('input', e => {
 // ---------- sun
 const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
 const sunM = $('sunM'); MONTHS.forEach((m, i) => { const o = document.createElement('option'); o.value = i; o.textContent = m; sunM.appendChild(o); }); sunM.value = new Date().getMonth();
-function setSun(regenEnv) {
-  const mo = +sunM.value, h = +$('sunH').value; $('sunHV').textContent = `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`;
+const SUN_COR = new THREE.Color(0xfff1dc), SUN_OURO = new THREE.Color(0xffa860), HEMI_COR = new THREE.Color(0xdfe9f2), HEMI_OURO = new THREE.Color(0xf2c9a4);
+function setSun(regenEnv, hora, mes) {   // hora/mes: o cinema anda o sol sem o passo de 15 min do controle
+  const mo = mes != null ? +mes : +sunM.value, h = hora != null ? +hora : +$('sunH').value;
+  const hm = Math.round(h * 60); $('sunHV').textContent = `${String(Math.floor(hm / 60)).padStart(2, '0')}:${String(hm % 60).padStart(2, '0')}`;
   const N = [15, 46, 74, 105, 135, 166, 196, 227, 258, 288, 319, 349][mo]; const decl = -23.44 * Math.cos(2 * Math.PI / 365 * (N + 10)) * Math.PI / 180; const lat = -23.55 * Math.PI / 180;
   const solar = h - 0.11; const HA = (solar - 12) * 15 * Math.PI / 180;           // lon -46,63 vs fuso -45°
   const el = Math.asin(Math.sin(lat) * Math.sin(decl) + Math.cos(lat) * Math.cos(decl) * Math.cos(HA));
@@ -1663,7 +1763,13 @@ function setSun(regenEnv) {
   const e = Math.max(el, 0.02); sunDir.set(Math.sin(az) * Math.cos(e), Math.sin(e), -Math.cos(az) * Math.cos(e)).normalize();
   su.sunPosition.value.copy(sunDir); sky2.material.uniforms.sunPosition.value.copy(sunDir); updSun(true);
   sun.intensity = el > 0 ? SUN_I * Math.min(1, Math.sin(el) * 2.2) : 0.1;
-  if (regenEnv) scene.environment = pmrem.fromScene(envScene).texture;
+  /* SOL BAIXO É DOURADO. A luz do fim da tarde atravessa mais atmosfera e chega
+     alaranjada; com a mesma cor do meio-dia, as 17h30 pareciam meio-dia com
+     sombra comprida. A cor vai do branco quente (acima de 30°) ao âmbar (4°). */
+  const kOuro = 1 - Math.max(0, Math.min(1, (el * 180 / Math.PI - 4) / 26));
+  sun.color.copy(SUN_COR).lerp(SUN_OURO, kOuro * kOuro); hemi.color.copy(HEMI_COR).lerp(HEMI_OURO, kOuro * kOuro * .6);
+  invalidar(2);
+  if (regenEnv) { const velho = envRT; envRT = pmrem.fromScene(envScene); scene.environment = envRT.texture; velho.dispose(); }   // o reflexo velho saía da GPU só com a página
 }
 $('sunH').addEventListener('input', () => setSun(false)); $('sunH').addEventListener('change', () => setSun(true)); sunM.addEventListener('change', () => setSun(true));
 
@@ -1976,6 +2082,8 @@ window.addEventListener('message', e => {
   else if (d.tipo === 'ir') irPara(d);
   else if (d.tipo === 'soltar') { RDO.sel = null; RDO.aberta = null; marcarSel(); info.hidden = true; }   // o app fechou a estaca
   else if (d.tipo === 'realce') realce(d.camada || null);
+  else if (d.tipo === 'apresentar') apresentar({ gravar: !!d.gravar });
+  else if (d.tipo === 'parar-apresentacao') pararApresentacao(false);
   else if (d.tipo === 'tema') { if (d.tema === 'dark' || d.tema === 'light') document.documentElement.setAttribute('data-theme', d.tema); else document.documentElement.removeAttribute('data-theme'); mm.sig = ''; invalidar(); }
 });
 // o app troca o tema no MESMO aparelho: o localStorage avisa este documento também
@@ -2078,21 +2186,190 @@ function aguaNoQuadro(now) {
     aguaVista = AGUAS.some(m => isVis(m) && _fr.intersectsObject(m) && m.geometry.boundingSphere && m.geometry.boundingSphere.center.distanceTo(camera.position) < 700); }
   return aguaVista;
 }
+/* ---------- CINEMA: "Apresentar a obra" e o gravador do vídeo do modelo
+   O módulo (cine.js) só é baixado quando alguém pede. Ao vivo, o relógio é o
+   do laço de desenho; no gravador (?cine=1) o laço fica parado (__pause) e
+   cada quadro é pedido por tempo: o mesmo roteiro dá o mesmo vídeo. */
+const CTX_CINE = { THREE, camera, controls, GRP, ALN, V, scene, renderer, invalidar, invalidarSombra,
+  superficie: (x, y) => { const h = sampleTop(x, y, visTops()); if (h) return h.z; const z = ngZ(x, y); return fin(z) ? z : NaN; },
+  opacidade: v => setOpacity(v),
+  nevoa: d => { if (scene.fog && scene.fog.isFogExp2) scene.fog.density = d == null ? NEVOA0 : d; },
+  exposicao: v => { renderer.toneMappingExposure = v == null ? EXPO0 : v; },
+  sol: (h, regen, mes) => setSun(regen, h, mes),
+  sombra: cfg => sombraConfig(cfg),
+  material: nome => MAT[nome] || null,
+  fatia: cfg => fatiaConfig(cfg),
+  nevoaCor: c => { if (scene.fog) scene.fog.color.set(c == null ? NEVOA_COR0 : c); },
+  agua: t => { if (Q_ALTA && SOLID.agua.normalMap) SOLID.agua.normalMap.offset.set((t * 1.2e-2) % 1, (t * .8e-2) % 1); } };   // a ondulação pelo tempo do roteiro
+let cineMod = null;
+async function cineCarregar() {
+  if (!cineMod) { const { criarCine } = await import(new URL('./cine.js' + new URL(import.meta.url).search, import.meta.url).href); cineMod = criarCine(CTX_CINE); }
+  return cineMod;
+}
+const APRES = { on: false, t0: 0, dur: 0, planos: [], leg: -1, grav: null, antes: null };
+const cineUI = $('cineUI');
+/* O roteiro da apresentação sai do PRÓPRIO modelo (vistas e trechos do
+   index.json): abertura do alto, cada trecho com o nome e as estacas, o
+   motorista chegando ao cruzamento e, no fim, o que o RDO já lançou. Obra
+   nova com modelo ganha a apresentação dela sem ninguém escrever roteiro. */
+function roteiroApresentacao() {
+  const P = [], tr = TRECHOS.map(t => ({ nome: t.nome, desc: t.desc || '', pos: t.pos, tgt: t.tgt }));
+  const vv = k => VIEWS[k] ? { pos: [VIEWS[k].pos.x, -VIEWS[k].pos.z, VIEWS[k].pos.y], tgt: [VIEWS[k].tgt.x, -VIEWS[k].tgt.z, VIEWS[k].tgt.y] } : null;
+  const geral = vv('geral') || vv(Object.keys(VIEWS)[0]);
+  const lerp3 = (a, b, k) => a.map((v, i) => v + (b[i] - v) * k);
+  const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  const recua = (t, k, sobe) => { const d = t.pos.map((v, i) => v - t.tgt[i]); return [t.pos[0] + d[0] * k, t.pos[1] + d[1] * k, t.pos[2] + d[2] * k + (sobe || 0)]; };
+  const lateral = (t, k) => { const dx = t.tgt[0] - t.pos[0], dy = t.tgt[1] - t.pos[1], L = Math.hypot(dx, dy) || 1; return [dy / L * k, -dx / L * k, 0]; };
+  const titulo = M.title || 'Modelo 3D', sub = M.subtitle || '';
+  if (!tr.length) {   // modelo sem trechos: as vistas, uma depois da outra
+    const ks = Object.keys(VIEWS).filter(k => k !== 'planta');
+    ks.forEach((k, i) => { const v = vv(k); P.push({ id: k, dur: 6, cam: { pos: [recua({ pos: v.pos, tgt: v.tgt }, .15, 4), v.pos], alvo: [v.tgt, v.tgt] }, ease: [.45, .45], legenda: { t: i ? VIEWS[k].nome : titulo, s: i ? '' : sub }, corte: i > 0 }); });
+    return { planos: P };
+  }
+  // abertura: do alto, descendo até o primeiro trecho
+  const t0 = tr[0], ini = recua(t0, .2, 6);
+  if (geral) P.push({ id: 'abertura', dur: 8, cam: { pos: [geral.pos, lerp3(geral.pos, ini, .55).map((v, i) => i === 2 ? v + 40 : v), ini], alvo: [geral.tgt, lerp3(geral.tgt, t0.tgt, .6), t0.tgt] }, ease: [.2, .5], legenda: { t: titulo, s: sub } });
+  // o motorista entra antes do cruzamento principal (o trecho com "cruzamento" no nome, ou o do meio)
+  let kMot = tr.findIndex(t => /cruzamento/i.test(t.nome)); if (kMot < 0) kMot = Math.floor(tr.length * .6);
+  tr.forEach((t, i) => {
+    const a = recua(t, .12, 3), b = recua(t, -.06, 0).map((v, j) => v + lateral(t, dist(t.pos, t.tgt) * .07)[j]);
+    if (i === kMot && ALN.PD) {
+      const A = ALN.PD, m = A.proj([t.tgt[0], t.tgt[1]])[0];
+      P.push({ id: 'motorista', dur: 11, corte: true, camadas: { est: false }, cam: { eixo: 'PD', m: [Math.max(A.m0 + 5, m - 160), Math.max(A.m0 + 20, m - 15)], lado: 1.8, alt: 1.25, olhar: 28, altAlvo: 1.0 }, ease: [.15, .3], legenda: { t: 'Na pista', s: 'PD chegando ao ' + t.nome.replace(/^Cruzamento\s*/i, 'cruzamento ') } });
+      P.push({ id: 'trecho-' + i, dur: 6, corte: true, cam: { pos: [a, b], alvo: [t.tgt, t.tgt] }, ease: [.4, .4], legenda: { t: t.nome, s: t.desc } });
+    } else {
+      if (i > 0) {   // voo até o trecho: sobe um pouco no meio, para não atravessar telhado
+        const prev = P[P.length - 1], de = prev.cam.pos[prev.cam.pos.length - 1], alvoDe = prev.cam.alvo[prev.cam.alvo.length - 1];
+        const meio = lerp3(de, a, .5); meio[2] += Math.min(60, dist(de, a) * .18);
+        P.push({ id: 'voo-' + i, dur: Math.max(2.5, Math.min(4.5, dist(de, a) / 70)), cam: { pos: [de, meio, a], alvo: [alvoDe, t.tgt] }, ease: [.5, .5] });
+      }
+      P.push({ id: 'trecho-' + i, dur: 5.5, cam: { pos: [a, b], alvo: [t.tgt, t.tgt] }, ease: [.4, .4], legenda: { t: t.nome, s: t.desc } });
+    }
+  });
+  // fecho: sobe para ver a avenida inteira, com o que o RDO já lançou (se o app mandou)
+  const ult = P[P.length - 1], de = ult.cam.pos[ult.cam.pos.length - 1];
+  if (geral) {
+    const temRDO = RDO.infos.length > 0;
+    P.push({ id: 'fecho', dur: 8, cam: { pos: [de, lerp3(de, geral.pos, .5).map((v, i) => i === 2 ? v + 30 : v), geral.pos], alvo: [ult.cam.alvo[ult.cam.alvo.length - 1], geral.tgt] }, ease: [.4, .3],
+      camadas: temRDO ? { rdo: true } : {}, legenda: temRDO ? { t: 'O que o RDO já lançou', s: String((RDO.dados && RDO.dados.resumo) || '') } : { t: titulo, s: sub } });
+  }
+  return { planos: P };
+}
+function legendaAparece(L) {   // entra subindo; sai esmaecendo (no voo entre trechos a tela fica limpa)
+  const t = $('cineT'), s = $('cineS'), box = $('cineLeg');
+  clearTimeout(legendaAparece._h);
+  if (!L) { if (!box.hidden) { box.classList.remove('on'); box.classList.add('sai'); legendaAparece._h = setTimeout(() => { box.hidden = true; box.classList.remove('sai'); }, 450); } return; }
+  box.classList.remove('on', 'sai'); void box.offsetWidth;   // reinicia a entrada
+  t.textContent = String(L.t || ''); s.textContent = String(L.s || ''); s.hidden = !L.s;
+  box.hidden = false; box.classList.add('on');
+}
+async function apresentar({ gravar = false } = {}) {
+  if (APRES.on) return;
+  let c; try { c = await cineCarregar(); } catch (e) { toast('Não foi possível abrir a apresentação: ' + (e && e.message || e)); return; }
+  const R = c.carregar(roteiroApresentacao());
+  stopDrive(); tween = null; info.hidden = true;
+  APRES.antes = { pos: camera.position.clone(), alvo: controls.target.clone(), hora: +$('sunH').value };
+  APRES.on = true; APRES.t0 = performance.now(); APRES.dur = R.dur; APRES.planos = c.planos; APRES.leg = -1;
+  controls.enabled = false; document.documentElement.classList.add('cine-on'); cineUI.hidden = false;
+  $('cineGrav').hidden = true;
+  if (gravar) gravacaoIniciar();
+  avisarApp({ tipo: 'apresentacao', on: true });
+  invalidar(3);
+}
+function pararApresentacao(fim) {
+  if (!APRES.on) return;
+  APRES.on = false; cineMod.soltar(); controls.enabled = true; controls.update();
+  document.documentElement.classList.remove('cine-on'); cineUI.hidden = true; legendaAparece(null);
+  if (APRES.grav) gravacaoFim(!!fim);
+  avisarApp({ tipo: 'apresentacao', on: false });
+  invalidar(3);
+}
+function apresPasso(now) {
+  const t = (now - APRES.t0) / 1000 * (window.__apresVel || 1);   // __apresVel: os testes andam devagar, o relógio do WebGL por software não acompanha
+  if (t >= APRES.dur) { cineMod.quadro(APRES.dur - 1e-3); pararApresentacao(true); return; }
+  const e = cineMod.quadro(t);
+  if (e && e.i !== APRES.leg) { APRES.leg = e.i; legendaAparece(APRES.planos[e.i].legenda); }
+  $('cineBarra').style.width = (100 * t / APRES.dur).toFixed(2) + '%';
+  // corte entre planos: um mergulho rápido no preto, em vez do salto seco de câmera
+  let veu = 0; for (const p of APRES.planos) if (p.corte) { const d = Math.abs(t - p.t0); if (d < .35) veu = Math.max(veu, 1 - d / .35); }
+  $('cineVeu').style.opacity = veu.toFixed(3);
+}
+/* GRAVAR: o vídeo sai do próprio aparelho (MediaRecorder), com a legenda
+   desenhada no quadro — o WebGL e o texto num canvas só. MP4 onde o navegador
+   grava MP4 (Safari, Chrome recente); senão WebM. */
+function gravacaoIniciar() {
+  const tipos = ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  const tipo = window.MediaRecorder ? tipos.find(t => MediaRecorder.isTypeSupported(t)) : null;
+  if (!tipo) { toast('Este navegador não grava vídeo. A apresentação continua sem gravar.', 5000); return; }
+  const src = renderer.domElement, k = Math.min(1, 1920 / src.width, 1080 / src.height);
+  const cv = document.createElement('canvas'); cv.width = Math.round(src.width * k / 2) * 2; cv.height = Math.round(src.height * k / 2) * 2;
+  const g = cv.getContext('2d'), partes = [];
+  let rec; try { rec = new MediaRecorder(cv.captureStream(30), { mimeType: tipo, videoBitsPerSecond: 10e6 }); } catch (e) { toast('Não foi possível gravar aqui: ' + (e && e.message || e), 5000); return; }
+  rec.ondataavailable = ev => { if (ev.data && ev.data.size) partes.push(ev.data); };
+  APRES.grav = { rec, cv, g, partes, tipo, salvar: false };
+  /* O vídeo pronto vira um LINK para tocar: o download tem de nascer de um toque
+     (o fim da apresentação não é um, e o navegador pode barrar o arquivo). */
+  rec.onstop = () => { const G = APRES.grav; APRES.grav = null; if (!G || !G.salvar || !partes.length) return; const ext = /mp4/.test(tipo) ? 'mp4' : 'webm';
+    const nome = 'apresentacao-' + (M.title || 'modelo').normalize('NFD').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 40) + '.' + ext;
+    const a = $('gravLink'), velho = a.href; a.href = URL.createObjectURL(new Blob(partes, { type: tipo.split(';')[0] })); a.download = nome; if (velho && velho.startsWith('blob:')) URL.revokeObjectURL(velho);
+    $('gravMB').textContent = (partes.reduce((s, b) => s + b.size, 0) / 1048576).toFixed(1).replace('.', ',') + ' MB · ' + ext.toUpperCase(); $('gravPronto').hidden = false; };
+  rec.start(1000); $('cineGrav').hidden = false;
+}
+function gravacaoQuadro() {
+  const G = APRES.grav; if (!G) return; const { cv, g } = G, W = cv.width, H = cv.height;
+  g.drawImage(renderer.domElement, 0, 0, W, H);
+  const v = +$('cineVeu').style.opacity || 0; if (v > 0) { g.fillStyle = `rgba(0,0,0,${v})`; g.fillRect(0, 0, W, H); }
+  const L = APRES.leg >= 0 && APRES.planos[APRES.leg] && APRES.planos[APRES.leg].legenda;
+  if (L) {
+    const u = H / 1080, x = 64 * u, y = H - 96 * u;
+    g.save(); g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 14 * u;
+    g.fillStyle = '#c85e14'; g.fillRect(x, y - 62 * u, 46 * u, 4 * u);
+    g.fillStyle = '#fff'; g.font = `700 ${Math.round(44 * u)}px "Space Grotesk", sans-serif`; g.fillText(String(L.t || ''), x, y - 16 * u);
+    if (L.s) { g.font = `500 ${Math.round(24 * u)}px "JetBrains Mono", monospace`; g.fillStyle = 'rgba(255,255,255,.88)'; g.fillText(String(L.s), x, y + 22 * u); }
+    g.restore();
+  }
+}
+function gravacaoFim(salvar) { const G = APRES.grav; if (!G) return; G.salvar = salvar; try { G.rec.stop(); } catch (e) { APRES.grav = null; } $('cineGrav').hidden = true; if (!salvar) toast('Gravação interrompida: o vídeo só sai da apresentação inteira.', 4000); }
+$('gravX').onclick = () => { $('gravPronto').hidden = true; };
+$('apresBtn').onclick = () => apresentar();
+$('gravBtn').onclick = () => apresentar({ gravar: true });
+$('cineSair').onclick = () => pararApresentacao(false);
+// qualquer toque no 3D devolve a câmera a quem tocou
+for (const ev of ['pointerdown', 'wheel']) renderer.domElement.addEventListener(ev, () => { if (APRES.on) pararApresentacao(false); }, { passive: true });
+document.addEventListener('keydown', e => { if (APRES.on && e.key === 'Escape') pararApresentacao(false); });
+// o gravador do vídeo do modelo (ferramentas/video-modelo3d): sem painel nenhum, um quadro por pedido
+if (PARAMS.get('cine') === '1') {
+  document.documentElement.classList.add('cine-rec');
+  window.__cineAbrir = async () => {
+    const c = await cineCarregar();
+    window.__cine = { carregar: r => c.carregar(r), quadro: (t, o) => c.quadro(t, o), projetar: p => c.projetar(p), soltar: () => c.soltar(), get dur() { return c.dur; },
+      foto: (tipo = 'image/jpeg', q = .95) => { prepararQuadro(performance.now()); renderNow(); return renderer.domElement.toDataURL(tipo, q); } };
+    return true;
+  };
+}
+// tudo o que o laço faz antes de desenhar um quadro (o gravador chama o mesmo)
+function prepararQuadro(now) {
+  sky.position.copy(camera.position); if (sky.userData.dome) sky.userData.dome.position.copy(camera.position); updSun();
+  camera.getWorldDirection(_d); const bearing = Math.atan2(_d.x, -_d.z); needle.setAttribute('transform', `rotate(${-bearing * 180 / Math.PI})`);
+  mmMaybe(now);
+}
 renderer.setAnimationLoop(() => {
   if (window.__pause || document.hidden) return;   // test harness: no frames while loading · aba escondida: nada
   const now = performance.now();
-  if (drive.on) driveStep(now);
-  navStep(now);
-  if (tween) { const k = Math.min(1, (now - tween.t0) / 1100), e = ease(k); camera.position.lerpVectors(tween.p0, tween.p1, e); controls.target.lerpVectors(tween.q0, tween.q1, e); if (k >= 1) tween = null; invalidar(); }
-  controls.update();
+  if (APRES.on) apresPasso(now);   // a apresentação manda na câmera: nada de órbita, roda ou voo por cima dela
+  else {
+    if (drive.on) driveStep(now);
+    navStep(now);
+    if (tween) { const k = Math.min(1, (now - tween.t0) / 1100), e = ease(k); camera.position.lerpVectors(tween.p0, tween.p1, e); controls.target.lerpVectors(tween.q0, tween.q1, e); if (k >= 1) tween = null; invalidar(); }
+    controls.update();
+  }
   if (aguaNoQuadro(now) && now - ultimoQuadro > 33) { SOLID.agua.normalMap.offset.set((now * 1.2e-5) % 1, (now * 0.8e-5) % 1); invalidar(1); }
   if (carregando && now - ultimoQuadro > 250) invalidar(1);
   if (sujo <= 0) { quadroAnterior = false; return; }
   sujo--; ultimoQuadro = now;
-  sky.position.copy(camera.position); if (sky.userData.dome) sky.userData.dome.position.copy(camera.position); updSun();
-  camera.getWorldDirection(_d); const bearing = Math.atan2(_d.x, -_d.z); needle.setAttribute('transform', `rotate(${-bearing * 180 / Math.PI})`);
-  mmMaybe(now);
+  prepararQuadro(now);
   renderNow();
+  if (APRES.grav) gravacaoQuadro();
   // o aviso de "pesada" mede quadros SEGUIDOS (câmera andando), não o intervalo entre dois toques
   if (Q_ALTA && window.__hqDone && FT.n < 90) { if (quadroAnterior && FT.last) { FT.t.push(now - FT.last); FT.n++; } FT.last = now;
     if (FT.n === 90) { const a = FT.t.slice(10).sort((x, y) => x - y); const med = a[a.length >> 1]; if (med > 70) toast('A imagem está pesada neste computador. Se ficar lenta, use “Qualidade: Leve” em Ferramentas › Tela.', 8000); } }
@@ -2175,4 +2452,5 @@ async function loadEdif() {
     addInst('edi', im, tanks.map(() => ({ disc: 'Ilustrativo', t: 'Caixa-d\u2019água (ilustrativa)', rows: [['Observação', 'colocada só para dar escala; não vem do OSM']], src: 'modelo' })), false); }
   if (clipOn) applyClip(true); envK(); tileVer++; invalidar(3); invalidarSombra();
 }
-window.__dbg = { THREE, scene, renderer, sun, sky, su, MAT, PAINT, get composer() { return composer; }, get gtao() { return gtao; }, pmrem, envScene, setSun, updSun, camera, controls, GRP, HQ };
+window.__dbg = { THREE, scene, renderer, sun, sky, su, MAT, PAINT, get composer() { return composer; }, get gtao() { return gtao; }, pmrem, envScene, setSun, updSun, camera, controls, GRP, HQ,
+  get tampa() { return secTampa || FATIA.mesh; } };

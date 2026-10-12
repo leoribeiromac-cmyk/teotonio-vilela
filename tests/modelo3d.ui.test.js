@@ -169,6 +169,22 @@ function gas(acao, params) {
   ok('a E120, só com terraplenagem, fica na terraplenagem', et.e120 === 1 && et.c120 === '#b98a4e', JSON.stringify(et));
   ok('a ficha da estaca no 3D diz a etapa', et.linha === 'Drenagem e redes', et.linha);
   ok('a legenda conta as estacas por etapa', /Drenagem e redes/.test(et.leg) && /Terraplenagem/.test(et.leg), et.leg.slice(0, 160));
+  // a legenda é clicável: a etapa tocada fica com a cor, as outras ficam cinza (no 3D e na lista)
+  await s.p.evaluate(() => { const b = [...document.querySelectorAll('#m3dLegenda .m3d-leg-bt')].find(x => /Drenagem e redes/.test(x.textContent)); b.click(); });
+  await s.p.waitForTimeout(250);
+  const realce = await s.p.evaluate(() => ({ c212: _m3dUltimo.faixas.find(f => f.chave === 'BC:212').cor, c120: _m3dUltimo.faixas.find(f => f.chave === 'CB:120').cor,
+    pressed: (document.querySelector('#m3dLegenda .m3d-leg-bt[aria-pressed="true"]') || {}).textContent || '', apagada: M3D_APAGADA,
+    lista: (document.querySelector('#m3dLista .m3d-est i') || {}).style ? 1 : 0 }));
+  ok('tocar "Drenagem e redes" na legenda realça só as estacas dela', realce.c212 === '#4f8fd6' && realce.c120 === realce.apagada && /Drenagem/.test(realce.pressed), JSON.stringify(realce));
+  ok('…e o visor recebe as cores novas', await fr.evaluate(() => window.__rdo.n) === app.n);
+  await s.p.evaluate(() => m3dEtapaRealce(2));
+  ok('tocar de novo devolve todas as cores', await s.p.evaluate(() => M3D.etapaSel === null && _m3dUltimo.faixas.find(f => f.chave === 'CB:120').cor === '#b98a4e'));
+  // o avanço da pista por etapa: acumulado, sobre todas as estacas dos eixos do modelo
+  const av = await s.p.evaluate(() => { const A = m3dAvancoEtapas(_m3dUltimo);
+    return { total: A.total, et: A.etapas.map(e => e.nome + ':' + e.n), html: !!document.querySelector('#m3dLegenda .m3d-avanco'), pcs: [...document.querySelectorAll('#m3dLegenda .m3d-av-pc')].map(x => parseInt(x.textContent)) }; });
+  const naoSobe = av.pcs.every((v, i) => i === 0 || v <= av.pcs[i - 1]);
+  ok('o avanço por etapa conta sobre as 87 estacas dos eixos do modelo (CB E99–E141, BC E201–E244)', av.total === 87 && av.html, JSON.stringify(av));
+  ok('…e é acumulado: nenhuma etapa passa a anterior', av.pcs.length >= 2 && naoSobe, JSON.stringify(av.pcs));
   await s.p.evaluate(() => m3dSelecionar('BC:212'));
   await s.p.waitForTimeout(300);
   const esc = await s.p.evaluate(() => ({ feitas: document.querySelectorAll('#m3dDetalhe .m3d-etapas span.on').length,
@@ -278,6 +294,51 @@ function gas(acao, params) {
     controls.target.x += 3; updSun(); const perto = renderer.shadowMap.needsUpdate;
     controls.target.x += 60; updSun(); const longe = renderer.shadowMap.needsUpdate; controls.target.x -= 63; updSun(true); return { perto, longe }; });
   ok('andar 3 m não refaz a sombra; andar 60 m refaz', sombra.perto === false && sombra.longe === true, JSON.stringify(sombra));
+  // a seção com "cortar o modelo": a face cortada mostra as camadas (era oca)
+  const tampa = await fr.evaluate(() => {
+    document.getElementById('oSec').click();
+    const c = document.getElementById('secClip'); c.checked = true; c.dispatchEvent(new Event('change'));
+    const t = window.__dbg.tampa, mats = new Set(); if (t) t.traverse(o => { if (o.material && o.material.name) mats.add(o.material.name); });
+    c.checked = false; c.dispatchEvent(new Event('change'));
+    const sobrou = window.__dbg.tampa;
+    document.getElementById('dockX').click();
+    return { mats: [...mats], sobrou: !!sobrou };
+  });
+  ok('cortar o modelo na seção mostra as camadas na face (CBUQ, BGTC, BGS, subleito e solo)', ['fatia_CBUQ', 'fatia_BGTC', 'fatia_BGS', 'fatia_Subleito', 'fatia_solo'].every(k => tampa.mats.includes(k)) && !tampa.sobrou, JSON.stringify(tampa));
+
+  console.log('\n── apresentar a obra ──');
+  const cineAntes = await fr.evaluate(() => performance.getEntriesByType('resource').some(e => /cine\.js/.test(e.name)));
+  ok('o cinema do visor não é baixado por quem não apresenta', cineAntes === false);
+  ok('o gravador do vídeo (?cine=1) não fica exposto no app', await fr.evaluate(() => typeof window.__cineAbrir === 'undefined'));
+  await s.p.evaluate(() => { m3dFiltro('periodo', 'linha'); m3dTocar(); });
+  await fr.evaluate(() => { window.__apresVel = 0.15; });   // o voo dura ~85 s; aqui, devagar, para não acabar antes da conferência
+  await s.p.click('#m3dBtnApresentar');
+  await s.p.waitForFunction(() => M3D.apresentando === true, null, { timeout: 20000 }).catch(() => {});
+  const ap = await s.p.evaluate(() => ({ on: M3D.apresentando, tocando: M3D.tocando, bt: document.getElementById('m3dBtnApresentar').textContent.trim() }));
+  ok('"Apresentar" no app põe o visor no voo guiado (e a linha do tempo para)', ap.on && !ap.tocando && /Parar/.test(ap.bt), JSON.stringify(ap));
+  ok('…o visor esconde os painéis e mostra a legenda do voo', await fr.evaluate(() => document.documentElement.classList.contains('cine-on') && !document.getElementById('cineUI').hidden));
+  const cam0 = await fr.evaluate(() => window.__cam().pos.join());
+  await bombear(() => document.getElementById('cineT').textContent.length > 0);
+  for (let i = 0; i < 6; i++) { await s.p.screenshot(); await s.p.waitForTimeout(150); }
+  const voo = await fr.evaluate(() => ({ pos: window.__cam().pos.join(), t: document.getElementById('cineT').textContent, barra: parseFloat(document.getElementById('cineBarra').style.width) || 0, ctl: window.__dbg.controls.enabled }));
+  // o relógio da apresentação é o de verdade, e o headless só desenha quando pede tela: a legenda é a do trecho em que o voo estiver
+  ok('a câmera anda sozinha, com a legenda do trecho e a barra de progresso', voo.pos !== cam0 && voo.t.length > 3 && voo.barra > 0 && voo.ctl === false, JSON.stringify(voo));
+  ok('o cinema foi baixado na hora do pedido', await fr.evaluate(() => performance.getEntriesByType('resource').some(e => /cine\.js\?v=/.test(e.name))));
+  await s.p.click('#m3dBtnApresentar');
+  await s.p.waitForFunction(() => M3D.apresentando === false, null, { timeout: 10000 }).catch(() => {});
+  const fimAp = await fr.evaluate(() => ({ on: document.documentElement.classList.contains('cine-on'), ctl: window.__dbg.controls.enabled, op: document.getElementById('opac').value, fov: window.__dbg.camera.fov }));
+  ok('"Parar" devolve a câmera a quem usa, com a superfície e a lente de antes', !fimAp.on && fimAp.ctl && fimAp.op === '100' && fimAp.fov === 45, JSON.stringify(fimAp));
+  ok('…e o botão volta a dizer "Apresentar"', /Apresentar/.test(await s.p.evaluate(() => document.getElementById('m3dBtnApresentar').textContent)));
+  // qualquer toque no 3D também para
+  await s.p.click('#m3dBtnApresentar');
+  await s.p.waitForFunction(() => M3D.apresentando === true, null, { timeout: 10000 }).catch(() => {});
+  await fr.evaluate(() => window.__dbg.renderer.domElement.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })));
+  await s.p.waitForFunction(() => M3D.apresentando === false, null, { timeout: 10000 }).catch(() => {});
+  ok('um toque no 3D interrompe a apresentação', await s.p.evaluate(() => M3D.apresentando === false));
+  await s.p.evaluate(() => m3dFiltro('periodo', 'tudo'));
+  // o sol baixo é dourado: a cor da luz muda com a altura do sol
+  const sol = await fr.evaluate(() => { const D = window.__dbg; D.setSun(false, 12, 4); const meio = D.sun.color.clone(); D.setSun(false, 16.8, 4); const tarde = D.sun.color.clone(); D.setSun(false); return { meio: [meio.r, meio.g, meio.b], tarde: [tarde.r, tarde.g, tarde.b] }; });
+  ok('o sol das 16h48 sai mais alaranjado que o do meio-dia', sol.tarde[2] < sol.meio[2] * 0.75 && sol.tarde[1] < sol.meio[1], JSON.stringify(sol));
 
   console.log('\n── lançar na estaca, sem apagar o rascunho ──');
   await s.p.evaluate(() => {
