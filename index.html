@@ -72,24 +72,24 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=66"></script>
-<script src="dados/ruas-de-terra.js?v=66"></script>
+<script src="dados/ranario.js?v=68"></script>
+<script src="dados/ruas-de-terra.js?v=68"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=66"></script>
+<script src="dados/teotonio-muros.js?v=68"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=66"></script>
-<script src="js/nf/adaptador.js?v=66"></script>
-<script src="js/nf/notas.js?v=66"></script>
-<script src="js/equip/equipamentos.js?v=66"></script>
+<script src="js/ui/icones.js?v=68"></script>
+<script src="js/nf/adaptador.js?v=68"></script>
+<script src="js/nf/notas.js?v=68"></script>
+<script src="js/equip/equipamentos.js?v=68"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=66"></script>
-<script src="js/rdo/mapa-chuva.js?v=66"></script>
-<script src="js/modelo3d/tela.js?v=66"></script>
+<script src="js/bf/bota-fora.js?v=68"></script>
+<script src="js/rdo/mapa-chuva.js?v=68"></script>
+<script src="js/modelo3d/tela.js?v=68"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -974,6 +974,21 @@ html,body{
 .m3d-legenda small{color:var(--muted)}
 .m3d-legenda .rampa{width:96px;height:10px;border-radius:3px;display:inline-block}
 .m3d-legenda-nota{margin-left:auto;color:var(--muted);font-size:var(--fs-xs)}
+/* a legenda de etapas é clicável: realça só as estacas daquela etapa */
+.m3d-leg-bt{font:inherit;color:inherit;background:transparent;border:1px solid transparent;border-radius:6px;padding:2px 6px;cursor:pointer;display:inline-flex;align-items:center}
+.m3d-leg-bt:hover{border-color:var(--border)}
+.m3d-leg-bt[aria-pressed=true]{border-color:var(--acc);background:var(--acc-l);color:var(--text)}
+.m3d-avanco{flex-basis:100%;margin-top:4px;border-top:1px dashed var(--border);padding-top:8px}
+.m3d-avanco summary{cursor:pointer;font-weight:600;color:var(--text)}
+.m3d-avanco summary small{font-weight:400;color:var(--muted);margin-left:6px}
+.m3d-avanco-lista{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:4px 18px;margin-top:8px}
+.m3d-av{font:inherit;color:inherit;display:grid;grid-template-columns:minmax(96px,auto) 1fr 40px;gap:8px;align-items:center;background:transparent;border:1px solid transparent;border-radius:6px;padding:3px 6px;cursor:pointer;text-align:left}
+.m3d-av:hover{border-color:var(--border)}
+.m3d-av[aria-pressed=true]{border-color:var(--acc);background:var(--acc-l)}
+.m3d-av-barra{height:8px;border-radius:4px;background:var(--border);overflow:hidden}
+.m3d-av-barra i{display:block;height:100%;border-radius:4px}
+.m3d-av-pc{font-family:'JetBrains Mono',monospace;font-variant-numeric:tabular-nums;text-align:right;color:var(--text)}
+.m3d-av-nota{font-size:var(--fs-xs);color:var(--muted);margin-top:6px}
 .m3d-legenda-nota .ic{width:13px;height:13px;vertical-align:-2px}
 .m3d-lados{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:16px;margin-top:16px;align-items:start}
 .m3d-lados .card-header{display:flex;gap:10px;align-items:flex-start}
@@ -1019,12 +1034,21 @@ html,body{
 .m3d-link{display:inline-flex;align-items:center;gap:var(--sp-1);border:1px solid var(--border-strong);background:var(--surface);color:var(--text-2);border-radius:5px;padding:2px 6px;font-family:inherit;font-size:var(--fs-2xs);font-weight:600;cursor:pointer;vertical-align:1px;margin-left:4px}
 .m3d-link:hover{border-color:var(--acc);color:var(--acc-d)}
 .m3d-link .ic{width:12px;height:12px}
+/* o campo da estaca que o 3D preencheu, no Lançar Serviço: marcado por um instante */
+.m3d-destaque{box-shadow:0 0 0 3px var(--acc-l);border-color:var(--acc)!important;transition:box-shadow .3s}
 @media(max-width:900px){ .m3d-lados{grid-template-columns:1fr} .m3d-visor{height:62vh;min-height:320px} .m3d-legenda-nota{margin-left:0} }
 /* No celular os filtros viram uma grade de duas colunas sem rótulo visível (o
    rótulo continua lá para o leitor de tela): rótulo + campo em fila, quebrando
    linha a linha, empurravam o 3D para a metade de baixo da tela. */
 @media(max-width:600px){
-  .m3d-filtros{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4);padding:10px 12px}
+  .m3d-filtros{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr) minmax(0,1fr);gap:var(--sp-3);padding:8px 12px}
+  .m3d-filtros #m3dDia{grid-column:1/-1}
+  .m3d-filtros select{padding:6px;font-size:var(--fs-sm)}
+  /* o topo da tela era 320 px de cabeçalho e filtro antes de o 3D começar: o título fica numa linha, os
+     botões só com o ícone e a dica do toque some (ela está também na legenda, logo abaixo do 3D) */
+  .m3d-header{flex-wrap:nowrap;align-items:center;padding-top:12px;padding-bottom:12px}
+  .m3d-header .card-title-sub{font-size:var(--fs-xs)}
+  .m3d-acoes .m3d-rot,.m3d-dica{display:none}
   .m3d-filtros label,.m3d-cor-rot{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
   .m3d-filtros select,.m3d-filtros input{max-width:none;width:100%;min-width:0}
   .m3d-seg{grid-column:1/-1;display:grid;grid-template-columns:repeat(4,1fr)}
@@ -1501,6 +1525,9 @@ body.proj-cheia-ativa{overflow:hidden}
 .btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
 .btn-outline{background:transparent;color:var(--text);border:1px solid var(--border)}
 .btn-outline:hover{background:var(--bg);border-color:var(--border-strong)}
+/* sobre o fundo escuro do ampliador de foto, o contorno do tema claro (texto escuro) sumia: o "Baixar" ficava invisível */
+.foto-amp-acoes .btn-outline{color:#fff;border-color:rgba(255,255,255,.55);background:rgba(255,255,255,.06)}
+.foto-amp-acoes .btn-outline:hover{background:rgba(255,255,255,.14);border-color:#fff}
 .btn-ghost{background:transparent;color:var(--muted);border:none;padding:8px 10px}
 .btn-ghost:hover{background:var(--bg);color:var(--text)}
 .btn-acc{background:var(--acc);color:#fff}
@@ -5835,7 +5862,11 @@ function navigate(page) {
   // dependem da página, não só de quem entrou.
   if (typeof atualizarBotoesTopo === 'function') atualizarBotoesTopo();
   toggleSidebar(false);
-  transitionTo(render);
+  /* A tela nova começa do TOPO. O .main guardava a rolagem da anterior: quem
+     tocava "Ver no modelo 3D" no pé do Painel chegava com o 3D fora da vista,
+     e o mesmo em qualquer tela comprida. Zerado depois do desenho, para a
+     tela que sai não pular durante o esmaecer. */
+  transitionTo(() => { render(); const m = document.querySelector('.main'); if (m) m.scrollTop = 0; });
 }
 
 window.atualizarFiltro = function(tipo, valor) {
@@ -7638,9 +7669,12 @@ async function carregarTudo(opts = {}) {
   }
   /* O Modelo 3D também não se redesenha por baixo de quem olha: o iframe
      recarregaria o modelo inteiro e a câmera voltaria ao início. Os dados
-     novos vão para o visor e só as listas ao lado são refeitas. */
+     novos vão para o visor e só as listas ao lado são refeitas. Vale também
+     para o ⟳ do cabeçalho (carga que NÃO é de fundo): quem pede dados novos
+     não pediu o modelo de novo — 20 s no 4G. O m3dRefrescar recusa quando o
+     iframe é de outra obra (trocarObra), e aí a tela é redesenhada. */
   let telaViva = false;
-  if (fundo && STATE.currentPage === 'modelo3d' && typeof m3dRefrescar === 'function') {
+  if (STATE.currentPage === 'modelo3d' && typeof m3dRefrescar === 'function') {
     try { telaViva = m3dRefrescar(); } catch (e) { console.error('modelo3d', e); }
   }
   /* Erro de DESENHO não é erro de rede: dentro do try da carga, uma tela
@@ -10179,7 +10213,7 @@ window.ampliarFoto = async function(fileId, legenda, fileIdLimpa) {
       style="max-width:100%;max-height:74vh;border-radius:8px;${previa ? '' : 'display:none'}">
     <div id="fotoAmpMsg" style="color:#fff;margin-top:12px;font-size:var(--fs-md)">
       ${escHtml(legenda || '')}${previa ? ' — carregando a foto inteira…' : ' — carregando…'}</div>
-    <div id="fotoAmpAcoes" onclick="event.stopPropagation()"
+    <div id="fotoAmpAcoes" class="foto-amp-acoes" onclick="event.stopPropagation()"
          style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;justify-content:center">
       <button type="button" class="btn btn-outline btn-sm" onclick="baixarFotoAmpliada(false)">
         ${ic('baixar')} Baixar</button>

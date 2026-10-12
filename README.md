@@ -916,8 +916,11 @@ pista do seu sentido (Centro→Bairro = pista PE, Bairro→Centro = pista PD):
   semana ou um mês por passo) e a avenida vai sendo pintada; a data aparece no
   alto do 3D, e a barra vai junto para a tela cheia. Nesse modo a recência
   conta a partir da data da linha.
-- **Cor**: pela frente (a mesma cor da frente no resto do app), pela **etapa
-  da pista**, pelo volume de lançamentos ou pela recência do último.
+- **Cor**: pela **etapa da pista** (o padrão), pela frente (a mesma cor da
+  frente no resto do app), pelo volume de lançamentos (do menor ao maior do
+  filtro) ou pela recência do último. A escolha fica lembrada no aparelho.
+  Cada faixa tem borda cheia e miolo translúcido: a cor se lê sem esconder o
+  asfalto e a sinalização do projeto.
 - **Etapa da pista**: até onde a pista chegou em cada estaca — demolição,
   terraplenagem, drenagem e redes, guias e sarjetas, sub-base, base,
   imprimação, binder, capa/placa, sinalização. Vale a etapa mais alta lançada
@@ -926,7 +929,7 @@ pista do seu sentido (Centro→Bairro = pista PE, Bairro→Centro = pista PD):
   desapropriação ficam fora da escada (cinza). A estaca aberta mostra a escada
   inteira, com a data do último lançamento de cada etapa.
 - **Fotos**: estaca com foto ganha um pino de câmera no 3D (camada "Fotos do
-  RDO"). Aberta a estaca, as miniaturas aparecem no painel do 3D e no cartão da
+  RDO"), com tamanho de verdade — aparece ao se aproximar e some na vista geral. Aberta a estaca, as miniaturas aparecem no painel do 3D e no cartão da
   estaca — as mesmas da Galeria, com o mesmo acesso (é preciso estar logado) —
   e tocar uma abre a foto inteira, com o "Baixar sem carimbo".
 - **Tocar uma faixa** abre a estaca: os lançamentos dela, as fotos, e os
@@ -941,8 +944,23 @@ pista do seu sentido (Centro→Bairro = pista PE, Bairro→Centro = pista PD):
   avenida, sol e sombras, quantidades do modelo (referência — não substituem a
   medição), imagens fotorrealistas. Qualidade **Leve** (padrão no celular) ou
   **Alta** (padrão no computador).
+- **Apresentar a obra**: um voo guiado pela avenida, trecho a trecho, com o
+  nome e as estacas de cada um na legenda — para mostrar o projeto a quem não
+  o conhece. Termina no que o RDO já lançou. Qualquer toque devolve a câmera.
+  Em Ferramentas › Tela, **Gravar vídeo da apresentação** grava o voo com as
+  legendas num arquivo de vídeo para mandar a quem não tem o app.
+- **Legenda de etapas**: tocar uma etapa realça só as estacas dela; abaixo, o
+  **avanço da pista por etapa** — quantas das estacas do eixo já chegaram a
+  cada etapa (mede extensão; a medição continua na Avanço Físico).
+- **Sol e sombras**: o sol baixo da manhã e do fim da tarde sai dourado.
+- **Seção transversal** com "cortar o modelo": a face cortada mostra as
+  camadas do pavimento (CBUQ, BGTC, BGS…), o solo e os tubos cortados.
 - **Offline**: o botão guarda o modelo no aparelho (~3 MB no Leve, ~15 MB no
   Alta) para abrir no canteiro sem sinal.
+- **Leve no celular**: as peças estáticas (placas, semáforos, tubos, abrigos)
+  são juntadas por material e a sombra só é refeita quando a câmera vai longe
+  — ~600 chamadas de desenho por quadro no modo Leve (eram 3.351). Atualizar
+  os dados (⟳) não recarrega o modelo.
 
 ### Trazer um modelo novo (ou reimportar)
 
@@ -1199,6 +1217,7 @@ agregando por código, como sempre foi.
 | `js/bf/bota-fora.js` | Tela de Bota-Fora: a viagem de caminhão com as três provas, e a planilha no formato da aba FRETE |
 | `modelo3d.html` + `js/modelo3d/visor.js` | O visor do modelo 3D (aberto num iframe pela tela Modelo 3D, ou sozinho) |
 | `js/modelo3d/tela.js` | A tela Modelo 3D: filtros, estacas, e as pontes com Histórico, Galeria e Lançar Serviço |
+| `js/modelo3d/cine.js` | O cinema do visor: a apresentação guiada da obra e o gravador do vídeo do modelo |
 | `modelo3d/<obra>/` | O modelo 3D da obra, gerado pela `ferramentas/modelo3d-importar.py` |
 | `vendor/` | Bibliotecas servidas pelo próprio site (ver abaixo) |
 

@@ -28,8 +28,10 @@ para a navegação, então a mudança chega sem precisar limpar cache.
   formato da aba FRETE do fechamento. Só fala com o `Code.gs`.
 - `modelo3d.html` + `js/modelo3d/visor.js` — o visor do modelo 3D da obra
   (three.js r160 de `vendor/three/`), aberto num iframe pela tela "Modelo 3D".
-  `js/modelo3d/tela.js` é o lado do app (filtros, estacas, ações). Os dados
-  ficam em `modelo3d/<obra>/`. Ver "O modelo 3D amarrado ao RDO".
+  `js/modelo3d/tela.js` é o lado do app (filtros, estacas, ações) e
+  `js/modelo3d/cine.js` o cinema do visor (Apresentar a obra, gravador do
+  vídeo), baixado só quando pedido. Os dados ficam em `modelo3d/<obra>/`. Ver
+  "O modelo 3D amarrado ao RDO".
 
 ## O RDO do dia sai por e-mail sozinho
 
@@ -326,9 +328,10 @@ lançamentos** (Histórico com `HIST_FILTRO.estaca`), **Fotos** (Galeria) e
 
 As travas:
 
-- **A carga de fundo NÃO redesenha a tela** (`m3dRefrescar` no
-  `carregarTudo`): o iframe recarregaria o modelo inteiro (20 s no 4G) e a
-  câmera voltaria ao início. Os dados novos vão por mensagem.
+- **Carga NENHUMA redesenha a tela** (`m3dRefrescar` no `carregarTudo`) — nem
+  a de fundo, nem o ⟳ do cabeçalho: o iframe recarregaria o modelo inteiro
+  (20 s no 4G) e a câmera voltaria ao início. Os dados novos vão por mensagem.
+  O `m3dRefrescar` só recusa quando o iframe é de OUTRA obra (`trocarObra`).
 - **"Lançar serviço aqui" não apaga nada do rascunho**: a estaca vai para o
   primeiro serviço em branco, ou para um serviço novo no fim
   (`m3dLancarNaEstaca`). É o mesmo princípio de "Formulário aberto é dado do
@@ -351,9 +354,49 @@ As travas:
 - **Obra sem `modelo3d` no cadastro não vê a tela** (o item some do menu).
 - **A câmera de uma estaca olha do canteiro** (`voarParaFaixa`): o "Ir para
   estaca" das ferramentas olha do lado de fora, e ali caía dentro das casas.
+- **O toque atravessa o ilustrativo** (`ehIlustrativo`): carro, pessoa e
+  arbusto em cima da faixa não roubam o toque da estaca.
+- **O pino de foto tem tamanho de verdade** (1,8 m, `PIN_M`): some abaixo de
+  8 px e não passa de 46. Em tamanho fixo, na vista geral, os pinos de 60
+  estacas viravam uma corrente de círculos por cima das faixas. O toque
+  (`pinNoPonto`) usa o mesmo tamanho.
+- **A faixa é borda cheia + miolo translúcido** (cor com alfa por vértice,
+  `FX_*`): chapada, ela escondia o asfalto e a sinalização do projeto.
+
+**O visor é leve por construção — e tem de continuar.** No celular o que pesa
+no quadro é o NÚMERO de chamadas de desenho; a primeira versão fazia 3.351
+por quadro no modo Leve (hoje ~600):
+
+- **Peças estáticas do índice são juntadas por material** (`consolidar`, logo
+  antes da interface de camadas): placa, semáforo, tubo (eram 6 malhas por
+  tubo), abrigo, tampão, legenda. Cada triângulo guarda a ficha de onde veio
+  (`userData.faceB` → `userData.infos`), a busca guarda a CAIXA da peça
+  (`focusEntry` usa `h.box`) e o rótulo (sprite) sai do grupo com a mesma
+  ficha. Objeto novo no índice entra sozinho, desde que seja malha simples;
+  superfície que o modelo LÊ (`userData.stype`, TOP/READ), instanciado,
+  sprite e linha ficam de fora.
+- **A sombra é estática** (`shadowMap.autoUpdate = false`): só é redesenhada
+  quando o enquadramento dela anda mais de 18 m (`updSun`), o sol muda ou a
+  cena muda — e quem muda a cena (camada, trecho, árvore, corte) chama
+  `invalidarSombra()`.
+- **Material com `transmission` é proibido**: o three.js redesenha a cena
+  opaca inteira num passe extra a cada quadro em que ele aparece (era o vidro
+  dos abrigos).
+- **As copas e arbustos do modo Leve** são icosaedros de detalhe 2 e 1 (eram
+  3 e 2: 4× mais triângulos, sem diferença que se veja com o ruído).
+`window.__rdo.quadro()` devolve as chamadas de um quadro; o teste exige menos
+de 1.000.
 
 Três leituras a mais do mesmo dado, todas no app (o visor só desenha):
 
+- **Cor padrão: Etapa** (a escolha de quem troca fica no aparelho,
+  `teotonio_m3d_cor`): "Frente" pintava quase toda estaca de Pav. Flexível.
+  O Volume vai do MENOR ao maior do filtro, não de 1. A escada da estaca só
+  mostra as etapas que a obra TEM (`m3dEtapasDaObra`). As partes da tela só
+  trocam de HTML quando ele mudou (`m3dPor`), devolvendo a rolagem das listas
+  — a reprodução redesenhava tudo a cada 450 ms. No celular o painel da estaca
+  no 3D é só a linha curta (`linha`) e os botões: o cartão abaixo tem o resto,
+  e a tabela cobria a estaca recém-tocada.
 - **Linha do tempo (4D)** — período `linha`: o que estava lançado ATÉ
   `M3D.ate`, com o ▶ andando dia/semana/mês (`m3dTocar`). A barra mora DENTRO
   do `#m3dVisor`, irmã do iframe (vai junto na tela cheia; recriar o iframe
@@ -385,6 +428,66 @@ Três leituras a mais do mesmo dado, todas no app (o visor só desenha):
   app). O visor recebe só a imagem pronta (`data:image/…`, conferida lá) e
   devolve só o ÍNDICE; o id do Drive fica no app (`M3D.fotos`).
 
+- **Legenda de etapas é botão**: tocar uma etapa (`m3dEtapaRealce`) deixa
+  só as estacas DELA com cor; as outras vão para `M3D_APAGADA`, no 3D e na
+  lista. Trocar a cor (`m3dFiltro('cor')`) solta o realce. Abaixo da legenda,
+  o **avanço da pista por etapa** (`m3dAvancoEtapas`): estacas que já
+  chegaram a cada degrau, ACUMULADO (quem está no Binder já passou pela
+  base), sobre TODAS as estacas dos eixos do modelo (87 na Teotônio, com ou
+  sem lançamento). Mede extensão, não quantidade — a medição continua na
+  Avanço Físico, e a tela diz isso.
+
+**O cinema do visor (`js/modelo3d/cine.js`).** Câmera e cena descritas como
+um ROTEIRO de planos, e um quadro que é função SÓ do tempo (`quadro(t)`):
+spline centrípeta de velocidade constante, perfil de aceleração em seno
+(`ease [entrada, saída]`), câmera pelo eixo (motorista, ciclista), órbita,
+lente, tremor de drone, hora do sol, transparência, névoa, camadas e a
+VARREDURA (a obra "se construindo" atrás de uma frente que anda pelo eixo).
+Dois usos, o mesmo código:
+
+- **Apresentar a obra** (botão no cabeçalho da tela e na barra de vistas do
+  visor): voo guiado com legenda por trecho. O roteiro sai do PRÓPRIO
+  `index.json` (`roteiroApresentacao`: vistas e trechos), então obra nova com
+  modelo ganha a apresentação sem ninguém escrever roteiro; o fecho mostra o
+  que o RDO já lançou. As travas: o módulo só é baixado no primeiro pedido
+  (`import()`; ele está na lista do Offline com a ?v= do visor); durante o
+  voo o laço NÃO chama `controls.update()` (ele desfazia a inclinação e a
+  lente); qualquer toque, roda ou Esc devolve a câmera (`pararApresentacao`
+  → `soltar()` repõe camadas, superfície, lente, névoa e sombra); o app
+  para a linha do tempo quando o visor avisa `apresentacao: on`. A
+  varredura NÃO entra na apresentação: é simulação, e o engenheiro que
+  apresenta mostra dado.
+- **Gravar vídeo da apresentação** (Ferramentas › Tela): `MediaRecorder` num
+  canvas que junta o WebGL e a legenda; MP4 onde o navegador grava MP4,
+  senão WebM. O arquivo vira um LINK para tocar (`#gravPronto`): o download
+  tem de nascer de um toque.
+- **O gravador do vídeo do modelo** (`modelo3d.html?cine=1`): sem painel
+  nenhum, `window.__cineAbrir()` expõe `__cine.quadro(t)` / `foto()` e o laço
+  fica parado (`__pause`) — cada quadro é pedido por tempo, então o mesmo
+  roteiro dá o mesmo vídeo. Fora do `?cine=1` nada disso existe.
+- **A varredura troca o material por uma CÓPIA com o plano de corte da
+  camada** (e devolve ao sair): o mesmo material serve a camadas diferentes,
+  e o three.js não reprojeta o plano entre dois objetos seguidos com o mesmo
+  material. Sombra junto (`clipShadows`), refeita a cada quadro do plano.
+- **A face cortada tem camadas** (`tampaDaFatia`): o modelo só traz as
+  camadas do pavimento nas bordas (as saias `sk_*`), então um corte deixava a
+  pista oca. A tampa redesenha, na face, a estrutura de cada superfície (a
+  mesma `STRUCT` da seção do painel), o solo por baixo e o anel de cada tubo
+  que atravessa o plano. Serve à seção do painel com "cortar o modelo" e à
+  `fatia` do cinema (plano de corte GLOBAL, `renderer.clippingPlanes`). A
+  tampa encosta 2 cm do lado que fica: no plano, ela seria cortada junto.
+- **Sombra ampla** (`sombraConfig`, só o cinema usa): uma sombra parada de
+  ±460 m em 8192² cobre a obra inteira nas vistas do alto — a padrão (±90 m
+  em volta do alvo) deixava sem sombra tudo o que ficava longe e era refeita
+  a cada 18 m de voo. Hora do sol que anda durante um voo refaz essa sombra
+  a cada quadro: no roteiro, só onde é a intenção (a varredura).
+
+**Sol baixo é dourado** (`setSun`): a cor da luz vai do branco quente (sol
+acima de 30°) ao âmbar (4°), e o céu do hemisfério acompanha; com a cor do
+meio-dia, as 17h pareciam meio-dia com sombra comprida. Trocar a hora refaz
+o reflexo do céu e LIBERA o anterior (`envRT.dispose()`; antes cada troca
+deixava um na GPU).
+
 **O modelo entra pela `ferramentas/modelo3d-importar.py`** (`<pasta publicada>
 modelo3d/<obra>/`): os trechos viram `.bin` ("M3DP": milímetro em diferença,
 bytes embaralhados, gzip — 15 MB de JSON → 2,4 MB), as texturas viram WebP
@@ -394,7 +497,8 @@ visor: **mudou um, mude o outro**. Reimportar exige subir o
 `VERSAO_MODELO3D` do `sw.js` (o balde do modelo é cache-primeiro, como o das
 pranchas). O visor carrega `js/modelo3d/visor.js?v=` com a versão do app.
 `tests/modelo3d.ui.test.js` (o app e o visor de verdade, com WebGL por
-software), `tests/modelo3d-manifesto.test.js` (os .bin abrem no
+software — inclusive a apresentação, a legenda que realça e o sol dourado),
+`tests/modelo3d-manifesto.test.js` (os .bin abrem no
 decodificador de verdade, índice × arquivos, vendor × lista do Offline) e
 `tests/modelo3d-etapas.test.js` (a etapa de cada pacote real).
 
@@ -444,6 +548,14 @@ O RDO Diário de QUALQUER data abre por `abrirDiaV4(iso)`: rascunho presente
 (que não seja parte) manda sobre a planilha — é trabalho que não subiu. O
 turno que sobe pela FILA limpa o rascunho só se ele não foi editado depois
 de ir para a fila (`_salvoEm` × `rascunhoEm`) e deposita o PDF do dia.
+
+## A tela nova começa do topo
+
+O `.main` é quem rola, e guardava a rolagem da tela anterior: quem tocava
+"Ver no modelo 3D" no pé do Painel chegava com o 3D fora da vista — e o mesmo
+em qualquer tela comprida. O `navigate()` zera a rolagem DEPOIS de desenhar a
+tela nova (zerar antes fazia a que sai pular durante o esmaecer). Rolar até um
+ponto da tela nova (`scrollIntoView`) vem depois disso, nunca antes.
 
 ## Sem sinal, o app abre com a última carga boa
 

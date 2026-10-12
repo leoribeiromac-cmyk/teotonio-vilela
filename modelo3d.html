@@ -112,7 +112,9 @@ body{background:var(--bg);color:var(--ink);font-family:"Space Grotesk",Arial,san
 #info dd{margin:0;font-family:"JetBrains Mono",monospace;font-size:12.5px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 #info .src{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:6px}
 #info .x{position:absolute;right:8px;top:6px;border:0;background:transparent;color:var(--muted);font-size:20px;cursor:pointer;line-height:1}
-#readout{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));padding:7px 11px;font-size:12px;z-index:3;display:grid;gap:2px;min-width:260px}
+#readout{position:fixed;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));padding:7px 11px;font-size:12px;z-index:3;display:grid;gap:2px;min-width:260px;max-width:min(420px,calc(100vw - 32px))}
+/* a estaca sob o cursor numa linha só: comprida, a leitura crescia por cima da barra de vistas */
+#readout #roB{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #readout .k{color:var(--muted);font-family:"Space Grotesk",sans-serif;font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:600}
 #compass{position:fixed;right:calc(16px + 270px + 10px);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:46px;height:46px;z-index:3;display:grid;place-items:center;border-radius:50%}
 body.mm-off #compass{right:16px;bottom:calc(92px + env(safe-area-inset-bottom,0px))}
@@ -217,6 +219,10 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
 .embed #hud{max-height:calc(100% - 96px)}
 .embed #titleblock h1{font-size:18px}
 .embed .tb-row{display:none}
+/* dentro do app o resumo já está no cabeçalho da tela, e o botão da galeria,
+   solto no alto do 3D, pegava o toque de quem mirava a faixa: os dois voltam
+   quando o painel "Camadas" abre */
+.embed #hud.collapsed #sub,.embed #hud.collapsed #galBtn{display:none}
 /* celular, dentro do app: o bloco do título encolhe ao nome da obra e ao botão
    "Camadas"; a galeria e o seletor de trecho voltam quando o painel abre */
 @media (max-width:760px){
@@ -226,6 +232,11 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
   /* a lista completa da estaca está logo abaixo do 3D, na tela do app: aqui, o resumo */
   .embed #info{max-height:52%;overflow:auto;gap:6px;padding:10px 12px}
   .embed #info dl dt:nth-of-type(n+6),.embed #info dl dd:nth-of-type(n+6),.embed #info .src{display:none}
+  /* estaca do RDO: título, a linha curta e os botões — a tabela inteira está no cartão logo abaixo do 3D,
+     e aqui ela cobria a estaca que acabou de ser tocada */
+  .embed #info.tem-linha dl{display:none}
+  .embed #info.tem-linha .linha{display:block}
+  .embed #info.tem-linha h3{font-size:17px}
   /* as miniaturas também: o cartão da estaca, logo abaixo, tem as mesmas — aqui elas empurravam os botões para fora */
   .embed #info .fotos{display:none}
 }
@@ -233,6 +244,7 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
 #info .acoes .btn{font-size:13px;padding:5px 9px}
 #info .acoes .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 #info .cor{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:baseline}
+#info .linha{display:none;margin:0;font-size:13.5px;color:var(--muted)}
 /* as miniaturas da estaca (o app manda prontas; o toque abre a foto no app) */
 #info .fotos{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
 #info .fotos button{flex:0 0 auto;width:68px;height:52px;padding:0;border:1px solid var(--line);border-radius:4px;background:var(--chip);cursor:zoom-in;overflow:hidden;line-height:0}
@@ -246,6 +258,34 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
 #carimbo span{font-size:12px;color:var(--muted)}
 /* celular: a data já está na barra do app, logo abaixo do 3D */
 @media (max-width:760px){#carimbo{display:none!important}}
+/* ---------- CINEMA: "Apresentar a obra" (ao vivo) e o gravador do vídeo (?cine=1) */
+.chip.apres{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);display:inline-flex;align-items:center;gap:6px}
+.chip.apres svg{width:13px;height:13px}
+html.cine-on #hud,html.cine-on #views,html.cine-on #info,html.cine-on #compass,html.cine-on #mini,html.cine-on #readout,html.cine-on #prog,html.cine-on #dock,html.cine-on #toast{display:none!important}
+html.cine-rec body > *:not(#stage){display:none!important}
+#cineUI{position:fixed;inset:0;z-index:6;pointer-events:none}
+#cineVeu{position:absolute;inset:0;background:#000;opacity:0}
+/* o texto branco precisa de chão escuro: céu claro atrás da legenda a apagava */
+#cineUI::before{content:"";position:absolute;left:0;right:0;bottom:0;height:42%;background:linear-gradient(to top,rgba(8,10,12,.5),rgba(8,10,12,0));pointer-events:none}
+#cineLeg.sai{transition:opacity .4s;opacity:0}
+#cineLeg{position:absolute;left:clamp(16px,4vw,56px);bottom:calc(clamp(56px,9vh,96px) + env(safe-area-inset-bottom,0px));max-width:min(680px,calc(100vw - 32px));color:#fff;text-shadow:0 1px 14px rgba(0,0,0,.55),0 0 2px rgba(0,0,0,.4)}
+#cineLeg::before{content:"";display:block;width:44px;height:3px;background:var(--accent);margin-bottom:12px;transform-origin:left;transform:scaleX(0)}
+#cineLeg b{display:block;font-size:clamp(22px,3.4vw,40px);font-weight:700;line-height:1.08;letter-spacing:-.01em;opacity:0;transform:translateY(10px)}
+#cineLeg span{display:block;margin-top:6px;font-family:"JetBrains Mono",monospace;font-size:clamp(12px,1.5vw,17px);opacity:0;transform:translateY(8px)}
+#cineLeg.on::before{transition:transform .6s cubic-bezier(.2,.7,.2,1);transform:scaleX(1)}
+#cineLeg.on b{transition:opacity .7s .12s,transform .9s .12s cubic-bezier(.2,.7,.2,1);opacity:1;transform:none}
+#cineLeg.on span{transition:opacity .7s .32s,transform .9s .32s cubic-bezier(.2,.7,.2,1);opacity:.9;transform:none}
+#cineBarraW{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.18)}
+#cineBarra{display:block;height:100%;width:0;background:var(--accent)}
+#cineCtl{position:absolute;right:16px;top:calc(16px + env(safe-area-inset-top,0px));display:flex;gap:8px;align-items:center;pointer-events:auto}
+#cineCtl .chip{background:rgba(20,22,24,.62);color:#fff;border-color:rgba(255,255,255,.28);backdrop-filter:blur(6px)}
+#cineGrav{font-size:12.5px;font-weight:700;color:#fff;background:#b3261e;border-radius:4px;padding:5px 9px;letter-spacing:.04em}
+#cineGrav::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#fff;margin-right:6px;vertical-align:1px;animation:pisca 1s steps(2) infinite}
+@keyframes pisca{50%{opacity:.15}}
+#gravPronto{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0px));transform:translateX(-50%);z-index:12;padding:10px 12px;display:flex;gap:10px;align-items:center;font-size:14px;max-width:calc(100vw - 32px)}
+#gravPronto small{color:var(--muted)}
+@media (prefers-reduced-motion:reduce){#cineLeg.on b,#cineLeg.on span,#cineLeg.on::before{transition:none}}
+
 #erro{position:fixed;inset:0;display:grid;place-items:center;z-index:30;background:var(--bg);padding:24px;text-align:center}
 #erro div{max-width:440px;display:grid;gap:10px;font-size:15px}
 #erro b{font-size:18px}
@@ -328,6 +368,7 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
       </div>
       <div class="tool"><h4>Tela</h4>
         <div class="row"><button class="btn" id="shotBtn">Capturar imagem</button><button class="btn" id="fsBtn">Tela cheia</button><button class="btn" id="mmBtn" aria-pressed="true">Mini-mapa</button></div>
+        <div class="row"><button class="btn" id="gravBtn" title="Grava a apresentação da obra, com as legendas, num vídeo para mandar a quem não tem o app.">Gravar vídeo da apresentação</button></div>
         <div class="row"><button class="btn" id="qBtn" title="Alta: texturas fotográficas, árvores detalhadas, nuvens e oclusão de ambiente. Leve: para celular e computador mais simples.">Qualidade: …</button></div>
       </div>
     </section>
@@ -363,13 +404,21 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
 <div id="gal" hidden role="dialog" aria-modal="true" aria-label="Imagens fotorrealistas"><header><b id="galT"></b><span id="galD"></span><button class="nav" id="galP" aria-label="Anterior">‹</button><button class="nav" id="galN" aria-label="Próxima">›</button><button class="btn" id="galS">Baixar</button><button class="btn" id="galX">Fechar</button></header><div class="big"><img id="galI" alt=""></div><div class="th" id="galTh"></div></div>
 <div id="shot" hidden><div class="box panel"><b>Imagem da vista</b><span class="hint">Clique com o botão direito (ou toque e segure) para salvar.</span><img id="shotImg" alt="Captura da vista atual do modelo"><button class="btn" id="shotX" style="justify-self:start">Fechar</button></div></div>
 <div id="toast" class="panel" role="status" hidden></div>
+<div id="cineUI" hidden>
+  <div id="cineVeu"></div>
+  <div id="cineLeg" hidden aria-live="polite"><b id="cineT"></b><span id="cineS"></span></div>
+  <div id="cineCtl"><span id="cineGrav" hidden>Gravando</span><button class="chip" id="cineSair">Sair da apresentação</button></div>
+  <div id="cineBarraW"><i id="cineBarra"></i></div>
+</div>
+<div id="gravPronto" class="panel" role="status" hidden><span>Vídeo pronto <small id="gravMB"></small></span><a class="btn" id="gravLink" href="#" download>Baixar o vídeo</a><button class="x" id="gravX" aria-label="Fechar" style="border:0;background:transparent;font-size:20px;cursor:pointer;color:var(--muted)">×</button></div>
 
-<div id="views" class="panel" role="group" aria-label="Vistas"></div>
+<div id="views" class="panel" role="group" aria-label="Vistas"><button class="chip apres" id="apresBtn" title="Um voo guiado pela obra, trecho a trecho, com legendas. Qualquer toque devolve a câmera."><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 1.5 10 6l-7.5 4.5z" fill="currentColor"/></svg>Apresentar</button></div>
 
 <div id="info" class="panel" hidden>
   <button class="x" id="infoX" aria-label="Fechar">×</button>
   <div class="disc" id="infoDisc"></div>
   <h3 id="infoT"></h3>
+  <p class="linha" id="infoLinha"></p>
   <dl id="infoDl"></dl>
   <div class="fotos" id="infoFotos" hidden></div>
   <div class="acoes" id="infoAcoes" hidden></div>
@@ -391,6 +440,6 @@ body.dock-open #readout,body.dock-open #compass,body.dock-open #mini{display:non
 <div id="erro" hidden><div><b>Não foi possível abrir o modelo 3D</b><span id="erroTxt"></span><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>
 
 <script type="importmap">{"imports":{"three":"./vendor/three/three.module.min.js","three/addons/":"./vendor/three/addons/","@dgreenheck/ez-tree":"./vendor/three/ez-tree/ez-tree.es.js"}}</script>
-<script type="module" src="js/modelo3d/visor.js?v=66"></script>
+<script type="module" src="js/modelo3d/visor.js?v=68"></script>
 </body>
 </html>
