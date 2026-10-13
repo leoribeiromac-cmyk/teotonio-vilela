@@ -475,21 +475,69 @@ mix = hp(mix, 30, 2)
 for tipo, f0, db, q in (('graves', 90, -4.5, 0.707), ('sino', 2600, 2.5, 0.8), ('sino', 300, -1.5, 0.9)):
     b_, a_ = biquad(tipo, f0, db, q); mix = signal.lfilter(b_, a_, mix, axis=0).astype(np.float32)
 mix = compressor(mix, limiar=-20, razao=2.2)
-# limitador simples (com olhar à frente): o pico não passa de -1,5 dBFS
-pico = 10 ** (-1.5 / 20)
-env = np.abs(mix).max(1)
-look = S(0.004)
-env = np.maximum.accumulate if False else env
-from scipy.ndimage import maximum_filter1d, uniform_filter1d
-e2 = maximum_filter1d(env, size=look * 2 + 1)
-g = np.minimum(1.0, pico / np.maximum(e2, 1e-9))
-g = uniform_filter1d(g, size=look * 2 + 1)
-mix = mix * g[:, None]
-# fade final
+# fades antes da masterização: ela mede o que vai sair
 fade = np.ones(N, np.float32); fi = S(DUR - 2.5); fade[fi:] = np.linspace(1, 0, N - fi) ** 2; mix *= fade[:, None]
 fade_in = np.clip(np.arange(N) / S(0.08), 0, 1); mix *= fade_in[:, None]
+# ---------- MASTER: −14 LUFS integrados (BS.1770-4) e pico verdadeiro abaixo de −1,5 dBTP já no AAC.
+# A trilha tem impactos ~22 dB acima da média: o volume vem de ganho + limitador com olhar à frente e
+# soltura suave (a redução forte fica só nos impactos), não de um loudnorm dinâmico, que "bombeia".
+from scipy.ndimage import minimum_filter1d, uniform_filter1d
+def lufs(x, sr=48000):
+    """volume integrado BS.1770-4 (ponderação K, blocos de 400 ms com 75% de sobreposição, portões −70 e −10)"""
+    assert sr == 48000
+    b1 = [1.53512485958697, -2.69169618940638, 1.19839281085285]; a1 = [1.0, -1.69065929318241, 0.73248077421585]
+    b2 = [1.0, -2.0, 1.0]; a2 = [1.0, -1.99004745483398, 0.99007225036621]
+    y = signal.lfilter(b2, a2, signal.lfilter(b1, a1, x, axis=0), axis=0)
+    blk, hop = int(0.4 * sr), int(0.1 * sr)
+    p = (y ** 2).sum(axis=1)
+    c = np.concatenate([[0], np.cumsum(p)])
+    ini = np.arange(0, len(p) - blk + 1, hop)
+    z = (c[ini + blk] - c[ini]) / blk
+    l = -0.691 + 10 * np.log10(z + 1e-20)
+    z1 = z[l > -70]
+    lr = -0.691 + 10 * np.log10(z1.mean() + 1e-20) - 10
+    z2 = z1[(-0.691 + 10 * np.log10(z1 + 1e-20)) > lr]
+    return -0.691 + 10 * np.log10(z2.mean() + 1e-20)
+
+def pico_verdadeiro(x):
+    """pico com sobreamostragem 4× (o que o conversor do aparelho vai ver)"""
+    return 20 * math.log10(np.abs(signal.resample_poly(x, 4, 1, axis=0)).max() + 1e-12)
+
+def limitar(x, teto_db=-1.8, olhar_ms=5, solta_ms=140, sr=48000):
+    """limitador com olhar à frente, em blocos de 1 ms: ataque dentro do olhar, soltura exponencial"""
+    teto = 10 ** (teto_db / 20)
+    ov = np.abs(signal.resample_poly(x, 4, 1, axis=0)).max(axis=1)
+    n = len(x); ov = ov[:n * 4].reshape(n, 4).max(axis=1)        # pico verdadeiro por amostra
+    r = np.minimum(1.0, teto / np.maximum(ov, 1e-9))
+    B = sr // 1000; nb = int(math.ceil(n / B))
+    rb = np.ones(nb * B); rb[:n] = r; rb = rb.reshape(nb, B).min(axis=1)
+    L = olhar_ms
+    gmin = minimum_filter1d(rb, size=L + 1, origin=-(L // 2))     # o mínimo de agora até L blocos à frente
+    k = 1 - math.exp(-1.0 / solta_ms)
+    g = np.empty(nb); cur = 1.0
+    for i in range(nb):
+        cur = min(gmin[i], cur + (1 - cur) * k); g[i] = cur
+    gs = uniform_filter1d(g, size=L, origin=(L - 1) // 2)          # média dos L blocos que terminam aqui
+    gs = np.minimum(gs, g)
+    t = (np.arange(nb) + 0.5) * B
+    gn = np.interp(np.arange(n), t, gs)
+    return (x * gn[:, None]).astype(np.float32), gn
+
+def masterizar(x, alvo=-14.0, teto_tp=-1.5, sr=48000, log=print):
+    i0 = lufs(x, sr); ganho = alvo - i0; teto = teto_tp - 0.3
+    for it in range(5):
+        y, gn = limitar(x * 10 ** (ganho / 20), teto, sr=sr)
+        i1 = lufs(y, sr); tp = pico_verdadeiro(y)
+        if tp > teto_tp: teto -= (tp - teto_tp) + 0.05; continue
+        log(f'  master {it}: ganho {ganho:+.2f} dB · {i1:.2f} LUFS · pico verdadeiro {tp:.2f} dBTP · redução máx {20 * math.log10(gn.min()):.1f} dB')
+        if abs(i1 - alvo) < 0.1: break
+        ganho += alvo - i1
+    return y
+
+# teto de −2,7 dBTP no WAV: o AAC da entrega passa ~1 dB por cima do original e tem de ficar abaixo de −1,5
+mix = masterizar(mix[:S(DUR)], -14.0, -2.7, SR)
 mix = mix[:S(DUR)]
 saida = sys.argv[1] if len(sys.argv) > 1 else os.path.join(AQ, 'trilha.wav')
 from scipy.io import wavfile
 wavfile.write(saida, SR, (np.clip(mix, -1, 1) * 32767).astype(np.int16))
-print('trilha', round(DUR, 2), 's · pico', round(20 * np.log10(np.abs(mix).max() + 1e-9), 2), 'dBFS ->', saida)
+print('trilha', round(DUR, 2), 's ·', round(lufs(mix, SR), 2), 'LUFS · pico verdadeiro', round(pico_verdadeiro(mix), 2), 'dBTP ->', saida)

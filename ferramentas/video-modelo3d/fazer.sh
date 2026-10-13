@@ -17,11 +17,15 @@ node "$AQUI/faixas.js"
 node -e "
 const R = require('$AQUI/roteiro.js'); let t = 0;
 const pl = R.roteiro.planos.map(p => { const o = { id: p.id, t0: t, dur: p.dur, texto: p.texto || null, secao: p.secao || null }; t += p.dur; return o; });
-require('fs').writeFileSync('$VIDEO_TRABALHO/roteiro.json', JSON.stringify({ planos: pl, dur: t }, null, 1));"
+require('fs').writeFileSync('$VIDEO_TRABALHO/roteiro.json', JSON.stringify({ planos: pl, dur: t, kc: R.KC }, null, 1));"
 node "$AQUI/render.js" "$AQUI/roteiro.js" "$Q" $R
 python3 "$AQUI/comp.py" "$Q" "$VIDEO_TRABALHO/nada" --png --ate 0 $C      # só escreve filme.json (o tempo de cada plano no filme)
 python3 "$AQUI/musica.py" "$VIDEO_TRABALHO/trilha.wav"
 python3 "$AQUI/comp.py" "$Q" "$VIDEO_TRABALHO/video-sem-som.mp4" $C
+# volume em duas passadas: a primeira mede, a segunda aplica a medida (uma passada só corrige "no escuro" e erra o alvo)
+MEDIDA=$(ffmpeg -hide_banner -i "$VIDEO_TRABALHO/trilha.wav" -af loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json -f null - 2>&1 | python3 -c "
+import sys, json; t = sys.stdin.read(); j = json.loads(t[t.rindex('{'):t.rindex('}') + 1])
+print(f\"measured_I={j['input_i']}:measured_TP={j['input_tp']}:measured_LRA={j['input_lra']}:measured_thresh={j['input_thresh']}:offset={j['target_offset']}\")")
 ffmpeg -y -loglevel error -i "$VIDEO_TRABALHO/video-sem-som.mp4" -i "$VIDEO_TRABALHO/trilha.wav" -map 0:v -map 1:a -c:v copy \
-  -af loudnorm=I=-14:TP=-1.5:LRA=11 -c:a aac -b:a 256k -ar 48000 -shortest -movflags +faststart "$VIDEO_TRABALHO/teotonio-vilela-modelo3d.mp4"
+  -af "loudnorm=I=-14:TP=-1.5:LRA=11:$MEDIDA:linear=true,aresample=48000" -c:a aac -b:a 256k -shortest -movflags +faststart "$VIDEO_TRABALHO/teotonio-vilela-modelo3d.mp4"
 echo "pronto: $VIDEO_TRABALHO/teotonio-vilela-modelo3d.mp4"

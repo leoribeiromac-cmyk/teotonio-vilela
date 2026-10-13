@@ -57,7 +57,7 @@ const planos = [
   // a câmera anda de lado com a frente de obra, ~70 m atrás dela: o trem de camadas passa embaixo
   { id: 'obra', dur: 15, cam: { eixo: 'PD', m: [4070, 4850], lado: -78, alt: 58, olhar: 28, ladoAlvo: 0, altAlvo: 0 }, ease: [.18, .18], tremor: .2, hora: [8.2, 16], mes: MES, regenSol: 'sempre', camadas: ESC, nevoa: .0005, nevoaCor: '#c9cdd0', exposicao: .93, sombra: OBRA_SOMBRA,
     varredura: { eixo: 'PD', m: [M0, M1], grupos: VARRE, t: [.03, .97], largura: 80, altura: 12 }, texto: { tipo: 'linha', de: 0 } },
-  { id: 'rdo', dur: 6, cam: cam([pt('PD', 4420, -85, 85), pt('PD', 4468, -72, 68)], [pt('PD', 4560, -6, 0), pt('PD', 4585, -6, 0)]), ease: [.1, .45], hora: 16, mes: MES, camadas: { ...ESC, rdo: true }, nevoa: .0005, nevoaCor: '#c9cdd0', exposicao: .93, sombra: OBRA_SOMBRA,
+  { id: 'rdo', dur: 6, cam: cam([pt('PD', 4420, -85, 85), pt('PD', 4468, -72, 68)], [pt('PD', 4560, -6, 0), pt('PD', 4585, -6, 0)]), ease: [.1, .45], hora: 14.6, mes: MES, camadas: { ...ESC, rdo: true }, nevoa: .0005, nevoaCor: '#c9cdd0', exposicao: 1.04, sombra: OBRA_SOMBRA,
     texto: { tipo: 'rdo', t: 'No app, cada estaca acende com o que o RDO lançou', de: .4 } },
   // ---------- ATO 4 — fecho dourado
   { id: 'dourado', dur: 7, cam: { eixo: 'PD', m: [4795, 4640], lado: -7, alt: 15, olhar: 75, ladoAlvo: -4, altAlvo: 2 }, ease: [0, 0], rolar: [1.5, -1.5], tremor: .25, hora: 16.6, mes: MES, camadas: ESC, nevoa: .0011, nevoaCor: '#d8c7b0', exposicao: 1.02, sombra: AMPLA },
@@ -66,13 +66,19 @@ const planos = [
 ];
 // a dança da obra: lançamentos por data (dados ILUSTRATIVOS, gerados pelo app de verdade em faixas.json)
 let FX = null; try { FX = JSON.parse(require('fs').readFileSync(require('path').join(process.env.VIDEO_TRABALHO || require('path').join(require('os').tmpdir(), 'video-modelo3d'), 'faixas.json'), 'utf8')); } catch (e) { }
+// As primeiras etapas da escada (demolição, terraplenagem) são cinza e somem sobre o asfalto visto do alto:
+// KC é a primeira data em que o trecho enquadrado (PD 225+10 a 246) ganha cor. As datas cinzentas passam
+// no primeiro sexto do plano; as que acendem a avenida ocupam o resto. A mesma conta está no comp.py (k_rdo).
+const CINZA = ['#8d8d8d', '#8a949b'];
+const KC = FX ? Math.max(1, FX.faixas.findIndex(fs => fs.some(x => !CINZA.includes(x.cor) && (x.m0 + x.m1) / 2 > 4510 && (x.m0 + x.m1) / 2 < 4920))) : 1;
 module.exports = {
   roteiro: { planos },
   regenSol: 'fim',
-  FX,
+  FX, KC,
   porQuadro: FX ? new Function('a', 'const FX = ' + JSON.stringify(FX) + '; ' + `
     if (a.plano !== 'rdo') { if (window.__fxEnviado) { window.__fxEnviado = null; window.postMessage({ m3d: 1, tipo: 'execucao', faixas: [] }, location.origin); } return; }
-    const k = Math.min(FX.datas.length - 1, Math.floor(Math.min(1, (a.u || 0) / .8) * (FX.datas.length - 1)));
+    const n = FX.datas.length - 1, kc = ${KC}, u = a.u || 0, A = .16, B = .82;
+    const k = u < A ? Math.floor(u / A * (kc - 1)) : Math.min(n, Math.floor(kc - 1 + Math.min(1, (u - A) / (B - A)) * (n - kc + 1)));
     if (window.__fxEnviado === k) return; window.__fxEnviado = k;
     // a mensagem chega no próximo giro: monta já, com o mesmo caminho do app
     window.postMessage({ m3d: 1, tipo: 'execucao', faixas: FX.faixas[k] }, location.origin);
