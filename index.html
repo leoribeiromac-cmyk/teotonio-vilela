@@ -72,24 +72,24 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=68"></script>
-<script src="dados/ruas-de-terra.js?v=68"></script>
+<script src="dados/ranario.js?v=69"></script>
+<script src="dados/ruas-de-terra.js?v=69"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=68"></script>
+<script src="dados/teotonio-muros.js?v=69"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=68"></script>
-<script src="js/nf/adaptador.js?v=68"></script>
-<script src="js/nf/notas.js?v=68"></script>
-<script src="js/equip/equipamentos.js?v=68"></script>
+<script src="js/ui/icones.js?v=69"></script>
+<script src="js/nf/adaptador.js?v=69"></script>
+<script src="js/nf/notas.js?v=69"></script>
+<script src="js/equip/equipamentos.js?v=69"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=68"></script>
-<script src="js/rdo/mapa-chuva.js?v=68"></script>
-<script src="js/modelo3d/tela.js?v=68"></script>
+<script src="js/bf/bota-fora.js?v=69"></script>
+<script src="js/rdo/mapa-chuva.js?v=69"></script>
+<script src="js/modelo3d/tela.js?v=69"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -8165,6 +8165,10 @@ async function carregarTudo(opts = {}) {
   if (STATE.currentPage === 'modelo3d' && typeof m3dRefrescar === 'function') {
     try { telaViva = m3dRefrescar(); } catch (e) { console.error('modelo3d', e); }
   }
+  /* Projetos não lê nada da carga (as pranchas são do cadastro da obra):
+     redesenhar por baixo de quem olha voltava o zoom ao início e tirava a
+     prancha da tela cheia a cada 5 minutos. */
+  if (fundo && jaHaviaTela && STATE.currentPage === 'projetos') telaViva = true;
   /* Erro de DESENHO não é erro de rede: dentro do try da carga, uma tela
      quebrada virava "Sem conexão com Google Sheets" e escondia o defeito. */
   if (!telaViva) { try { render(); } catch (e) { console.error('render', e); } }
@@ -8296,7 +8300,25 @@ function _chavePacote(v) {
   return String(v == null ? '' : v).trim().toUpperCase();
 }
 
+/* A conta de TODOS os pacotes sobre TODOS os lançamentos (dezenas de milhares
+   de linhas) era refeita a cada linha de serviço do Lançar Serviço — e o
+   formulário se redesenha a cada pacote escolhido. A chamada sobre o STATE
+   inteiro fica guardada pela REFERÊNCIA das duas listas: STATE.rdoavanco e
+   STATE.pacotes são trocados a cada carga e nunca mexidos no lugar (o mesmo
+   princípio do m3dBase do Modelo 3D). O DADO_SUJO volta junto, porque a tela
+   de avisos o lê da última conta. */
+let _avancoTudo = null;   // { rdos, pacotes, m, sujo }
 function calcularAvancoPorPacote(rdos = STATE.rdoavanco, pacotes = STATE.pacotes) {
+  const tudo = rdos === STATE.rdoavanco && pacotes === STATE.pacotes;
+  if (tudo && _avancoTudo && _avancoTudo.rdos === rdos && _avancoTudo.pacotes === pacotes) {
+    DADO_SUJO = _avancoTudo.sujo;
+    return _avancoTudo.m;
+  }
+  const m = calcularAvancoPorPacote_(rdos, pacotes);
+  if (tudo) _avancoTudo = { rdos, pacotes, m, sujo: DADO_SUJO };
+  return m;
+}
+function calcularAvancoPorPacote_(rdos, pacotes) {
   const m = {};
   const porChave = {};          // CHAVE NORMALIZADA -> id como está na planilha
   DADO_SUJO = { pacoteDesconhecido: [], quantidadeNegativa: [], estimadaInvalida: [] };
@@ -8848,7 +8870,7 @@ window.buscaDigitou = function (v) {
 let _buscaRelogio = 0;
 window.buscaDigitouAtrasado = function (v) {
   clearTimeout(_buscaRelogio);
-  _buscaRelogio = setTimeout(() => { if (BUSCA.aberta) buscaDigitou(v); }, 140);
+  _buscaRelogio = setTimeout(() => { _buscaRelogio = 0; if (BUSCA.aberta) buscaDigitou(v); }, 140);
 };
 
 window.buscaAbrir = function () {
@@ -8896,7 +8918,7 @@ document.addEventListener('keydown', e => {
     // Enter logo depois da última tecla: a busca atrasada ainda não rodou (e a
     // lista ainda vazia não pode encerrar o Enter antes dela)
     const inp = document.getElementById('buscaInput');
-    if (inp && inp.value !== BUSCA.termo) { clearTimeout(_buscaRelogio); buscaDigitou(inp.value); }
+    if (_buscaRelogio && inp) { clearTimeout(_buscaRelogio); _buscaRelogio = 0; buscaDigitou(inp.value); }
     if (BUSCA.itens.length) buscaIr(BUSCA.sel);
     return;
   }
@@ -9217,7 +9239,7 @@ function render() {
   else if (STATE.currentPage === 'cronograma') pageEl.innerHTML = renderCronograma();
   else if (STATE.currentPage === 'medicao') { pageEl.innerHTML = renderMedicao(); medicaoGarantirFechadas(); }
   else if (STATE.currentPage === 'improdutivos') pageEl.innerHTML = renderImprodutivos();
-  else if (STATE.currentPage === 'teoricoreal') pageEl.innerHTML = renderTeoricoReal();
+  else if (STATE.currentPage === 'teoricoreal') { pageEl.innerHTML = renderTeoricoReal(); trSincronizarSaidas(); }
   else if (STATE.currentPage === 'analista') pageEl.innerHTML = renderAnalistaIA();
   else if (STATE.currentPage === 'rdo') { pageEl.innerHTML = renderRDO(); attachRDOForm(); }
   else if (STATE.currentPage === 'rdodiario') { pageEl.innerHTML = renderRDODiarioV4(); attachRDODiarioV4Form(); }
@@ -10392,10 +10414,38 @@ window.gerarRelatorioFotografico = function () {
   return comLib('pdf', _gerarRelatorioFotografico, 'o relatório fotográfico');
 };
 
+/* Cada foto vem do Drive, uma por vez (1 a 3 s cada no 4G): o relatório
+   do mês inteiro levava minutos com a tela parada — e quem tocava de novo,
+   achando que não tinha pegado, montava dois ao mesmo tempo. Agora o aviso
+   conta as fotos, o segundo toque espera o primeiro, e relatório grande
+   pergunta antes. */
+const REL_FOTO_PERGUNTA = 60;
+let _relFotoGerando = false;
+
 async function _gerarRelatorioFotografico() {
+  if (_relFotoGerando) { toast('O relatório fotográfico ainda está sendo montado — espere ele terminar.', 'info', 4000); return; }
   const fotos = galeriaParaRelatorio();
   if (!fotos.length) { toast('Nenhuma foto selecionada.', 'error', 4000); return; }
   if (!STATE.usuarioLogado) { toast('Entre no sistema para baixar as fotos.', 'error', 5000); return; }
+  if (fotos.length > REL_FOTO_PERGUNTA &&
+      !confirm(`O relatório vai ter ${fotos.length} fotos (${Math.ceil(fotos.length / 2)} folhas). Cada foto vem do Drive, ` +
+               'e no celular isso pode levar vários minutos.\n\nMontar assim mesmo? (Cancelar volta para filtrar ou tirar fotos da seleção.)')) return;
+  _relFotoGerando = true;
+  let aviso = null;
+  try { aviso = await _gerarRelatorioFotografico_(fotos, (n) => {
+    const msg = `Montando o relatório: foto ${n} de ${fotos.length}…`;
+    if (!aviso || !aviso.isConnected) aviso = toast(msg, 'info', 0);
+    else { const m = aviso.querySelector('.toast-msg'); if (m) m.textContent = msg; }
+    return aviso;
+  }); }
+  finally {
+    _relFotoGerando = false;
+    if (aviso && aviso.remove) aviso.remove();
+  }
+}
+
+async function _gerarRelatorioFotografico_(fotos, progresso) {
+  let aviso = null;
 
   const info = rdoInfo();
   const { jsPDF } = window.jspdf;
@@ -10422,7 +10472,7 @@ async function _gerarRelatorioFotografico() {
     : datas[0].slice(0, 7) === datas[datas.length - 1].slice(0, 7) ? nomeMes(datas[0])
     : nomeMes(datas[0]) + ' a ' + nomeMes(datas[datas.length - 1]);
 
-  toast(`Montando o relatório com ${fotos.length} foto(s)…`, 'info', 3000);
+  aviso = progresso(0);
 
   // ---------------------------------------------------------------- capa
   let y = M + 6;
@@ -10476,6 +10526,7 @@ async function _gerarRelatorioFotografico() {
       y = M + 6;
     }
 
+    aviso = progresso(i + 1);
     let dataUri = '';
     try { dataUri = await baixarFotoServidor(f.fileId, false); } catch (e) {}
 
@@ -10516,7 +10567,9 @@ async function _gerarRelatorioFotografico() {
   const mesIni = (datas[0] || '').slice(0, 7), mesFim = (datas[datas.length - 1] || '').slice(0, 7);
   const nome = `relatorio-fotografico-${OBRA.id}-${!mesIni ? 'periodo' : mesIni === mesFim ? mesIni : mesIni + '_a_' + mesFim}.pdf`;
   doc.save(nome);
+  if (aviso && aviso.remove) aviso.remove();
   toast(`Relatório com ${fotos.length} foto(s) gerado.`, 'success', 4500);
+  return aviso;
 }
 
 function carregarImagensGaleria() {
@@ -15206,6 +15259,26 @@ function consumoTeoricoReal(mes) {
       saidasOrfas: semTeorico.length,
     },
   };
+}
+
+/* A metade REAL desta tela são as saídas do almoxarifado, que moram no
+   servidor e chegam ao aparelho pela sincronização das Notas — que só rodava
+   com a tela de Notas aberta. Quem abria o Teórico × Real direto via o
+   consumo de quando abriu as Notas pela última vez (ou nenhum). Aqui ela roda
+   também, e a tela se redesenha se as saídas mudaram. */
+const _trSincEm = {};
+function trSincronizarSaidas() {
+  if (typeof nfCarregar !== 'function' || typeof nfSaiGet !== 'function') return;
+  const obraId = OBRA.id;
+  const sinc = typeof nfSyncEstado === 'function' ? nfSyncEstado(obraId) : { em: 0 };
+  if (sinc.em && !sinc.erro && Date.now() - sinc.em < 2 * 60 * 1000) return;
+  if (_trSincEm[obraId] && Date.now() - _trSincEm[obraId] < 60 * 1000) return;   // não insiste
+  _trSincEm[obraId] = Date.now();
+  const antes = JSON.stringify(nfSaiGet(obraId));
+  nfCarregar(obraId, { fundo: true }).then(() => {
+    if (STATE.currentPage !== 'teoricoreal' || OBRA.id !== obraId) return;
+    if (JSON.stringify(nfSaiGet(obraId)) !== antes) transitionTo(render);
+  }).catch(() => {});
 }
 
 function renderTeoricoReal() {

@@ -102,6 +102,20 @@ const ok = (nome, cond, extra) => {
   ok('Enter leva ao Histórico', foi.tela === 'historico', foi.tela);
   ok('e já deixa o filtro preenchido com a estaca', /E112/.test(foi.filtro || ''), foi.filtro);
 
+  // digitado de verdade e Enter na hora: a busca espera a pessoa parar de
+  // digitar (140 ms), e o Enter não pode chegar antes dela e não fazer nada
+  console.log('\n── Enter logo depois de digitar ──');
+  await s.p.evaluate(() => { HIST_FILTRO.busca = ''; buscaAbrir(); });
+  await s.p.waitForTimeout(200);
+  await s.p.keyboard.type('E113', { delay: 10 });
+  await s.p.keyboard.press('Enter');
+  await s.p.waitForTimeout(800);
+  const rapido = await s.p.evaluate(() => ({ fechou: !document.getElementById('buscaOverlay'), filtro: HIST_FILTRO.busca }));
+  ok('o Enter dado antes da busca atrasada rodar ainda leva ao resultado', rapido.fechou && /E113/.test(rapido.filtro || ''),
+     JSON.stringify(rapido));
+  ok('e, já no Histórico, a lista é filtrada de novo (antes ficava como estava)',
+     await s.p.evaluate(() => STATE.currentPage === 'historico' && /E113/.test(document.querySelector('.page') ? document.querySelector('.page').innerHTML : '')));
+
   ok('nenhum erro de JS na busca', s.erros.length === 0, s.erros.slice(0, 3).join(' | '));
   await s.fechar();
 

@@ -247,6 +247,7 @@ function m3dBase() {
     var p = pac.get(pid);
     var frente = (p && getCSVField(p, 'Frente')) || 'Outros';
     linhas.push({ r: r, pid: pid, frente: frente, iso: normalizarDataCSV(getCSVField(r, 'Data')), ests: ests,
+      id: String(getCSVField(r, 'ID') || ''),
       nf: fotosDaLinha(r).length, etapa: m3dEtapaDe((p && getCSVField(p, 'Pacote')) || getCSVField(r, 'Pacote_Nome'), frente) });
   });
   _m3dBase = { fonte: STATE.rdoavanco, pac: STATE.pacotes, linhas: linhas };
@@ -267,8 +268,9 @@ function m3dEstacas() {
     if (!m3dNoPeriodo(L.iso)) return;
     L.ests.forEach(function (e) {
       var k = e.eixo + ':' + e.num, a = out.get(k);
-      if (!a) out.set(k, a = { chave: k, eixo: e.eixo, num: e.num, linhas: [], frentes: {}, ultima: '', fotos: 0, etapa: -1 });
+      if (!a) out.set(k, a = { chave: k, eixo: e.eixo, num: e.num, linhas: [], frentes: {}, ultima: '', fotos: 0, etapa: -1, top: [] });
       a.linhas.push(L.r);
+      m3dTopInserir(a.top, L);
       a.frentes[L.frente] = (a.frentes[L.frente] || 0) + 1;
       if (L.iso > a.ultima) a.ultima = L.iso;
       a.fotos += L.nf;
@@ -300,8 +302,23 @@ function m3dTempoLimites() {
   });
   return { ini: ini || hoje, fim: fim || hoje };
 }
+/* Os 4 lançamentos mais novos da estaca, guardados enquanto a estaca é
+   montada: ordenar TODAS as linhas de cada estaca (relendo a data a cada
+   comparação) só para mostrar quatro custava 170–200 ms por quadro da linha
+   do tempo — a reprodução engasgava no celular. */
+var M3D_TOP = 4;
+function m3dMaisNovo(x, y) { return x.iso > y.iso || (x.iso === y.iso && x.id > y.id); }
+function m3dTopInserir(top, L) {
+  if (top.length >= M3D_TOP && !m3dMaisNovo(L, top[top.length - 1])) return;
+  var i = top.length;
+  while (i > 0 && m3dMaisNovo(L, top[i - 1])) i--;
+  top.splice(i, 0, L);
+  if (top.length > M3D_TOP) top.pop();
+}
 function m3dFrentesOrdenadas(a) {
-  return Object.keys(a.frentes).sort(function (x, y) { return a.frentes[y] - a.frentes[x] || x.localeCompare(y); });
+  // a estaca é refeita a cada montagem: a ordem das frentes vale por ela inteira
+  if (a._frs) return a._frs;
+  return (a._frs = Object.keys(a.frentes).sort(function (x, y) { return a.frentes[y] - a.frentes[x] || x.localeCompare(y); }));
 }
 /* "Há quantos dias": de hoje, ou — na linha do tempo — da data da linha */
 function m3dDiasDesde(iso) {
@@ -347,7 +364,8 @@ function m3dDados() {
     rows.push(['Etapa', a.etapa >= 0 ? M3D_ETAPAS[a.etapa].nome : 'fora da pista']);
     rows.push(['Frentes', fr]);
     if (a.fotos) rows.push(['Fotos', String(a.fotos)]);
-    m3dOrdenarLinhas(a.linhas).slice(0, 4).forEach(function (r) {
+    a.top.forEach(function (L) {
+      var r = L.r;
       rows.push([fmtData(getCSVField(r, 'Data')),
         ((nomeDoPacote(r) || '—') + ' · ' + fmtNum(num(getCSVField(r, 'Quantidade'))) + ' ' + (getCSVField(r, 'Unidade') || '')).trim()]);
     });
@@ -360,7 +378,7 @@ function m3dDados() {
       titulo: 'E' + a.num + ' · ' + (eixo ? eixo.label : a.eixo),
       linha: (a.etapa >= 0 ? M3D_ETAPAS[a.etapa].nome + ' · ' : '') + n + ' lançamento' + (n > 1 ? 's' : '') +
         (a.ultima ? ' · último ' + fmtData(a.ultima) : '') + (a.fotos ? ' · ' + a.fotos + ' foto' + (a.fotos > 1 ? 's' : '') : ''),
-      resumo: n + ' lançamento' + (n > 1 ? 's' : '') + ' · ' + m3dFrentesOrdenadas(a).join(', '),
+      resumo: n + ' lançamento' + (n > 1 ? 's' : '') + ' · ' + frs.join(', '),
       rows: rows, acoes: acoes, src: 'serviços lançados no app (RDO_Avanco) · ' + m3dDescFiltro(),
     });
   });
@@ -417,6 +435,7 @@ function renderModelo3D() {
       '</div></div>';
   }
   M3D.pronto = false;   // iframe novo: espera ele dizer que está escutando
+  M3D.falhou = false;
   M3D.apresentando = false;
   M3D.realce = undefined;
   M3D.fotos = null;
@@ -451,11 +470,19 @@ function renderModelo3D() {
 /* "Apresentar a obra": o voo guiado mora no visor (js/modelo3d/cine.js); o app
    só pede e para. Com o 3D fora da vista, o pedido traz ele para a tela. */
 window.m3dApresentar = function () {
+  // o 3D que não abriu (sem WebGL) não está "carregando": dizer isso fazia esperar para sempre
+  if (M3D.falhou) { toast('O 3D não abriu neste aparelho (WebGL indisponível) — não há o que apresentar aqui.', 'error', 5000); return; }
   if (!M3D.pronto) { toast('O modelo ainda está carregando.', 'info', 2500); return; }
   if (M3D.apresentando) { m3dEnviar({ tipo: 'parar-apresentacao' }); return; }
   var v = document.getElementById('m3dVisor'); if (v && v.getBoundingClientRect().top < 0) v.scrollIntoView({ block: 'start' });
   m3dEnviar({ tipo: 'apresentar' });
 };
+/* O Esc só chegava ao visor com o foco DENTRO do iframe; quem tinha tocado no
+   botão do app (o foco ficou aqui fora) apertava Esc e nada acontecia. */
+// (fora do navegador — o teste das etapas lê este arquivo numa VM — não há documento)
+if (typeof document !== 'undefined') document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && M3D.apresentando && STATE.currentPage === 'modelo3d') m3dEnviar({ tipo: 'parar-apresentacao' });
+});
 
 function m3dFiltrosHtml() {
   var meses = {}, frentesSet = {};
@@ -634,16 +661,25 @@ function m3dDesenharLista(D) {
           '<i style="background:' + escHtml(a.cor || '#999') + '"></i><b>E' + a.num + '</b><small>' + a.linhas.length + '</small></button>';
       }).join('') + '</div>' : '<div class="m3d-vazio">Nada lançado com estaca neste eixo, neste filtro.</div>');
   }).join('');
-  m3dPor(el, '<div class="card-header"><div><div class="card-title">Estacas com serviço</div>' +
-    '<div class="card-title-sub">Toque para levar o 3D até a estaca</div></div></div>' +
-    '<div class="card-body">' +
-      '<div class="m3d-ir"><label for="m3dIrNum">Ir para a estaca</label>' +
-        (eixos.length > 1 ? '<select id="m3dIrEixo" aria-label="Eixo">' + eixos.map(function (x) { return '<option value="' + escHtml(x.id) + '">' + escHtml(x.label) + '</option>'; }).join('') + '</select>' : '') +
-        '<input id="m3dIrNum" type="text" inputmode="numeric" placeholder="ex.: 212" onkeyup="if(event.key===\'Enter\') m3dIrDigitada()">' +
-        '<button type="button" class="btn btn-outline btn-sm" onclick="m3dIrDigitada()">' + ic('lupa') + ' Ir</button>' +
-        '<div class="field-error" id="m3dIrErro" style="display:none;flex-basis:100%"></div>' +
-      '</div>' + porEixo +
-    '</div>');
+  /* O "Ir para a estaca" é montado UMA vez; só a lista abaixo dele é refeita.
+     Com a linha do tempo tocando a lista muda a cada quadro, e o campo era
+     redesenhado junto: o número digitado sumia e o teclado fechava. */
+  var corpo = document.getElementById('m3dListaCorpo');
+  if (!corpo) {
+    el.innerHTML = '<div class="card-header"><div><div class="card-title">Estacas com serviço</div>' +
+      '<div class="card-title-sub">Toque para levar o 3D até a estaca</div></div></div>' +
+      '<div class="card-body">' +
+        '<div class="m3d-ir"><label for="m3dIrNum">Ir para a estaca</label>' +
+          (eixos.length > 1 ? '<select id="m3dIrEixo" aria-label="Eixo">' + eixos.map(function (x) { return '<option value="' + escHtml(x.id) + '">' + escHtml(x.label) + '</option>'; }).join('') + '</select>' : '') +
+          '<input id="m3dIrNum" type="text" inputmode="numeric" placeholder="ex.: 212" onkeyup="if(event.key===\'Enter\') m3dIrDigitada()">' +
+          '<button type="button" class="btn btn-outline btn-sm" onclick="m3dIrDigitada()">' + ic('lupa') + ' Ir</button>' +
+          '<div class="field-error" id="m3dIrErro" style="display:none;flex-basis:100%"></div>' +
+        '</div><div id="m3dListaCorpo"></div>' +
+      '</div>';
+    el._m3dHtml = null;
+    corpo = document.getElementById('m3dListaCorpo');
+  }
+  m3dPor(corpo, porEixo);
 }
 
 function m3dDesenharDetalhe(D) {
@@ -1093,6 +1129,7 @@ window.addEventListener('message', function (e) {
     var b = document.getElementById('m3dBtnApresentar');
     if (b) { b.innerHTML = ic(M3D.apresentando ? 'pausa' : 'play') + '<span class="m3d-rot"> ' + (M3D.apresentando ? 'Parar' : 'Apresentar') + '</span>'; b.setAttribute('aria-pressed', String(M3D.apresentando)); }
   } else if (d.tipo === 'falhou') {
+    M3D.falhou = true;
     var r = document.getElementById('m3dResumo');
     if (r) r.textContent = 'O 3D não abriu neste aparelho (WebGL indisponível). A lista de estacas abaixo continua valendo.';
   }

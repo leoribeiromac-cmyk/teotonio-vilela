@@ -126,6 +126,17 @@ branco, com a linha para a caneta. Daí "todas as assinaturas" querer dizer as
 ONLINE previstas, e não os quadros da folha: quem espera pela firma da caneta
 espera para sempre.
 
+**O que foi lido é o que se assina.** O `rdoAssinaturaGravar` recusa a
+firma de dia SEM PDF depositado (`semPdf` — o link copiado do painel existe
+antes do depósito, e levava a um quadro de assinar sem documento) e a de uma
+versão que MUDOU (`mudou`): a página manda a `revisao` do PDF que abriu, e a
+firma só entra se ela (e a do PDF guardado) ainda for a do dia. O link avisa
+quando o dia foi corrigido depois do PDF (`desatualizado`). A revisão é
+comparada limpa nas três pontas (`rdoRevNorm_`: o depósito, a linha do dia e
+a página). E o botão **Enviar para assinatura** recusa o RDO de HOJE: o dia
+não acabou, e o envio registrado fazia o gatilho de amanhã achar "já
+enviado" e não mandar a versão com o noturno.
+
 ### O engenheiro não assina um por um: a firma dele fica arquivada
 
 O engenheiro responsável assina TODO RDO — é o relatório da própria
@@ -223,6 +234,35 @@ ao escritório e barra o apontador (o que ele digitou fica no rascunho), e a
 fila guarda o turno recusado e tenta de novo a cada 10 min, sem travar os
 outros. `tests/rdo-turno-assinado-servidor.test.js` e
 `tests/rdo-gravado-e-assinado.ui.test.js`.
+
+## O servidor confere QUEM é e de que obra é CADA linha
+
+**Em produção `EXIGIR_TOKEN` é `true`.** Desligado (modo de implantação),
+`ehAdminToken` trata todo mundo como admin, por desenho — e as portas por
+pessoa abaixo (dono da linha, parte de outro, apagar) deixam de existir.
+
+- **Nome digitado nunca indexa o cadastro direto** (`usuarioDoCadastro_`,
+  `usuarioTem_` — `hasOwnProperty`): `usuarios['constructor']` devolvia a
+  função herdada do Object, e o texto dela servia de senha para entrar como
+  engenharia em todas as obras. Digitar o próprio hash guardado também não
+  entra.
+- **Apagar o dia**: com um ID pedido que não existe mais, `deleteRDODiario`
+  NÃO cai para "o único RDO da data" (`naoEncontrado`) — o segundo toque de
+  um Excluir lento levava o dia inteiro. E RDO assinado não se apaga
+  (`RDO_ASSINADO`): apagar e lançar de novo era o desvio da regra "assinado
+  só muda reaberto".
+- **O lote é conferido como é gravado**: `addBatchRDO` passa as chaves para
+  minúsculas UMA vez e confere a obra desse registro — `{"obra":"ranario",
+  "OBRA":"teotonio"}` passava pela porta do Ranário e caía na Teotônio.
+- **Parte com o nome de outra pessoa** não troca a dela (`PARTE_DE_OUTRO`):
+  só o dono, a engenharia ou o admin; quem corrige não vira dono.
+- `apagarPorPrefixoId` exige a data do id (8+ dígitos): "   " virava "" e
+  casava com a aba inteira.
+- Medição, cadastro de máquinas e `nfImagem` estão no `POR_OBRA`, e cada um
+  confere a obra da LINHA que mexe (`OUTRA_OBRA`).
+
+`tests/seguranca-servidor.test.js` (o Code.gs de verdade, via
+`tests/servidor-falso.js`).
 
 ## O RDO Diário é UMA linha por dia, com os dois turnos
 
@@ -408,7 +448,11 @@ Três leituras a mais do mesmo dado, todas no app (o visor só desenha):
   quadro reenvia as faixas: o app lê cada lançamento UMA vez por carga
   (`m3dBase`, cache pela referência do `STATE.rdoavanco`, que é trocado e
   nunca mexido no lugar) e o visor guarda a geometria de cada faixa
-  (`_geoFx`, esvaziado quando chega trecho novo). O `realce` (transparência)
+  (`_geoFx`, esvaziado quando chega trecho novo). Os 4 lançamentos mais
+  novos de cada estaca são guardados enquanto ela é montada (`m3dTopInserir`)
+  — ordenar todas as linhas de cada estaca a cada quadro custava 185 ms (CPU
+  4× mais lenta); são 70. O "Ir para a estaca" é montado uma vez, fora da
+  lista que o quadro refaz (o número digitado sumia). O `realce` (transparência)
   só vai quando a frente muda — reenviar recompilava os materiais a cada
   quadro. O visor monta as faixas NA HORA em que a `execucao` chega (o `ir`
   que vem logo atrás tem de achar as novas), e o painel da estaca aberta
@@ -457,10 +501,21 @@ Dois usos, o mesmo código:
   para a linha do tempo quando o visor avisa `apresentacao: on`. A
   varredura NÃO entra na apresentação: é simulação, e o engenheiro que
   apresenta mostra dado.
+  O que é ferramenta de quem usa — a seção cortada e o plano laranja, o anel
+  do "Ir para estaca", as medidas, a transparência escolhida — sai do filme
+  e volta como estava (`APRES.antes`). A tela fica ACESA (Wake Lock) e, com
+  a aba escondida, o relógio do roteiro e a gravação PAUSAM. A roda do mouse
+  para (o zoom do palco, em captura, calava o ouvinte), o Esc com o foco no
+  app também (`tela.js` repassa), e o toque que parou não abre a ficha do
+  que estava embaixo (`APRES.engole`). Dois toques em "Gravar" não abrem
+  duas apresentações (`APRES.abrindo`).
 - **Gravar vídeo da apresentação** (Ferramentas › Tela): `MediaRecorder` num
   canvas que junta o WebGL e a legenda; MP4 onde o navegador grava MP4,
   senão WebM. O arquivo vira um LINK para tocar (`#gravPronto`): o download
-  tem de nascer de um toque.
+  tem de nascer de um toque. A gravação começa ANTES do modo cinema (que
+  esconde o `#toast`: o "este navegador não grava" sumia), o `onstop` usa a
+  gravação DELE (uma nova pode já ter começado) e fechar o aviso solta o
+  arquivo da memória.
 - **O gravador do vídeo do modelo** (`modelo3d.html?cine=1`): sem painel
   nenhum, `window.__cineAbrir()` expõe `__cine.quadro(t)` / `foto()` e o laço
   fica parado (`__pause`) — cada quadro é pedido por tempo, então o mesmo
@@ -549,6 +604,48 @@ O RDO Diário de QUALQUER data abre por `abrirDiaV4(iso)`: rascunho presente
 turno que sobe pela FILA limpa o rascunho só se ele não foi editado depois
 de ir para a fila (`_salvoEm` × `rascunhoEm`) e deposita o PDF do dia.
 
+A conferência da NOTA FISCAL também tem rascunho fora da página
+(`nfRascGuardar`, no `notas.js`): o formulário entra na nota a cada tecla e a
+gravação espera 600 ms. "Cancelar" descarta de propósito; fechar por fora
+(Voltar, toque fora da janela) guarda, e a tela de Notas oferece
+**Continuar a nota**. Nota lançada aberta só para olhar, ou nova fechada sem
+nada preenchido, não vira "nota não salva". `tests/nf-rascunho.ui.test.js`.
+
+## A fila de envio
+
+O que não subiu fica no aparelho (IndexedDB) e sobe sozinho. As travas:
+
+- **Sobe com o login de QUEM LANÇOU** (`dono`): o aparelho do canteiro passa
+  de mão, e o turno de A subia com o login de B — gravado em nome de B, ou
+  recusado e apagado. Fica guardado até A entrar.
+- **Só o erro TERMINAL tira da fila** (`ERROS_TERMINAIS`: o servidor recusou
+  o conteúdo, e o aviso manda lançar de novo pela tela). `ERROS_DE_ESPERA`
+  ("Ação desconhecida", equipamento recusado) e `ERROS_DE_ACESSO` ficam
+  guardados e a fila ANDA; o resto é passageiro (cota, 5xx) e espera o
+  próximo ciclo.
+- **Depois da rodada, UMA carga e UM PDF por dia** — cinco turnos guardados
+  eram seis cargas em paralelo no 4G e cinco PDFs desenhados juntos.
+- **A obra do turno é a da hora do Salvar** (`obraEnvio`, e a `obra` de cada
+  item da fila): o rascunho limpo, a linha local (`diarioLocalGuardar(…,
+  obra)`) e o PDF são da obra DELE. Com a tela já em outra obra, o PDF fica
+  anotado (`depositoDepoisDeGravar` → `depositosPendentesRodar`, na
+  manutenção depois de cada carga boa, junto da varredura) e sai quando
+  aquela obra volta à tela — sem isso o e-mail das 6h30 levava o depósito
+  velho.
+- **Todo pedido tem prazo**: `POST_TEMPO` no `enviarPost`, 60 s no CSV e na
+  `assinar.html`, `fetchEquip` nos Equipamentos (inclusive o da fila: um
+  envio pendurado segurava a fila inteira), e a lista do Bota-Fora.
+
+`tests/fila-e-voltar.ui.test.js`.
+
+## O botão Voltar
+
+Cada troca de tela é uma entrada do histórico (`navEmpilhar`); o Voltar do
+Android volta à tela anterior e, com algo aberto por cima (foto ampliada,
+RDO, busca, gaveta), primeiro fecha isso (`fecharSobreposicao`). Antes ele
+saía do app de uma vez. A busca que leva a um filtro da tela em que já se
+está redesenha (`navegarRedesenhando`). `tests/fila-e-voltar.ui.test.js`.
+
 ## A tela nova começa do topo
 
 O `.main` é quem rola, e guardava a rolagem da tela anterior: quem tocava
@@ -587,6 +684,13 @@ na tela dele apaga lançamento e arquiva firma. Três ferramentas:
   pode ficar, sem atributo nenhum.
 
 `resumoRDO()` já devolve escapado (é só para tela). `tests/telas-seguras.ui.test.js`.
+O `toast()` é TEXTO, sempre (`textContent`): ele leva nome de apontador,
+mensagem do servidor, ID da planilha.
+
+O mesmo vale para o CSV que o escritório abre no Excel: célula que começa com
+`= + - @` é FÓRMULA. `csvCel` (index.html) e `nfCSVcel` (notas.js) põem um
+apóstrofo na frente — número negativo continua número — e a chave de acesso
+da nota sai como `="…"` (crua, virava 3,51E+43). `tests/csv-seguro.test.js`.
 
 O Histórico acha o lançamento pelo ID guardado na linha (`histLinha(idx)`,
 `data-id`), nunca pela posição: com a edição aberta o refresh troca o
@@ -696,6 +800,22 @@ prova. `tests/foto-sem-carimbo.ui.test.js` (o app de verdade) e
   mesmo desenho, só para os botões Abrir/Baixar.
   `tests/pranchas-manifesto.test.js` confere bitmap × arquivos no disco.
 
+## A foto é aberta UMA vez
+
+`comprimirFotoServico` decodifica a foto do serviço uma vez e tira a
+miniatura da cheia já reduzida — eram duas leituras do arquivo inteiro em
+paralelo (dois textos base64 do tamanho da foto, dois bitmaps de 12 MP), e o
+celular simples fechava a aba logo depois da câmera. O arquivo vai direto
+para o `<img>` (URL de objeto), o canvas é zerado ao sair (`zerarCanvas`: o
+iPhone tem teto de memória de canvas) e a foto que não abre em 45 s vira
+erro em vez de "preparando…" para sempre (`abrirFotoArquivo`). O PDF.js
+fecha o documento quando acaba (`nfPDFFechar`, e a prancha trocada).
+
+O guarda de fotos do aparelho tem TETO (`fotosAparar`, um minuto depois do
+boot): só sai cópia do Drive, que o servidor devolve de novo — as cheias
+primeiro —; a folha de nota que pode não ter subido (`nf:`) nunca.
+Armazenamento cheio é o navegador apagando o site INTEIRO, fila junto.
+
 ## Números de cadastro escritos em arquivo
 
 `num()` trata o ponto como separador de MILHAR — é o formato pt-BR que chega
@@ -734,6 +854,43 @@ O que segura o tempo dessa tela, e as travas que não podem cair:
 
 `tests/nf-leitura-ia.ui.test.js` (o aparelho, no app de verdade) e
 `tests/nf-leitura-ia-servidor.test.js` (o servidor, com o Gemini falso).
+
+## Notas, estoque e consumo são da obra, não do aparelho
+
+- A tela de Notas busca a lista no servidor ao entrar, no relógio de 1 min,
+  ao voltar ao app e no Atualizar — não a cada aba ou filtro (era o 4G
+  indo embora). E a `atualizadoEm` de cada nota é a da última GRAVAÇÃO, do
+  servidor: com `Date.now()` toda sincronização parecia mudar a lista, e a
+  tela era redesenhada a cada minuto.
+- **As entradas do estoque saem das notas** (`nfSincronizarEntradas`): eram
+  gravadas só no aparelho que salvou a nota, e no celular do almoxarife a
+  nota "Integrada ao estoque" não tinha estoque nenhum. Nota integrada que
+  chega de outro aparelho ganha a entrada (com o nome de quem lançou); a
+  cancelada ou excluída lá leva a dela embora, e a entrada que a própria
+  sincronização deu (`sinc`) sai quando a nota deixa de estar integrada. Por
+  isso o STATUS tem de dizer a verdade: desmarcar "dar entrada no estoque"
+  numa nota integrada a devolve para "Conferida".
+- **O Teórico × Real busca as saídas** (`trSincronizarSaidas`): elas só
+  chegavam com a tela de Notas aberta.
+
+`tests/estoque-entre-aparelhos.ui.test.js`.
+
+## O Painel com filtro de mês fala do ACUMULADO
+
+Com um mês escolhido, `metrics` enxerga só o mês (recomeça do zero). Tudo o
+que é "a obra até aquela data" — o número grande, a linha dos 30 dias, a
+velocidade, o término no ritmo, a leitura da semana, a IA e o PDF — lê
+`metricsAcum`, ancorado no FIM do mês (`calcExecMetrics(…, { hoje: dataRef
+})`). O PDF saía com 3% enquanto a tela dizia 45%.
+
+A conta do avanço sobre o STATE inteiro (`calcularAvancoPorPacote()` sem
+recorte) fica guardada pela REFERÊNCIA de `STATE.rdoavanco` e
+`STATE.pacotes` — o Lançar Serviço a refazia por linha de serviço. Por isso
+(e pelo `m3dBase`) essas listas são TROCADAS a cada carga e nunca mexidas
+no lugar.
+
+A tela de Projetos não é redesenhada pela carga de fundo (não lê nada dela):
+voltava o zoom ao início e tirava a prancha da tela cheia a cada 5 minutos.
 
 ## Sem app irmão
 

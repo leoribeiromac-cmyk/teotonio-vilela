@@ -88,7 +88,7 @@ const DriveApp = {
 const PLANILHA = { RDO_Diario: [], RDO_Avanco: [], RDO_Assinaturas: [], Auditoria: [] };
 const CAB_DIARIO = ['id', 'data', 'obra', 'numero_rdo', 'clima_manha', 'clima_tarde', 'clima_noite',
                     'apontador_diurno', 'apontador_noturno', 'visitas', 'ocorrencias',
-                    'observacoes_gerais', 'paralisacoes_json', 'paralisado_motivo', 'chuva_mm_auto'];
+                    'observacoes_gerais', 'paralisacoes_json', 'paralisado_motivo', 'chuva_mm_auto', 'revisao'];
 const CAB_AVANCO = ['id', 'data', 'obra', 'pacote_id', 'quantidade'];
 const CAB_ASSIN = ['id', 'obra', 'data', 'papel', 'rotulo', 'nome', 'email', 'token', 'status',
                    'convidadoEm', 'assinadoEm', 'assinatura', 'nomeAssinante', 'documento',
@@ -197,7 +197,7 @@ function linhaDiario(extra) {
     clima_manha: 'Bom', clima_tarde: 'Chuva', clima_noite: '',
     apontador_diurno: 'Carlos Apontador', apontador_noturno: '',
     visitas: '', ocorrencias: 'Sem ocorrências.', observacoes_gerais: '',
-    paralisacoes_json: '', paralisado_motivo: '', chuva_mm_auto: '',
+    paralisacoes_json: '', paralisado_motivo: '', chuva_mm_auto: '', revisao: '',
   };
   Object.assign(base, extra || {});
   return CAB_DIARIO.map(c => base[c]);
@@ -1419,6 +1419,52 @@ t('nome digitado na página pública que começa com "=" não vira fórmula', ()
   const iNome = CAB_ASSIN.indexOf('nomeAssinante');
   const gravado = PLANILHA.RDO_Assinaturas.map(l => l[iNome]).filter(Boolean)[0];
   eq(String(gravado).charAt(0), "'", 'gravou a fórmula crua: ' + gravado);
+});
+
+console.log('\nO que foi lido é o que se assina');
+/* A página mostrava "o PDF ainda não foi depositado" — mas o servidor aceitava
+   a firma do mesmo jeito, e o link copiado do painel do app (que existe antes
+   do depósito) levava a um quadro de assinar sem documento nenhum. */
+t('sem PDF depositado o servidor RECUSA a firma', () => {
+  const r = ctx.rdoAssinaturaGravar({ t: tokenDe('fiscalizacao'), assinatura: uriPng(), nome: 'Walter Fiscal' });
+  verdade(!r.ok && r.semPdf, JSON.stringify(r));
+  eq(ctx.rdoAssinLinhasDoDia_('teotonio', HOJE).filter(x => x.status === 'assinada').length, 0, 'gravou a firma');
+});
+t('o link devolve a revisão do PDF que está sendo lido', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rA1' })];
+  depositar({ revisao: 'rA1' });
+  const r = ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') });
+  eq(r.revisao, 'rA1');
+  verdade(!r.desatualizado, 'disse desatualizado com o PDF em dia');
+});
+t('dia gravado de novo depois do PDF: o link avisa que a versão ficou para trás', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rA1' })];
+  depositar({ revisao: 'rA1' });
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rB2' })];
+  const r = ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') });
+  verdade(r.desatualizado && /corrigido/.test(r.aviso || ''), JSON.stringify(r).slice(0, 240));
+});
+t('firma de uma versão que mudou depois que a página abriu NÃO entra', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rA1' })];
+  depositar({ revisao: 'rA1' });
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rB2' })];
+  const r = ctx.rdoAssinaturaGravar({ t: tokenDe('fiscalizacao'), assinatura: uriPng(), nome: 'Walter Fiscal', revisao: 'rA1' });
+  verdade(!r.ok && r.mudou, JSON.stringify(r));
+  eq(ctx.rdoAssinLinhasDoDia_('teotonio', HOJE).filter(x => x.status === 'assinada').length, 0, 'gravou a firma');
+});
+t('firma da versão em dia entra', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rB2' })];
+  depositar({ revisao: 'rB2' });
+  const r = ctx.rdoAssinaturaGravar({ t: tokenDe('fiscalizacao'), assinatura: uriPng(), nome: 'Walter Fiscal', revisao: 'rB2' });
+  verdade(r.ok, JSON.stringify(r));
+});
+t('as três pontas comparam a revisão do mesmo jeito (o depósito a grava limpa)', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'r-c3' })];
+  depositar({ revisao: 'r-c3' });
+  const a = ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') });
+  verdade(!a.desatualizado, 'a mesma revisão, escrita com hífen, pareceu outra');
+  const r = ctx.rdoAssinaturaGravar({ t: tokenDe('fiscalizacao'), assinatura: uriPng(), nome: 'Walter Fiscal', revisao: a.revisao });
+  verdade(r.ok, JSON.stringify(r));
 });
 
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');

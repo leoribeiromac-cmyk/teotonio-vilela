@@ -377,7 +377,9 @@ t('o index.html envia a obra ativa no action=clima', () => {
   const html = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
   const bloco = (html.split('window.buscarClima')[1] || '').slice(0, 1200);
   assert.ok(/action: 'clima'/.test(bloco), 'não achei a chamada');
-  assert.ok(/obra: obraAtivaId\(\)/.test(bloco), 'a obra não vai na consulta');
+  // a obra DESTA aba (OBRA.id): obraAtivaId() é a última escolhida no aparelho,
+  // e com duas abas abertas ela é a da outra
+  assert.ok(/obra: (OBRA\.id|obraAtivaId\(\))/.test(bloco), 'a obra não vai na consulta');
 });
 
 console.log(falhas ? `\n${falhas} FALHA(S)` : '\nTudo certo.');

@@ -1290,8 +1290,10 @@ function preencherInfo(I) {
 }
 $('infoX').onclick = () => { info.hidden = true; RDO.aberta = null; if (RDO.sel) { RDO.sel = null; marcarSel(); } $('infoFotos').dataset.chave = ''; };
 let down = null;
-renderer.domElement.addEventListener('pointerdown', e => down = e.button === 0 ? [e.clientX, e.clientY] : null);   // info/measure: left click only
+renderer.domElement.addEventListener('pointerdown', e => { down = e.button === 0 ? [e.clientX, e.clientY] : null; APRES.engole = false; });   // info/measure: left click only (o ouvinte da apresentação, depois deste, marca o toque que a parou)
 renderer.domElement.addEventListener('pointerup', e => {
+  // o toque que parou a apresentação só devolveu a câmera: não abre a ficha do que estava embaixo
+  if (APRES.engole) { APRES.engole = false; return; }
   if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 5) return; const r = renderer.domElement.getBoundingClientRect(); ndc.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
   // o toque ATRAVESSA o ilustrativo (carro, pessoa, arbusto): quem toca a faixa da estaca com um carro em cima quer a estaca,
   // não a ficha "elemento ilustrativo"; só tocando o ilustrativo sozinho é que a ficha dele aparece
@@ -1384,6 +1386,8 @@ function navEnd(e) {
 navCv.addEventListener('pointerup', navEnd); navCv.addEventListener('pointercancel', navEnd); navCv.addEventListener('lostpointercapture', navEnd);
 stage.addEventListener('wheel', e => {   // capture phase on the stage: runs before OrbitControls (whose wheel zooms to the screen centre)
   if (e.target !== navCv) return; e.preventDefault(); e.stopPropagation();
+  // a roda também devolve a câmera (o stopPropagation acima calava o ouvinte da apresentação)
+  if (APRES.on) { pararApresentacao(false); return; }
   if (!controls.enabled || NAV.mode) return;
   tween = null;
   const dy = Math.max(-400, Math.min(400, e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1))), now = performance.now(), Z = NAV.zoom;
@@ -2207,7 +2211,33 @@ async function cineCarregar() {
   if (!cineMod) { const { criarCine } = await import(new URL('./cine.js' + new URL(import.meta.url).search, import.meta.url).href); cineMod = criarCine(CTX_CINE); }
   return cineMod;
 }
-const APRES = { on: false, t0: 0, dur: 0, planos: [], leg: -1, grav: null, antes: null };
+const APRES = { on: false, abrindo: false, t0: 0, dur: 0, planos: [], leg: -1, grav: null, antes: null, pausaEm: 0, engole: false };
+/* A TELA FICA ACESA durante a apresentação e a gravação (Wake Lock): o
+   celular apagava no meio do voo, e o relógio do roteiro seguia correndo —
+   na volta a apresentação tinha pulado (ou acabado), e o vídeo saía com um
+   trecho parado. Com a aba escondida o relógio PAUSA, e a gravação também. */
+let _telaAcesa = null;
+async function telaAcesa(on) {
+  try {
+    if (on) {
+      if (_telaAcesa || !navigator.wakeLock || document.visibilityState !== 'visible') return;
+      _telaAcesa = await navigator.wakeLock.request('screen');
+      _telaAcesa.addEventListener('release', () => { _telaAcesa = null; });
+    } else if (_telaAcesa) { const w = _telaAcesa; _telaAcesa = null; await w.release(); }
+  } catch (e) { _telaAcesa = null; }
+}
+document.addEventListener('visibilitychange', () => {
+  if (!APRES.on) return;
+  const rec = APRES.grav && APRES.grav.rec;
+  if (document.hidden) {
+    APRES.pausaEm = performance.now();
+    try { if (rec && rec.state === 'recording') rec.pause(); } catch (e) { }
+  } else {
+    if (APRES.pausaEm) { APRES.t0 += performance.now() - APRES.pausaEm; APRES.pausaEm = 0; }
+    try { if (rec && rec.state === 'paused') rec.resume(); } catch (e) { }
+    telaAcesa(true);   // o navegador solta a trava quando a aba some
+  }
+});
 const cineUI = $('cineUI');
 /* O roteiro da apresentação sai do PRÓPRIO modelo (vistas e trechos do
    index.json): abertura do alto, cada trecho com o nome e as estacas, o
@@ -2265,25 +2295,45 @@ function legendaAparece(L) {   // entra subindo; sai esmaecendo (no voo entre tr
   box.hidden = false; box.classList.add('on');
 }
 async function apresentar({ gravar = false } = {}) {
-  if (APRES.on) return;
-  let c; try { c = await cineCarregar(); } catch (e) { toast('Não foi possível abrir a apresentação: ' + (e && e.message || e)); return; }
-  const R = c.carregar(roteiroApresentacao());
+  // dois toques seguidos em "Gravar" abriam duas apresentações (o módulo vem por import, e o "on" só valia depois)
+  if (APRES.on || APRES.abrindo) return;
+  APRES.abrindo = true;
+  let c; try { c = await cineCarregar(); } catch (e) { APRES.abrindo = false; toast('Não foi possível abrir a apresentação: ' + (e && e.message || e)); return; }
+  /* A gravação começa ANTES do modo cinema: no cinema o #toast some, e o
+     "este navegador não grava vídeo" não aparecia — a apresentação seguia
+     muda, e quem pediu o vídeo ficava sem ele e sem saber. */
+  if (gravar && !gravacaoIniciar()) { APRES.abrindo = false; return; }
+  let R;
+  try { R = c.carregar(roteiroApresentacao()); }
+  catch (e) { if (APRES.grav) gravacaoFim(false); APRES.abrindo = false; toast('Não foi possível montar a apresentação: ' + (e && e.message || e)); return; }
   stopDrive(); tween = null; info.hidden = true;
-  APRES.antes = { pos: camera.position.clone(), alvo: controls.target.clone(), hora: +$('sunH').value };
-  APRES.on = true; APRES.t0 = performance.now(); APRES.dur = R.dur; APRES.planos = c.planos; APRES.leg = -1;
+  /* O que é ferramenta de quem usa — a seção cortada e o plano laranja, o
+     anel do "Ir para estaca", as medidas, a transparência escolhida — não
+     entra no filme, e volta como estava no fim (soltar() devolvia a
+     superfície a 100%). */
+  APRES.antes = { pos: camera.position.clone(), alvo: controls.target.clone(), hora: +$('sunH').value,
+                  opac: +$('opac').value / 100, plano: planeMesh.visible, clip: clipOn, anel: marker.visible, med: mGroup.visible };
+  planeMesh.visible = false; marker.visible = false; mGroup.visible = false; if (clipOn) applyClip(false);
+  APRES.on = true; APRES.abrindo = false; APRES.t0 = performance.now(); APRES.pausaEm = 0; APRES.dur = R.dur; APRES.planos = c.planos; APRES.leg = -1;
   controls.enabled = false; document.documentElement.classList.add('cine-on'); cineUI.hidden = false;
-  $('cineGrav').hidden = true;
-  if (gravar) gravacaoIniciar();
+  $('cineGrav').hidden = !APRES.grav;
+  telaAcesa(true);
   avisarApp({ tipo: 'apresentacao', on: true });
   invalidar(3);
 }
 function pararApresentacao(fim) {
   if (!APRES.on) return;
   APRES.on = false; cineMod.soltar(); controls.enabled = true; controls.update();
+  const a = APRES.antes;
+  if (a) {
+    setOpacity(a.opac); planeMesh.visible = a.plano; marker.visible = a.anel; mGroup.visible = a.med;
+    if (a.clip) { applyClip(true); if (dockMode === 'sec') drawSection(); }
+  }
   document.documentElement.classList.remove('cine-on'); cineUI.hidden = true; legendaAparece(null);
   if (APRES.grav) gravacaoFim(!!fim);
+  telaAcesa(false);
   avisarApp({ tipo: 'apresentacao', on: false });
-  invalidar(3);
+  invalidar(3); invalidarSombra();
 }
 function apresPasso(now) {
   const t = (now - APRES.t0) / 1000 * (window.__apresVel || 1);   // __apresVel: os testes andam devagar, o relógio do WebGL por software não acompanha
@@ -2301,23 +2351,26 @@ function apresPasso(now) {
 function gravacaoIniciar() {
   const tipos = ['video/mp4;codecs=avc1.42E01E', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
   const tipo = window.MediaRecorder ? tipos.find(t => MediaRecorder.isTypeSupported(t)) : null;
-  if (!tipo) { toast('Este navegador não grava vídeo. A apresentação continua sem gravar.', 5000); return; }
+  if (!tipo) { toast('Este navegador não grava vídeo. Use “Apresentar a obra” para ver o voo, ou grave num computador com Chrome ou Edge.', 7000); return false; }
   const src = renderer.domElement, k = Math.min(1, 1920 / src.width, 1080 / src.height);
   const cv = document.createElement('canvas'); cv.width = Math.round(src.width * k / 2) * 2; cv.height = Math.round(src.height * k / 2) * 2;
   const g = cv.getContext('2d'), partes = [];
-  let rec; try { rec = new MediaRecorder(cv.captureStream(30), { mimeType: tipo, videoBitsPerSecond: 10e6 }); } catch (e) { toast('Não foi possível gravar aqui: ' + (e && e.message || e), 5000); return; }
+  let rec; try { rec = new MediaRecorder(cv.captureStream(30), { mimeType: tipo, videoBitsPerSecond: 10e6 }); } catch (e) { toast('Não foi possível gravar aqui: ' + (e && e.message || e), 6000); return false; }
   rec.ondataavailable = ev => { if (ev.data && ev.data.size) partes.push(ev.data); };
-  APRES.grav = { rec, cv, g, partes, tipo, salvar: false };
+  const G = APRES.grav = { rec, cv, g, partes, tipo, salvar: false };
   /* O vídeo pronto vira um LINK para tocar: o download tem de nascer de um toque
-     (o fim da apresentação não é um, e o navegador pode barrar o arquivo). */
-  rec.onstop = () => { const G = APRES.grav; APRES.grav = null; if (!G || !G.salvar) return;
+     (o fim da apresentação não é um, e o navegador pode barrar o arquivo).
+     O `onstop` chega depois (é assíncrono): ele lê a gravação DELE (G), não a
+     que estiver em APRES.grav — uma nova pode já ter começado. */
+  rec.onstop = () => { if (APRES.grav === G) APRES.grav = null; if (!G.salvar) return;
     // sem um quadro gravado (aba escondida, aparelho que não desenhou), avisa em vez de sumir calado
     if (!partes.length || !partes.some(b => b.size > 0)) { toast('Nada foi gravado: o 3D não chegou a desenhar durante a apresentação. Tente de novo com a tela à vista.', 6000); return; }
     const ext = /mp4/.test(tipo) ? 'mp4' : 'webm';
     const nome = 'apresentacao-' + (M.title || 'modelo').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 40) + '.' + ext;
     const a = $('gravLink'), velho = a.href; a.href = URL.createObjectURL(new Blob(partes, { type: tipo.split(';')[0] })); a.download = nome; if (velho && velho.startsWith('blob:')) URL.revokeObjectURL(velho);
     $('gravMB').textContent = (partes.reduce((s, b) => s + b.size, 0) / 1048576).toFixed(1).replace('.', ',') + ' MB · ' + ext.toUpperCase(); $('gravPronto').hidden = false; };
-  rec.start(1000); $('cineGrav').hidden = false;
+  rec.start(1000);
+  return true;
 }
 function gravacaoQuadro() {
   const G = APRES.grav; if (!G) return; const { cv, g } = G, W = cv.width, H = cv.height;
@@ -2333,13 +2386,14 @@ function gravacaoQuadro() {
     g.restore();
   }
 }
-function gravacaoFim(salvar) { const G = APRES.grav; if (!G) return; G.salvar = salvar; try { G.rec.stop(); } catch (e) { APRES.grav = null; } $('cineGrav').hidden = true; if (!salvar) toast('Gravação interrompida: o vídeo só sai da apresentação inteira.', 4000); }
-$('gravX').onclick = () => { $('gravPronto').hidden = true; };
+function gravacaoFim(salvar) { const G = APRES.grav; if (!G) return; G.salvar = salvar; APRES.grav = null; try { G.rec.stop(); } catch (e) { } $('cineGrav').hidden = true; if (!salvar) toast('Gravação interrompida: o vídeo só sai da apresentação inteira.', 4000); }
+// fechou o aviso do vídeo pronto: o arquivo (dezenas de MB na memória) é solto
+$('gravX').onclick = () => { $('gravPronto').hidden = true; const a = $('gravLink'); if (a.href && a.href.startsWith('blob:')) { URL.revokeObjectURL(a.href); a.removeAttribute('href'); } };
 $('apresBtn').onclick = () => apresentar();
 $('gravBtn').onclick = () => apresentar({ gravar: true });
 $('cineSair').onclick = () => pararApresentacao(false);
 // qualquer toque no 3D devolve a câmera a quem tocou
-for (const ev of ['pointerdown', 'wheel']) renderer.domElement.addEventListener(ev, () => { if (APRES.on) pararApresentacao(false); }, { passive: true });
+for (const ev of ['pointerdown', 'wheel']) renderer.domElement.addEventListener(ev, () => { if (APRES.on) { if (ev === 'pointerdown') APRES.engole = true; pararApresentacao(false); } }, { passive: true });
 document.addEventListener('keydown', e => { if (APRES.on && e.key === 'Escape') pararApresentacao(false); });
 // o gravador do vídeo do modelo (ferramentas/video-modelo3d): sem painel nenhum, um quadro por pedido
 if (PARAMS.get('cine') === '1') {

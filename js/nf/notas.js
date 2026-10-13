@@ -815,7 +815,7 @@ function nfIdsDuplicadas(obraId) {
 /* ============================================================
    ESTOQUE — entrada gerada a partir da nota confirmada
    ============================================================ */
-function nfIntegrarEstoque(obraId, nota) {
+function nfIntegrarEstoque(obraId, nota, quem, daSinc) {
   const movs = nfMovGet(obraId).filter(m => m.notaId !== nota.id);   // regrava, nunca duplica
   const lote = 'NF ' + (nota.numero || '?') + (nota.serie ? '/' + nota.serie : '');
   (nota.itens || []).forEach((it, i) => {
@@ -827,11 +827,46 @@ function nfIntegrarEstoque(obraId, nota) {
       qtd: nfNum(it.qtd), vUnit: nfNum(it.vUnit), vTotal: nfNum(it.vTotal),
       cnpj: nota.cnpj || '', fornecedor: nota.razaoSocial || '',
       dataISO: nota.dataEntrada || nota.dataEmissao || hoje(),
-      usuario: usuarioAtual(), criadoEm: Date.now()
+      usuario: quem || usuarioAtual(), criadoEm: Date.now(),
+      // veio da sincronizacao (nota integrada em outro aparelho): sai sozinha
+      // se a nota deixar de estar integrada (ver nfSincronizarEntradas)
+      sinc: !!daSinc
     });
   });
   nfMovSet(obraId, movs);
   return movs.filter(m => m.notaId === nota.id).length;
+}
+/* AS ENTRADAS DO ESTOQUE SAEM DAS NOTAS — tambem das que chegaram de outro
+   aparelho. A entrada era gravada so no aparelho que salvou a nota: no
+   celular do almoxarife a nota aparecia "Integrada ao estoque" e o estoque
+   dela nao existia (a primeira saida deixava o saldo negativo). Na
+   sincronizacao: nota integrada sem entrada aqui (ou gravada de novo depois
+   da entrada daqui) ganha a sua; nota que sumiu ou foi cancelada leva a dela
+   embora — e a entrada que a PROPRIA sincronizacao criou sai quando a nota
+   deixa de estar integrada (a de quem salvou aqui fica: ela pode ser de uma
+   nota "Em analise", que so este aparelho decidiu integrar). Devolve se
+   mexeu em alguma coisa. */
+function nfSincronizarEntradas(obraId) {
+  const notas = nfGet(obraId);
+  const porId = new Map(notas.map(n => [n.id, n]));
+  const todos = nfMovGet(obraId);
+  const movs = todos.filter(m => {
+    const n = porId.get(m.notaId);
+    if (!n || n.status === 'Cancelada') return false;
+    return !(m.sinc && n.status !== 'Integrada ao estoque');
+  });
+  let mudou = movs.length !== todos.length;
+  if (mudou) nfMovSet(obraId, movs);
+  const integradaEm = {};
+  movs.forEach(m => { integradaEm[m.notaId] = Math.max(integradaEm[m.notaId] || 0, m.criadoEm || 0); });
+  notas.forEach(n => {
+    if (n.status !== 'Integrada ao estoque' || !(n.itens || []).length) return;
+    const em = integradaEm[n.id];
+    if (em && !(n.doServidor && (n.atualizadoEm || 0) > em)) return;
+    nfIntegrarEstoque(obraId, n, n.usuario, true);
+    mudou = true;
+  });
+  return mudou;
 }
 function nfDesfazerEstoque(obraId, notaId) {
   nfMovSet(obraId, nfMovGet(obraId).filter(m => m.notaId !== notaId));
@@ -2140,7 +2175,13 @@ function nfSalvarForm() {
   if (paraEstoque && n.status !== 'Cancelada' && (n.itens || []).length) {
     const q = nfIntegrarEstoque(o.id, n);
     if (q) { msg = q + ' material(is) no estoque'; if (n.status === 'Recebida' || n.status === 'Conferida') n.status = 'Integrada ao estoque'; nfRegistrar(n, 'entrada no estoque', q + ' item(ns)'); }
-  } else if (!paraEstoque) nfDesfazerEstoque(o.id, n.id);
+  } else if (!paraEstoque) {
+    nfDesfazerEstoque(o.id, n.id);
+    /* "Integrada ao estoque" sem entrada no estoque desmente a si mesma — e é
+       o status que os outros aparelhos leem para dar a entrada (sem isto a
+       sincronização seguinte devolvia o que acabou de ser tirado). */
+    if (n.status === 'Integrada ao estoque') { n.status = 'Conferida'; nfRegistrar(n, 'saída do estoque', 'entradas da nota retiradas'); }
+  }
   nfSet(o.id, nfGet(o.id).map(x => x.id === n.id ? n : x));
 
   // imagens em resolucao cheia: IndexedDB local primeiro (nao depende de
@@ -4040,6 +4081,7 @@ async function nfCarregar(obraId, opcoes) {
       nfSaiSet(obraId, Object.values(mapaS).sort((a, b) => (b.dataISO || '').localeCompare(a.dataISO || '')));
     }
     if (!r || !r.ok) throw new Error((r && r.error) || 'resposta invalida');
+    const estoqueMudou = Array.isArray(r.notas) && nfSincronizarEntradas(obraId);
     nfSync[obraId] = { em: Date.now(), erro: '' };
     nfReenviarImagens(obraId).catch(() => {});
     /* Redesenha quando a lista MUDOU, e nao quando dois estados batem.
@@ -4047,7 +4089,7 @@ async function nfCarregar(obraId, opcoes) {
        app: dava sempre falso, a nota nova era gravada no aparelho e a tela
        so mostrava depois de sair e voltar. */
     const depois = nfAssinaturaLista(obraId);
-    if (estado.tela === 'notas' && (depois !== antes || !(opcoes && opcoes.fundo)) && nfPodeRedesenhar(opcoes)) render();
+    if (estado.tela === 'notas' && (depois !== antes || estoqueMudou || !(opcoes && opcoes.fundo)) && nfPodeRedesenhar(opcoes)) render();
   } catch (e) {
     // offline: fica com o que ja esta no aparelho, mas a tela passa a dizer isso
     nfSync[obraId] = { em: nfSyncEstado(obraId).em, erro: String((e && e.message) || 'falha') };

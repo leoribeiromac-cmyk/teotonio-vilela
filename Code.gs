@@ -3669,7 +3669,7 @@ function rdoPdfDoDia(p) {
   if (isNaN(comAssinaturas) || comAssinaturas < 0) comAssinaturas = 0;
   /* De QUAL gravação do dia este PDF foi desenhado (a `revisao` da linha).
      É o que amarra a firma ao conteúdo lido: ver rdoAssinaturaGravar. */
-  var revisaoDep = String(p.revisao == null ? '' : p.revisao).replace(/[^A-Za-z0-9]/g, '').slice(0, 40);
+  var revisaoDep = rdoRevNorm_(p.revisao);
 
   /* O DEPÓSITO NÃO ANDA PARA TRÁS. Um PDF com MENOS firmas do que o
      guardado, quando a planilha ainda tem essas firmas, é um desenho que não
@@ -4101,6 +4101,12 @@ function rdoDiarioDaData_(obra, dataISO) {
 /* As `revisao` das linhas do dia. Normalmente é uma (o dia é UMA linha);
    um dia ainda repetido tem uma por linha, e o app pode ter desenhado de
    qualquer uma delas — por isso a conferência da firma aceita o conjunto. */
+/* A revisão do dia, do jeito que é comparada: o depósito a grava limpa (só
+   letras e números, numa descrição de arquivo), e as três pontas — o
+   depósito, a linha do dia e a página de assinar — têm de ler igual. */
+function rdoRevNorm_(v) {
+  return String(v == null ? '' : v).replace(/[^A-Za-z0-9]/g, '').slice(0, 40);
+}
 function rdoRevisoesDoDia_(obra, dataISO) {
   var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
   if (!aba) return [];
@@ -4113,7 +4119,7 @@ function rdoRevisoesDoDia_(obra, dataISO) {
   for (var i = 1; i < dados.length; i++) {
     if (normData(dados[i][iData]) !== dataISO) continue;
     if (iObra !== -1 && normObra(dados[i][iObra]) !== normObra(obra)) continue;
-    var r = String(dados[i][iRev] == null ? '' : dados[i][iRev]).trim();
+    var r = rdoRevNorm_(dados[i][iRev]);
     if (r && revs.indexOf(r) === -1) revs.push(r);
   }
   return revs;
@@ -5261,7 +5267,7 @@ function rdoAssinaturaGravar(p) {
      se o dia foi gravado de novo depois que a página abriu (ou depois do PDF
      guardado), a firma entraria num documento que quem assina não viu. */
   var revsAgora = rdoRevisoesDoDia_(obra, dataISO);
-  var revLida = String(p.revisao == null ? '' : p.revisao).trim();
+  var revLida = rdoRevNorm_(p.revisao);
   var revPdf = rdoPdfRevisaoDe_(arqPdf);
   if (revsAgora.length && ((revLida && revsAgora.indexOf(revLida) === -1) ||
                            (revPdf && revsAgora.indexOf(revPdf) === -1))) {
