@@ -14,7 +14,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument('quadros'); ap.add_argument('saida')
 ap.add_argument('--previz', action='store_true'); ap.add_argument('--de', type=float, default=0); ap.add_argument('--ate', type=float, default=1e9)
 ap.add_argument('--png', action='store_true'); ap.add_argument('--passo', type=int, default=1)
-ap.add_argument('--audio', default=None); ap.add_argument('--crf', default='15')
+ap.add_argument('--audio', default=None); ap.add_argument('--crf', default='19'); ap.add_argument('--grao', type=float, default=0.012); ap.add_argument('--tune', default='film')
 A = ap.parse_args()
 
 FPS = 24
@@ -157,6 +157,46 @@ def grade(img, quente=0.0):
     # saturação +8%
     m = a.mean(axis=2, keepdims=True); a = m + (a - m) * 1.08
     return np.clip(a, 0, 1)
+
+def expor(a, e):
+    # ganho de exposição com ombro: o escuro sobe ~e vezes, o branco continua branco
+    return a * e / (1 + (e - 1) * a * a)
+
+# O "vazio" é o chão do céu (abaixo do horizonte) que aparece além da borda do terreno do modelo
+# quando a câmera olha para baixo no fim da avenida. Vira névoa de horizonte.
+def mascara_vazio(a):
+    s = a[::2, ::2]
+    luma = s.mean(axis=2)
+    m1 = ndimage.uniform_filter(luma, 7); m2 = ndimage.uniform_filter(luma * luma, 7)
+    dp = np.sqrt(np.clip(m2 - m1 * m1, 0, None))
+    r, g, b = s[..., 0], s[..., 1], s[..., 2]
+    cand = (dp < 0.010) & (b < g - 0.05) & (np.abs(r - g) < 0.06) & (luma > 0.2) & (luma < 0.8)
+    cand = ndimage.binary_opening(cand, iterations=2)
+    lab, n = ndimage.label(cand)
+    if n == 0: return None, None
+    ids = set(np.unique(lab[0, :])) - {0}
+    if not ids: return None, None
+    keep = np.isin(lab, list(ids))
+    if keep.sum() < 0.0005 * keep.size: return None, None
+    cor = s[keep].mean(axis=0)                      # a cor do vazio neste quadro
+    keep = ndimage.binary_closing(keep, iterations=2)
+    keep = ndimage.binary_dilation(keep, iterations=1)   # a borda do objeto mistura com o vazio: pega o meio-pixel
+    m = ndimage.gaussian_filter(keep.astype(np.float32), 0.8)
+    m = np.asarray(Image.fromarray((m * 255).astype(np.uint8)).resize((a.shape[1], a.shape[0]), Image.BILINEAR), np.float32) / 255
+    return m, cor
+def ceu_no_vazio(a, m, cor, forca=1.0, cor_alto=(0.77, 0.80, 0.81), cor_baixo=(0.64, 0.68, 0.67)):
+    if m is None or forca <= 0: return a
+    H = a.shape[0]
+    ys = np.where(m.max(axis=1) > 0.5)[0]
+    y1 = ys.max() if len(ys) else H
+    t = np.clip(np.arange(H, dtype=np.float32) / max(1, y1), 0, 1)[:, None, None] ** 0.8
+    ceu = np.array(cor_alto, np.float32) * (1 - t) + np.array(cor_baixo, np.float32) * t
+    # soma a diferença (céu − cor do vazio) na medida da cobertura: o meio-pixel da borda vira objeto + céu, sem halo escuro
+    w = np.clip(m, 0, 1)[..., None] * forca
+    # fora do vazio de verdade (pixel bem diferente da cor do vazio) a soma some
+    dist = np.abs(a - cor[None, None, :]).max(axis=2, keepdims=True)
+    w = w * np.clip(1 - (dist - 0.10) / 0.12, 0, 1)
+    return np.clip(a + w * (ceu - cor[None, None, :]), 0, 1)
 
 def bloom(a, forca=0.10):
     luma = a[..., 0] * 0.2126 + a[..., 1] * 0.7152 + a[..., 2] * 0.0722
@@ -389,10 +429,14 @@ def rotulos_estaca(C, tl, pts, rotulos, de=0.6, passo=0.32, sai=None):
         ks = 1 - suave(rampa(tl, sai, sai + 0.6)) if sai is not None else 1
         if k <= 0 or ks <= 0: continue
         x, y = p[0] * IW / ROT_W, IY + p[1] * IH / ROT_H
-        im, _ = sp(r, 'mono-m', 17, (220, 236, 255), 0.06)
-        C.retangulo(x - 3, y - 3, 6, 6, AMBAR, k * ks)
-        C.retangulo(x - 0.5, y - 34 * k, 1, 30 * k, (220, 236, 255), 0.7 * k * ks)
-        C.poe(im, x - im.width / 2, y - 64 + (1 - k) * 8, k * ks)
+        if not (20 < x < IW - 20 and IY + 60 < y < IY + IH - 10): continue
+        im, _ = sp(r, 'mono-m', 18, BRANCO, 0.06, False)
+        C.retangulo(x - 4, y - 4, 8, 8, AMBAR, k * ks)
+        C.retangulo(x - 0.75, y - 38 * k, 1.5, 34 * k, AMBAR, 0.9 * k * ks)
+        # a etiqueta: chapa da prancha por baixo do texto, senão ele some entre as linhas do desenho
+        C.retangulo(x - im.width / 2 - 6, y - 72 + (1 - k) * 8, im.width + 4, im.height + 2, (8, 30, 56), 0.92 * k * ks)
+        C.retangulo(x - im.width / 2 - 6, y - 72 + (1 - k) * 8 + im.height + 1, im.width + 4, 2, AMBAR, k * ks)
+        C.poe(im, x - im.width / 2 - 2, y - 70 + (1 - k) * 8, k * ks)
 
 def chamadas(C, tl, pts, rotulos, de=1.2, passo=0.45, ate=None):
     """chamadas com linha de chamada que acompanham o ponto 3D (as camadas do pavimento)"""
@@ -447,6 +491,12 @@ def linha_tempo(C, tl, dur, frac):
     C.poe(imd, X0 - 4, IY + 64, 0.75 * k * ks)
 
 ETAPAS = FX['etapas']
+def k_rdo(u):
+    # a mesma conta do porQuadro do roteiro.js: as datas cinzentas no primeiro sexto, as que acendem no resto
+    n = len(FX['datas']) - 1; kc = ROT.get('kc', 1); A, B = .16, .82
+    if u < A: return int(u / A * (kc - 1))
+    return min(n, int(kc - 1 + min(1, (u - A) / (B - A)) * (n - kc + 1)))
+
 def legenda_rdo(C, tl, dur, k_data):
     k = sai3(rampa(tl, 0.3, 1.0)); ks = 1 - suave(rampa(tl, dur - 0.7, dur - 0.1))
     if k <= 0 or ks <= 0: return
@@ -508,6 +558,17 @@ def imagem_do_plano(pid, tl, f):
             m = np.clip((fr - xx) / 0.07, 0, 1)[..., None]
             borda = np.exp(-((xx - fr) / 0.012) ** 2)[..., None] * np.array([1.0, .55, .2], np.float32) * 0.85
             a = bp * (1 - m) + a * m + borda * (1 - k) ** 0.3
+    if pid == 'obra':     # o sol das 8h e das 16h deixa as pontas do plano escuras: exposição de volta, sem estourar o branco
+        e = 1 + 0.55 * (1 - suave(rampa(tl, 0.0, 3.8))) + 0.6 * suave(rampa(tl, 10.8, dur))
+        if e > 1.001: a = expor(a, e)
+        kv = suave(rampa(tl, 10.6, 11.8))
+        if kv > 0:
+            m, cor = mascara_vazio(a)
+            a = ceu_no_vazio(a, m, cor, kv)
+    if pid == 'dourado':  # sol das 16h36: o dourado fica, o chão sai do lamaçal
+        a = expor(a, 1.22)
+    if pid == 'fim':      # o recuo abre para a avenida inteira e o chão escurece com a névoa: a exposição acompanha
+        a = expor(a, 1.22 + 0.16 * suave(rampa(tl, 2.0, 8.0)))
     if pid == 'orbita':   # zoom de saída
         a = borrao_radial(a, 0.16 * entra3(rampa(tl, dur - 0.33, dur)))
     if pid == 'mergulho':
@@ -540,7 +601,7 @@ def textos_do_plano(C, pid, tl):
     if pid == 'obra':
         linha_tempo(C, tl, dur, PERFIL_VAR((tl / dur - 0.03) / 0.94))   # a régua anda com a frente da obra
     if pid == 'rdo':
-        kd = min(len(FX['datas']) - 1, int(min(1, (tl / dur) / 0.8) * (len(FX['datas']) - 1)))
+        kd = k_rdo(tl / dur)
         legenda_rdo(C, tl, dur, kd)
         legenda(C, tl, dur, 'No app, cada estaca acende', 'com a etapa que o RDO lançou nela', de=0.6, ate=dur - 0.7)
     if pid == 'fim':
@@ -605,12 +666,13 @@ def main():
         return
     cmd = ['ffmpeg', '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-s', f'{W}x{H}', '-r', str(FPS), '-i', '-']
     if A.audio: cmd += ['-i', A.audio, '-c:a', 'aac', '-b:a', '256k', '-shortest']
-    cmd += ['-c:v', 'libx264', '-preset', 'slow', '-crf', A.crf, '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-tune', 'grain' if not A.previz else 'film',
+    # RGB → YUV na matriz BT.709 (o padrão do conversor é a 601, e o arquivo é marcado 709: as cores andariam)
+    cmd += ['-vf', 'scale=out_color_matrix=bt709:out_range=tv', '-c:v', 'libx264', '-preset', 'slow', '-crf', A.crf, '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-tune', A.tune,
             '-x264-params', 'aq-mode=3', '-movflags', '+faststart', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-colorspace', 'bt709', A.saida]
     pr = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     for f in range(f0, f1):
         q = quadro_filme(f / FPS, f)
-        q = grao(q, f, 0.02 if not A.previz else 0.0)
+        q = grao(q, f, A.grao if not A.previz else 0.0)
         pr.stdin.write((np.clip(q, 0, 1) * 255 + .5).astype(np.uint8).tobytes())
         if f % 120 == 0: print('  ', f, '/', f1, file=sys.stderr)
     pr.stdin.close(); pr.wait()
