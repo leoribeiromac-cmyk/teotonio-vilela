@@ -57,6 +57,7 @@
   const LS_PADROES = 'teotonio_bf_padroes_v1';
 
   let VIAGENS = [];          // o que a última consulta trouxe
+  let VIAGENS_DE = null;     // e de qual período ela foi (ver montarPlanilha)
   let PROVAS = { carga: null, ticket: null, assinatura: '' };
 
   /* O RASCUNHO. A viagem em preenchimento não pode morrer com a aba: o
@@ -124,8 +125,16 @@
      — o Chromium descarta o valor inteiro em silêncio, e frete errado é
      dinheiro errado. É a mesma decisão já tomada no horímetro. */
   function valorFrete() {
-    const bruto = val('bfValor');
-    return bruto ? num(bruto) : 0;
+    const bruto = val('bfValor').replace(/\s+/g, '');
+    if (!bruto) return 0;
+    /* Só o `num()` (ponto = milhar) fazia "350.50" virar R$ 35.050,00 — e
+       muita gente digita o centavo com ponto. Com vírgula, é pt-BR; ponto
+       seguido de grupos de 3 dígitos ("1.250", "12.500") é milhar; qualquer
+       outro ponto ("350.50", "350.5") é o decimal. */
+    if (bruto.indexOf(',') !== -1) return num(bruto);
+    if (/^\d{1,3}(\.\d{3})+$/.test(bruto)) return num(bruto);
+    const n = parseFloat(bruto);
+    return isFinite(n) ? n : 0;
   }
 
   function dataBR(iso) {
@@ -300,9 +309,13 @@
     if (typeof rascunhoLer !== 'function') return;
     let reg = null;
     try { reg = await rascunhoLer(chaveRasc(), RASC_VALIDADE); } catch (e) { }
+    /* Saiu da tela enquanto a leitura vinha: NÃO arma o gravador. Armado sem
+       o formulário, o próximo `pagehide` lia "nada digitado" e APAGAVA o
+       rascunho que esta leitura acabou de trazer. */
+    if (!g('bfForm')) return;
     // A leitura é assíncrona. Se o apontador começou a digitar enquanto ela
     // vinha, quem manda é o dedo dele — não um rascunho de minutos atrás.
-    if (!reg || mexeu || !g('bfForm')) { ligarRascunho(); return; }
+    if (!reg || mexeu) { ligarRascunho(); return; }
     const d = reg.dados || {};
     Object.keys(d.campos || {}).forEach(id => {
       const e = g(id);
@@ -491,9 +504,11 @@
     carregando = true;
     box.innerHTML = '<p class="eq-vazio">Carregando…</p>';
     try {
-      const url = urlBF('bfListar', { de: val('bfDe'), ate: val('bfAte') });
+      const periodo = { de: val('bfDe'), ate: val('bfAte') };
+      const url = urlBF('bfListar', periodo);
       const r = await (await fetch(url)).json();
       VIAGENS = (r && r.viagens) || [];
+      VIAGENS_DE = periodo;
       pintarViagens();
     } catch (e) {
       box.innerHTML = '<p class="eq-vazio">Não consegui buscar as viagens. Tente de novo.</p>';
@@ -521,7 +536,7 @@
       <div class="eq-item">
         <div class="eq-item-txt">
           <p class="eq-item-nome">${esc(v.placa)} · ${esc(v.material)}</p>
-          <p class="kpi-s">${dataBR(v.data)} · ${esc(v.motorista || 'sem motorista')} · ${esc(v.fornecedor || '—')}
+          <p class="kpi-s">${esc(dataBR(v.data))} · ${esc(v.motorista || 'sem motorista')} · ${esc(v.fornecedor || '—')}
              ${v.origem || v.destino ? ' · ' + esc(v.origem || '?') + ' → ' + esc(v.destino || '?') : ''}</p>
           <p class="bf-selos">${prova(v, 'fotoCarga', 'carga')}${prova(v, 'assinatura', 'assinatura')}${prova(v, 'fotoTicket', 'ticket')}</p>
         </div>
@@ -616,12 +631,13 @@
       return;
     }
     const de = val('bfDe'), ate = val('bfAte');
+    /* A planilha é do período que está NOS CAMPOS. Quem trocava as datas e
+       ia direto em "Gerar planilha" exportava a consulta ANTERIOR, com o
+       nome do arquivo dizendo o período novo. */
+    const doPeriodo = () => VIAGENS_DE && VIAGENS_DE.de === de && VIAGENS_DE.ate === ate;
+    if (!doPeriodo() || !VIAGENS.length) await carregarViagens();
+    if (!doPeriodo()) { aviso('Não consegui buscar as viagens desse período. Tente de novo.'); return; }
     let dados = VIAGENS.slice();
-    if (!dados.length) {
-      // Quem abre direto na planilha ainda não consultou nada.
-      await carregarViagens();
-      dados = VIAGENS.slice();
-    }
     if (!dados.length) { aviso('Nenhuma viagem no período para exportar.'); return; }
     dados.sort((a, b) => String(a.data).localeCompare(String(b.data)) ||
                          String(a.placa).localeCompare(String(b.placa), 'pt-BR'));
@@ -912,6 +928,7 @@
     // Provas são da viagem que estava na tela; remontar a tela zera.
     PROVAS = { carga: null, ticket: null, assinatura: '' };
     VIAGENS = [];
+    VIAGENS_DE = null;
     rasc = null;
     mexeu = false;
     ligarForm();

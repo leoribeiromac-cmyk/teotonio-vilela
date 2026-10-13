@@ -965,18 +965,32 @@ async function nfSubirFolhas(o, n, capa, extras, primeiraNova) {
 /* envia a imagem depois que a nota ja existe (mesma regra das fotos do RDO).
    `pagina` ausente ou 1 = a capa, que continua indo para `drive`; da 2 em
    diante o arquivo entra em `nota.paginas`, na posicao da folha. */
+const _nfImgSubindo = new Set();   // obra|id|página com o envio no ar
+function nfMarcarImagemPendente(obraId, notaId, pag, pendente) {
+  const arr = nfGet(obraId), n = arr.find(x => x.id === notaId);
+  if (!n) return;
+  const campo = pag === 1 ? 'imgPendente' : 'pagsPendentes';
+  if (pendente) n[campo] = true; else delete n[campo];
+  nfSet(obraId, arr);
+}
 function nfEnviarImagem(obraId, nota, dataUrl, pagina) {
   if (!BACKEND || isDemo() || !dataUrl) return Promise.resolve(null);
   const pag = parseInt(pagina, 10) > 1 ? parseInt(pagina, 10) : 1;
   const comp = (nota.dataEntrada || nota.dataEmissao || hoje()).slice(0, 7);
+  const chaveEnvio = obraId + '|' + nota.id + '|' + pag;
+  _nfImgSubindo.add(chaveEnvio);
   return postAcao({ action: 'nfImagem', obra: obraId, id: nota.id, competencia: comp,
                     numero: nota.numero || '', pagina: pag, foto: dataUrl })
     .then(r => {
+      if (!(r && r.ok && r.fileId)) {
+        // recusada agora: a nota fica marcada e é tentada de novo (nfReenviarImagens)
+        nfMarcarImagemPendente(obraId, nota.id, pag, true);
+      }
       if (r && r.ok && r.fileId) {
         const arr = nfGet(obraId), n = arr.find(x => x.id === nota.id);
         if (n) {
           const ref = { fileId: r.fileId, link: r.link || '', pasta: r.pasta || '', enviadoEm: Date.now() };
-          if (pag === 1) n.drive = ref;
+          if (pag === 1) { n.drive = ref; delete n.imgPendente; }
           else {
             // a folha ja tinha lugar reservado como `local`: agora ganha o
             // arquivo do Drive, sem mudar de posicao
@@ -987,13 +1001,58 @@ function nfEnviarImagem(obraId, nota, dataUrl, pagina) {
               if (!n.paginas[i]) n.paginas[i] = { local: true, pagina: i + 2 };
             }
           }
+          if (pag > 1 && !(n.paginas || []).some(x => x && x.local && !x.fileId)) delete n.pagsPendentes;
           nfSet(obraId, arr);
           nfEnfileirar(obraId, n);
         }
       }
       return r;
     })
-    .catch(() => null);
+    .catch(() => { nfMarcarImagemPendente(obraId, nota.id, pag, true); return null; })
+    .then(r => { _nfImgSubindo.delete(chaveEnvio); return r; });
+}
+
+/* A IMAGEM QUE NÃO SUBIU É TENTADA DE NOVO. O envio da imagem é em segundo
+   plano e, falhando (sem sinal, servidor ocupado), não tinha segunda chance:
+   a nota ficava para sempre sem a prova no Drive, e só o aparelho de quem
+   lançou tinha a foto. Depois de cada sincronização boa, a nota que já está
+   no servidor e ainda não tem o arquivo sobe a cópia guardada aqui — uma
+   tentativa por sessão, para um erro que se repete não virar laço. */
+const _nfImgTentada = new Set();
+async function nfReenviarImagens(obraId) {
+  if (!BACKEND || isDemo() || !obraId) return;
+  let pend;
+  try { pend = new Set(outboxLer().filter(it => it.tipo === 'nf').map(it => it.clientId)); }
+  catch (e) { pend = new Set(); }
+  for (const n of nfGet(obraId)) {
+    // a linha tem de existir lá: é nela que o servidor anota o arquivo
+    if (!n.doServidor || pend.has(n.clientId || n.id)) continue;
+    // só o que FALHOU (a marca fica na nota): a imagem que ainda está subindo
+    // — a sincronização roda logo depois do salvar — não pode ir de novo
+    const pagsLocais = n.pagsPendentes ? (n.paginas || []).filter(p => p && p.local && !p.fileId) : [];
+    const semCapa = !!n.imgPendente && !(n.drive && n.drive.fileId);
+    if (!semCapa && !pagsLocais.length) continue;
+    if ([...(_nfImgSubindo)].some(k => k.indexOf(obraId + '|' + n.id + '|') === 0)) continue;
+    const k = obraId + '|' + n.id;
+    if (_nfImgTentada.has(k)) continue;
+    _nfImgTentada.add(k);
+    if (semCapa) {
+      let img = '';
+      try { img = await fotoLerFull(nfImgChave(obraId, n.id)); } catch (e) { img = ''; }
+      if (img) {
+        const r = await nfEnviarImagem(obraId, n, img, 1);
+        if (r && r.ok) NF_PAGS_SERVIDOR.sabe = (typeof r.pagina === 'number');
+      }
+    }
+    // as folhas 2..N só sobem num servidor que sabe paginar (ver nfSubirFolhas)
+    if (pagsLocais.length && (await nfSondarPaginacao()) === true) {
+      for (const p of pagsLocais) {
+        let img = '';
+        try { img = await fotoLerFull(nfImgChave(obraId, n.id, p.pagina)); } catch (e) { img = ''; }
+        if (img) await nfEnviarImagem(obraId, n, img, p.pagina);
+      }
+    }
+  }
 }
 
 /* ---------- auditoria ---------- */
@@ -1195,7 +1254,7 @@ async function nfAbrirPDF(file) {
   }
   if (!window.pdfjsLib) return out;
   const buf = await file.arrayBuffer();
-  const doc = await window.pdfjsLib.getDocument({ data: buf }).promise;
+  const doc = await window.pdfjsLib.getDocument({ data: buf, isEvalSupported: false }).promise;
   out.doc = doc;
   out.paginas = doc.numPages;
   // a DANFE cabe em poucas folhas; ler tudo de uma nota de 40 páginas é desperdício
@@ -1250,7 +1309,17 @@ async function nfLerPDF(file) {
   return { texto: a.texto, paginas: a.paginas, thumb: im.thumb, full: im.full, extras: im.extras };
 }
 
+/* A LEITURA QUE CHEGA TARDE NÃO É DA NOTA DE AGORA. A leitura leva até um
+   minuto (IA, consulta da chave, a Receita); quem fecha e começa a nota
+   seguinte nesse meio recebia, por cima dela, a imagem e os dados da
+   anterior. Cada leitura leva um número; a que não é mais a vigente — ou
+   cujo rascunho já não é o da tela — para onde estiver. */
+let _nfLeituraGer = 0;
+
 async function nfArquivoSelecionado(inp) {
+  const minhaGer = ++_nfLeituraGer;
+  const meuRasc = _nfRascunho;
+  const vale = () => minhaGer === _nfLeituraGer && _nfRascunho === meuRasc;
   const escolhidos = [...(inp.files || [])]; inp.value = '';
   const f = escolhidos[0];
   const ehPDF = f && (/pdf/i.test(f.type) || /\.pdf$/i.test(f.name || ''));
@@ -1281,15 +1350,18 @@ async function nfArquivoSelecionado(inp) {
   if (ehPDF) {
     let aberto;
     try { aberto = await nfAbrirPDF(f); }
-    catch (e) { toast('Não consegui abrir esse PDF'); nfAbrirNova(); return; }
+    catch (e) { if (vale()) { toast('Não consegui abrir esse PDF'); nfAbrirNova(); } return; }
+    if (!vale()) return;
     textoPDF = aberto.texto; totalPDF = aberto.paginas || 1;
     const quantas = Math.min(totalPDF, NF_MAX_PAGINAS);
     const virarImagens = nfPDFImagens(aberto.doc, aberto.texto.length <= 200).then(im => {
+      if (!vale()) return;
       thumb = im.thumb; full = im.full; paraIA = im.paraIA; extras = im.extras || [];
       _nfRascunho.thumb = thumb; _nfFull = full; _nfPags = extras;
     }).catch(() => { /* sem imagem a nota ainda vale: os dados vieram do texto */ });
     if (textoPDF.length > 200) prontoPaginas = virarImagens;   // a IA le o texto: nao espera
     else await virarImagens;                                   // digitalizado: a IA precisa da folha
+    if (!vale()) return;
     passos[0] = { ic: 'check', st: 'ok',
       t: (quantas > 1 ? quantas + ' páginas guardadas — ' : '') +
          (textoPDF.length > 200 ? 'texto lido do PDF' : 'PDF aberto (parece ser digitalizado)') };
@@ -1300,14 +1372,15 @@ async function nfArquivoSelecionado(inp) {
     try {
       const prep = await nfPrepararFoto(f);
       thumb = prep.thumb; full = prep.full; paraIA = prep.paraIA; reduzida = prep.canvas;
-    } catch (e) { toast('Não consegui ler essa imagem'); nfAbrirNova(); return; }
+    } catch (e) { if (vale()) { toast('Não consegui ler essa imagem'); nfAbrirNova(); } return; }
+    if (!vale()) return;
     const seguintes = outrasFotos.slice(0, NF_MAX_PAGINAS - 1);
     if (seguintes.length) {
       prontoPaginas = (async () => {
         for (const x of seguintes) {
           try { extras.push((await nfPrepararFoto(x)).full); } catch (e) { /* pula a que nao abriu */ }
         }
-        _nfPags = extras;
+        if (vale()) _nfPags = extras;
       })();
     }
     passos[0] = { ic: 'check', st: 'ok',
@@ -1327,6 +1400,7 @@ async function nfArquivoSelecionado(inp) {
   let cod = { codigos: [], suportado: nfTemLeitorCodigo() };
   if (!chaveAchada && !ehPDF) {
     cod = await nfLerCodigos(f, reduzida);
+    if (!vale()) return;
     chaveAchada = cod.chave;
     if (chaveAchada) comoAchou = 'Chave de acesso lida do código de barras';
   }
@@ -1349,6 +1423,7 @@ async function nfArquivoSelecionado(inp) {
     passos[2] = { ic: 'ampulheta', t: 'Buscando a nota pela chave de acesso', st: '' };
     nfPassoUI(passos);
     consulta = await nfConsultarPelaChave(daChave.chave);
+    if (!vale()) return;
   }
 
   // 3) só se a consulta não resolveu é que se recorre ao texto/imagem
@@ -1363,6 +1438,7 @@ async function nfArquivoSelecionado(inp) {
         // espera o que ficou virando imagem em segundo plano, senao ele
         // termina depois e sobrescreve a folha oficial com a foto do barracão
         await prontoPaginas;
+        if (!vale()) return;
         if (oficial.full) { thumb = oficial.thumb; full = oficial.full; _nfRascunho.thumb = thumb; _nfFull = full; }
       } catch (e) { /* fica com a imagem que o apontador enviou */ }
     }
@@ -1379,6 +1455,7 @@ async function nfArquivoSelecionado(inp) {
     }, 12000);
     ia = await nfLerImagemIA(paraIA || full, daChave ? daChave.chave : '', textoPDF);
     clearTimeout(demora);
+    if (!vale()) return;
     if (ia && ia.ok) passos[2] = { ic: 'check', st: 'ok',
       t: ia.semItens ? 'Dados da nota extraídos — a lista de itens é longa demais e ficou de fora'
                      : (textoPDF.length > 200 ? 'Dados extraídos do PDF' : 'Dados extraídos da imagem') };
@@ -1404,6 +1481,7 @@ async function nfArquivoSelecionado(inp) {
     passos[3] = { ic: 'ampulheta', t: 'Identificando o fornecedor pelo CNPJ', st: '' };
     nfPassoUI(passos);
     emitente = await nfCompletarEmitente(nota);
+    if (!vale()) return;
   }
   passos[3] = emitente
     ? { ic: 'check', t: 'Fornecedor: ' + emitente.razaoSocial, st: 'ok' }
@@ -1430,9 +1508,10 @@ async function nfArquivoSelecionado(inp) {
   // as folhas que ficaram virando imagem em segundo plano precisam estar
   // prontas antes do formulario: e ele que mostra e grava a contagem delas
   await prontoPaginas;
+  if (!vale()) return;
   nota.thumb = _nfRascunho.thumb || nota.thumb;
   _nfRascunho = nota;
-  setTimeout(() => nfConferir(), 450);
+  setTimeout(() => { if (_nfRascunho === nota) nfConferir(); }, 450);
 }
 
 async function nfUsarChaveDigitada() {
@@ -1626,8 +1705,8 @@ function nfConferir() {
       // sempre; o que muda e o que vai dentro dele.
       const temImagem = !!(n.thumb || (n.drive && n.drive.fileId) || (n.paginas || []).length);
       const capa = n.thumb
-        ? `<img src="${esc(n.thumb)}" alt="nota fiscal" onclick="nfVerImagem('${n.id}')" style="width:88px;height:110px;object-fit:cover;object-position:top center;border-radius:8px;border:1px solid var(--border-strong);cursor:zoom-in">`
-        : `<div onclick="${temImagem ? `nfVerImagem('${n.id}')` : ''}" style="width:88px;height:110px;display:flex;align-items:center;justify-content:center;border-radius:8px;border:1px dashed var(--border-strong);color:var(--muted);${temImagem ? 'cursor:zoom-in' : ''}">${ic('notas', 26)}</div>`;
+        ? `<img src="${esc(n.thumb)}" alt="nota fiscal" onclick="nfVerImagem(${nfJs(n.id)})" style="width:88px;height:110px;object-fit:cover;object-position:top center;border-radius:8px;border:1px solid var(--border-strong);cursor:zoom-in">`
+        : `<div onclick="${temImagem ? `nfVerImagem(${nfJs(n.id)})` : ''}" style="width:88px;height:110px;display:flex;align-items:center;justify-content:center;border-radius:8px;border:1px dashed var(--border-strong);color:var(--muted);${temImagem ? 'cursor:zoom-in' : ''}">${ic('notas', 26)}</div>`;
       return `<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:14px">
       ${capa}
       <div style="flex:1;min-width:0">
@@ -1635,7 +1714,7 @@ function nfConferir() {
         ${n.chave ? `<div class="mono nf-extra" style="font-size:10.5px;word-break:break-all;margin-top:6px;color:var(--text-2)">${esc(n.chave)}</div>` : ''}
         <div id="nfPagsInfo" class="kpi-s" style="margin-top:4px">${nfPaginasTxt(n)}</div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">
-          ${temImagem ? `<button class="btn btn-sm btn-ghost" style="padding-left:0" onclick="nfVerImagem('${n.id}')">${ic('lupa')} Ver a nota</button>` : ''}
+          ${temImagem ? `<button class="btn btn-sm btn-ghost" style="padding-left:0" onclick="nfVerImagem(${nfJs(n.id)})">${ic('lupa')} Ver a nota</button>` : ''}
           <label class="btn btn-sm btn-ghost" style="cursor:pointer" title="A nota tem mais de uma folha? Junte-as aqui.">
             ${ic('mais')} ${temImagem ? 'Adicionar página' : 'Anexar a imagem da nota'}
             <input type="file" accept="image/*,application/pdf,.pdf" multiple
@@ -1647,7 +1726,7 @@ function nfConferir() {
       <b>${dups.some(d => d.certeza) ? 'Esta nota já está lançada nesta obra.' : 'Talvez esta nota já esteja lançada.'}</b>
       ${dups.slice(0, 3).map(d => `<div style="margin-top:6px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap">
         <span>${esc(nfDupResumo(d.nota))} <span class="kpi-s">(${esc(d.motivo)})</span></span>
-        <button class="btn btn-sm btn-ghost" style="padding:2px 8px" onclick="nfAbrirDuplicada('${d.nota.id}')">Abrir a que já existe</button>
+        <button class="btn btn-sm btn-ghost" style="padding:2px 8px" onclick="nfAbrirDuplicada(${nfJs(d.nota.id)})">Abrir a que já existe</button>
       </div>`).join('')}
       ${dups.length > 3 ? `<div class="kpi-s" style="margin-top:4px">e mais ${dups.length - 3}</div>` : ''}
       <div class="kpi-s" style="margin-top:6px">Salvar assim mesmo cria uma SEGUNDA nota — o material entra dobrado no estoque.</div>
@@ -1708,7 +1787,7 @@ function nfConferir() {
     <div style="display:flex;gap:9px">
       <button class="btn" style="flex:1;justify-content:center" onclick="fecharModal()">Cancelar</button>
       <button class="btn btn-primary" style="flex:2;justify-content:center" onclick="nfSalvarForm()">Salvar nota</button></div>
-    ${(n.historico || []).length ? `<button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;margin-top:10px" onclick="nfVerHistorico('${n.id}')">${ic('relogio')} Histórico de alterações (${n.historico.length})</button>` : ''}
+    ${(n.historico || []).length ? `<button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;margin-top:10px" onclick="nfVerHistorico(${nfJs(n.id)})">${ic('relogio')} Histórico de alterações (${n.historico.length})</button>` : ''}
   `, 680);
   nfRenderItens();
   nfCnpjNoForm();
@@ -1760,7 +1839,7 @@ function nfRenderItens() {
           <div class="field" style="margin:0;max-width:118px"><input class="num" inputmode="decimal" value="${it.vTotal ? fmtNum(it.vTotal) : ''}" placeholder="Valor do item" oninput="nfItemCampo(${i},'vTotal',this.value)"></div>
           <button class="btn btn-sm btn-ghost" onclick="nfDelItem(${i})" title="Remover">${ic('fechar')}</button></div>
         ${mat ? `<div class="nf-vinc">${ic('vinculo')} Material <b>${esc(mat.descricao)}</b> · ${mat.notas} nota(s) <button class="btn btn-sm btn-ghost" onclick="nfItemCampo(${i},'materialId','');nfRenderItens()">desvincular</button></div>` : ''}
-        ${sugM.length ? `<div class="nf-vinc">Material parecido: ${sugM.map(s => `<button class="chip nf-chip-sug" onclick="nfItemCampo(${i},'materialId','${esc(s.material.id).replace(/'/g, '')}');nfRenderItens()">${esc(s.material.descricao)} · ${Math.round(s.score * 100)}%</button>`).join(' ')}</div>` : ''}
+        ${sugM.length ? `<div class="nf-vinc">Material parecido: ${sugM.map(s => `<button class="chip nf-chip-sug" onclick="nfItemCampo(${i},'materialId',${nfJs(s.material.id)});nfRenderItens()">${esc(s.material.descricao)} · ${Math.round(s.score * 100)}%</button>`).join(' ')}</div>` : ''}
       </div>`;
     }).join('');
   }
@@ -1875,14 +1954,13 @@ function nfTotalAuto() {
 }
 function nfRecalcTotal() { nfTotalAuto(); }
 
-/* ---------- salvar ---------- */
-function nfSalvarForm() {
-  const o = obra(); if (!o || !_nfRascunho) return;
+/* Os campos do formulário de conferência para dentro do rascunho. Quem
+   redesenha o formulário (anexar a capa, por exemplo) chama isto antes:
+   o nfConferir() remonta tudo a partir do rascunho, e o que estava só na
+   tela — número, valor, fornecedor digitados — sumia. */
+function nfColetarForm(n) {
+  if (!n || !el('nf_numero')) return n;
   const v = id => { const e = el(id); return e ? e.value.trim() : ''; };
-  const n = _nfRascunho;
-  const antes = nfPorId(o.id, n.id);
-  const antesCopia = antes ? JSON.parse(JSON.stringify(antes)) : null;
-
   n.numero = v('nf_numero'); n.serie = v('nf_serie');
   n.chave = nfChaveNorm(v('nf_chave')).slice(0, 44);
   n.dataEmissao = v('nf_dataEmissao'); n.dataEntrada = v('nf_dataEntrada') || hoje();
@@ -1891,6 +1969,17 @@ function nfSalvarForm() {
   n.vProd = nfNum(v('nf_vProd')); n.vFrete = nfNum(v('nf_vFrete')); n.vTotal = nfNum(v('nf_vTotal'));
   n.vBaseICMS = nfNum(v('nf_vBaseICMS')); n.vICMS = nfNum(v('nf_vICMS'));
   n.status = v('nf_status') || 'Recebida'; n.responsavel = v('nf_responsavel'); n.obs = v('nf_obs');
+  return n;
+}
+
+/* ---------- salvar ---------- */
+function nfSalvarForm() {
+  const o = obra(); if (!o || !_nfRascunho) return;
+  const n = _nfRascunho;
+  const antes = nfPorId(o.id, n.id);
+  const antesCopia = antes ? JSON.parse(JSON.stringify(antes)) : null;
+
+  nfColetarForm(n);
   n.itens = (n.itens || []).filter(it => String(it.descricao || '').trim());
   n.obraId = o.id;
   if (!n.numero && !n.chave && !n.vTotal) { toast('Informe ao menos o número ou o valor da nota'); return; }
@@ -2062,6 +2151,7 @@ window.nfAddPaginas = async function (inp) {
   if (!nfTemCapa(_nfRascunho) && _nfPags.length) {
     _nfFull = _nfPags.shift();
     _nfRascunho.thumb = await nfReduzirUri(_nfFull, 320, .6);
+    nfColetarForm(_nfRascunho);         // o que foi digitado não pode sumir no redesenho
     nfConferir();                       // redesenha com a capa no lugar
     toast('Imagem da nota anexada — salve para enviá-la', 'success', 5000);
     return;
@@ -2199,7 +2289,7 @@ async function nfVerImagem(id) {
          style="${primeira.link ? '' : 'display:none'}">${ic('pasta')} Abrir no Google Drive</a>
       <a id="nfVerBaixar" class="btn" href="${esc(primeira.src || '#')}" download="NF-${esc(n.numero || n.id)}.jpg"
          style="${primeira.src ? '' : 'display:none'}">${ic('baixar')} Baixar imagem</a>
-      <button class="btn btn-ghost" onclick="nfEditar('${n.id}')">${ic('editar')} Editar dados</button></div>`, 720);
+      <button class="btn btn-ghost" onclick="nfEditar(${nfJs(n.id)})">${ic('editar')} Editar dados</button></div>`, 720);
   // os botoes andam a partir da folha que estiver aberta
   const ant = el('nfVerAnt'), pro = el('nfVerProx');
   if (ant) ant.onclick = () => nfIrPagina(n.id, _nfVerPag - 1);
@@ -2338,7 +2428,11 @@ function nfRespDe(n) { return n.responsavel || n.usuario || ''; }
 function nfLocalDe(n) { return n.municipio ? n.municipio + (n.uf ? '/' + String(n.uf).toUpperCase() : '') : ''; }
 /* valor que vai para dentro de um onclick — a descrição do material vira id
    do filtro e pode carregar apóstrofo */
-function nfJs(v) { return esc(String(v == null ? '' : v)).replace(/'/g, '&#39;'); }
+/* Valor de fora DENTRO de onclick="fn(…)": vai como literal de string JS (JSON)
+   e com escape de HTML — sem aspas em volta no chamador. O navegador desfaz as
+   entidades antes de rodar o handler, então só trocar ' por &#39; não protegia:
+   uma nota com id `x');alert(1);('` rodava. É o jsArg() do index.html. */
+function nfJs(v) { return esc(JSON.stringify(String(v == null ? '' : v))); }
 
 function nfOrdenar(lista) {
   const dt = n => nfDataDe(n) || '';
@@ -2529,7 +2623,7 @@ function nfViewLista(o) {
       ${esc(nfNomeForn(g.notas[0]))} ·
       ${esc(nfDupResumo(g.notas[0]))} <span class="kpi-s">— ${g.notas.length} lançamentos, ${esc(g.motivo)}</span>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
-        ${g.notas.map(x => `<button class="btn btn-sm" style="padding:2px 9px" onclick="nfEditar('${x.id}')"
+        ${g.notas.map(x => `<button class="btn btn-sm" style="padding:2px 9px" onclick="nfEditar(${nfJs(x.id)})"
           title="Lançada por ${esc(x.responsavel || x.usuario || '—')}">${ic('editar')} Abrir a de ${esc(nfDataBR(x.dataEntrada || x.dataEmissao) || 'sem data')}</button>`).join('')}
       </div>
     </div>`).join('')}
@@ -2547,11 +2641,11 @@ function nfCartoesNotas(o, mostra, idsDup) {
   const cards = mostra.map(n => {
     const div = nfDivergencia(n);
     return `<div class="card nf-card">
-      <div class="nf-card-img" id="nfcard-${n.id}" onclick="nfVerImagem('${n.id}')">
+      <div class="nf-card-img" id="nfcard-${esc(n.id)}" onclick="nfVerImagem(${nfJs(n.id)})">
         ${n.thumb
           ? `<img src="${esc(n.thumb)}" alt="nota ${esc(n.numero)}">`
-          : `<img id="nfmini-${n.id}" alt="nota ${esc(n.numero)}" style="display:none">
-             <div id="nfsem-${n.id}" class="nf-card-sem">${ic('notas', 40)}</div>`}
+          : `<img id="nfmini-${esc(n.id)}" alt="nota ${esc(n.numero)}" style="display:none">
+             <div id="nfsem-${esc(n.id)}" class="nf-card-sem">${ic('notas', 40)}</div>`}
         <span class="pill ${NF_STATUS_COR[n.status] || 'pill-blu'} nf-card-st">${esc(n.status)}</span>
         ${idsDup[n.id] ? '<span class="pill pill-red nf-card-dup" title="Esta nota está lançada mais de uma vez">repetida</span>' : ''}</div>
       <div class="nf-card-b">
@@ -2563,10 +2657,10 @@ function nfCartoesNotas(o, mostra, idsDup) {
         <div class="kpi-s nf-1linha" title="${esc(o.nome)}">${esc(o.nome)}</div>
         ${div ? `<div class="nf-alerta nf-alerta-ylw" style="margin:8px 0 0;padding:8px 10px">${esc(div)}</div>` : ''}
         <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-          ${podeEditar(n)?`<button class="btn btn-sm" onclick="nfEditar('${n.id}')">${ic('editar')} Conferir</button>`:''}
-          <button class="btn btn-sm btn-ghost" onclick="nfVerImagem('${n.id}')">${ic('lupa')} Nota</button>
+          ${podeEditar(n)?`<button class="btn btn-sm" onclick="nfEditar(${nfJs(n.id)})">${ic('editar')} Conferir</button>`:''}
+          <button class="btn btn-sm btn-ghost" onclick="nfVerImagem(${nfJs(n.id)})">${ic('lupa')} Nota</button>
           ${n.drive && n.drive.link ? `<a class="btn btn-sm btn-ghost" href="${esc(n.drive.link)}" target="_blank" rel="noopener" title="Abrir no Google Drive">${ic('pasta')}</a>` : ''}
-          ${podeExcluir(n)?`<button class="btn btn-sm btn-ghost" onclick="nfExcluir('${n.id}')" title="Excluir">${ic('fechar')}</button>`:''}</div>
+          ${podeExcluir(n)?`<button class="btn btn-sm btn-ghost" onclick="nfExcluir(${nfJs(n.id)})" title="Excluir">${ic('fechar')}</button>`:''}</div>
       </div></div>`;
   }).join('');
   return `<div class="grid nf-grid">${cards}</div>`;
@@ -2595,8 +2689,8 @@ function nfTabelaNotas(o, mostra, idsDup, r) {
       <td><span class="pill ${NF_STATUS_COR[n.status] || 'pill-blu'}">${esc(n.status)}</span></td>
       <td class="kpi-s">${esc(nfRespDe(n) || '—')}</td>
       <td style="white-space:nowrap">
-        ${podeEditar(n) ? `<button class="btn btn-sm btn-ghost" onclick="nfEditar('${n.id}')" title="Conferir">${ic('editar')}</button>` : ''}
-        <button class="btn btn-sm btn-ghost" onclick="nfVerImagem('${n.id}')" title="Ver a nota">${ic('lupa')}</button></td></tr>`;
+        ${podeEditar(n) ? `<button class="btn btn-sm btn-ghost" onclick="nfEditar(${nfJs(n.id)})" title="Conferir">${ic('editar')}</button>` : ''}
+        <button class="btn btn-sm btn-ghost" onclick="nfVerImagem(${nfJs(n.id)})" title="Ver a nota">${ic('lupa')}</button></td></tr>`;
   }).join('');
   return `<div class="card"><div class="tbl-wrap"><table class="t nf-tbl">
     <thead><tr><th>Nº / série</th><th class="num">Emissão</th><th class="num">Receb.</th><th>Fornecedor</th>
@@ -2918,7 +3012,7 @@ function nfTabelaItens(o, fs) {
     <td class="num">${fmtQtd(i.qtd)} <span class="kpi-s">${esc(i.un)}</span></td>
     <td class="num">${i.vUnit ? fmtBRL(i.vUnit) : '—'}</td>
     <td class="num mono" style="font-weight:700">${fmtBRL(i.vTotal)}</td>
-    <td><button class="btn btn-sm btn-ghost" onclick="nfEditar('${i.notaId}')">NF ${esc(i.numero || '—')}</button></td></tr>`).join('');
+    <td><button class="btn btn-sm btn-ghost" onclick="nfEditar(${nfJs(i.notaId)})">NF ${esc(i.numero || '—')}</button></td></tr>`).join('');
   return `<div class="card"><div class="card-h"><div><div class="card-t">Produtos das notas</div>
       <div class="card-st">uma linha por produto · ${itens.length} de ${total} no filtro · ${fmtBRL(somaV)}</div></div></div>
     <div class="card-b" style="padding:10px 15px 0">
@@ -3082,7 +3176,7 @@ function nfViewEstoque(o) {
       <td class="num">${fmtBRL(s.valorSaldo)}</td>
       <td class="kpi-s">${esc(s.lotes.slice(0, 3).join(', '))}${s.lotes.length > 3 ? ' +' + (s.lotes.length - 3) : ''}</td>
       <td class="num kpi-s">${nfDataBR(s.ultima)}${dias != null ? `<div class="kpi-s">${nfHa(s.ultima)}</div>` : ''}</td>
-      <td>${pode('saidaEstoque') ? `<button class="btn btn-sm btn-ghost" onclick="nfSaidaModal('${nfJs(s.id)}')" title="Registrar saída deste material">${ic('saida')}</button>` : ''}</td></tr>`;
+      <td>${pode('saidaEstoque') ? `<button class="btn btn-sm btn-ghost" onclick="nfSaidaModal(${nfJs(s.id)})" title="Registrar saída deste material">${ic('saida')}</button>` : ''}</td></tr>`;
     }).join('')}</tbody>
     <tfoot><tr><td colspan="4"><b>${saldos.length} material(is)</b></td>
       <td class="num"></td><td class="num"></td><td class="num"></td>
@@ -3116,7 +3210,7 @@ function nfViewEstoque(o) {
       <td class="num">${fmtQtd(m.qtd)} ${esc(m.un)}</td>
       <td class="kpi-s">${esc([m.capId != null ? frenteNome(o, m.capId) : '', m.rua].filter(Boolean).join(' · ')) || '—'}</td>
       <td class="kpi-s">${esc(m.responsavel || m.usuario || '—')}</td>
-      <td>${podeExcluir(m) ? `<button class="btn btn-sm btn-ghost" onclick="nfSaidaExcluir('${m.id}')" title="Apagar">${ic('fechar')}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>
+      <td>${podeExcluir(m) ? `<button class="btn btn-sm btn-ghost" onclick="nfSaidaExcluir(${nfJs(m.id)})" title="Apagar">${ic('fechar')}</button>` : ''}</td></tr>`).join('')}</tbody></table></div>
     ${sai.length > limS ? `<div style="text-align:center;padding:12px"><button class="btn btn-sm" onclick="nfMaisSaidas()">Mostrar mais ${Math.min(30, sai.length - limS)} de ${sai.length - limS}</button></div>` : ''}</div>`;
 
   const limE = estado.nfLimiteEntradas || 30;
@@ -3132,7 +3226,7 @@ function nfViewEstoque(o) {
       <td class="num">${fmtBRL(nfNum(m.vTotal))}</td>
       <td class="mono" style="font-size:12px">${esc(m.lote)}</td>
       <td class="kpi-s">${esc(m.fornecedor || nfCNPJfmt(m.cnpj))}</td>
-      <td><button class="btn btn-sm btn-ghost" onclick="nfEditar('${m.notaId}')">abrir</button></td></tr>`).join('')}</tbody></table></div>
+      <td><button class="btn btn-sm btn-ghost" onclick="nfEditar(${nfJs(m.notaId)})">abrir</button></td></tr>`).join('')}</tbody></table></div>
     ${movs.length > limE ? `<div style="text-align:center;padding:12px"><button class="btn btn-sm" onclick="nfMaisEntradas()">Mostrar mais ${Math.min(30, movs.length - limE)} de ${movs.length - limE}</button></div>` : ''}</div>`;
   return topo + kpis + aviso + filtros + tab + tabLocal + tabSaidas + rastro;
 }
@@ -3423,7 +3517,7 @@ function nfViewPrecos(o) {
       <td class="num">${fmtBRL(m.ultimo)}</td>
       <td class="num" style="color:${m.comparavel ? corVar(m.variacao) : 'var(--muted)'};font-weight:600">${m.comparavel ? sinal(m.variacao) : '—'}</td>
       <td class="num kpi-s">${nfDataBR(m.ultimaData)}</td>
-      <td><button class="btn btn-sm btn-ghost" onclick="nfPrecoDetalhe('${nfJs(m.id)}')">ver</button></td></tr>`).join('')}</tbody>
+      <td><button class="btn btn-sm btn-ghost" onclick="nfPrecoDetalhe(${nfJs(m.id)})">ver</button></td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="4"><b>${mats.length} material(is)</b></td><td class="num"></td><td class="num"></td><td class="num"></td>
       <td class="num"></td><td class="num mono"><b>${fmtBRL(mats.reduce((a, m) => a + m.valorTotal, 0))}</b></td><td></td></tr></tfoot></table></div></div>`;
 
@@ -3471,7 +3565,7 @@ function nfPrecoDetalhe(id) {
       <div style="flex:1;min-width:0">
         <div style="font-weight:600;font-size:13.5px">${fmtBRL(c.vUnit)} <span class="kpi-s" style="text-transform:none;letter-spacing:0">por ${esc(m.un)}</span>${marca}</div>
         <div class="kpi-s">${nfDataBR(c.dataISO)} · ${esc(c.fornecedor || nfCNPJfmt(c.cnpj) || 'fornecedor não informado')} · ${fmtQtd(c.qtd)} ${esc(m.un)}</div></div>
-      <button class="btn btn-sm btn-ghost" onclick="fecharModal();nfEditar('${c.notaId}')">nota ${esc(c.numero)}</button></div>`;
+      <button class="btn btn-sm btn-ghost" onclick="fecharModal();nfEditar(${nfJs(c.notaId)})">nota ${esc(c.numero)}</button></div>`;
   }).join('');
   const economia = ex && m.n > 1 ? (m.ultimo - ex.barato.vUnit) * m.qtdTotal : 0;
   abrirModal(esc(m.descricao), `
@@ -3612,7 +3706,7 @@ function nfViewPainel(o) {
       ${pendentes.slice(0, 6).map(n => `<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
         <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13.5px">NF ${esc(n.numero || '—')} · ${esc(nfNomeForn(n))}</div>
           <div class="kpi-s">${nfDataBR(nfDataDe(n))}${n.dias > 0 ? ' · parada há ' + n.dias + ' dia(s)' : ''} · ${fmtBRL(nfNum(n.vTotal))}</div></div>
-        ${podeEditar(n) ? `<button class="btn btn-sm" onclick="nfEditar('${n.id}')">${ic('editar')} Conferir</button>` : ''}</div>`).join('')}
+        ${podeEditar(n) ? `<button class="btn btn-sm" onclick="nfEditar(${nfJs(n.id)})">${ic('editar')} Conferir</button>` : ''}</div>`).join('')}
       ${pendentes.length > 6 ? `<div class="kpi-s" style="margin-top:8px">e mais ${pendentes.length - 6} —
         <a href="#" onclick="nfTab('notas');nfMarcaToggle('pend');return false">ver todas na lista</a></div>` : ''}</div></div>`;
 
@@ -3772,8 +3866,12 @@ async function nfCarregar(obraId, opcoes) {
             apagava a nota do aparelho de quem a lancou. */
       locais.forEach(l => {
         const k = l.clientId || l.id;
+        /* EDIÇÃO NA FILA VALE SOBRE O SERVIDOR até subir: a nota corrigida
+           sem sinal voltava à versão velha na primeira sincronização — e quem
+           editasse de novo partia do valor errado. */
+        if (pend.has(k)) { mapa[k] = l; return; }
         if (mapa[k]) return;
-        if (pend.has(k) || !l.doServidor) mapa[k] = l;
+        if (!l.doServidor) mapa[k] = l;
       });
       nfSet(obraId, Object.values(mapa).sort((a, b) => (b.dataEntrada || '').localeCompare(a.dataEntrada || '')));
     }
@@ -3788,6 +3886,7 @@ async function nfCarregar(obraId, opcoes) {
     }
     if (!r || !r.ok) throw new Error((r && r.error) || 'resposta invalida');
     nfSync[obraId] = { em: Date.now(), erro: '' };
+    nfReenviarImagens(obraId).catch(() => {});
     /* Redesenha quando a lista MUDOU, e nao quando dois estados batem.
        A condicao antiga comparava `estado.obraId`, que nem existia neste
        app: dava sempre falso, a nota nova era gravada no aparelho e a tela
@@ -3836,6 +3935,9 @@ function nfDoServidor(s, obraId, locais) {
     // veio do servidor: uma sincronizacao futura pode remove-la se ela sumir
     // de la. Nota SEM esta marca nunca foi confirmada e nao pode ser apagada.
     doServidor: true,
+    // a imagem que falhou ao subir continua marcada (nfReenviarImagens)
+    imgPendente: !!(local && local.imgPendente) && !s.driveId,
+    pagsPendentes: !!(local && local.pagsPendentes),
     thumb: (local && local.thumb) || '',
     leitura: leitura, leituraConf: (local && local.leituraConf) || {},
     historico: hist, usuario: s.usuario || '',

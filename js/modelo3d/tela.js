@@ -560,7 +560,7 @@ function m3dDesenharLegenda(D) {
         '<i style="background:' + e.cor + '"></i>' + escHtml(e.nome) + ' <small>(' + (porEt[i] || 0) + ')</small></button>';
     }).join('') + (fora ? '<span><i style="background:' + M3D_FORA_COR + '"></i>Fora da pista (muro, passeio…) <small>(' + fora + ')</small></span>' : '') +
       (D.lista.length ? '' : '<span>Nenhuma estaca com serviço neste filtro.</span>');
-    h += m3dAvancoEtapasHtml(D);
+    h += m3dAvancoEtapasHtml();
   } else {
     var cont = {};
     D.lista.forEach(function (a) { var f = m3dFrentesOrdenadas(a)[0]; if (f) cont[f] = (cont[f] || 0) + 1; });
@@ -577,19 +577,30 @@ function m3dDesenharLegenda(D) {
    já passou pela base —, e contado sobre TODAS as estacas do eixo (com ou sem
    lançamento), que é o que "quanto da avenida" quer dizer. Não é a medição:
    a Avanço Físico mede quantidade; isto mede extensão. */
-function m3dAvancoEtapas(D) {
+function m3dAvancoEtapas() {
   var eixos = eixosDaObraAtiva().filter(function (x) { return m3dEixoModelo(x.id); });
   var total = 0, nos = {};
   eixos.forEach(function (x) { total += Math.max(0, (+x.fim) - (+x.ini) + 1); nos[x.id] = x; });
   var tem = m3dEtapasDaObra(), conta = M3D_ETAPAS.map(function () { return 0; });
-  D.lista.forEach(function (a) {
-    var x = nos[a.eixo]; if (!x || a.etapa < 0 || a.num < +x.ini || a.num > +x.fim) return;
-    for (var i = 0; i <= a.etapa; i++) conta[i]++;
+  /* De TODOS os lançamentos, não do filtro: com "últimos 7 dias" ou uma
+     frente escolhida, o "quanto da avenida chegou à base" contava só o que o
+     filtro deixava — a obra parecia andar para trás. Só a linha do tempo
+     corta, na data dela: é o avanço ATÉ aquele dia. */
+  var ate = M3D.periodo === 'linha' ? (M3D.ate || m3dHoje()) : '';
+  var topo = new Map();
+  m3dBase().forEach(function (L) {
+    if (L.etapa < 0 || (ate && L.iso > ate)) return;
+    L.ests.forEach(function (e) {
+      var x = nos[e.eixo]; if (!x || e.num < +x.ini || e.num > +x.fim) return;
+      var k = e.eixo + ':' + e.num;
+      if (!(topo.get(k) >= L.etapa)) topo.set(k, L.etapa);
+    });
   });
+  topo.forEach(function (et) { for (var i = 0; i <= et; i++) conta[i]++; });
   return { total: total, etapas: M3D_ETAPAS.map(function (e, i) { return { i: i, nome: e.nome, cor: e.cor, n: conta[i], tem: !!tem[i] || conta[i] > 0 }; }).filter(function (e) { return e.tem; }) };
 }
-function m3dAvancoEtapasHtml(D) {
-  var A = m3dAvancoEtapas(D);
+function m3dAvancoEtapasHtml() {
+  var A = m3dAvancoEtapas();
   if (!A.total || !A.etapas.length) return '';
   return '<details class="m3d-avanco"' + (M3D.avancoAberto ? ' open' : '') + ' ontoggle="M3D.avancoAberto=this.open">' +
     '<summary>Avanço da pista por etapa <small>' + A.total + ' estacas nos eixos do modelo' + (M3D.periodo === 'linha' ? ' · até ' + escHtml(fmtData(M3D.ate || m3dHoje())) : '') + '</small></summary>' +
@@ -883,7 +894,8 @@ window.m3dAbrirDia = function (iso) {
 window.m3dIrDigitada = function () {
   var inp = document.getElementById('m3dIrNum'), erro = document.getElementById('m3dIrErro');
   var dizer = function (m) { if (erro) { erro.textContent = m; erro.style.display = m ? '' : 'none'; } };
-  var n = parseInt(String((inp && inp.value) || '').replace(/[^\d]/g, ''), 10);
+  // "212+10" é a estaca 212 e mais 10 m: tirar tudo que não é dígito dava 21210
+  var n = parseInt((/\d+/.exec(String((inp && inp.value) || '')) || [''])[0], 10);
   if (!isFinite(n)) { dizer('Digite o número da estaca.'); return; }
   var sel = document.getElementById('m3dIrEixo');
   var eixos = eixosDaObraAtiva().filter(function (x) { return m3dEixoModelo(x.id); });
@@ -1032,7 +1044,12 @@ function m3dRenders() {
 /* Depois que o HTML da tela entrou: desenha o que não depende do visor. */
 function m3dMontar() {
   if (!OBRA.modelo3d) return;
-  m3dDesenharPartes(m3dDados());
+  /* guardado já aqui: o painel da estaca (m3dDesenharDetalhe sem argumento)
+     lê o _m3dUltimo, e antes do primeiro m3dSincronizar ele era null — a
+     estaca tocada dizia "Nada nesta estaca no filtro atual" com lançamento nela */
+  var D = m3dDados();
+  _m3dUltimo = D;
+  m3dDesenharPartes(D);
   m3dDesenharTempo();
   if (M3D.sel) m3dCarregarFotos(M3D.sel);
 }

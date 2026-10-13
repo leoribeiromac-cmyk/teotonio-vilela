@@ -131,18 +131,21 @@ self.addEventListener('fetch', (e) => {
        "/index.html" (dois endereços da MESMA página), a guardada no install. */
     const guardada = async () => (await caches.match(e.request, { ignoreSearch: true })) ||
       (/\/(index\.html)?$/.test(url.pathname) ? caches.match('./index.html') : undefined);
+    /* O worker fica vivo até a cópia nova ser gravada. O waitUntil é pedido
+       AQUI, durante o evento: chamado depois (quando a rede responde, com a
+       cópia guardada já entregue pelo prazo de 4 s) ele estoura
+       InvalidStateError — e o aparelho ficava na versão velha. */
+    const fundo = emSegundoPlano(e);
     e.respondWith((async () => {
       const rede = fetch(e.request).then(resp => {
         // só página boa substitui a guardada: erro 5xx ou redirecionamento
         // por cima da cópia boa era trocar o app offline por uma página de erro
         if (resp && resp.ok && !resp.redirected) {
           const clone = resp.clone();
-          // waitUntil: servida a cópia pelo prazo de 4 s, o worker podia ser
-          // desligado antes de gravar a nova — e o aparelho ficava na versão velha
-          e.waitUntil(caches.open(VERSAO).then(c => c.put(e.request, clone)).catch(() => {}));
-        }
+          fundo(caches.open(VERSAO).then(c => c.put(e.request, clone)));
+        } else fundo();
         return resp;
-      });
+      }, err => { fundo(); throw err; });
       rede.catch(() => {}); // evita "unhandled rejection" quando servimos o cache
       const timeout = new Promise(res => setTimeout(() => res(null), 4000));
       try {
@@ -185,18 +188,34 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
+  // a revalidação termina DEPOIS da resposta (o cache já foi entregue): o
+  // waitUntil tem de ser pedido agora, não quando ela acabar (ver emSegundoPlano)
+  const fundo = emSegundoPlano(e);
   e.respondWith(
     caches.match(e.request).then(hit => {
       const rede = fetch(hit ? new Request(e.request, { cache: 'no-cache' }) : e.request)
         .then(resp => {
           if (resp && resp.ok) {
             const clone = resp.clone();
-            e.waitUntil(caches.open(balde).then(c => c.put(e.request, clone)));
-          }
+            fundo(caches.open(balde).then(c => c.put(e.request, clone)));
+          } else fundo();
           return resp;
         })
-        .catch(() => hit);
+        .catch(() => { fundo(); return hit; });
       return hit || rede;
     })
   );
 });
+
+/* Estende a vida do worker por um trabalho que só vai existir depois da
+   resposta. Devolve a função que o entrega (ou só encerra, sem argumento).
+   Um prazo fecha a espera se a rede nunca responder. */
+function emSegundoPlano(e) {
+  let fim;
+  const pronto = new Promise(r => { fim = r; });
+  const prazo = setTimeout(() => fim(), 60000);
+  e.waitUntil(pronto);
+  return (trabalho) => {
+    Promise.resolve(trabalho).catch(() => {}).then(() => { clearTimeout(prazo); fim(); });
+  };
+}

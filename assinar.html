@@ -223,10 +223,16 @@ function chamar(params) {
   Object.keys(params).forEach(function (k) { corpo.append(k, params[k] == null ? '' : params[k]); });
   var url = BACKEND + '?action=' + encodeURIComponent(params.action || '') +
             '&t=' + encodeURIComponent(params.t || '');
-  return fetch(url, { method: 'POST', body: corpo }).then(function (r) {
+  /* PRAZO. No 4G fraco um pedido pendurado deixava o botão em "Enviando…"
+     para sempre — sem erro, sem o "tente de novo" que o traço preservado
+     existe para permitir. */
+  var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+  var prazo = ctl ? setTimeout(function () { ctl.abort(); }, 60000) : 0;
+  return fetch(url, { method: 'POST', body: corpo, signal: ctl ? ctl.signal : undefined }).then(function (r) {
     if (!r.ok) throw new Error('Falha de rede (HTTP ' + r.status + ')');
-    return r.text();
+    return r.text();               // o corpo também está no prazo: o abort corta a leitura
   }).then(function (txt) {
+    clearTimeout(prazo);
     try {
       return JSON.parse(txt);
     } catch (e) {
@@ -235,6 +241,10 @@ function chamar(params) {
          indisponível, e quem assina precisa saber a diferença. */
       throw new Error('O servidor respondeu uma página em vez de dados. Tente de novo em alguns minutos.');
     }
+  }, function (e) {
+    clearTimeout(prazo);
+    if (e && e.name === 'AbortError') throw new Error('O servidor demorou demais para responder');
+    throw e;
   });
 }
 
@@ -389,7 +399,7 @@ function desenharPdf(dataUri) {
   var bytes = new Uint8Array(cru.length);
   for (var i = 0; i < cru.length; i++) bytes[i] = cru.charCodeAt(i);
 
-  window.pdfjsLib.getDocument({ data: bytes }).promise.then(function (doc) {
+  window.pdfjsLib.getDocument({ data: bytes, isEvalSupported: false }).promise.then(function (doc) {
     var caixa = q('folhas');
     caixa.innerHTML = '';
     q('dicaFolhas').textContent = doc.numPages + (doc.numPages > 1 ? ' folhas' : ' folha') +
@@ -494,6 +504,14 @@ function abrir() {
              '. Código ' + r.codigo + '.', 'feito');
       return;                       // nada a assinar: o quadro nem aparece
     }
+    /* Ninguém assina o que não pode ler: sem o PDF, ou com um PDF que já
+       ficou para trás de uma correção do dia, o quadro de assinar não
+       aparece — o servidor recusaria a firma do mesmo jeito. */
+    if (r.semPdf) return;
+    if (r.desatualizado) {
+      recado(r.aviso || 'O RDO deste dia foi corrigido. Volte por este link em alguns minutos.', 'atencao');
+      return;
+    }
 
     mostrar('cartaoAssinar', true);
     prepararTela();
@@ -517,6 +535,8 @@ function assinar() {
     assinatura: tracoPNG(),
     nome: q('nome').value.trim(),
     documento: q('documento').value.trim(),
+    // a versão do RDO que está na tela: a firma só entra se o dia ainda for este
+    revisao: (DADOS && DADOS.revisao) || '',
     agente: navigator.userAgent
   }).then(function (r) {
     if (!r || !r.ok) {

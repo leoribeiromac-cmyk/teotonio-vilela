@@ -2035,7 +2035,8 @@ function irPara(d) {   // {chave} de uma estaca com serviço, ou {eixo, m} de qu
     voarParaFaixa(e); RDO.sel = String(d.chave); marcarSel(); showInfo(RDO.infos[e.ii]);
   } else if (d.eixo && ALN[d.eixo] && fin(+d.m)) {
     const A = ALN[d.eixo]; goStation(d.eixo, Math.max(A.m0, Math.min(A.m1, +d.m)));
-    if (d.chave != null) { RDO.sel = null; marcarSel(); }
+    // estaca sem faixa: o painel não pode ficar mostrando a estaca de ANTES
+    if (d.chave != null) showInfo(null);
   }
   invalidar();
 }

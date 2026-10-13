@@ -255,8 +255,11 @@
             if (typeof rascunhoLer !== 'function') { ligarRascunho(); return; }
             let reg = null;
             try { reg = await rascunhoLer(chaveRasc(), RASC_VALIDADE); } catch (e) { }
+            // Saiu da tela enquanto a leitura vinha: sem formulário, o gravador
+            // armado apagaria o rascunho no próximo `pagehide` (nada digitado)
+            if (!document.getElementById('apontamentoForm')) return;
             // Leitura assíncrona: se já começaram a digitar, quem manda é o dedo.
-            if (!reg || mexeu || !document.getElementById('apontamentoForm')) { ligarRascunho(); return; }
+            if (!reg || mexeu) { ligarRascunho(); return; }
             const d = reg.dados || {};
             Object.keys(d.campos || {}).forEach(id => {
                 const e = document.getElementById(id);
@@ -598,6 +601,7 @@
         async function enviarApontamento(forcar) {
             fecharConfirmacao();
             setLoading(true);
+            let fdParaFila = null;
             try {
                 /* NÃO se captura o canvas aqui: o que vale é o que o operador
                    CONFIRMOU no modal (hidden #assinatura). Traço deixado no
@@ -668,6 +672,11 @@
                     return;
                 }
 
+                // o que a fila precisaria, caso o envio caia (ver o catch)
+                const campos = {};
+                fd.forEach((v, k) => { if (typeof v === 'string') campos[k] = v; });
+                fdParaFila = { url: be.url, legado: be.legado, campos,
+                    descricao: 'apontamento de ' + (campos.equipamento || 'equipamento') + ' em ' + (campos.data || '') };
                 const resp = await fetch(be.url, { method: 'POST', body: fd });
                 const r = await resp.json();
                 if (r.ok) {
@@ -684,7 +693,22 @@
                 }
             } catch (err) {
                 console.error('Error!', err);
-                showToast('Erro de conexão com o servidor. Tente novamente.', 'error');
+                /* SEM SINAL, O APONTAMENTO VAI PARA A FILA — como o RDO, a nota e
+                   a viagem. Antes ele dava "erro de conexão" e ficava só na tela,
+                   enquanto a pílula do app prometia "lançamentos ficam guardados".
+                   A fila manda pelo MESMO destino e no MESMO dialeto (o legado da
+                   Teotônio ou o Code.gs), com o formulário como foi montado aqui.
+                   A correção (EDICAO) não entra: ela reescreve uma linha que já
+                   existe, e precisa da resposta para dizer se pegou. */
+                const guardou = !EDICAO && fdParaFila && typeof outboxAdicionar === 'function' &&
+                    await outboxAdicionar({ tipo: 'equip', url: fdParaFila.url, legado: fdParaFila.legado,
+                                            campos: fdParaFila.campos, descricao: fdParaFila.descricao });
+                if (guardou) {
+                    showToast('Sem sinal — apontamento guardado no aparelho. Ele sobe sozinho quando a internet voltar.', 'success');
+                    limparApontamento();
+                } else {
+                    showToast('Erro de conexão com o servidor. Tente novamente.', 'error');
+                }
             } finally {
                 setLoading(false);
             }
@@ -779,7 +803,7 @@
                         <div class="eq-item-lado">
                             <span class="eq-item-horas">${escapeHtml(String(a.horas))}h</span>
                             <button type="button" data-carimbo="${escapeHtml(a.carimbo)}" class="btn-editar-apont btn btn-ghost btn-icone" title="Corrigir este apontamento" aria-label="Corrigir este apontamento">${ic('editar')}</button>
-                            <button type="button" data-carimbo="${a.carimbo}" class="btn-apagar-apont btn btn-ghost btn-icone" title="Apagar este apontamento" aria-label="Apagar este apontamento">${ic('lixeira')}</button>
+                            <button type="button" data-carimbo="${escapeHtml(a.carimbo)}" class="btn-apagar-apont btn btn-ghost btn-icone" title="Apagar este apontamento" aria-label="Apagar este apontamento">${ic('lixeira')}</button>
                         </div>
                     </div>`).join('');
                 box.querySelectorAll('.btn-editar-apont').forEach(b => b.addEventListener('click', () => editarApontamentoUI(b.getAttribute('data-carimbo'))));

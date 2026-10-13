@@ -135,7 +135,12 @@ function rotear(e) {
     // continuar idêntico dos dois lados.
     var POR_OBRA = ['nfSalvar', 'saidaSalvar', 'equipApontar', 'bfSalvar', 'rdoPdfDoDia', 'deleteRDODiario',
                     'rdoAssinaturasDoDia', 'rdoAssinadosPendentes',
-                    'rdoEnviarParaAssinatura', 'rdoDiagEmail'];
+                    'rdoEnviarParaAssinatura', 'rdoDiagEmail',
+                    /* fechar a medição, mexer no cadastro de máquinas e guardar a
+                       imagem da nota também são da obra que o app diz: sem estar
+                       aqui, quem só tem o Ranário fechava a medição da Teotônio */
+                    'medicaoFechar', 'medicaoReabrir',
+                    'equipCadastrar', 'locadoraCadastrar', 'equipDesativar', 'nfImagem'];
     if (POR_OBRA.indexOf(action) !== -1) {
       var sessObraR = sessaoDoToken(p.token);
       if (sessObraR && !sessaoPodeNaObra(sessObraR, p.obra)) {
@@ -169,7 +174,13 @@ function rotear(e) {
                              'nfSalvar', 'nfExcluir', 'saidaSalvar', 'saidaExcluir', 'bfExcluir',
                              /* grava o ponteiro da imagem pelo ÍNDICE lido antes: um
                                 nfExcluir no meio punha a imagem na nota vizinha */
-                             'nfImagem'];
+                             'nfImagem',
+                             /* desativa pelo índice lido antes, como o equipApagar */
+                             'equipDesativar',
+                             /* leem e regravam uma Propriedade inteira (a firma
+                                arquivada, o cadastro de usuários): duas ao mesmo
+                                tempo, a segunda desfazia a primeira */
+                             'rdoFirmaArquivar', 'usuarioSalvar', 'usuarioExcluir'];
     var travaRoteador = null;
     if (SEM_TRAVA_PROPRIA.indexOf(action) !== -1) {
       travaRoteador = LockService.getScriptLock();
@@ -323,8 +334,12 @@ function loginUsuario(usuario, senha) {
   try { usuarios = JSON.parse(raw); }
   catch (e) { return { ok: false, error: 'Propriedade USUARIOS não é um JSON válido' }; }
 
-  var conf = usuarios[u] || usuarios[u.toLowerCase()];
-  if (!conf) {
+  /* Só chave PRÓPRIA do cadastro. `usuarios` sai de um JSON.parse, e
+     usuarios['constructor'] devolvia a função herdada do Object: a "senha"
+     dela era o próprio texto da função, e quem digitasse esse texto entrava
+     como engenharia em todas as obras. */
+  var conf = usuarioDoCadastro_(usuarios, u);
+  if (!conf || !usuarioSenhaDe(conf)) {
     cache.put(chaveErros, String(erros + 1), 900);
     Utilities.sleep(500);                       // desincentiva tentativa e erro em massa
     return { ok: false, error: 'CREDENCIAIS_INVALIDAS' };
@@ -681,7 +696,10 @@ function auditoriaDescarregar(aba) {
     });
     if (linhas.length) {
       var a = aba || getOrCreateAba(ABA_AUDITORIA);
-      a.getRange(a.getLastRow() + 1, 1, linhas.length, AUDITORIA_COLUNAS).setValues(seguroMatriz(linhas));
+      /* appendRow, e não getLastRow()+1: quem descarrega não tem trava, e
+         duas execuções lendo o mesmo "fim" gravavam uma POR CIMA da outra —
+         na trilha de auditoria, que é o que não pode perder linha. */
+      seguroMatriz(linhas).forEach(function (l) { a.appendRow(l); });
     }
     // só apaga depois de gravar: se a gravação falhar, a fila fica de pé
     chaves.forEach(function (k) { try { props.deleteProperty(k); } catch (e) {} });
@@ -860,14 +878,20 @@ function deleteRDO(id, token) {
   // o dono do lançamento é o apontador (ou a coluna usuario, se existir)
   var iDono = idxColuna(cab, 'usuario');
   if (iDono === -1) iDono = idxColuna(cab, 'apontador');
+  var iObraD = cab.indexOf('obra');
 
   for (var i = 1; i < dados.length; i++) {
     if (String(dados[i][iId]).trim() === String(id).trim()) {
       var dono = iDono !== -1 ? dados[i][iDono] : '';
       if (!podeApagarLinha(token, dono)) return negarPorPermissao(token, 'deleteRDO', id, dono);
+      // a obra DA LINHA, como no updateRDO: o id é carimbo de segundo, igual
+      // em todas as obras, e o admin de uma obra não apaga a medição da outra
+      var obraLinhaD = iObraD !== -1 ? normObra(dados[i][iObraD]) : OBRA_ID;
+      var sessD = sessaoDoToken(token);
+      if (sessD && !sessaoPodeNaObra(sessD, obraLinhaD)) return negarPorObra(token, 'deleteRDO', obraLinhaD);
       var antes = cab.map(function (c, k) { return c + '=' + dados[i][k]; }).join(' | ');
       aba.deleteRow(i + 1); // planilha é base-1 e tem cabeçalho
-      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDO', OBRA_ID, id, antes, '');
+      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDO', obraLinhaD, id, antes, '');
       return { ok: true, deleted: id };
     }
   }
@@ -889,13 +913,25 @@ function addBatchRDO(batchJson, clientId, token) {
   // regra de exclusão ("o dono apaga") e a trilha de auditoria.
   var sess = sessaoDoToken(token) || { usuario: '', perfil: '' };
 
+  /* Cada item com as chaves em minúsculas, UMA vez, e é ESTE o registro que
+     a porta confere e que vai para a planilha. Conferir `item.obra` e gravar
+     a chave minúscula deixava `{"obra":"ranario","OBRA":"teotonio"}` passar
+     pela porta do Ranário e cair na Teotônio — a base da medição. */
+  var itens = [];
+  for (var bn = 0; bn < batch.length; bn++) {
+    var it = batch[bn];
+    if (!it || typeof it !== 'object' || Array.isArray(it)) return { ok: false, error: 'batch inválido' };
+    var reg = {};
+    Object.keys(it).forEach(function (chave) { reg[String(chave).toLowerCase()] = it[chave]; });
+    itens.push(reg);
+  }
+
   // O app monta o lote com uma obra só — mas quem confere é o servidor, e
   // conferir só a PRIMEIRA linha deixava um lote "Ranário + Teotônio" gravar
   // na obra que o usuário não tem. Cada linha passa pela porta.
-  var obraDoLote = normObra(batch[0] && (batch[0].obra || batch[0].Obra));
   if (sessaoDoToken(token)) {
-    for (var bi = 0; bi < batch.length; bi++) {
-      var obraItem = normObra(batch[bi] && (batch[bi].obra || batch[bi].Obra));
+    for (var bi = 0; bi < itens.length; bi++) {
+      var obraItem = normObra(itens[bi]['obra']);
       if (!sessaoPodeNaObra(sess, obraItem)) return negarPorObra(token, 'addBatchRDO', obraItem);
     }
   }
@@ -942,12 +978,16 @@ function addBatchRDO(batchJson, clientId, token) {
     }
 
     var agora = new Date();
-    var linhas = batch.map(function (item, k) {
+    var linhas = itens.map(function (item, k) {
+      // copia os campos recebidos (já com as chaves em minúsculas)
       var registro = {};
-      // copia os campos recebidos
-      Object.keys(item).forEach(function (chave) { registro[chave.toLowerCase()] = item[chave]; });
-      // campos gerados pelo servidor
-      registro['id'] = registro['id'] || gerarId(agora, k);
+      Object.keys(item).forEach(function (chave) { registro[chave] = item[chave]; });
+      // campos gerados pelo servidor. O ID vem do app (é ele que amarra a foto
+      // ao serviço), mas só no formato que o app gera: ID é chave, vai para
+      // atributo e onclick em várias telas, e não é lugar de texto livre.
+      if (!/^[A-Za-z0-9_.:-]{1,80}$/.test(String(registro['id'] == null ? '' : registro['id']))) {
+        registro['id'] = gerarId(agora, k);
+      }
       registro['obra'] = normObra(registro['obra']);
       registro['clientid'] = clientId || '';
       registro['timestamp'] = registro['timestamp'] || agora;
@@ -964,7 +1004,7 @@ function addBatchRDO(batchJson, clientId, token) {
     });
 
     aba.getRange(aba.getLastRow() + 1, 1, linhas.length, cab.length).setValues(seguroMatriz(linhas));
-    registrarAuditoria(sess.usuario, sess.perfil, 'addBatchRDO', OBRA_ID, clientId || '', '',
+    registrarAuditoria(sess.usuario, sess.perfil, 'addBatchRDO', normObra(itens[0]['obra']), clientId || '', '',
       linhas.length + ' serviço(s) gravado(s)');
     return { ok: true, inserted: linhas.length };
   } finally {
@@ -1348,6 +1388,20 @@ function rdoFoto(p) {
   if (alvo.deOutraObra) {
     return { ok: false, error: 'O serviço ' + p.id + ' não é desta obra — foto não anexada.' };
   }
+  /* E quem manda tem de poder naquela obra. A obra do pedido é só o que o
+     aparelho diz: vale a da LINHA achada (e, sem linha, a do pedido). Sem
+     isto, uma sessão só do Ranário pendurava foto como prova num serviço da
+     Teotônio — bastava mandar a obra certa, ou nenhuma. */
+  var sessFoto = sessaoDoToken(p.token);
+  if (sessFoto) {
+    var obraDaFoto = normObra(p.obra);
+    if (alvo.linha > 0 && alvo.dados) {
+      var cabFoto = alvo.dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+      var iObraFoto = idxColuna(cabFoto, 'obra');
+      obraDaFoto = normObra(iObraFoto !== -1 ? alvo.dados[alvo.linha][iObraFoto] : '');
+    }
+    if (!sessaoPodeNaObra(sessFoto, obraDaFoto)) return negarPorObra(p.token, 'rdoFoto', obraDaFoto);
+  }
 
   /* IDEMPOTÊNCIA — o reenvio da fila offline não pode duplicar a foto.
      O caminho da duplicata: o servidor grava a foto, mas a resposta se
@@ -1696,13 +1750,17 @@ function equipApagar(carimbo, token) {
   var a = getOrCreateAba(ABA_APONT);
   var dados = a.getDataRange().getValues();
   var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
-  var iC = idxColuna(cab, 'carimbo'), iU = idxColuna(cab, 'usuario');
+  var iC = idxColuna(cab, 'carimbo'), iU = idxColuna(cab, 'usuario'), iOA = cab.indexOf('obra');
   for (var i = 1; i < dados.length; i++) {
     if (String(dados[i][iC]).trim() === String(carimbo).trim()) {
       var dono = iU !== -1 ? dados[i][iU] : '';
       if (!podeApagarLinha(token, dono)) return negarPorPermissao(token, 'equipApagar', carimbo, dono);
+      // a obra da LINHA, como no equipEditar
+      var obraDaLinhaA = iOA !== -1 ? normObra(dados[i][iOA]) : OBRA_ID;
+      var sessA = sessaoDoToken(token);
+      if (sessA && !sessaoPodeNaObra(sessA, obraDaLinhaA)) return negarPorObra(token, 'equipApagar', obraDaLinhaA);
       a.deleteRow(i + 1);
-      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'equipApagar', OBRA_ID, carimbo,
+      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'equipApagar', obraDaLinhaA, carimbo,
         cab.map(function (c, k) { return c + '=' + dados[i][k]; }).join(' | '), '');
       return { ok: true, deleted: carimbo };
     }
@@ -2101,6 +2159,7 @@ function rdoAvancoSemDuplicadas_(dados) {
   var iApont  = idxColuna(cab, 'apontador');
   var iEstaca = idxColuna(cab, 'local_estaca');
   var iObra   = cab.indexOf('obra');
+  var iFotos  = cab.indexOf('foto_link');
   var vistas = {};
   var manter = [dados[0]]; // mantém o cabeçalho
   for (var i = 1; i < dados.length; i++) {
@@ -2114,7 +2173,19 @@ function rdoAvancoSemDuplicadas_(dados) {
       String(iEstaca !== -1 ? r[iEstaca] : '').trim().toLowerCase(),
       normObra(iObra !== -1 ? r[iObra] : '')
     ].join('|');
-    if (!vistas[chave]) { vistas[chave] = true; manter.push(r); }
+    if (!vistas[chave]) { vistas[chave] = r.slice(); manter.push(vistas[chave]); continue; }
+    /* A repetida sai, mas a FOTO dela fica: a fila reenvia o serviço e a
+       foto sobe pendurada na cópia que chegou por último — que é justo a
+       que a limpeza tirava, levando a prova do serviço junto. */
+    if (iFotos !== -1) {
+      var fica = vistas[chave];
+      var tem = String(fica[iFotos] == null ? '' : fica[iFotos]).trim();
+      var ptrs = tem ? tem.split(/\s+/) : [];
+      String(r[iFotos] == null ? '' : r[iFotos]).trim().split(/\s+/).forEach(function (x) {
+        if (x && ptrs.indexOf(x) === -1) ptrs.push(x);
+      });
+      fica[iFotos] = ptrs.join(' ');
+    }
   }
   return manter;
 }
@@ -2178,7 +2249,13 @@ function limparDuplicadosServidor(token) {
 // Faz backup antes. Chamada: ?action=apagarPorPrefixoId&prefixo=20260530
 // ------------------------------------------------------------
 function apagarPorPrefixoId(prefixo, token) {
-  if (!prefixo) return { ok: false, error: 'prefixo não informado' };
+  /* O prefixo é a DATA do id (AAAAMMDD…). Conferido DEPOIS do trim: "   "
+     passava pelo `!prefixo`, virava "" e "".indexOf casa com tudo — a aba
+     da medição inteira ia embora numa chamada. */
+  prefixo = String(prefixo == null ? '' : prefixo).trim();
+  if (!/^\d{8,}$/.test(prefixo)) {
+    return { ok: false, error: 'prefixo inválido: use a data do id, AAAAMMDD (8 dígitos ou mais)' };
+  }
   var negado = exigirAdminEstrito(token, 'apagarPorPrefixoId');
   if (negado) return negado;
   var lock = LockService.getScriptLock();
@@ -2272,7 +2349,7 @@ function updateRDO(payloadJson, token) {
           aba.getRange(i + 1, col + 1).setValue(seguro(payload[chave]));
         }
       });
-      registrarAuditoria(usuarioDoToken(token), perfil, 'updateRDO', OBRA_ID, id,
+      registrarAuditoria(usuarioDoToken(token), perfil, 'updateRDO', obraLinha, id,
         antes.join(' | '), JSON.stringify(payload));
       return { ok: true, updated: id };
     }
@@ -2465,7 +2542,12 @@ function rdoAplicarEnvio_(cab, base, registro) {
   cab.forEach(function (c, i) {
     if (registro.hasOwnProperty(c)) novo[i] = registro[c];
   });
-  if (!porTurno) {
+  /* Só o app velho que MANDOU o texto junto troca a linha para "texto junto".
+     O pedido sem texto nenhum (o "criar os dias que faltam" manda só obra,
+     data e turno) não diz nada sobre os textos — e limpava os de cada turno
+     de um dia que outro aparelho acabara de gravar. */
+  var juntadoVeio = RDO_TEXTOS_JUNTADOS.some(function (c) { return registro.hasOwnProperty(c); });
+  if (!porTurno && juntadoVeio) {
     RDO_TEXTOS_COLUNAS.forEach(function (c) { var i = cab.indexOf(c); if (i !== -1) { novo[i] = ''; base[i] = ''; } });
   }
   var preservou = false;
@@ -2773,6 +2855,22 @@ function rdoParteAplicar_(cab, base, envio, de, sess, token) {
     }
     delete doTurno[chaveDe];
   }
+  /* A chave é o NOME digitado num campo livre: outra pessoa que digitasse
+     "Joao" trocava a parte do João pela dela — o dia ia de 8 serventes para
+     3, a ocorrência dele sumia e ela virava dona da parte. Trocar a parte de
+     outra pessoa é a mesma decisão que tirá-la: o dono, a engenharia ou o
+     admin. E quem corrige a parte alheia não vira dono dela. */
+  var atual = doTurno[chave];
+  var meu = String((sess && sess.usuario) || '').trim().toLowerCase();
+  var donoAtual = atual ? String(atual.usuario || '').trim() : '';
+  if (donoAtual && donoAtual.toLowerCase() !== meu) {
+    if (!podeApagarLinha(token, donoAtual) && perfilDoToken(token) !== 'engenharia') {
+      return { ok: false, error: 'PARTE_DE_OUTRO', dono: donoAtual,
+               mensagem: 'Já existe a parte de "' + (atual.apontador || nome) + '" neste turno, lançada por ' + donoAtual +
+                         '. Se é você, confira o nome; se é outra pessoa, peça a ela (ou ao escritório) para corrigir.' };
+    }
+    parte.usuario = donoAtual;
+  }
   doTurno[chave] = parte;
   return { ok: true, novo: rdoPartesAgregar_(cab, base, partes), chave: chave };
 }
@@ -2835,6 +2933,10 @@ function upsertRDODiario(p, deveExistir) {
     var dados = aba.getDataRange().getValues();
 
     var dataAlvo = normData(p.data);
+    // Data que não se lê vira linha órfã na aba (e consome um número de RDO).
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dataAlvo)) {
+      return { ok: false, error: 'DATA_INVALIDA', mensagem: 'Data do RDO ilegível: "' + String(p.data == null ? '' : p.data) + '".' };
+    }
     var turno = String(p.turno || '').trim().toLowerCase();
     var obraAlvo = normObra(p.obra);
 
@@ -2847,9 +2949,12 @@ function upsertRDODiario(p, deveExistir) {
        aceite daquele conteúdo: gravar por cima e redesenhar o PDF punha a
        firma dele num documento que ele não viu. Mudar exige REABRIR — só o
        escritório, que é quem manda o RDO —, e reabrir cancela as firmas
-       dadas: quem assinou recebe um link novo e assina o que ficou. */
+       dadas: quem assinou recebe um link novo e assina o que ficou.
+       Vale também quando a linha do dia NÃO existe: as firmas ficam por
+       (obra, data), e um dia assinado que foi apagado e lançado de novo
+       receberia a firma num conteúdo que ninguém assinou. */
     var reabrir = null;
-    if (doDia.length) {
+    {
       var firmasDadas = rdoFirmasDePessoa_(obraAlvo, dataAlvo);
       if (firmasDadas.length) {
         var quem = firmasDadas.map(function (x) {
@@ -2869,11 +2974,17 @@ function upsertRDODiario(p, deveExistir) {
     var iRev = cab.indexOf('revisao');
 
     var registro = {};
+    /* Colunas que o SERVIDOR escreve, nunca o pedido: o ID técnico, o número
+       que a fiscalização lê, o carimbo da gravação e as partes (que só mudam
+       pelo `contribuicao`, com a régua do dono). Vindas do cliente, renumeravam
+       o RDO oficial ou zeravam as partes dos outros apontadores. */
+    var DO_SERVIDOR = ['id', 'numero_rdo', 'revisao', 'contribuicoes_json', 'reabrir'];
     Object.keys(p).forEach(function (chave) {
       // 'token' é credencial, não dado do RDO: nunca vai para a planilha.
       if (chave === 'action' || chave === 'callback' || chave === 'token') return;
       // A parte não é coluna: as colunas saem da soma das partes.
       if (chave === 'contribuicao' || chave === 'contribuicao_de') return;
+      if (DO_SERVIDOR.indexOf(String(chave).toLowerCase()) !== -1) return;
       registro[chave.toLowerCase()] = p[chave];
     });
     registro['obra'] = obraAlvo;
@@ -2948,8 +3059,10 @@ function upsertRDODiario(p, deveExistir) {
       registrarAuditoria(sessD && sessD.usuario, sessD && sessD.perfil, 'addRDODiario', OBRA_ID,
         registro['id'] || dataAlvo, '', 'data ' + dataAlvo + sobreParte);
       mapaChuvaAposGravar_(cab, linha);
+      var reabertoNovo = reabrir ? rdoReabrirAssinaturas_(obraAlvo, dataAlvo, reabrir, sessD) : 0;
       return { ok: true, inserted: true, id: registro['id'] || '',
                chave: resParte ? resParte.chave : undefined,
+               reaberto: reabertoNovo || undefined,
                linha: rdoLinhaObj_(cab, linha) };
     }
   } finally {
@@ -3223,6 +3336,24 @@ function deleteRDODiario(id, data, token, obra) {
     var alvoDig = alvo.replace(/\D/g, '');
     var alvoNum = alvoDig ? parseInt(alvoDig, 10) : null;
 
+    var tz = Session.getScriptTimeZone();
+    var isoDaLinha = function (v) {
+      if (v instanceof Date) return Utilities.formatDate(v, tz, 'yyyy-MM-dd');
+      return normData(v);
+    };
+    /* RDO ASSINADO NÃO SE APAGA. Apagar o dia e lançar de novo era o desvio
+       da regra "o RDO assinado só muda reaberto": a linha nova nascia com
+       outro conteúdo e as firmas — guardadas por (obra, data) — continuavam
+       valendo e eram desenhadas nela. Quem precisa apagar reabre antes. */
+    var assinadoPor = function (linha) {
+      var firmas = rdoFirmasDePessoa_(iObraD !== -1 ? linha[iObraD] : '', isoDaLinha(iData !== -1 ? linha[iData] : ''));
+      if (!firmas.length) return null;
+      var quem = firmas.map(function (x) { return String(x.nomeAssinante || x.papel || ''); }).join(', ');
+      return { ok: false, error: 'RDO_ASSINADO', assinaram: quem,
+               mensagem: 'Este RDO já foi assinado (' + quem + ') e não pode ser apagado. ' +
+                         'Para mudá-lo, o escritório reabre o RDO — as firmas são canceladas e o convite sai de novo.' };
+    };
+
     // 1) por ID — exato; senão por dígitos (IDs numéricos formatados).
     if (iId !== -1 && (alvo || alvoNum !== null)) {
       for (var i = 1; i < dados.length; i++) {
@@ -3234,6 +3365,8 @@ function deleteRDODiario(id, data, token, obra) {
           if (!daObra(dados[i])) continue;       // mesmo número, outra obra: não é este
           var donoId = iDono !== -1 ? dados[i][iDono] : '';
           if (!podeApagarLinha(token, donoId)) return negarPorPermissao(token, 'deleteRDODiario', id, donoId);
+          var assinadoId = assinadoPor(dados[i]);
+          if (assinadoId) return assinadoId;
           aba.deleteRow(i + 1);
           registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDODiario', OBRA_ID, id,
             'data: ' + (iData !== -1 ? dados[i][iData] : ''), '');
@@ -3244,28 +3377,26 @@ function deleteRDODiario(id, data, token, obra) {
 
     // 2) por data — só se houver exatamente UM RDO naquela data.
     if (data && iData !== -1) {
-      var tz = Session.getScriptTimeZone();
       var alvoData = String(data).slice(0, 10);
       var matches = [];
       for (var j = 1; j < dados.length; j++) {
-        var v = dados[j][iData];
-        var iso;
-        if (v instanceof Date) {
-          iso = Utilities.formatDate(v, tz, 'yyyy-MM-dd');
-        } else {
-          var sv = String(v).trim();
-          if (sv.indexOf('/') !== -1) {
-            var p = sv.split('/');
-            iso = (p.length === 3) ? (p[2].slice(0, 4) + '-' + ('0' + p[1]).slice(-2) + '-' + ('0' + p[0]).slice(-2)) : sv;
-          } else {
-            iso = sv.slice(0, 10);
-          }
-        }
-        if (iso === alvoData && daObra(dados[j])) matches.push(j);
+        if (isoDaLinha(dados[j][iData]) === alvoData && daObra(dados[j])) matches.push(j);
       }
       if (matches.length === 1) {
+        /* Com um ID PEDIDO que não está na aba, "o único RDO do dia" não é
+           ele — é o que sobrou depois que ele saiu (o segundo toque de um
+           Excluir que demorou, um Unificar de outro aparelho). Apagar pela
+           data aqui levava o RDO do dia inteiro. A procura por data fica para
+           quem não mandou ID (app antigo) ou para a linha que não tem ID. */
+        var idDaLinha = iId !== -1 ? String(dados[matches[0]][iId]).trim() : '';
+        if (alvo && idDaLinha) {
+          return { ok: false, error: 'ID não encontrado: ' + id + ' (já foi apagado?)', naoEncontrado: true,
+                   idsVistos: amostraIdsDiario(dados, iId) };
+        }
         var donoData = iDono !== -1 ? dados[matches[0]][iDono] : '';
         if (!podeApagarLinha(token, donoData)) return negarPorPermissao(token, 'deleteRDODiario', alvoData, donoData);
+        var assinadoData = assinadoPor(dados[matches[0]]);
+        if (assinadoData) return assinadoData;
         aba.deleteRow(matches[0] + 1);
         registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDODiario', OBRA_ID, id || alvoData,
           'data: ' + alvoData, '');
@@ -3456,16 +3587,36 @@ function rdoEmailDestinatarios() {
   return out;
 }
 
+/* Quem ASSINA e não está na lista de envio: o link pessoal vai no e-mail
+   dele, e o laço de envio percorre a lista — fora dela, o link não chega a
+   ninguém. A lista NÃO ganha o assinante sozinha (a Propriedade RDO_EMAILS
+   manda: é com ela que se manda o RDO só para si, num teste, sem acordar o
+   fiscal); a conferência do envio mostra o buraco, e o aviso ao dono também. */
+function rdoAssinantesForaDaLista_(destinos) {
+  try {
+    var na = {};
+    (destinos || rdoEmailDestinatarios()).forEach(function (e) { na[String(e).toLowerCase()] = true; });
+    return rdoAssinantes().filter(function (a) { return !na[String(a.email).toLowerCase()]; });
+  } catch (e) {
+    return [];
+  }
+}
+
 // ------------------------------------------------------------
 // 1. DEPÓSITO — o app entrega o PDF oficial já pronto
 // ------------------------------------------------------------
+/* A pasta é procurada UMA vez por execução (como o fuso, em _FUSO): a
+   lista de dias assinados pendentes passava por aqui uma vez por dia da
+   janela, a cada carga do app — uma busca no Drive por dia, de 5 em 5 min. */
+var _RDO_PDF_PASTA = null;
 function rdoPdfPasta_() {
+  if (_RDO_PDF_PASTA) return _RDO_PDF_PASTA;
   var pastas = DriveApp.getFoldersByName(PASTA_RDO_PDF);
-  if (pastas.hasNext()) return pastas.next();
+  if (pastas.hasNext()) return (_RDO_PDF_PASTA = pastas.next());
   var nova = DriveApp.createFolder(PASTA_RDO_PDF);
   // RDO tem nome de trabalhador, placa e ocorrência do dia: pasta fechada.
   nova.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
-  return nova;
+  return (_RDO_PDF_PASTA = nova);
 }
 
 function rdoPdfNome_(obra, dataISO) {
@@ -3509,19 +3660,6 @@ function rdoPdfDoDia(p) {
   var pasta = rdoPdfPasta_();
   var nome = rdoPdfNome_(obra, dataISO);
 
-  /* Um arquivo por obra e por dia. O depósito novo SUBSTITUI o anterior:
-     o turno noturno salvo depois do diurno, ou a correção de um dado
-     errado, geram um RDO mais completo que o primeiro — guardar os dois
-     só criaria a dúvida de qual foi o que a fiscalização recebeu. */
-  var antigos = pasta.getFilesByName(nome);
-  while (antigos.hasNext()) {
-    var velho = antigos.next();
-    if (!velho.isTrashed()) velho.setTrashed(true);
-  }
-
-  var arq = pasta.createFile(Utilities.newBlob(bytes, 'application/pdf', nome));
-  arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
-
   /* QUANTAS ASSINATURAS ESTE PDF JÁ TRAZ DESENHADAS. O app conta os quadros
      que preencheu e manda o número junto; ele fica na descrição do arquivo,
      que é o único lugar que não tem como ficar dessincronizado do PDF que
@@ -3529,9 +3667,49 @@ function rdoPdfDoDia(p) {
      último depósito — e que o arquivo guardado ainda tem o quadro em branco. */
   var comAssinaturas = parseInt(p.assinaturas, 10);
   if (isNaN(comAssinaturas) || comAssinaturas < 0) comAssinaturas = 0;
+  /* De QUAL gravação do dia este PDF foi desenhado (a `revisao` da linha).
+     É o que amarra a firma ao conteúdo lido: ver rdoAssinaturaGravar. */
+  var revisaoDep = String(p.revisao == null ? '' : p.revisao).replace(/[^A-Za-z0-9]/g, '').slice(0, 40);
+
+  /* O DEPÓSITO NÃO ANDA PARA TRÁS. Um PDF com MENOS firmas do que o
+     guardado, quando a planilha ainda tem essas firmas, é um desenho que não
+     conseguiu lê-las (a leitura das assinaturas falhou no aparelho, ou foi
+     ao ar com a lista de outro momento) — e trocá-lo pelo assinado servia ao
+     fiscal, pelo link dele, a via SEM a firma que ele deu. O guardado fica. */
+  var noDeposito = rdoPdfAssinaturasNoDeposito_(obra, dataISO);
+  if (noDeposito > comAssinaturas) {
+    var assinadasAgora = 0;
+    try {
+      assinadasAgora = rdoAssinLinhasDoDia_(obra, dataISO).filter(function (x) {
+        return String(x.status || '') === 'assinada';
+      }).length;
+    } catch (eAs) { assinadasAgora = noDeposito; }
+    if (assinadasAgora > comAssinaturas) {
+      return { ok: false, error: 'DEPOSITO_COM_MENOS_FIRMAS', guardado: noDeposito, enviado: comAssinaturas,
+               mensagem: 'O PDF guardado já traz ' + noDeposito + ' assinatura(s) e este traz ' + comAssinaturas +
+                         '. Nada foi trocado — gere o PDF de novo quando as assinaturas carregarem.' };
+    }
+  }
+
+  /* Um arquivo por obra e por dia. O depósito novo SUBSTITUI o anterior:
+     o turno noturno salvo depois do diurno, ou a correção de um dado
+     errado, geram um RDO mais completo que o primeiro — guardar os dois
+     só criaria a dúvida de qual foi o que a fiscalização recebeu.
+     O novo é criado ANTES de o velho ir para a lixeira: se o Drive falhar
+     no meio (cota, erro passageiro), fica o velho — e não o dia sem PDF,
+     que é o dia em que o e-mail das 6h30 não sai. */
+  var arq = pasta.createFile(Utilities.newBlob(bytes, 'application/pdf', nome));
+  arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+  var antigos = pasta.getFilesByName(nome);
+  while (antigos.hasNext()) {
+    var velho = antigos.next();
+    if (velho.getId() !== arq.getId() && !velho.isTrashed()) velho.setTrashed(true);
+  }
+
   try {
     arq.setDescription((p.numero_rdo ? 'RDO nº ' + p.numero_rdo + ' — ' : 'RDO ') + dataISO +
-                       ' — assinaturas: ' + comAssinaturas);
+                       ' — assinaturas: ' + comAssinaturas +
+                       (revisaoDep ? ' — revisao: ' + revisaoDep : ''));
   } catch (e) {}
 
   registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoPdfDoDia', obra,
@@ -3617,6 +3795,13 @@ function rdoEnviarParaAssinatura(p) {
   if (dataISO > hoje) {
     return { ok: false, error: 'O RDO de ' + rdoDataBR_(dataISO) + ' é de um dia que ainda não chegou.' };
   }
+  /* HOJE também não: além de o dia não ter terminado, o envio fica
+     registrado, e o gatilho das 6h30 de amanhã — que leva justamente este
+     dia, já com o noturno — achava "já enviado" e não mandava a versão
+     final. */
+  if (dataISO === hoje) {
+    return { ok: false, error: 'O RDO de hoje ainda não terminou — ele sai sozinho no e-mail das 6h30 de amanhã, já com o turno da noite.' };
+  }
 
   /* Sem depósito não há o que anexar, e um e-mail de RDO sem o RDO é pior
      que e-mail nenhum. A mensagem diz o caminho, porque quem aperta o botão
@@ -3677,6 +3862,10 @@ function rdoDiagEmail(p) {
     data: dataISO,
     destinatarios: rdoEmailDestinatarios(),
     listaVemDe: temPropriedade ? 'Propriedade RDO_EMAILS' : 'lista do Code.gs',
+    // quem assina e não está na lista: o link pessoal dele não chega
+    assinantesFora: rdoAssinantesForaDaLista_().map(function (a) {
+      return { papel: a.papel, rotulo: a.rotulo || a.papel, email: a.email };
+    }),
     cotaRestante: cota,
     pdfDepositado: !!rdoPdfArquivo_(obra, dataISO),
     assinaturasNoDeposito: rdoPdfAssinaturasNoDeposito_(obra, dataISO),
@@ -3780,6 +3969,21 @@ function rdoEnviarPorEmail_(dataISO, obra, forcar) {
      Quem não assina (as cópias do escritório) recebe o mesmo e-mail, com o
      andamento das assinaturas e sem link nenhum. */
   var assinaturas = rdoAssinaturasGarantir_(obra, dataISO);
+  /* O REENVIO DO ESCRITÓRIO RENOVA O CONVITE VENCIDO. O botão existe para o
+     dia que ficou para trás — e passado o prazo do link, o e-mail levava um
+     endereço que abre em "Este link de assinatura venceu": o fiscal recebia
+     o RDO e não tinha como assinar. Quem aperta é o escritório, de propósito,
+     para aquela pessoa; o mesmo link volta a valer o prazo inteiro. */
+  if (forcar) {
+    var agoraConv = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss');
+    assinaturas.forEach(function (a) {
+      if (String(a.status) === 'assinada' || !rdoAssinVencida_(a)) return;
+      var alvoConv = rdoAssinPorToken_(a.token);
+      if (!alvoConv) return;
+      rdoAssinGravarCampo_(alvoConv, 'convidadoEm', agoraConv);
+      a.convidadoEm = agoraConv;
+    });
+  }
   var minhaPorEmail = {};
   assinaturas.forEach(function (a) {
     var e = String(a.email || '').trim().toLowerCase();
@@ -3892,6 +4096,27 @@ function rdoDiarioDaData_(obra, dataISO) {
     }
   }
   return junta;
+}
+
+/* As `revisao` das linhas do dia. Normalmente é uma (o dia é UMA linha);
+   um dia ainda repetido tem uma por linha, e o app pode ter desenhado de
+   qualquer uma delas — por isso a conferência da firma aceita o conjunto. */
+function rdoRevisoesDoDia_(obra, dataISO) {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return [];
+  var dados = aba.getDataRange().getValues();
+  if (dados.length <= 1) return [];
+  var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iData = idxColuna(cab, 'data'), iObra = cab.indexOf('obra'), iRev = cab.indexOf('revisao');
+  if (iData === -1 || iRev === -1) return [];
+  var revs = [];
+  for (var i = 1; i < dados.length; i++) {
+    if (normData(dados[i][iData]) !== dataISO) continue;
+    if (iObra !== -1 && normObra(dados[i][iObra]) !== normObra(obra)) continue;
+    var r = String(dados[i][iRev] == null ? '' : dados[i][iRev]).trim();
+    if (r && revs.indexOf(r) === -1) revs.push(r);
+  }
+  return revs;
 }
 
 /* Quantos serviços foram lançados no dia — o número que diz, de relance,
@@ -4136,9 +4361,30 @@ function rdoEmailMarcar_(obra, dataISO, destinos) {
   /* A Propriedade não pode crescer sem fim — o teto do Apps Script é 500 KB
      no projeto inteiro, dividido com as sessões. A chave é 'obra|data', que
      ordena por data dentro de cada obra: o mais velho é o primeiro. */
+  rdoLogGravar_(RDO_EMAIL_LOG_CHAVE, log);
+}
+
+/* Grava um registro de envio sem nunca estourar: cada VALOR de Propriedade
+   tem teto de 9 KB, e o registro dos e-mails (com a lista `para` de cada
+   dia) passava disso com ~46 dias. O setProperty estourava DEPOIS de os
+   e-mails terem saído — o botão dizia "não saiu", o escritório mandava de
+   novo e todos recebiam em dobro; o gatilho perdia a proteção contra envio
+   repetido. Os mais velhos saem até caber; e uma falha aqui fica no Logger,
+   nunca vira erro de um envio que já aconteceu. */
+var RDO_LOG_MAX_CHARS = 7800;
+function rdoLogGravar_(chaveProp, log) {
   var chaves = Object.keys(log).sort();
   while (chaves.length > RDO_EMAIL_LOG_MAX) delete log[chaves.shift()];
-  PropertiesService.getScriptProperties().setProperty(RDO_EMAIL_LOG_CHAVE, JSON.stringify(log));
+  var txt = JSON.stringify(log);
+  while (txt.length > RDO_LOG_MAX_CHARS && chaves.length > 1) {
+    delete log[chaves.shift()];
+    txt = JSON.stringify(log);
+  }
+  try {
+    PropertiesService.getScriptProperties().setProperty(chaveProp, txt);
+  } catch (e) {
+    Logger.log('Registro ' + chaveProp + ' não gravado (' + txt.length + ' caracteres): ' + e);
+  }
 }
 
 /* Avisos de dentro de casa: vão para quem é dono do script, nunca para a
@@ -4175,6 +4421,10 @@ function conferirEnvioRDOEmail() {
        no meio da lista. */
     lista_vem_de: PropertiesService.getScriptProperties().getProperty('RDO_EMAILS')
       ? 'Propriedade RDO_EMAILS' : 'lista RDO_EMAIL_DESTINOS do Code.gs',
+    // quem assina e não está na lista: o link pessoal dele não chega
+    assinantes_fora_da_lista: rdoAssinantesForaDaLista_(destinos).map(function (a) {
+      return a.papel + ' <' + a.email + '>';
+    }),
     hora_do_envio: rdoEmailHoraTexto(),
     gatilho_instalado: gatilho,
     pdf_desse_dia_depositado: !!arq,
@@ -4957,6 +5207,17 @@ function rdoAssinaturaAbrir(p) {
     var assinadasDoDia = resp.outras.filter(function (x) { return x.assinada; }).length;
     resp.pdfComFirmas = assinadasDoDia > 0 &&
                         rdoPdfAssinaturasNoDeposito_(obra, dataISO) >= assinadasDoDia;
+    /* A VERSÃO LIDA. A página devolve esta revisão ao assinar, e a firma só
+       entra se o dia ainda for o mesmo (rdoAssinaturaGravar). E se a linha do
+       dia já mudou depois deste PDF — corrigido e ainda não redesenhado —,
+       quem abre não assina o que está na tela: a versão que vale é outra. */
+    resp.revisao = rdoPdfRevisaoDe_(arq);
+    var revsDia = resp.revisao ? rdoRevisoesDoDia_(obra, dataISO) : [];
+    if (revsDia.length && revsDia.indexOf(resp.revisao) === -1) {
+      resp.desatualizado = true;
+      resp.aviso = 'O RDO deste dia foi corrigido depois deste PDF, e a versão nova ainda não chegou. ' +
+                   'Volte por este mesmo link em alguns minutos para ler e assinar a versão corrigida.';
+    }
   }
   return resp;
 }
@@ -4984,6 +5245,31 @@ function rdoAssinaturaGravar(p) {
              vencido: true };
   }
 
+  var obra = normObra(l.obra), dataISO = normData(l.data);
+
+  /* NINGUÉM ASSINA O QUE NÃO PODE LER. Sem PDF depositado a página mostra
+     só o aviso — mas o servidor aceitava a firma do mesmo jeito, e o link
+     copiado do painel do app (que existe antes do depósito) levava a um
+     quadro de assinar sem documento nenhum. */
+  var arqPdf = rdoPdfArquivo_(obra, dataISO);
+  if (!arqPdf) {
+    return { ok: false, semPdf: true,
+             error: 'O PDF deste RDO ainda não foi depositado — a assinatura não foi registrada. ' +
+                    'Volte por este mesmo link quando o RDO aparecer na página.' };
+  }
+  /* O QUE FOI LIDO É O QUE SE ASSINA. A firma é o aceite daquele conteúdo:
+     se o dia foi gravado de novo depois que a página abriu (ou depois do PDF
+     guardado), a firma entraria num documento que quem assina não viu. */
+  var revsAgora = rdoRevisoesDoDia_(obra, dataISO);
+  var revLida = String(p.revisao == null ? '' : p.revisao).trim();
+  var revPdf = rdoPdfRevisaoDe_(arqPdf);
+  if (revsAgora.length && ((revLida && revsAgora.indexOf(revLida) === -1) ||
+                           (revPdf && revsAgora.indexOf(revPdf) === -1))) {
+    return { ok: false, mudou: true,
+             error: 'O RDO deste dia foi corrigido depois que esta página abriu — a assinatura não ' +
+                    'foi registrada. Recarregue a página para ler a versão nova antes de assinar.' };
+  }
+
   var img = String(p.assinatura || '');
   if (img.indexOf('data:image/png;base64,') !== 0) {
     return { ok: false, error: 'Assinatura inválida — o traço não chegou.' };
@@ -4998,7 +5284,6 @@ function rdoAssinaturaGravar(p) {
   var nome = String(p.nome || l.nome || '').trim().slice(0, 120);
   if (nome.length < 3) return { ok: false, error: 'Escreva o nome de quem está assinando.' };
 
-  var obra = normObra(l.obra), dataISO = normData(l.data);
   var arq = rdoAssinPasta_().createFile(Utilities.newBlob(bytes, 'image/png',
     'assinatura_' + obra + '_' + dataISO.replace(/-/g, '') + '_' + l.papel + '.png'));
   arq.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
@@ -5204,6 +5489,16 @@ function conferirAssinaturasRDO(dataISO) {
   var d = normData(dataISO || Utilities.formatDate(new Date(Date.now() - 24 * 3600 * 1000),
                                                    fusoDoScript(), 'yyyy-MM-dd'));
   var r = rdoAssinaturasDoDia({ obra: OBRA_ID, data: d, imagens: '0' });
+  /* No editor quem roda é o dono do script. Sem sessão, a régua do app (com
+     EXIGIR_TOKEN ligado) devolvia o link vazio — justo aqui, que é onde se
+     vem buscar o link do fiscal que "não recebeu nada". O link sai da linha. */
+  if (r && r.ok && r.assinaturas) {
+    var linkDe = {};
+    rdoAssinLinhasDoDia_(OBRA_ID, d).forEach(function (l) {
+      linkDe[String(l.papel || '')] = rdoAssinaturaLink_(l.token);
+    });
+    r.assinaturas.forEach(function (a) { if (!a.link) a.link = linkDe[a.papel] || ''; });
+  }
   Logger.log(JSON.stringify(r, null, 2));
   return r;
 }
@@ -5225,12 +5520,43 @@ function rdoPdfAssinaturasNoDeposito_(obra, dataISO) {
   }
 }
 
+/* A revisão da linha do dia de que o PDF guardado foi desenhado ('' quando
+   o depósito é de um app que ainda não a mandava). */
+function rdoPdfRevisaoDe_(arq) {
+  if (!arq) return '';
+  try {
+    var m = String(arq.getDescription() || '').match(/revisao:\s*([A-Za-z0-9]+)/);
+    return m ? m[1] : '';
+  } catch (e) {
+    return '';
+  }
+}
+
 function rdoAssinadoLogLer_() {
   try {
     return JSON.parse(PropertiesService.getScriptProperties().getProperty(RDO_ASSINADO_LOG) || '{}');
   } catch (e) {
     return {};
   }
+}
+
+/* As firmas ONLINE do dia estão TODAS dadas? Conta os PAPÉIS da lista atual
+   que estão assinados — não as linhas: uma linha antiga, de um papel que já
+   saiu da lista, fazia a conta fechar sem o fiscal. E exige que a lista tenha
+   alguém que assina pelo LINK (fora de RDO_FIRMA_PAPEIS): com o e-mail do
+   fiscal digitado errado, `rdoAssinantes` o descartava calado, a lista ficava
+   só com o engenheiro, e a firma ARQUIVADA dele bastava para todo RDO sair
+   "ASSINADO por todos" sem a fiscalização nem ter sido convidada. */
+function rdoFirmasCompletas_(linhas, previstasLista) {
+  var papeis = (previstasLista || []).map(function (a) { return String(a.papel || '').toLowerCase(); });
+  if (!papeis.length) return false;
+  var porLink = papeis.some(function (p) { return RDO_FIRMA_PAPEIS.indexOf(p) === -1; });
+  if (!porLink) return false;
+  var assinado = {};
+  (linhas || []).forEach(function (x) {
+    if (String(x.status || '') === 'assinada') assinado[String(x.papel || '').toLowerCase()] = true;
+  });
+  return papeis.every(function (p) { return assinado[p]; });
 }
 
 /* O depósito acabou de chegar com todas as firmas: manda o RDO ASSINADO
@@ -5244,16 +5570,16 @@ function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
   /* "Todas" são as assinaturas ONLINE previstas — não os quadros do PDF. A
      supervisão assina a mão: o quadro dela nunca vai ser preenchido por
      aqui, e esperar por ele seria esperar para sempre. */
-  var previstas = rdoAssinantes().length;
+  var previstasLista = rdoAssinantes();
+  var previstas = previstasLista.length;
   if (!previstas || quantasNoPdf < previstas) return { ok: true, pulado: 'ainda falta assinatura' };
   /* O número acima vem do APP (o `assinaturas` do depósito). Ele diz quantas
      firmas o desenho trouxe — não quantas foram DADAS. Um app que contasse
      errado, ou uma chamada feita à mão, mandava "RDO ASSINADO por todos" à
      fiscalização sem ninguém ter assinado. A planilha é quem tem a palavra. */
-  var dadas = rdoAssinLinhasDoDia_(obra, dataISO).filter(function (x) {
-    return String(x.status || '') === 'assinada';
-  }).length;
-  if (dadas < previstas) return { ok: true, pulado: 'planilha sem todas as firmas' };
+  if (!rdoFirmasCompletas_(rdoAssinLinhasDoDia_(obra, dataISO), previstasLista)) {
+    return { ok: true, pulado: 'planilha sem todas as firmas' };
+  }
 
   var chave = normObra(obra) + '|' + dataISO;
   var log = rdoAssinadoLogLer_();
@@ -5282,21 +5608,31 @@ function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
   var anexo = arq.getBlob().setName(
     'RDO' + (numero ? '_' + numero : '') + '_' + String(dataISO).replace(/-/g, '_') + '_assinado.pdf');
 
-  MailApp.sendEmail({
-    to: destinos.join(','),
-    subject: 'RDO' + (numero ? ' nº ' + numero : '') + ' ASSINADO — ' + rdoObraNome_(obra) +
-             ' — ' + rdoDataBR_(dataISO),
-    body: 'O RDO de ' + rdoDataBR_(dataISO) + ' (' + rdoDiaSemana_(dataISO) + ') está assinado ' +
-          'por todos.\n\n' + quem + '\n\nO PDF com as assinaturas vai em anexo.\n' +
-          '\n— Enviado automaticamente pelo app de campo da Gestor Engenharia.\n',
-    name: 'Gestor Engenharia — RDO ' + rdoObraNome_(obra),
-    attachments: [anexo]
-  });
+  /* Falha aqui era CALADA: quem chama engole a exceção para não derrubar o
+     depósito, e o RDO assinado — o documento que a fiscalização arquiva —
+     simplesmente não saía, sem ninguém saber. O dono do script fica sabendo,
+     com o comando que manda de novo. */
+  try {
+    MailApp.sendEmail({
+      to: destinos.join(','),
+      subject: 'RDO' + (numero ? ' nº ' + numero : '') + ' ASSINADO — ' + rdoObraNome_(obra) +
+               ' — ' + rdoDataBR_(dataISO),
+      body: 'O RDO de ' + rdoDataBR_(dataISO) + ' (' + rdoDiaSemana_(dataISO) + ') está assinado ' +
+            'por todos.\n\n' + quem + '\n\nO PDF com as assinaturas vai em anexo.\n' +
+            '\n— Enviado automaticamente pelo app de campo da Gestor Engenharia.\n',
+      name: 'Gestor Engenharia — RDO ' + rdoObraNome_(obra),
+      attachments: [anexo]
+    });
+  } catch (eMail) {
+    rdoEmailAvisarDono_('RDO ' + rdoDataBR_(dataISO) + ' — assinado, mas não saiu',
+      'O RDO assinado de ' + rdoDataBR_(dataISO) + ' está depositado, mas o e-mail para a lista ' +
+      'falhou: ' + (eMail && eMail.message ? eMail.message : eMail) + '\n\nMande com:  ' +
+      'reenviarRDOAssinado(\'' + dataISO + '\')');
+    return { ok: false, error: 'O e-mail do RDO assinado não saiu: ' + (eMail && eMail.message ? eMail.message : eMail) };
+  }
 
   log[chave] = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm');
-  var chaves = Object.keys(log).sort();
-  while (chaves.length > RDO_EMAIL_LOG_MAX) delete log[chaves.shift()];
-  PropertiesService.getScriptProperties().setProperty(RDO_ASSINADO_LOG, JSON.stringify(log));
+  rdoLogGravar_(RDO_ASSINADO_LOG, log);
   return { ok: true, data: dataISO, para: destinos };
 }
 
@@ -5338,7 +5674,8 @@ function rdoAssinadosPendentes(p) {
   /* "Todas" são as assinaturas ONLINE previstas — as mesmas do
      `rdoEnviarAssinadoSePronto_`. A supervisão assina a mão e não conta:
      esperar pelo quadro dela seria esperar para sempre. */
-  var previstas = rdoAssinantes().length;
+  var previstasLista = rdoAssinantes();
+  var previstas = previstasLista.length;
   if (!previstas) return { ok: true, obra: obra, previstas: 0, pendentes: [] };
 
   var hoje = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd');
@@ -5361,7 +5698,7 @@ function rdoAssinadosPendentes(p) {
     var assinadas = porData[d].filter(function (x) {
       return String(x.status) === 'assinada';
     }).length;
-    if (assinadas < previstas) return;                 // ainda falta alguém
+    if (!rdoFirmasCompletas_(porData[d], previstasLista)) return;   // ainda falta alguém
     var noDeposito = rdoPdfAssinaturasNoDeposito_(obra, d);
     if (noDeposito >= assinadas) return;               // o depósito está em dia
     out.push({ data: d, assinadas: assinadas, noDeposito: noDeposito,
@@ -5939,8 +6276,27 @@ function negarPorObra(token, acao, obra) {
 }
 
 function usuarioSenhaDe(conf) {
-  if (conf && typeof conf === 'object') return conf.senha || '';
-  return conf || '';
+  if (conf && typeof conf === 'object') return typeof conf.senha === 'string' ? conf.senha : '';
+  return typeof conf === 'string' ? conf : '';
+}
+
+/* O cadastro é um objeto vindo de JSON.parse: nome digitado na tela NUNCA
+   indexa ele direto. `mapa['constructor']`, `mapa['toString']`… devolvem o
+   que o Object herda, e `mapa['__proto__'] = {…}` troca o protótipo em vez de
+   criar a chave (e o usuário some no JSON.stringify). Estas três são a única
+   porta. A busca aceita o nome exato ou em minúsculas, como o login sempre fez. */
+function usuarioTem_(mapa, nome) {
+  return !!mapa && Object.prototype.hasOwnProperty.call(mapa, nome);
+}
+function usuarioDoCadastro_(mapa, nome) {
+  var u = String(nome || '');
+  var k = usuarioTem_(mapa, u) ? u : (usuarioTem_(mapa, u.toLowerCase()) ? u.toLowerCase() : null);
+  if (k === null) return null;
+  var conf = mapa[k];
+  return (typeof conf === 'string' || (conf && typeof conf === 'object' && !Array.isArray(conf))) ? conf : null;
+}
+function usuarioNomeReservado_(nome) {
+  return nome === '__proto__' || nome in Object.prototype;
 }
 
 function contarAdmins(mapa, ignorar) {
@@ -6107,18 +6463,21 @@ function usuarioSalvar(p) {
 
   if (!nome) return { ok: false, error: 'NOME_OBRIGATORIO', mensagem: 'Informe o nome do usuário.' };
   if (nome.length > 40) return { ok: false, error: 'NOME_LONGO', mensagem: 'Nome muito longo.' };
+  if (usuarioNomeReservado_(nome) || usuarioNomeReservado_(nome.toLowerCase())) {
+    return { ok: false, error: 'NOME_RESERVADO', mensagem: 'Esse nome é reservado pelo sistema. Escolha outro.' };
+  }
   if (PERFIS_VALIDOS.indexOf(perfil) === -1) {
     return { ok: false, error: 'PERFIL_INVALIDO', mensagem: 'Perfil desconhecido: ' + perfil };
   }
 
   var mapa = usuariosCarregar();
   var eu = usuarioDoToken(p.token);
-  var editando = nomeAntigo && mapa[nomeAntigo];
+  var editando = nomeAntigo && usuarioTem_(mapa, nomeAntigo);
 
-  if (!editando && mapa[nome]) {
+  if (!editando && usuarioTem_(mapa, nome)) {
     return { ok: false, error: 'JA_EXISTE', mensagem: 'Já existe um usuário com esse nome.' };
   }
-  if (editando && nomeAntigo !== nome && mapa[nome]) {
+  if (editando && nomeAntigo !== nome && usuarioTem_(mapa, nome)) {
     return { ok: false, error: 'JA_EXISTE', mensagem: 'Já existe um usuário com esse nome.' };
   }
 
@@ -6153,6 +6512,10 @@ function usuarioSalvar(p) {
   // criaria a situação de não poder consertar o acesso de ninguém.
   if (perfil === 'admin') obrasFinal = '*';
 
+  // As obras de ANTES, lidas antes de o cadastro ser sobrescrito logo abaixo:
+  // comparadas depois, eram sempre iguais às novas, e restringir as obras de
+  // alguém não derrubava a sessão dele — que carrega as obras do login.
+  var obrasAntes = editando ? usuarioObrasDe(mapa[nomeAntigo]) : null;
   if (editando && nomeAntigo !== nome) delete mapa[nomeAntigo];
   mapa[nome] = { senha: senhaFinal, perfil: perfil, obras: obrasFinal };
   usuariosGravar(mapa);
@@ -6166,7 +6529,7 @@ function usuarioSalvar(p) {
      a tela no meio do trabalho. */
   var derrubadas = 0;
   var mudouAcesso = !!senha || (editando && (perfil !== perfilAnterior || nomeAntigo !== nome ||
-    JSON.stringify(usuarioObrasDe(mapa[nome])) !== JSON.stringify(obrasFinal)));
+    JSON.stringify(obrasAntes) !== JSON.stringify(usuarioObrasDe(mapa[nome]))));
   if (editando && mudouAcesso) {
     if (nomeAntigo !== eu) derrubadas += sessoesDoUsuarioRevogar(nomeAntigo, 'cadastro alterado');
     if (nome !== nomeAntigo && nome !== eu) derrubadas += sessoesDoUsuarioRevogar(nome, 'cadastro alterado');
@@ -6183,7 +6546,7 @@ function usuarioExcluir(p) {
   var falha = exigirAdmin(p.token); if (falha) return falha;
   var nome = String(p.nome || '').trim();
   var mapa = usuariosCarregar();
-  if (!mapa[nome]) return { ok: false, error: 'NAO_ENCONTRADO', mensagem: 'Usuário não encontrado.' };
+  if (!usuarioTem_(mapa, nome)) return { ok: false, error: 'NAO_ENCONTRADO', mensagem: 'Usuário não encontrado.' };
 
   var eu = usuarioDoToken(p.token);
   if (nome === eu) return { ok: false, error: 'AUTO_EXCLUSAO', mensagem: 'Você não pode excluir o seu próprio usuário.' };
@@ -6212,7 +6575,8 @@ function migrarSenhasParaHash() {
     var senha = usuarioSenhaDe(conf);
     if (!senha) return;
     if (String(senha).length === 64 && /^[0-9a-f]+$/.test(String(senha))) return; // já é hash
-    mapa[nome] = { senha: hashSenha(senha), perfil: usuarioPerfilDe(nome, conf) };
+    // as obras vão junto: regravar sem elas abria todas as obras a quem era restrito
+    mapa[nome] = { senha: hashSenha(senha), perfil: usuarioPerfilDe(nome, conf), obras: usuarioObrasDe(conf) };
     mudou++;
   });
   usuariosGravar(mapa);
@@ -6414,6 +6778,27 @@ function nfImagem(p) {
   var sufixo = pagina > 1 ? '_p' + pagina : '';
   var nome = 'NF-' + (p.numero || p.id || Date.now()) + '_' + (p.id || '') + sufixo + '.jpg';
   var blob = Utilities.newBlob(Utilities.base64Decode(b64.split(',')[1]), 'image/jpeg', nome);
+
+  /* A nota é DAQUELA obra. O id é carimbo do aparelho e as obras dividem a
+     aba: sem conferir a obra da linha, a imagem mandada "pelo Ranário" com o
+     id de uma nota da Teotônio trocava a prova da nota de lá. */
+  var abaNf = getOrCreate(ABA_NF);
+  var dadosNf = abaNf.getDataRange().getValues();
+  var cabNf = dadosNf[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iObraNf = cabNf.indexOf('obra');
+  var iIdNf = idxCol(cabNf, 'id'), iCliNf = idxCol(cabNf, 'clientid');
+  var linhaNf = -1;
+  for (var n = 1; n < dadosNf.length; n++) {
+    var bateNf = (iIdNf !== -1 && String(dadosNf[n][iIdNf]).trim() === String(p.id || '').trim()) ||
+                 (iCliNf !== -1 && String(dadosNf[n][iCliNf]).trim() === String(p.id || '').trim());
+    if (!bateNf) continue;
+    if (iObraNf !== -1 && String(dadosNf[n][iObraNf] == null ? '' : dadosNf[n][iObraNf]).trim() &&
+        normObra(dadosNf[n][iObraNf]) !== normObra(p.obra)) {
+      return { ok: false, error: 'OUTRA_OBRA', mensagem: 'Esta nota é de outra obra — a imagem não foi guardada.' };
+    }
+    linhaNf = n;
+    break;
+  }
   var pasta = nfPastaDaNota(p.obra, p.competencia);
 
   // se a mesma nota ja tem arquivo, substitui em vez de acumular copias
@@ -6428,19 +6813,10 @@ function nfImagem(p) {
   // as outras vão para a coluna `paginas`, montada pelo app)
   try {
     if (pagina > 1) throw 0;                    // pula a gravação na planilha
-    var a = getOrCreate(ABA_NF);
-    var dados = a.getDataRange().getValues();
-    var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
-    var iId = idxCol(cab, 'id'), iCli = idxCol(cab, 'clientid');
-    var iDid = idxCol(cab, 'driveid'), iDlk = idxCol(cab, 'drivelink');
-    for (var i = 1; i < dados.length; i++) {
-      var bate = (iId !== -1 && String(dados[i][iId]).trim() === String(p.id || '').trim()) ||
-                 (iCli !== -1 && String(dados[i][iCli]).trim() === String(p.id || '').trim());
-      if (bate) {
-        if (iDid !== -1) a.getRange(i + 1, iDid + 1).setValue(fileId);
-        if (iDlk !== -1) a.getRange(i + 1, iDlk + 1).setValue(f.getUrl());
-        break;
-      }
+    if (linhaNf !== -1) {                       // a linha achada acima (o roteador segura a trava)
+      var iDid = idxCol(cabNf, 'driveid'), iDlk = idxCol(cabNf, 'drivelink');
+      if (iDid !== -1) abaNf.getRange(linhaNf + 1, iDid + 1).setValue(fileId);
+      if (iDlk !== -1) abaNf.getRange(linhaNf + 1, iDlk + 1).setValue(f.getUrl());
     }
   } catch (e) {}
 
