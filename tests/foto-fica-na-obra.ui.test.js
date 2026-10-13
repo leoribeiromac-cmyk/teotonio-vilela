@@ -163,9 +163,11 @@ async function novoAvulso(p, descricao) {
     // linha. Sem a obra ali, o id sozinho pode casar com a linha de outra.
     // A obra é lida UMA vez no começo do lote (`const obraId = OBRA.id`):
     // trocar de obra durante o upload não pode mudar a obra das fotos seguintes.
+    // (quem salvou antes de uma troca de obra manda a obra do lote: `obraDoLote`)
     const fonte = String(enviarFotosDoLote);
     return { temObra: /obra:\s*OBRA\.id/.test(fonte) ||
-                      (/obra:\s*obraId/.test(fonte) && /const obraId = OBRA\.id/.test(fonte)) };
+                      (/obra:\s*obraId/.test(fonte) &&
+                       /const obraId = (obraDoLote \|\| )?OBRA\.id/.test(fonte)) };
   });
   ok('o envio da foto declara a obra', params.temObra === true, JSON.stringify(params));
 

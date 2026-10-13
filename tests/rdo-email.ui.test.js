@@ -214,8 +214,11 @@ function camposMultipart(corpo) {
   ok('e sem pendência a varredura não deposita nada', semPendencia === 0,
      JSON.stringify(semPendencia));
 
+  /* A manutenção de fundo (o PDF que ficou devendo, depois a varredura) roda
+     no fim de toda carga, uma coisa de cada vez. */
   ok('a varredura roda no fim de toda carga — boot e refresh de 5 em 5 minutos',
-     /varrerRDOsAssinados\(\)\.catch/.test(html0));
+     (html0.match(/manutencaoDosPdfs\(\)\.catch/g) || []).length >= 2 &&
+     /async function manutencaoDosPdfs\(\)[\s\S]{0,300}varrerRDOsAssinados\(\)/.test(html0));
   ok('o servidor tem a ação que a varredura consulta',
      /case 'rdoAssinadosPendentes':/.test(gs) && /function rdoAssinadosPendentes\(/.test(gs));
   ok('e ela exige token e respeita a obra da sessão, como o depósito',
@@ -242,12 +245,16 @@ function camposMultipart(corpo) {
   // fixo pode terminar ANTES do trecho que este teste existe para vigiar
   const iFim = html.indexOf('\nfunction ', iSalvar);
   const corpoSalvar = html.slice(iSalvar, iFim === -1 ? iSalvar + 9000 : iFim);
-  ok('salvar o turno dispara o depósito', corpoSalvar.indexOf('depositarRDOPdf(d.data)') !== -1);
+  /* O depósito é o da obra EM QUE se gravou (depositoDepoisDeGravar): com a
+     tela ainda nela, é o depositarRDOPdf de sempre. */
+  ok('salvar o turno dispara o depósito',
+     corpoSalvar.indexOf('depositoDepoisDeGravar(obraEnvio, d.data') !== -1 &&
+     /function depositoDepoisDeGravar\(obra, data, reaberto\)[\s\S]{0,500}depositarRDOPdf\(data\)/.test(html));
   /* O número do RDO nasce no servidor. O depósito sai da linha que ele
      devolve ao gravar (guardada por cima do CSV atrasado) — e depois da
      recarga, como sempre. Sem isso o primeiro depósito ia com "RDO Nº —". */
   ok('o depósito sai da linha gravada, depois da recarga (senão o RDO sai sem número)',
-     /diarioLocalGuardar\(d\.data, result\.linha\)[\s\S]*carregarTudo\(\)\.then\([\s\S]{0,120}depositarRDOPdf\(d\.data\)/.test(corpoSalvar));
+     /diarioLocalGuardar\(d\.data, result\.linha, '', obraEnvio\)[\s\S]*carregarTudo\(\)[\s\S]{0,160}depositoDepoisDeGravar\(obraEnvio, d\.data/.test(corpoSalvar));
 
   ok('nenhum erro de página durante o teste', s.erros.length === 0, s.erros.join(' | '));
 

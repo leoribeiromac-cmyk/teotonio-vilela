@@ -139,6 +139,14 @@ body.mm-off #mini{display:none}
 #toggleHud{display:none}
 #loading{position:fixed;inset:0;display:grid;place-items:center;z-index:20;background:var(--bg);font-size:18px;font-weight:600;text-align:center}
 #loading small{display:block;font-size:14px;font-weight:500;color:var(--muted);margin-top:6px}
+/* Telas médias (1366×768): a barra de vistas, centrada, entrava por baixo
+   do painel do cursor (#readout, à direita) — "Planta", "Córrego" e "Aérea"
+   ficavam cobertos e não recebiam o clique. Acima do celular, a barra se
+   centra no espaço À ESQUERDA do painel. */
+@media (min-width:761px){
+  #views{left:16px;right:calc(16px + 280px);max-width:calc(100vw - 32px - 280px)}
+  body.dock-open #views{right:0;left:0;max-width:calc(100vw - 32px)}
+}
 @media (max-width:760px){
   #hud{width:auto;right:16px;max-height:calc(100% - 150px)}
   #hud.collapsed #layers{display:none}
@@ -440,6 +448,6 @@ html.cine-rec body > *:not(#stage){display:none!important}
 <div id="erro" hidden><div><b>Não foi possível abrir o modelo 3D</b><span id="erroTxt"></span><button class="btn" onclick="location.reload()">Tentar de novo</button></div></div>
 
 <script type="importmap">{"imports":{"three":"./vendor/three/three.module.min.js","three/addons/":"./vendor/three/addons/","@dgreenheck/ez-tree":"./vendor/three/ez-tree/ez-tree.es.js"}}</script>
-<script type="module" src="js/modelo3d/visor.js?v=68"></script>
+<script type="module" src="js/modelo3d/visor.js?v=69"></script>
 </body>
 </html>

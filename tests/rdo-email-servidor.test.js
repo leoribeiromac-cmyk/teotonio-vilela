@@ -192,6 +192,7 @@ function linhaDiario(extra) {
 function limpar() {
   Object.keys(_props).forEach(k => delete _props[k]);
   DRIVE.pastas = {}; DRIVE.seq = 0;
+  ctx._RDO_PDF_PASTA = null;   // o Code.gs guarda a pasta por execução; aqui cada teste é uma
   PLANILHA.RDO_Diario = [linhaDiario()];
   PLANILHA.RDO_Assinaturas = [];
   PLANILHA.RDO_Avanco = [

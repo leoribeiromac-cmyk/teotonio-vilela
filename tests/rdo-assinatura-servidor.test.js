@@ -88,7 +88,7 @@ const DriveApp = {
 const PLANILHA = { RDO_Diario: [], RDO_Avanco: [], RDO_Assinaturas: [], Auditoria: [] };
 const CAB_DIARIO = ['id', 'data', 'obra', 'numero_rdo', 'clima_manha', 'clima_tarde', 'clima_noite',
                     'apontador_diurno', 'apontador_noturno', 'visitas', 'ocorrencias',
-                    'observacoes_gerais', 'paralisacoes_json', 'paralisado_motivo', 'chuva_mm_auto'];
+                    'observacoes_gerais', 'paralisacoes_json', 'paralisado_motivo', 'chuva_mm_auto', 'revisao'];
 const CAB_AVANCO = ['id', 'data', 'obra', 'pacote_id', 'quantidade'];
 const CAB_ASSIN = ['id', 'obra', 'data', 'papel', 'rotulo', 'nome', 'email', 'token', 'status',
                    'convidadoEm', 'assinadoEm', 'assinatura', 'nomeAssinante', 'documento',
@@ -197,7 +197,7 @@ function linhaDiario(extra) {
     clima_manha: 'Bom', clima_tarde: 'Chuva', clima_noite: '',
     apontador_diurno: 'Carlos Apontador', apontador_noturno: '',
     visitas: '', ocorrencias: 'Sem ocorrências.', observacoes_gerais: '',
-    paralisacoes_json: '', paralisado_motivo: '', chuva_mm_auto: '',
+    paralisacoes_json: '', paralisado_motivo: '', chuva_mm_auto: '', revisao: '',
   };
   Object.assign(base, extra || {});
   return CAB_DIARIO.map(c => base[c]);
@@ -206,6 +206,7 @@ function linhaDiario(extra) {
 function limpar() {
   Object.keys(_props).forEach(k => delete _props[k]);
   DRIVE.pastas = {}; DRIVE.arquivosPorId = {}; DRIVE.seq = 0;
+  ctx._RDO_PDF_PASTA = null;   // o Code.gs guarda a pasta por execução; aqui cada teste é uma
   PLANILHA.RDO_Diario = [linhaDiario()];
   PLANILHA.RDO_Avanco = [['A1', HOJE, 'teotonio', 'P01', 10]];
   PLANILHA.RDO_Assinaturas = [];
@@ -234,8 +235,17 @@ const tokenDe = (papel, data) => {
   const c = convites(data).filter(x => x.papel === papel)[0];
   return c ? c.token : '';
 };
-const assinar = (papel, extra) => ctx.rdoAssinaturaGravar(Object.assign(
-  { t: tokenDe(papel), assinatura: uriPng(), nome: 'Fulano de Tal Assinante' }, extra || {}));
+/* Ninguém assina o que não pode ler: o servidor recusa a firma de um dia
+   sem PDF guardado. Os testes que não são sobre isso assinam, como na vida
+   real, um dia que já tem o depósito (o das 6h30, com os quadros em branco). */
+const comPdf = (data) => {
+  if (!ctx.rdoPdfArquivo_('teotonio', data || HOJE)) depositar({ data: data || HOJE, assinaturas: '0' });
+};
+const assinar = (papel, extra) => {
+  comPdf();
+  return ctx.rdoAssinaturaGravar(Object.assign(
+    { t: tokenDe(papel), assinatura: uriPng(), nome: 'Fulano de Tal Assinante' }, extra || {}));
+};
 const paraLista = () => CORREIO.enviados.filter(e => !e.simples);
 const paraDono = () => CORREIO.enviados.filter(e => e.simples);
 
@@ -919,6 +929,7 @@ t('e o link novo do cancelamento continua assinando à mão', () => {
   arquivar();
   convites();
   ctx.rdoAssinaturaCancelar(HOJE, 'engenheiro', 'firma errada');
+  comPdf();
   const r = ctx.rdoAssinaturaGravar({ t: linhaDe('engenheiro').token, assinatura: uriPng(),
                                       nome: 'Marcio Santana dos Santos' });
   verdade(r.ok, JSON.stringify(r));
@@ -1058,6 +1069,7 @@ t('e quem arquivou fica escrito na firma, não some', () => {
 console.log('\nArquivar sem foto nenhuma');
 
 t('as firmas que ele já deu ficam à mão, da mais nova para a mais velha', () => {
+  comPdf('2026-08-21');
   ctx.rdoAssinaturaGravar({ t: tokenDe('engenheiro', '2026-08-21'), assinatura: uriPng(),
                             nome: 'Marcio Santana dos Santos' });
   assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });   // HOJE, 24/08
@@ -1239,8 +1251,11 @@ const ANTIGO = diaRelativo(40);
 const comDiario = (data, id) => {
   PLANILHA.RDO_Diario.push(linhaDiario({ id: id || ('D' + data.replace(/-/g, '')), data }));
 };
-const assinarNoDia = (papel, data) => ctx.rdoAssinaturaGravar({
-  t: tokenDe(papel, data), assinatura: uriPng(), nome: 'Fulano de Tal Assinante' });
+const assinarNoDia = (papel, data) => {
+  comPdf(data);
+  return ctx.rdoAssinaturaGravar({
+    t: tokenDe(papel, data), assinatura: uriPng(), nome: 'Fulano de Tal Assinante' });
+};
 const assinarTodosNoDia = (data) => {
   convites(data);
   assinarNoDia('engenheiro', data);
@@ -1273,6 +1288,8 @@ t('dia em que ainda falta alguém NÃO entra — não é hora de mandar nada', (
 t('dia sem depósito nenhum entra: é o atrasado que nunca foi desenhado', () => {
   comDiario(ONTEM);
   assinarTodosNoDia(ONTEM);
+  // assinar exige o PDF guardado; aqui ele se perdeu depois (apagado à mão no Drive)
+  ctx.rdoPdfArquivo_('teotonio', ONTEM).setTrashed(true);
   const l = pendentes();
   eq(l.length, 1, JSON.stringify(l));
   eq(l[0].noDeposito, -1);
@@ -1402,6 +1419,52 @@ t('nome digitado na página pública que começa com "=" não vira fórmula', ()
   const iNome = CAB_ASSIN.indexOf('nomeAssinante');
   const gravado = PLANILHA.RDO_Assinaturas.map(l => l[iNome]).filter(Boolean)[0];
   eq(String(gravado).charAt(0), "'", 'gravou a fórmula crua: ' + gravado);
+});
+
+console.log('\nO que foi lido é o que se assina');
+/* A página mostrava "o PDF ainda não foi depositado" — mas o servidor aceitava
+   a firma do mesmo jeito, e o link copiado do painel do app (que existe antes
+   do depósito) levava a um quadro de assinar sem documento nenhum. */
+t('sem PDF depositado o servidor RECUSA a firma', () => {
+  const r = ctx.rdoAssinaturaGravar({ t: tokenDe('fiscalizacao'), assinatura: uriPng(), nome: 'Walter Fiscal' });
+  verdade(!r.ok && r.semPdf, JSON.stringify(r));
+  eq(ctx.rdoAssinLinhasDoDia_('teotonio', HOJE).filter(x => x.status === 'assinada').length, 0, 'gravou a firma');
+});
+t('o link devolve a revisão do PDF que está sendo lido', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rA1' })];
+  depositar({ revisao: 'rA1' });
+  const r = ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') });
+  eq(r.revisao, 'rA1');
+  verdade(!r.desatualizado, 'disse desatualizado com o PDF em dia');
+});
+t('dia gravado de novo depois do PDF: o link avisa que a versão ficou para trás', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rA1' })];
+  depositar({ revisao: 'rA1' });
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rB2' })];
+  const r = ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') });
+  verdade(r.desatualizado && /corrigido/.test(r.aviso || ''), JSON.stringify(r).slice(0, 240));
+});
+t('firma de uma versão que mudou depois que a página abriu NÃO entra', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rA1' })];
+  depositar({ revisao: 'rA1' });
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rB2' })];
+  const r = ctx.rdoAssinaturaGravar({ t: tokenDe('fiscalizacao'), assinatura: uriPng(), nome: 'Walter Fiscal', revisao: 'rA1' });
+  verdade(!r.ok && r.mudou, JSON.stringify(r));
+  eq(ctx.rdoAssinLinhasDoDia_('teotonio', HOJE).filter(x => x.status === 'assinada').length, 0, 'gravou a firma');
+});
+t('firma da versão em dia entra', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'rB2' })];
+  depositar({ revisao: 'rB2' });
+  const r = ctx.rdoAssinaturaGravar({ t: tokenDe('fiscalizacao'), assinatura: uriPng(), nome: 'Walter Fiscal', revisao: 'rB2' });
+  verdade(r.ok, JSON.stringify(r));
+});
+t('as três pontas comparam a revisão do mesmo jeito (o depósito a grava limpa)', () => {
+  PLANILHA.RDO_Diario = [linhaDiario({ revisao: 'r-c3' })];
+  depositar({ revisao: 'r-c3' });
+  const a = ctx.rdoAssinaturaAbrir({ t: tokenDe('fiscalizacao') });
+  verdade(!a.desatualizado, 'a mesma revisão, escrita com hífen, pareceu outra');
+  const r = ctx.rdoAssinaturaGravar({ t: tokenDe('fiscalizacao'), assinatura: uriPng(), nome: 'Walter Fiscal', revisao: a.revisao });
+  verdade(r.ok, JSON.stringify(r));
 });
 
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');

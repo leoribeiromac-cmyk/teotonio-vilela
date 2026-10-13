@@ -255,8 +255,11 @@
             if (typeof rascunhoLer !== 'function') { ligarRascunho(); return; }
             let reg = null;
             try { reg = await rascunhoLer(chaveRasc(), RASC_VALIDADE); } catch (e) { }
+            // Saiu da tela enquanto a leitura vinha: sem formulário, o gravador
+            // armado apagaria o rascunho no próximo `pagehide` (nada digitado)
+            if (!document.getElementById('apontamentoForm')) return;
             // Leitura assíncrona: se já começaram a digitar, quem manda é o dedo.
-            if (!reg || mexeu || !document.getElementById('apontamentoForm')) { ligarRascunho(); return; }
+            if (!reg || mexeu) { ligarRascunho(); return; }
             const d = reg.dados || {};
             Object.keys(d.campos || {}).forEach(id => {
                 const e = document.getElementById(id);
@@ -376,9 +379,27 @@
             return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         }
 
+        /* TODO PEDIDO TEM PRAZO. Sem ele, um POST pendurado no 3G deixava o
+           botão em "Enviando…" para sempre — e o apontamento nem ia para a
+           fila, que só o recebe no erro. Estourado o prazo, vira erro de rede
+           (o mesmo caminho do "sem sinal"). Reenviar não duplica: o legado
+           confere equipamento + data + turno, e o Code.gs, o clientId. */
+        async function fetchEquip(url, opcoes, ms) {
+            const metodo = String((opcoes && opcoes.method) || 'GET').toUpperCase();
+            let ctl = null, relogio = 0;
+            try { ctl = new AbortController(); } catch (e) { ctl = null; }
+            if (ctl) relogio = setTimeout(() => ctl.abort(), ms || (metodo === 'POST' ? 90000 : 30000));
+            try {
+                return await fetch(url, Object.assign({}, opcoes || {}, ctl ? { signal: ctl.signal } : {}));
+            } catch (e) {
+                if (e && e.name === 'AbortError') throw new TypeError('Failed to fetch (o servidor demorou demais para responder)');
+                throw e;
+            } finally { clearTimeout(relogio); }
+        }
+
         async function carregarListas() {
             try {
-                const resp = await fetch(urlEquip('listas'));
+                const resp = await fetchEquip(urlEquip('listas'));
                 const data = await resp.json();
                 if (data && data.ok) {
                     EQUIPAMENTOS = data.equipamentos || [];
@@ -491,7 +512,7 @@
                 const extra = paramsPrincipal();
                 Object.keys(extra).forEach(k => fd.set(k, extra[k]));
             }
-            const resp = await fetch(be.url, { method: 'POST', body: fd });
+            const resp = await fetchEquip(be.url, { method: 'POST', body: fd });
             const r = await resp.json();
             // O legado avisa em `erro`; o principal, em `error`/`mensagem`.
             // A tela lê `erro` — traduz aqui para o aviso não virar genérico.
@@ -598,6 +619,7 @@
         async function enviarApontamento(forcar) {
             fecharConfirmacao();
             setLoading(true);
+            let fdParaFila = null;
             try {
                 /* NÃO se captura o canvas aqui: o que vale é o que o operador
                    CONFIRMOU no modal (hidden #assinatura). Traço deixado no
@@ -668,7 +690,12 @@
                     return;
                 }
 
-                const resp = await fetch(be.url, { method: 'POST', body: fd });
+                // o que a fila precisaria, caso o envio caia (ver o catch)
+                const campos = {};
+                fd.forEach((v, k) => { if (typeof v === 'string') campos[k] = v; });
+                fdParaFila = { url: be.url, legado: be.legado, campos,
+                    descricao: 'apontamento de ' + (campos.equipamento || 'equipamento') + ' em ' + (campos.data || '') };
+                const resp = await fetchEquip(be.url, { method: 'POST', body: fd });
                 const r = await resp.json();
                 if (r.ok) {
                     showToast('Transmissão concluída com sucesso!', 'success');
@@ -684,7 +711,22 @@
                 }
             } catch (err) {
                 console.error('Error!', err);
-                showToast('Erro de conexão com o servidor. Tente novamente.', 'error');
+                /* SEM SINAL, O APONTAMENTO VAI PARA A FILA — como o RDO, a nota e
+                   a viagem. Antes ele dava "erro de conexão" e ficava só na tela,
+                   enquanto a pílula do app prometia "lançamentos ficam guardados".
+                   A fila manda pelo MESMO destino e no MESMO dialeto (o legado da
+                   Teotônio ou o Code.gs), com o formulário como foi montado aqui.
+                   A correção (EDICAO) não entra: ela reescreve uma linha que já
+                   existe, e precisa da resposta para dizer se pegou. */
+                const guardou = !EDICAO && fdParaFila && typeof outboxAdicionar === 'function' &&
+                    await outboxAdicionar({ tipo: 'equip', url: fdParaFila.url, legado: fdParaFila.legado,
+                                            campos: fdParaFila.campos, descricao: fdParaFila.descricao });
+                if (guardou) {
+                    showToast('Sem sinal — apontamento guardado no aparelho. Ele sobe sozinho quando a internet voltar.', 'success');
+                    limparApontamento();
+                } else {
+                    showToast('Erro de conexão com o servidor. Tente novamente.', 'error');
+                }
             } finally {
                 setLoading(false);
             }
@@ -727,7 +769,7 @@
                 else if (EDICAO.assinaturaRemovida) fd.set('assinatura', '');   // apagar é uma ordem
                 else fd.delete('assinatura');                                    // não reassinar não é
                 if (forcar) fd.set('forcar', 'true');
-                const resp = await fetch(be.url, { method: 'POST', body: fd });
+                const resp = await fetchEquip(be.url, { method: 'POST', body: fd });
                 const r = await resp.json();
                 if (r && !r.ok && !r.erro && (r.mensagem || r.error)) r.erro = r.mensagem || r.error;
                 return r;
@@ -736,7 +778,7 @@
             // Legado: grava o corrigido primeiro…
             if (assinatura) fd.set('assinatura', assinatura);
             fd.set('forcar', 'true');             // o antigo ainda está lá; ele mesmo é a "duplicata"
-            const resp = await fetch(be.url, { method: 'POST', body: fd });
+            const resp = await fetchEquip(be.url, { method: 'POST', body: fd });
             const r = await resp.json();
             if (r && !r.ok && !r.erro && (r.mensagem || r.error)) r.erro = r.mensagem || r.error;
             if (!r || !r.ok) return r;
@@ -764,7 +806,7 @@
             const box = document.getElementById('listaUltimos');
             box.innerHTML = '<p class="eq-vazio">Carregando…</p>';
             try {
-                const resp = await fetch(urlEquip('ultimos', { n: 15 }));
+                const resp = await fetchEquip(urlEquip('ultimos', { n: 15 }));
                 const data = await resp.json();
                 const items = (data && data.apontamentos) || [];
                 ULTIMOS = items;
@@ -779,7 +821,7 @@
                         <div class="eq-item-lado">
                             <span class="eq-item-horas">${escapeHtml(String(a.horas))}h</span>
                             <button type="button" data-carimbo="${escapeHtml(a.carimbo)}" class="btn-editar-apont btn btn-ghost btn-icone" title="Corrigir este apontamento" aria-label="Corrigir este apontamento">${ic('editar')}</button>
-                            <button type="button" data-carimbo="${a.carimbo}" class="btn-apagar-apont btn btn-ghost btn-icone" title="Apagar este apontamento" aria-label="Apagar este apontamento">${ic('lixeira')}</button>
+                            <button type="button" data-carimbo="${escapeHtml(a.carimbo)}" class="btn-apagar-apont btn btn-ghost btn-icone" title="Apagar este apontamento" aria-label="Apagar este apontamento">${ic('lixeira')}</button>
                         </div>
                     </div>`).join('');
                 box.querySelectorAll('.btn-editar-apont').forEach(b => b.addEventListener('click', () => editarApontamentoUI(b.getAttribute('data-carimbo'))));
@@ -1062,7 +1104,7 @@
             const de = document.getElementById('relDe').value, ate = document.getElementById('relAte').value;
             try {
                 const url = urlEquip('relatorio', { de: de, ate: ate });
-                const data = await (await fetch(url)).json();
+                const data = await (await fetchEquip(url)).json();
                 REL_RAW = (data && data.apontamentos) || [];
                 // A Central de Campo mostra o que já foi apontado hoje. Enquanto
                 // ninguém abrir o painel ela diz "abra a tela" — nunca "0".
@@ -1173,13 +1215,18 @@
             const head = ['Data', 'Turno', 'Equipamento', 'Operador', 'Horas', 'Status', 'Combustivel(L)', 'Locadora'];
             // `;` é o CSV do Excel pt-BR, e ali o decimal é vírgula: 7.5 h virava texto
             const dec = v => (v === '' || v == null || !isFinite(Number(v))) ? v : String(Number(v)).replace('.', ',');
-            const linhas = REL_DADOS.map(a => [a.data, a.turno, a.equipamento, a.operador, dec(a.horas), rotuloStatusTxt(a.status), dec(a.combustivel), locadoraDe(a.equipamento)]);
-            const csv = [head].concat(linhas).map(r => r.map(c => '"' + String(c == null ? '' : c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
+            // a data como na tela (DD/MM/AAAA): crua, o legado mandava o texto
+            // inteiro do Date ("Tue Oct 13 2026 00:00:00 GMT-0300")
+            const linhas = REL_DADOS.map(a => [a.data ? formatarData(a.data) : '', a.turno, a.equipamento, a.operador, dec(a.horas), rotuloStatusTxt(a.status), dec(a.combustivel), locadoraDe(a.equipamento)]);
+            // texto com = + - @ na frente seria fórmula no Excel (ver csvCel no index.html)
+            const cel = c => { let t = String(c == null ? '' : c); if (/^[=+\-@\t\r]/.test(t) && !/^-?[\d.,]+%?$/.test(t)) t = "'" + t; return t; };
+            const csv = [head].concat(linhas).map(r => r.map(c => '"' + cel(c).replace(/"/g, '""') + '"').join(';')).join('\r\n');
             const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
             a.download = 'relatorio-equipamentos.csv';
             a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 10000);
         }
 
         /* ===================== MEDIÇÃO MENSAL — XLSX por equipamento ===================== */
@@ -1307,7 +1354,7 @@
             stEl.textContent = 'Buscando apontamentos…';
             try {
                 const url = urlEquip('relatorio', { de: de, ate: ate });
-                const data = await (await fetch(url)).json();
+                const data = await (await fetchEquip(url)).json();
                 let dados = (data && data.apontamentos) || [];
                 const eqFiltro = document.getElementById('relEquip').value;
                 if (eqFiltro) dados = dados.filter(a => a.equipamento === eqFiltro);
@@ -1499,12 +1546,14 @@
             setTimeout(() => { w.print(); }, 350);
         }
 
-        // Fecha qualquer modal aberto com a tecla Esc (UX)
+        // Fecha qualquer modal aberto com a tecla Esc (UX). Os modais abrem e
+        // fecham pelo `display` (EQ.abrir/EQ.fechar): a classe `hidden` que
+        // isto conferia não existe neles, e o Esc não fechava nada.
         document.addEventListener('keydown', e => {
             if (e.key !== 'Escape') return;
             ['cadastroModal', 'confirmModal', 'ultimosModal', 'painelModal'].forEach(id => {
                 const el = document.getElementById(id);
-                if (el && !el.classList.contains('hidden')) el.classList.add('hidden');
+                if (el && el.style.display && el.style.display !== 'none') EQ.fechar(id);
             });
         });
 
