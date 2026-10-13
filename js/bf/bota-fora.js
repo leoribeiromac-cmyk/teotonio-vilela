@@ -506,7 +506,14 @@
     try {
       const periodo = { de: val('bfDe'), ate: val('bfAte') };
       const url = urlBF('bfListar', periodo);
-      const r = await (await fetch(url)).json();
+      // com prazo: pendurado, o `carregando` nunca voltava e a lista não
+      // era buscada de novo até recarregar o app
+      let ctl = null, relogio = 0;
+      try { ctl = new AbortController(); } catch (e) { ctl = null; }
+      if (ctl) relogio = setTimeout(() => ctl.abort(), 30000);
+      let r;
+      try { r = await (await fetch(url, ctl ? { signal: ctl.signal } : undefined)).json(); }
+      finally { clearTimeout(relogio); }
       VIAGENS = (r && r.viagens) || [];
       VIAGENS_DE = periodo;
       pintarViagens();

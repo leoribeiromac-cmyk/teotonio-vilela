@@ -3682,20 +3682,29 @@ button.nav-item.active{background:var(--sidebar-active-bg)}
 const LIBS = {
   grafico: { arquivos: ['vendor/chartjs/chart.umd.min.js'],           pronto: () => typeof Chart !== 'undefined' },
   // AutoTable precisa do jsPDF já carregado: entra depois, na ordem.
+  /* "Pronto" é com o AutoTable: o sinal caindo entre os dois arquivos deixava
+     o jsPDF sozinho na memória, e a tentativa seguinte o dava por pronto —
+     toda exportação de tabela quebrava até recarregar o app. */
   pdf:     { arquivos: ['vendor/jspdf/jspdf.umd.min.js',
-                        'vendor/jspdf/jspdf.plugin.autotable.min.js'], pronto: () => !!(window.jspdf && window.jspdf.jsPDF) },
+                        'vendor/jspdf/jspdf.plugin.autotable.min.js'],
+             pronto: () => !!(window.jspdf && window.jspdf.jsPDF) &&
+                           _scriptsCarregados.has('vendor/jspdf/jspdf.plugin.autotable.min.js') },
   excel:   { arquivos: ['vendor/xlsx/xlsx.bundle.js'],                 pronto: () => typeof XLSX !== 'undefined' },
   lerPdf:  { arquivos: ['vendor/pdfjs/pdf.min.js'],                    pronto: () => !!window.pdfjsLib,
              depois: () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'vendor/pdfjs/pdf.worker.min.js'; } },
 };
 const _libsEmCurso = {};
+const _scriptsCarregados = new Set();
 
 function _injetarScript(src) {
+  // a nova tentativa baixa só o que faltou (o jsPDF de novo recriaria o
+  // objeto em que o AutoTable vai se registrar)
+  if (_scriptsCarregados.has(src)) return Promise.resolve();
   return new Promise((ok, erro) => {
     const s = document.createElement('script');
     s.src = src;
-    s.onload = () => ok();
-    s.onerror = () => erro(new Error('não foi possível carregar ' + src));
+    s.onload = () => { _scriptsCarregados.add(src); ok(); };
+    s.onerror = () => { s.remove(); erro(new Error('não foi possível carregar ' + src)); };
     document.head.appendChild(s);
   });
 }
@@ -3905,6 +3914,12 @@ function lsObra(base) {
   let id = '';
   try { id = OBRA && OBRA.id; } catch (e) { id = ''; }
   if (!id) id = obraAtivaId();
+  return lsChaveDaObra(base, id);
+}
+/* A mesma chave para uma obra que não é a da tela: o turno que sobe pela
+   fila (ou termina de subir depois de uma troca de obra) mexe no rascunho
+   DA OBRA DELE. */
+function lsChaveDaObra(base, id) {
   return id === 'teotonio' ? base : base + ':' + id;
 }
 
@@ -4078,6 +4093,15 @@ function trocarObra(id, opcoes) {
      "fechado" da Teotônio aparecia fechado no Ranário, com o snapshot dela). */
   DIARIO_V4 = null; DIARIO_TURNO_ATIVO = null;
   MEDICOES_FECHADAS = null;
+  /* Os filtros das telas são da obra que sai: a estaca aberta no croqui, o
+     apontador escolhido no Histórico, o mês da Galeria… apontavam para
+     coisas que a obra nova nem tem — e a tela abria "vazia" sem motivo à vista. */
+  HIST_FILTRO = { mes: '', frente: '', apontador: '', data: '', busca: '', estaca: '' };
+  HIST_DIARIO_FILTRO = { mes: '' };
+  PV.sel = null; CROQUI.sel = null;
+  Object.keys(GAL_FILTRO).forEach(k => { GAL_FILTRO[k] = ''; });
+  STATE.galMes = 'Todos'; STATE.galPacote = 'Todos';
+  IMPROD_MES = ''; MEDICAO_MES = '';
   localStorage.setItem(LS_OBRA, id);
   OBRA = OBRAS_CFG[id];
   CONFIG = montarConfig(id);
@@ -4189,6 +4213,16 @@ function escHtml(v) {
     .replace(/'/g, '&#39;');
 }
 
+/* CÉLULA DE CSV. Texto que começa com = + - @ é FÓRMULA para o Excel: uma
+   observação, um nome de equipe ou o fornecedor lido pela IA rodaria como
+   fórmula no computador do escritório que abre a planilha. Ganha um
+   apóstrofo na frente; número negativo ("-12,50") continua número. */
+function csvCel(v) {
+  let t = String(v == null ? '' : v);
+  if (/^[=+\-@\t\r]/.test(t) && !/^-?[\d.,]+%?$/.test(t)) t = "'" + t;
+  return '"' + t.replace(/"/g, '""') + '"';
+}
+
 /* UM VALOR DENTRO DE onclick="fn('…')". O escHtml não basta ali: o navegador
    DESFAZ as entidades do atributo antes de rodar o código, e um apóstrofo
    volta a ser apóstrofo — "caixa d'água" quebrava o clique (SyntaxError) e
@@ -4244,9 +4278,22 @@ async function fetchCSVTexto(url) {
   // quanto reduzem chance de pegar a cópia velha do CSV publicado do Google,
   // que causava serviços recém-lançados "aparecerem e sumirem" no refresh.
   const buster = '&t=' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
-  const res = await fetch(url + buster, { cache: 'no-store' });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  return res.text();
+  /* PRAZO. Sinal "de mentira" (as barras cheias e nada passando, o Wi-Fi do
+     contêiner que pede login) deixava o pedido pendurado para sempre: a
+     carga nunca falhava, e a cópia guardada no aparelho nunca entrava — o app
+     ficava em "Carregando…". Um minuto cobre o CSV grande no 3G (ele vem
+     comprimido); passou disso, é falha, e a cópia guardada assume. */
+  let ctl = null, relogio = 0;
+  try { ctl = new AbortController(); } catch (e) { ctl = null; }
+  if (ctl) relogio = setTimeout(() => { try { ctl.abort(); } catch (e) {} }, 60000);
+  try {
+    const res = await fetch(url + buster, { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.text();
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw new Error('Falha de rede: a planilha não respondeu em 1 minuto');
+    throw e;
+  } finally { if (relogio) clearTimeout(relogio); }
 }
 async function fetchCSV(url) {
   return parseCSV(await fetchCSVTexto(url));
@@ -4646,9 +4693,16 @@ async function outboxFlush(manual = false) {
   // "tentar agora" não responder). Tentamos enviar de verdade sempre.
   _flushEmAndamento = true;
   atualizarIndicadorOutbox();   // troca o indicador para "enviando…" na hora
-  if (manual) toast('Enviando ' + itens.length + ' RDO' + (itens.length>1?'s':'') + ' guardado' + (itens.length>1?'s':'') + '…', 'info', 2500);
+  // o nome do que está guardado: a fila leva nota, foto, viagem — não só RDO
+  if (manual) toast('Enviando o que está guardado: ' + descricaoDaFila(itens) + '…', 'info', 2500);
   let enviados = 0, falhouRede = false;
+  const subiram = [];
   const deOutros = new Set();
+  /* Os dias cujos turnos subiram NESTA rodada: um PDF por dia, depois de UMA
+     carga. Antes cada turno marcava a sua carga inteira e o seu PDF — cinco
+     turnos guardados eram seis cargas em paralelo no 4G e cinco PDFs
+     desenhados juntos (o mesmo dia duas vezes, com diurno e noturno). */
+  const diasDepositar = new Map();
   try {
     for (const item of itens) {
       if (!manual && item.esperarAte && Date.now() < item.esperarAte) continue;
@@ -4668,6 +4722,7 @@ async function outboxFlush(manual = false) {
         if (!result.ok) throw new Error('servidor: ' + (result.error || 'erro'));
         outboxRemover(item.id);
         enviados++;
+        subiram.push(item);
         if (item.kind === 'rdo' && item.params && item.params.batch) {
           try {
             lancadosLocaisGuardar(JSON.parse(item.params.batch));
@@ -4676,29 +4731,30 @@ async function outboxFlush(manual = false) {
         }
         /* O turno do RDO que subiu pela FILA não passava pelo que o envio
            direto faz depois de gravar: o PDF do dia não era depositado (o
-           e-mail das 6h30 ia sem ele, ou com um velho). */
-        if (item.kind === 'diario' && item.params && item.params.data &&
-            (item.params.obra || 'teotonio') === OBRA.id) {
+           e-mail das 6h30 ia sem ele, ou com um velho). Vale também para o
+           turno de OUTRA obra (a fila sobe em qualquer tela): o rascunho é
+           o da obra dele, e o PDF fica anotado até ela voltar à tela. */
+        if (item.kind === 'diario' && item.params && item.params.data) {
+          const obraItem = item.params.obra || 'teotonio';
           const dataDia = item.params.data;
-          if (result.linha) diarioLocalGuardar(dataDia, result.linha);
+          if (result.linha) diarioLocalGuardar(dataDia, result.linha, '', obraItem);
           // O rascunho que ficou na tela subiu inteiro: sai de cena, como no
           // envio direto. Se foi editado DEPOIS de ir para a fila, fica — é
           // trabalho novo, e continua avisando que não subiu.
-          const rasc = loadDiarioV4(dataDia);
+          const rasc = loadDiarioV4(dataDia, obraItem);
           if (rasc && (rasc._salvoEm || 0) <= (item.rascunhoEm || 0)) {
-            clearDiarioV4(dataDia);
-            if (DIARIO_V4 && DIARIO_V4.data === dataDia && !DIARIO_TURNO_ATIVO) DIARIO_V4 = null;
+            clearDiarioV4(dataDia, obraItem);
+            if (obraItem === OBRA.id && DIARIO_V4 && DIARIO_V4.data === dataDia && !DIARIO_TURNO_ATIVO) DIARIO_V4 = null;
           }
           /* Reaberto pela fila (o escritório salvou um RDO assinado sem sinal):
              como no envio direto, o convite sai de novo — senão quem assinou
              nunca recebia o link novo, e o RDO ficava reaberto sem firma. */
-          const reabertoFila = result.reaberto || 0;
-          if (reabertoFila) _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
-          setTimeout(() => {
-            carregarTudo({ fundo: true })
-              .then(() => reabertoFila ? enviarRDOParaAssinatura(dataDia, true) : depositarRDOPdf(dataDia))
-              .catch(() => {});
-          }, 1500);
+          const reabertoFila = !!(result.reaberto || 0);
+          if (reabertoFila && obraItem === OBRA.id) _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
+          const chaveDia = obraItem + '|' + dataDia;
+          const antes = diasDepositar.get(chaveDia);
+          diasDepositar.set(chaveDia, { obra: obraItem, data: dataDia,
+                                        reaberto: reabertoFila || !!(antes && antes.reaberto) });
         }
       } catch(e) {
         if (ehErroDeRede(e)) { falhouRede = true; break; } // segue offline — tenta tudo de novo depois
@@ -4782,10 +4838,17 @@ async function outboxFlush(manual = false) {
   }
   if (enviados > 0) {
     if (!outboxLer().length) avisosDaFilaTirar();
-    toast(`${enviados} RDO${enviados>1?'s':''} guardado${enviados>1?'s':''} enviado${enviados>1?'s':''} agora`, 'success', 4500);
+    toast('Enviado agora o que estava guardado: ' + descricaoDaFila(subiram), 'success', 4500);
     // em modo FUNDO: a fila sobe sozinha a cada 30 s, e uma carga "de frente"
     // redesenhava o formulário por baixo de quem estava preenchendo
-    setTimeout(() => carregarTudo({ fundo: true }), 1500);
+    const dias = [...diasDepositar.values()];
+    setTimeout(() => {
+      carregarTudo({ fundo: true }).then(async () => {
+        for (const x of dias) {
+          try { await depositoDepoisDeGravar(x.obra, x.data, x.reaberto); } catch (e) {}
+        }
+      }).catch(() => {});
+    }, 1500);
     // O que entrou na fila DURANTE este envio foi ignorado: o flush já estava
     // rodando e o segundo pedido voltou na hora. Sem isto ele esperava o
     // temporizador de 30 s — é o caso das páginas 2..N de uma nota, que só
@@ -4822,8 +4885,17 @@ async function enviarEquipDaFila(item) {
   Object.keys(item.campos || {}).forEach(k => fd.append(k, item.campos[k]));
   if (!item.legado) { const t = tokenSessao(); if (t) fd.set('token', t); }
   let resp;
-  try { resp = await fetch(item.url, { method: 'POST', body: fd }); }
-  catch (e) { throw new Error('Falha de rede: ' + ((e && e.message) || 'sem conexão')); }
+  /* Com prazo: um envio pendurado segurava a fila INTEIRA (o flush só anda
+     quando este volta), e nada mais subia até recarregar o app. */
+  let ctl = null, relogio = 0;
+  try { ctl = new AbortController(); } catch (e) { ctl = null; }
+  if (ctl) relogio = setTimeout(() => ctl.abort(), POST_TEMPO);
+  try { resp = await fetch(item.url, Object.assign({ method: 'POST', body: fd }, ctl ? { signal: ctl.signal } : {})); }
+  catch (e) {
+    throw new Error('Falha de rede: ' + ((e && e.name === 'AbortError') ? 'o servidor demorou demais para responder'
+                                                                       : ((e && e.message) || 'sem conexão')));
+  }
+  finally { clearTimeout(relogio); }
   if (!resp.ok) throw new Error('Falha de rede: HTTP ' + resp.status);
   let r;
   try { r = await resp.json(); } catch (e) { throw new Error('Falha de rede: o servidor respondeu uma página em vez de dados'); }
@@ -4866,6 +4938,7 @@ function descricaoDaFila(itens) {
     nf:      ['nota fiscal', 'notas fiscais'],
     nfDel:   ['exclusão de nota', 'exclusões de nota'],
     saida:   ['saída de estoque', 'saídas de estoque'],
+    saidaDel:['exclusão de saída', 'exclusões de saída'],
     equip:   ['apontamento de equipamento', 'apontamentos de equipamento'],
     botafora:['viagem de bota-fora', 'viagens de bota-fora'],
     foto:    ['foto de serviço', 'fotos de serviço'],
@@ -6012,6 +6085,15 @@ function navigate(page, doVoltar) {
   transitionTo(() => { render(); const m = document.querySelector('.main'); if (m) m.scrollTop = 0; });
 }
 
+/* Ir a uma tela com um filtro novo: o navigate() não redesenha a tela em que
+   já se está, e a busca feita DE DENTRO do Histórico punha o filtro e deixava
+   a lista como estava até a próxima carga. */
+function navegarRedesenhando(page) {
+  if (STATE.currentPage !== page) { navigate(page); return; }
+  toggleSidebar(false);
+  transitionTo(() => { render(); const m = document.querySelector('.main'); if (m) m.scrollTop = 0; });
+}
+
 /* O BOTÃO VOLTAR. O app trocava de tela sem tocar no histórico do
    navegador: o Voltar do Android saía do app de uma vez (e com a foto
    ampliada aberta, também). Cada troca de tela vira uma entrada; o Voltar
@@ -6793,7 +6875,9 @@ function desenharCarimbo(dataUri, ctxDados, cfg) {
           g.fillStyle = i === 0 ? '#ffffff' : 'rgba(255,255,255,.88)';
           g.fillText(t, pad, y0 + pad + i * lh);
         });
-        resolve(c.toDataURL('image/jpeg', 0.82));
+        var saida = c.toDataURL('image/jpeg', 0.82);
+        zerarCanvas(c);
+        resolve(saida);
       } catch (e) { resolve(dataUri); }
     };
     img.src = dataUri;
@@ -7009,25 +7093,65 @@ function lerExif(file) {
   });
 }
 
-function comprimirImg(file, maxLado, qualidade) {
+/* ABRIR A FOTO DO ARQUIVO, uma vez e com prazo. O arquivo vai direto para o
+   <img> (URL de objeto), sem virar antes um texto base64 do tamanho da foto;
+   o canvas é zerado ao sair — no iPhone a memória de canvas tem teto, e o
+   que ficava esperando o coletor estourava na terceira foto; e a foto que
+   não abre em 45 s vira erro, em vez de deixar o "preparando a foto…"
+   girando para sempre. `usar(img)` faz o desenho e devolve o resultado. */
+function abrirFotoArquivo(file, usar) {
   return new Promise((resolve, reject) => {
-    const fr = new FileReader();
-    fr.onload = () => {
-      const img = new Image();
-      img.onload = () => {
-        let w = img.width, h = img.height;
-        const maior = Math.max(w, h);
-        if (maior > maxLado) { const k = maxLado / maior; w = Math.round(w * k); h = Math.round(h * k); }
-        const c = document.createElement('canvas');
-        c.width = w; c.height = h;
-        c.getContext('2d').drawImage(img, 0, 0, w, h);
-        try { resolve(c.toDataURL('image/jpeg', qualidade)); } catch (e) { reject(e); }
-      };
-      img.onerror = reject;
-      img.src = fr.result;
+    let url = '';
+    try { url = URL.createObjectURL(file); } catch (e) { reject(e); return; }
+    const img = new Image();
+    let acabou = false, relogio = 0;
+    const fim = (erro, val) => {
+      if (acabou) return;
+      acabou = true;
+      clearTimeout(relogio);
+      img.onload = img.onerror = null;
+      try { URL.revokeObjectURL(url); } catch (e) {}
+      if (erro) reject(erro); else resolve(val);
     };
-    fr.onerror = reject;
-    fr.readAsDataURL(file);
+    relogio = setTimeout(() => fim(new Error('a foto demorou demais para abrir')), 45000);
+    img.onerror = () => fim(new Error('imagem ilegível'));
+    img.onload = () => { try { fim(null, usar(img)); } catch (e) { fim(e); } };
+    img.src = url;
+  });
+}
+function canvasReduzido(fonte, w, h, maxLado) {
+  const maior = Math.max(w, h);
+  if (maior > maxLado) { const k = maxLado / maior; w = Math.round(w * k); h = Math.round(h * k); }
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(fonte, 0, 0, w, h);
+  return c;
+}
+function zerarCanvas(c) { if (c) { c.width = 0; c.height = 0; } }
+
+function comprimirImg(file, maxLado, qualidade) {
+  return abrirFotoArquivo(file, img => {
+    const c = canvasReduzido(img, img.naturalWidth || img.width, img.naturalHeight || img.height, maxLado);
+    try { return c.toDataURL('image/jpeg', qualidade); } finally { zerarCanvas(c); }
+  });
+}
+
+/* A FOTO DE SERVIÇO EM DUAS MEDIDAS, DE UMA DECODIFICAÇÃO SÓ (como a da nota
+   fiscal, nfPrepararFoto): a miniatura sai da cheia já reduzida. Eram duas
+   leituras do arquivo inteiro em paralelo — dois textos base64 do tamanho da
+   foto e dois bitmaps de 12 MP (~48 MB cada) —, e o celular simples fechava
+   a aba logo depois da câmera. */
+function comprimirFotoServico(file) {
+  return abrirFotoArquivo(file, img => {
+    let cheia = null, mini = null;
+    try {
+      cheia = canvasReduzido(img, img.naturalWidth || img.width, img.naturalHeight || img.height, 1280);
+      const full = cheia.toDataURL('image/jpeg', .72);
+      mini = canvasReduzido(cheia, cheia.width, cheia.height, 320);
+      return { full, thumb: mini.toDataURL('image/jpeg', .5) };
+    } finally { zerarCanvas(cheia); zerarCanvas(mini); }
   });
 }
 
@@ -7047,7 +7171,9 @@ function reduzirDataUri(dataUri, maxLado, qualidade) {
         var c = document.createElement('canvas');
         c.width = w; c.height = h;
         c.getContext('2d').drawImage(img, 0, 0, w, h);
-        resolve({ uri: c.toDataURL('image/jpeg', qualidade), w: w, h: h });
+        var uri = c.toDataURL('image/jpeg', qualidade);
+        zerarCanvas(c);
+        resolve({ uri: uri, w: w, h: h });
       } catch (e) { resolve(null); }
     };
     img.src = dataUri;
@@ -7104,7 +7230,7 @@ window.fotosSelecionadas = async function(input, idx, origem) {
       // duas versões: a miniatura desenha a tela, a cheia é a que sobe.
       // As duas levam o carimbo — a miniatura para o apontador conferir
       // na hora que a foto saiu carimbada, sem precisar ampliar.
-      const [thumb0, full0] = await Promise.all([comprimirImg(f, 320, .5), comprimirImg(f, 1280, .72)]);
+      const { thumb: thumb0, full: full0 } = await comprimirFotoServico(f);
       const [thumb, full] = await Promise.all([
         desenharCarimbo(thumb0, ctx, cfg),
         desenharCarimbo(full0, ctx, cfg)
@@ -7390,6 +7516,44 @@ async function fotoGuardar(chave, dataUri) {
       t.oncomplete = res; t.onerror = () => rej(t.error);
     });
   } catch (e) { /* sem IndexedDB: a foto fica no cache de memória durante a sessão */ }
+}
+
+/* O GUARDA DE FOTOS TEM TETO. Cada foto aberta ficava no aparelho para
+   sempre: meses de Galeria são centenas de MB num celular simples, e
+   armazenamento cheio é o navegador apagando o site INTEIRO — a fila de
+   envio junto. Só sai o que o servidor devolve de novo (cópia do Drive); a
+   folha de nota que ainda pode não ter subido (`nf:`) nunca. As cheias
+   primeiro: cada uma pesa por dez miniaturas, e a Galeria vive delas. Os
+   ids do Drive são aleatórios, então a ordem das chaves é um sorteio — e
+   substituir ao acaso é uma política de cache honesta, sem marcar cada uso. */
+const FOTO_IDB_TETO = { cheia: 120, mini: 600 };
+async function fotosAparar() {
+  try {
+    const d = await idbAbrir();
+    const chaves = await new Promise((res, rej) => {
+      const st = d.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE);
+      if (!st.getAllKeys) return res([]);
+      const q = st.getAllKeys();
+      q.onsuccess = () => res(q.result || []); q.onerror = () => rej(q.error);
+    });
+    const doDrive = chaves.filter(k => typeof k === 'string' && !/^(mini:)?nf:/.test(k));
+    const cheias = doDrive.filter(k => k.indexOf('mini:') !== 0);
+    const minis = doDrive.filter(k => k.indexOf('mini:') === 0);
+    const sair = [];
+    const aparar = (lista, teto) => {
+      if (lista.length > teto) sair.push(...lista.slice(0, lista.length - Math.round(teto * 0.7)));
+    };
+    aparar(cheias, FOTO_IDB_TETO.cheia);
+    aparar(minis, FOTO_IDB_TETO.mini);
+    if (!sair.length) return 0;
+    await new Promise((res, rej) => {
+      const t = d.transaction(IDB_STORE, 'readwrite');
+      const st = t.objectStore(IDB_STORE);
+      sair.forEach(k => { st.delete(k); _fotoMemCache.delete(k); });
+      t.oncomplete = res; t.onerror = () => rej(t.error);
+    });
+    return sair.length;
+  } catch (e) { return 0; }
 }
 
 async function fotoLer(chave) {
@@ -7904,7 +8068,10 @@ function aplicarCarga(c, p, k, r, d) {
   const compl = aplicarComplemento(p, k);
   STATE.pacotes = compl.pacotes;
   STATE.coeficientes = compl.coeficientes;
-  STATE.rdoavanco = comEditadosLocais(comLancadosLocais(semApagadosLocais(soDaObraAtiva(r))));
+  // semApagadosLocais ANTES do filtro da obra: ela esquece o id que o CSV não
+  // traz mais, e filtrado só a obra aberta, o apagado de outra obra era
+  // esquecido na troca — e voltava ao trocar de volta, até o CSV alcançar
+  STATE.rdoavanco = comEditadosLocais(comLancadosLocais(soDaObraAtiva(semApagadosLocais(r))));
   // Diário que não veio (CSV fora por um instante) não é diário vazio: fica o
   // que já estava. Trocar por [] fazia a tela dizer "RDO de hoje pendente" e
   // a varredura das assinaturas gastar a chance dela contra um diário vazio.
@@ -7951,7 +8118,7 @@ async function carregarTudo(opts = {}) {
     STATE.lastSync = new Date();
     STATE.cargaFalhou = false;
     setSyncStatus('ok', `Sincronizado às ${hm()} · ${STATE.pacotes.length} pacotes, ${STATE.rdoavanco.length} serviços`);
-    varrerRDOsAssinados().catch(() => {});
+    manutencaoDosPdfs().catch(() => {});
     return;
   }
 
@@ -8009,7 +8176,7 @@ async function carregarTudo(opts = {}) {
      parado olhando para um dia que não é o de ninguém. E fica depois do
      desvio acima de propósito: com formulário aberto ou campo focado, a
      varredura espera a próxima carga. Sem o CSV do diário, espera também. */
-  if (d !== null) varrerRDOsAssinados().catch(() => {});
+  if (d !== null) manutencaoDosPdfs().catch(() => {});
 }
 
 async function cargaFalhou(minhaEpoca, minhaObra, fundo) {
@@ -8592,7 +8759,7 @@ function buscaCalcular(termo) {
       grupo: 'Serviços lançados', icone: 'servicos',
       titulo: nomeDoPacote(r) || '(sem pacote)',
       sub: `${data}${estaca ? ' · ' + estaca : ''} · ${fmtNum(num(getCSVField(r, 'Quantidade')))} ${getCSVField(r, 'Unidade') || ''}`.trim(),
-      ir: () => { HIST_FILTRO.busca = estaca || getCSVField(r, 'ID'); HIST_LIMITE = 100; navigate('historico'); },
+      ir: () => { HIST_FILTRO.busca = estaca || getCSVField(r, 'ID'); HIST_LIMITE = 100; navegarRedesenhando('historico'); },
     });
   }
 
@@ -8676,6 +8843,13 @@ window.buscaDigitou = function (v) {
   BUSCA.sel = 0;
   buscaRender();
 };
+/* A tecla não recalcula na hora: a busca passa por 20 mil lançamentos, e a
+   cada letra o teclado do celular simples travava. Espera a pessoa parar. */
+let _buscaRelogio = 0;
+window.buscaDigitouAtrasado = function (v) {
+  clearTimeout(_buscaRelogio);
+  _buscaRelogio = setTimeout(() => { if (BUSCA.aberta) buscaDigitou(v); }, 140);
+};
 
 window.buscaAbrir = function () {
   if (BUSCA.aberta) return;
@@ -8687,7 +8861,7 @@ window.buscaAbrir = function () {
         <span class="busca-ic-topo">${ic('lupa')}</span>
         <input id="buscaInput" type="search" autocomplete="off" autocapitalize="off" spellcheck="false"
                placeholder="Estaca, pacote, lançamento ou data do RDO…"
-               oninput="buscaDigitou(this.value)" aria-label="O que você procura">
+               oninput="buscaDigitouAtrasado(this.value)" aria-label="O que você procura">
         <kbd class="busca-esc">Esc</kbd>
       </div>
       <div id="buscaResultados" class="busca-resultados"></div>
@@ -8717,10 +8891,18 @@ document.addEventListener('keydown', e => {
     return;
   }
   if (e.key === 'Escape') { e.preventDefault(); buscaFechar(); return; }
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    // Enter logo depois da última tecla: a busca atrasada ainda não rodou (e a
+    // lista ainda vazia não pode encerrar o Enter antes dela)
+    const inp = document.getElementById('buscaInput');
+    if (inp && inp.value !== BUSCA.termo) { clearTimeout(_buscaRelogio); buscaDigitou(inp.value); }
+    if (BUSCA.itens.length) buscaIr(BUSCA.sel);
+    return;
+  }
   if (!BUSCA.itens.length) return;
   if (e.key === 'ArrowDown') { e.preventDefault(); buscaSelecionar((BUSCA.sel + 1) % BUSCA.itens.length); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); buscaSelecionar((BUSCA.sel - 1 + BUSCA.itens.length) % BUSCA.itens.length); }
-  else if (e.key === 'Enter') { e.preventDefault(); buscaIr(BUSCA.sel); }
 });
 
 function renderShell() {
@@ -9044,10 +9226,17 @@ function render() {
   else if (STATE.currentPage === 'botafora') { pageEl.innerHTML = BF.render(); BF.boot(); }
   else if (STATE.currentPage === 'notas') {
     pageEl.innerHTML = faixaObraNotas() + viewNotas(obra());
-    nfCarregar(obra().id);
+    /* Toda aba, filtro e "ver mais" da tela de Notas passa por aqui: buscar
+       a lista inteira no servidor a cada toque era o 4G do canteiro indo
+       embora. O relógio de 1 min, a volta ao app e o botão Atualizar
+       continuam buscando na hora. */
+    const sincNf = typeof nfSyncEstado === 'function' ? nfSyncEstado(obra().id) : { em: 0, erro: '' };
+    if (!sincNf.em || sincNf.erro || Date.now() - sincNf.em > 30000) nfCarregar(obra().id);
     // quem NÃO lançou a nota recebe ela sem miniatura: o quadro busca a
     // imagem do Drive quando entra na tela (mesmo desenho da Galeria)
     if (typeof nfMiniaturasLazy === 'function') nfMiniaturasLazy();
+    // a nota em conferência que a aba perdeu (camera, outro app): oferece retomar
+    if (typeof nfRascOferecer === 'function') nfRascOferecer();
   }
   else if (STATE.currentPage === 'galeria') { pageEl.innerHTML = renderGaleria(); carregarImagensGaleria(); }
   else if (STATE.currentPage === 'projetos') { pageEl.innerHTML = renderProjetos(); abrirPrancha(); }
@@ -9899,7 +10088,10 @@ async function abrirPranchaPdf() {
   // anterior terminava depois e desenhava por cima da que o usuário escolheu.
   const tok = ++PROJ.token;
   window.pdfjsLib.getDocument({ url: PROJ.sel, isEvalSupported: false }).promise.then(doc => {
-    if (tok !== PROJ.token) return;
+    // cada documento tem o seu worker do PDF.js, com a prancha inteira na
+    // memória: o descartado e o anterior fecham, senão ficavam até recarregar
+    if (tok !== PROJ.token) { try { doc.destroy(); } catch (e) {} return; }
+    if (PROJ.doc && PROJ.doc !== doc) { try { PROJ.doc.destroy(); } catch (e) {} }
     PROJ.doc = doc; PROJ.url = PROJ.sel;
     desenharPrancha();
   }).catch(() => { if (tok === PROJ.token) box.innerHTML = prachaFalhou(PROJ.sel); });
@@ -10171,6 +10363,14 @@ async function pintarFotoGaleria(fileId) {
   } else {
     img2.dataset.pronta = '';                     // deixa tentar de novo ao rolar
     if (ph2) ph2.textContent = 'imagem indisponível';
+    /* "Tentar de novo ao rolar" não acontecia: o observador já tinha soltado
+       o quadro antes de pedir a foto. Volta a observá-lo — com um respiro,
+       senão o quadro à vista pediria a foto em laço no sinal ruim. */
+    const box = document.getElementById('galbox-' + fileId);
+    if (box && _galObs) {
+      const obs = _galObs;
+      setTimeout(() => { if (obs === _galObs && box.isConnected) obs.observe(box); }, 15000);
+    }
   }
   // Descobriu, na primeira foto, que o servidor ainda manda a imagem cheia:
   // mostra o aviso uma vez, sem redesenhar a galeria toda.
@@ -10210,11 +10410,17 @@ async function _gerarRelatorioFotografico() {
         ? fmtData(datas[0])
         : fmtData(datas[0]) + ' a ' + fmtData(datas[datas.length - 1]))
     : '—';
-  const mesRef = datas.length ? (() => {
-    const d = new Date(datas[0] + 'T12:00:00');
+  /* "Mensal" de UM mês só quando as fotos são de um mês só: com fotos de
+     agosto e setembro, a capa, o cabeçalho e o arquivo diziam "Agosto" —
+     e setembro entrava no relatório de agosto. */
+  const nomeMes = iso => {
+    const d = new Date(String(iso).slice(0, 7) + '-01T12:00:00');
     const s = d.toLocaleString('pt-BR', { month: 'long', year: 'numeric' });
     return s.charAt(0).toUpperCase() + s.slice(1);
-  })() : '';
+  };
+  const mesRef = !datas.length ? ''
+    : datas[0].slice(0, 7) === datas[datas.length - 1].slice(0, 7) ? nomeMes(datas[0])
+    : nomeMes(datas[0]) + ' a ' + nomeMes(datas[datas.length - 1]);
 
   toast(`Montando o relatório com ${fotos.length} foto(s)…`, 'info', 3000);
 
@@ -10307,7 +10513,8 @@ async function _gerarRelatorioFotografico() {
     naFolha = (naFolha + 1) % PORFOLHA;
   }
 
-  const nome = `relatorio-fotografico-${OBRA.id}-${(datas[0] || '').slice(0, 7) || 'periodo'}.pdf`;
+  const mesIni = (datas[0] || '').slice(0, 7), mesFim = (datas[datas.length - 1] || '').slice(0, 7);
+  const nome = `relatorio-fotografico-${OBRA.id}-${!mesIni ? 'periodo' : mesIni === mesFim ? mesIni : mesIni + '_a_' + mesFim}.pdf`;
   doc.save(nome);
   toast(`Relatório com ${fotos.length} foto(s) gerado.`, 'success', 4500);
 }
@@ -11129,13 +11336,22 @@ function calcCumulativoDia(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
 
   /* Em ordem de data: o teto só faz sentido sobre o acumulado do pacote,
      e um lançamento tardio não pode "descapar" um anterior. */
+  /* As MESMAS regras do calcularAvancoPorPacote, senão a Curva S, o ritmo e a
+     projeção terminam num número e o Painel mostra outro: o id do pacote é
+     casado sem caixa e sem espaço (" p01" é o P01), e quantidade negativa não
+     entra (lá ela é dado sujo, avisado; aqui ela derrubava a curva). */
+  const porChave = {};
+  Object.keys(info).forEach(id => { porChave[_chavePacote(id)] = id; });
   const lancamentos = [];
   rdosAtivos.forEach(r => {
     const d = parseISODate(getCSVField(r, 'Data'));
     if (!d) return;
-    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
-    if (!info[pid]) return;
-    lancamentos.push({ k: ymd(d), pid, qtd: num(getCSVField(r, 'Quantidade')) });
+    const pidCru = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    const pid = info[pidCru] ? pidCru : porChave[_chavePacote(pidCru)];
+    if (!pid || !info[pid]) return;
+    const qtd = num(getCSVField(r, 'Quantidade'));
+    if (qtd < 0) return;
+    lancamentos.push({ k: ymd(d), pid, qtd });
   });
   lancamentos.sort((a, b) => (a.k < b.k ? -1 : a.k > b.k ? 1 : 0));
 
@@ -11183,7 +11399,11 @@ function calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados, opts) {
   const diasUteis = opts.diasUteis != null ? opts.diasUteis : (STATE.execRitmo ? !!STATE.execRitmo.diasUteis : false);
 
   const { cum, sortedDays, total } = calcCumulativoDia(rdosAtivos, pacotesAtivos, totalDiasEstimados);
-  const today = new Date(); today.setHours(0,0,0,0);
+  /* `opts.hoje`: o dia em que a conta se põe. Com um mês escolhido no Painel
+     é o fim dele — "os últimos 30 dias", a velocidade e o término no ritmo
+     daquele momento. Ancorado sempre em hoje, um mês passado dava linha
+     parada, velocidade zero e "sem ritmo". */
+  const today = opts.hoje ? new Date(opts.hoje) : new Date(); today.setHours(0,0,0,0);
   const todayStr = ymd(today);
   const sparkPts = [];
   for (let i = 30; i >= 0; i--) {
@@ -11450,7 +11670,8 @@ Responda APENAS com a recomendação.`;
 
 window.refreshIA = function() {
   if (!STATE.dashData || !STATE.dashData.metrics) return;
-  const { metrics, fa, totalPac, iniciados, gap } = STATE.dashData;
+  const { fa, totalPac, iniciados, gap } = STATE.dashData;
+  const metrics = STATE.dashData.metricsAcum || STATE.dashData.metrics;
   carregarRecomendacaoIA(metrics, fa, totalPac, iniciados, gap || 0, true);
 };
 
@@ -11648,15 +11869,18 @@ function previsaoDoOpenMeteo(j) {
   }));
 }
 
-let _previsaoBuscando = null;
+let _previsaoBuscando = null, _previsaoBuscandoObra = '';
 async function previsaoBuscar() {
   const c = coordDaObra();
   if (!c) return null;
-  if (_previsaoBuscando) return _previsaoBuscando;
+  // a busca no ar só serve à MESMA obra: trocar de obra com ela em voo
+  // pintava no Ranário a previsão da Teotônio
+  if (_previsaoBuscando && _previsaoBuscandoObra === (OBRA && OBRA.id)) return _previsaoBuscando;
   const url = PREV_URL + '?latitude=' + c.lat + '&longitude=' + c.lon +
     '&daily=precipitation_sum,precipitation_probability_max,temperature_2m_max,temperature_2m_min,weather_code' +
     '&timezone=America%2FSao_Paulo&forecast_days=' + PREV_DIAS;
   const obraId = OBRA && OBRA.id;
+  _previsaoBuscandoObra = obraId;
   _previsaoBuscando = (async () => {
     const ctl = typeof AbortController === 'function' ? new AbortController() : null;
     const t = setTimeout(() => { if (ctl) ctl.abort(); }, 9000);
@@ -11673,7 +11897,7 @@ async function previsaoBuscar() {
       return null;              // sem sinal: fica a guardada, se houver
     } finally {
       clearTimeout(t);
-      _previsaoBuscando = null;
+      if (_previsaoBuscandoObra === obraId) { _previsaoBuscando = null; _previsaoBuscandoObra = ''; }
     }
   })();
   return _previsaoBuscando;
@@ -11742,7 +11966,7 @@ function previsaoPreencher() {
   const obraId = OBRA && OBRA.id;
   previsaoBuscar().then(o => {
     const alvo = document.getElementById('ccPrevisao');
-    if (!o || !alvo || (OBRA && OBRA.id) !== obraId) return;
+    if (!o || !alvo || (OBRA && OBRA.id) !== obraId || (o.obra && o.obra !== obraId)) return;
     alvo.innerHTML = previsaoHTML(o);
     alvo.hidden = !alvo.innerHTML.trim();
   });
@@ -11965,7 +12189,7 @@ function renderExecutivo() {
      data de referência, que é o que se compara com o cronograma. Sem filtro os
      dois são o mesmo objeto — nenhum cálculo a mais na tela de sempre. */
   const metricsAcum = STATE.filtros.mes
-    ? calcExecMetrics(rdosAcum, pacotesAtivos, totalDiasEstimados)
+    ? calcExecMetrics(rdosAcum, pacotesAtivos, totalDiasEstimados, { hoje: dataRef })
     : metrics;
   const fa      = calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados);
   const baseline = calcCurvaPrevista(pacotesAtivos, totalDiasEstimados);
@@ -11975,7 +12199,15 @@ function renderExecutivo() {
      meta de agosto. */
   const todayPlanned = pctAteDia(baseline.cum, baseline.sortedDays, ymd(dataRef));
   const gap = pctPondAcum - todayPlanned;
-  const narrativa = gerarNarrativaSemana(metrics, fa, totalPac, iniciados);
+  /* Com um mês escolhido, `metrics` enxerga só o mês, recomeçando do zero: a
+     linha dos 30 dias, a velocidade, o término, a leitura da semana, a IA e o
+     PDF vinham daí — o PDF saía com 3% enquanto a tela dizia 45%. Tudo o que
+     é "da obra até aquela data" lê o acumulado (`metricsAcum`, ancorado no fim
+     do mês). Sem filtro os dois são o mesmo objeto. */
+  const mH = metricsAcum;
+  // mês que já fechou: os rótulos dizem "até aquela data"; o corrente é "hoje"
+  const refPassada = !!STATE.filtros.mes && ymd(dataRef) !== ymd(hojeRef);
+  const narrativa = gerarNarrativaSemana(mH, fa, totalPac, iniciados);
   STATE.dashData.metrics = metrics;
   STATE.dashData.metricsAcum = metricsAcum;
   STATE.dashData.dataRef = dataRef;
@@ -12039,7 +12271,7 @@ function renderExecutivo() {
       <span class="hero-trama"></span>
       <div class="hero-main">
         <div>
-          <span class="hero-label">Avanço Ponderado · escopo em dias-equivalentes${STATE.filtros.mes ? ` · acumulado até ${escHtml(fmtData(dataRef))}` : ''}</span>
+          <span class="hero-label">${(() => { const b = baseDoAvanco(); return escHtml(b.rotulo + ' · ' + b.nota); })()}${STATE.filtros.mes ? ` · acumulado até ${escHtml(fmtData(dataRef))}` : ''}</span>
           <span class="hero-period">${periodoTag}${frenteTag ? ' · ' + frenteTag : ''}</span>
         </div>
         <div class="hero-value-row">
@@ -12079,7 +12311,7 @@ function renderExecutivo() {
           </div>
         </div>
         <div class="hero-spark">
-          <span class="hero-spark-label">Avanço acumulado · últimos 30 dias</span>
+          <span class="hero-spark-label">Avanço acumulado · ${refPassada ? '30 dias até ' + escHtml(fmtData(dataRef)) : 'últimos 30 dias'}</span>
           <canvas id="heroSpark" height="50"></canvas>
         </div>
       </div>
@@ -12099,13 +12331,13 @@ function renderExecutivo() {
         </div>
         <div class="hero-stats">
           <div>
-            <div class="hero-stat-num">${(metrics.velocity*100).toFixed(2).replace('.', ',')}<span class="small"> p.p./dia${metrics.diasUteis?' útil':''}</span></div>
-            <div class="hero-stat-lbl">${metrics.diasUteis ? `Velocidade · ${metrics.janela}d · por dia útil` : `Velocidade · média ${metrics.janela}d`}</div>
+            <div class="hero-stat-num">${(mH.velocity*100).toFixed(2).replace('.', ',')}<span class="small"> p.p./dia${mH.diasUteis?' útil':''}</span></div>
+            <div class="hero-stat-lbl">${mH.diasUteis ? `Velocidade · ${mH.janela}d · por dia útil` : `Velocidade · média ${mH.janela}d`}</div>
           </div>
           <div>
-            <div class="hero-stat-num" style="font-size:var(--fs-2xl)">${metrics.dataPrevista ? fmtData(metrics.dataPrevista) : '—'}</div>
-            <div class="hero-stat-lbl">Término no ritmo atual${metrics.daysToComplete!==null?` · ${metrics.daysToComplete} dia${metrics.daysToComplete>1?'s':''}`:''}</div>
-            ${metrics.diasVsPrazo!=null ? `<div class="hero-stat-prazo ${metrics.diasVsPrazo>0?'over':metrics.diasVsPrazo<0?'under':'on'}">${metrics.diasVsPrazo>0?`+${metrics.diasVsPrazo}d além do prazo`:metrics.diasVsPrazo<0?`${Math.abs(metrics.diasVsPrazo)}d de folga`:'no limite do prazo'}</div>` : ''}
+            <div class="hero-stat-num" style="font-size:var(--fs-2xl)">${mH.dataPrevista ? fmtData(mH.dataPrevista) : '—'}</div>
+            <div class="hero-stat-lbl">Término no ritmo ${refPassada ? 'de ' + escHtml(fmtData(dataRef)) : 'atual'}${mH.daysToComplete!==null?` · ${mH.daysToComplete} dia${mH.daysToComplete>1?'s':''}`:''}</div>
+            ${mH.diasVsPrazo!=null ? `<div class="hero-stat-prazo ${mH.diasVsPrazo>0?'over':mH.diasVsPrazo<0?'under':'on'}">${mH.diasVsPrazo>0?`+${mH.diasVsPrazo}d além do prazo`:mH.diasVsPrazo<0?`${Math.abs(mH.diasVsPrazo)}d de folga`:'no limite do prazo'}</div>` : ''}
           </div>
         </div>
       </div>
@@ -12306,7 +12538,8 @@ function _exportarRelatorioExecutivoPDF() {
     return;
   }
 
-  const metrics = data.metrics;
+  // o acumulado até a data de referência — o mesmo número da tela (ver renderExecutivo)
+  const metrics = data.metricsAcum || data.metrics;
   const fa = data.fa;
   const totalPac = data.totalPac || 0;
   const iniciados = data.iniciados || 0;
@@ -12740,7 +12973,8 @@ async function montarGraficos() {
 
   // Dispara recomendação IA (cacheada 6h) — independente do gráfico
   if (STATE.dashData.metrics) {
-    const { metrics, fa, totalPac, iniciados, gap } = STATE.dashData;
+    const { fa, totalPac, iniciados, gap } = STATE.dashData;
+    const metrics = STATE.dashData.metricsAcum || STATE.dashData.metrics;   // o acumulado (ver renderExecutivo)
     setTimeout(() => carregarRecomendacaoIA(metrics, fa, totalPac || 0, iniciados || 0, gap || 0, false), 200);
   }
 
@@ -12748,7 +12982,7 @@ async function montarGraficos() {
   const sparkEl = document.getElementById('heroSpark');
   if (sparkEl && STATE.dashData.metrics) {
     if (window.heroSparkChart) window.heroSparkChart.destroy();
-    const pts = STATE.dashData.metrics.sparkPts;
+    const pts = (STATE.dashData.metricsAcum || STATE.dashData.metrics).sparkPts;
     const labels = pts.map(p => p.date);
     const data = pts.map(p => +(p.value * 100).toFixed(3));
     window.heroSparkChart = new Chart(sparkEl, {
@@ -13882,6 +14116,10 @@ function salvarPlanDados() {
 window.atualizarPlan = function(pacoteId, campo, valor) {
   if (!PLAN_DADOS) loadPlanDados();
   if (!PLAN_DADOS[pacoteId]) PLAN_DADOS[pacoteId] = { prod: '', dataFim: '' };
+  /* Sem mudança, sem redesenho: o campo chama isto no blur e no Enter, e o
+     redesenho da tela inteira tirava o foco do campo seguinte que a pessoa
+     acabava de tocar — o cronograma "não deixava digitar". */
+  if (String(PLAN_DADOS[pacoteId][campo] == null ? '' : PLAN_DADOS[pacoteId][campo]) === String(valor == null ? '' : valor)) return;
   PLAN_DADOS[pacoteId][campo] = valor;
   salvarPlanDados();
   transitionTo(render);
@@ -14385,7 +14623,7 @@ window.exportarMedicaoCSV = function() {
         dec(x.saldo), x.pctContrato === null ? '' : dec(x.pctContrato * 100), x.estourou ? 'SIM' : '',
       ] : [])
       .concat([MEDICAO_MES || 'obra inteira', x.pacotes.join(' + ')])
-      .map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`);
+      .map(csvCel);
   });
   const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
@@ -14638,12 +14876,15 @@ function calcDiasImprodutivos(mes) {
   });
   // paradas de equipamento por chuva, do módulo js/equip
   const paradasChuva = {};
+  /* Só os campos de PARADA do apontamento: o JSON inteiro casava "chuva" na
+     observação "sem chuva hoje", no nome do operador, em qualquer lugar. */
   try {
     ((window.EQUIP && EQUIP.apontamentos) || []).forEach(a => {
       const k = String(normalizarDataCSV(a.data) || '').slice(0, 10);
       if (!k) return;
-      const txt = JSON.stringify(a).toLowerCase();
-      if (txt.includes('chuva')) paradasChuva[k] = (paradasChuva[k] || 0) + 1;
+      const txt = [a.paradas, a.situacao, a.status, a.motivo].filter(Boolean).join(' ').toLowerCase()
+        .replace(/sem chuva/g, '');
+      if (/chuva/.test(txt)) paradasChuva[k] = (paradasChuva[k] || 0) + 1;
     });
   } catch (e) {}
 
@@ -14805,10 +15046,13 @@ window.exportarImprodutivosCSV = function () {
     x.climas.join(' / '),
     x.paralisacoes.map(p => p.turno + ': ' + textoParalisacao(p)).join(' | '),
     x.horasParadas ? dec(Math.round(x.horasParadas * 10) / 10) : '',
-    x.paralisacoes.length ? (x.pleiteavel ? 'sim' : 'nao') : '',
-    x.servicos, x.paradasChuva,
+    // o MESMO critério do total "dias pleiteáveis" (antes a coluna dizia uma
+    // coisa e a soma no fim do arquivo, outra)
+    x.improdutivo ? ((x.pleiteavel || x.chuvaMm > 0 || x.climaChuvoso) ? 'sim' : 'nao') : '',
+    // sem a tela de Equipamentos aberta nesta sessão, não se sabe — vazio, não zero
+    x.servicos, (window.EQUIP && EQUIP.carregado) ? x.paradasChuva : '',
     x.improdutivo ? 'IMPRODUTIVO' : x.semRDO ? 'SEM RDO' : x.util ? 'produtivo' : 'nao util',
-  ].map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(';')));
+  ].map(csvCel).join(';')));
   linhas.push('');
   linhas.push(['TOTAIS'].join(';'));
   linhas.push(['Dias uteis', totais.diasUteis].join(';'));
@@ -15086,7 +15330,7 @@ window.exportarTeoricoRealCSV = function () {
   if (!linhas.length && !semTeorico.length) { toast('Nada a exportar neste período.', 'info'); return; }
   const dec = n => (n === null || n === undefined) ? ''
     : String((Math.round(n * 100) / 100).toFixed(2)).replace('.', ',');
-  const asp = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+  const asp = csvCel;
   const out = [['Codigo', 'Item_Planilha', 'Descricao_Item', 'Unid_Item', 'Material_Estoque', 'Unid_Material',
                 'Vinculo', 'Teorico', 'Real', 'Diferenca', 'Desvio_pct', 'Unidades_divergem', 'Periodo']
                .map(asp).join(';')];
@@ -15435,7 +15679,7 @@ window.exportarHistoricoCSV = function() {
     getCSVField(r,'Local_Estaca')||'',
     getCSVField(r,'Equipe')||getCSVField(r,'Subcontratado')||'',
     getCSVField(r,'Apontador')||''
-  ].map(v => `"${String(v).replace(/"/g,'""')}"`));
+  ].map(csvCel));
   const csv = [header.join(';'), ...rows.map(r => r.join(';'))].join('\r\n');
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -15656,7 +15900,8 @@ async function histCarregarFotosExistentes(idx, ponteiros) {
   
   const fileIds = ponteiros.map(p => fotoFileId(p)).filter(Boolean);
   const resultados = await Promise.all(fileIds.map(async (fileId) => {
-    const src = await baixarFotoServidor(fileId);
+    // miniatura (64 px na tela): a foto inteira aqui era 10× os bytes no 4G
+    const src = await baixarFotoServidor(fileId, true);
     return { fileId, src };
   }));
   
@@ -15819,8 +16064,12 @@ window.histDeletarServico = async function(idx) {
     render();
     toast('Lançamento apagado', 'success');
 
-    // Reconcilia com o servidor e detecta backend que insere em vez de apagar.
-    await verificarBackendNaoCriou(antes, 1, 'apagar');
+    /* Reconcilia com o servidor. O alarme de "backend que insere em vez de
+       apagar" (Code.gs antigo, sem deleteRDO) só vale quando o servidor NÃO
+       confirmou a exclusão: contar linhas antes/depois dava alarme falso a
+       cada serviço que outro apontador lançava nesses 4 segundos. */
+    if (result.deleted) setTimeout(() => carregarTudo({ fundo: true }), 4000);
+    else await verificarBackendNaoCriou(antes, 1, 'apagar');
   } catch(e) {
     toast('Falha ao apagar: ' + e.message, 'error', 6000);
   }
@@ -18519,9 +18768,13 @@ function paralisacoesDoDia(reg) {
 let DIARIO_V4 = null;
 let DIARIO_TURNO_ATIVO = null;
 
-function loadDiarioV4(data) {
+function chaveDiarioV4(data, obra) {
+  const base = 'teotonio_rdo_diario_v4_' + data;
+  return obra ? lsChaveDaObra(base, obra) : lsObra(base);
+}
+function loadDiarioV4(data, obra) {
   try {
-    const raw = localStorage.getItem(lsObra('teotonio_rdo_diario_v4_' + data));
+    const raw = localStorage.getItem(chaveDiarioV4(data, obra));
     if (raw) return normalizarDiarioV4(JSON.parse(raw));
   } catch(e) {}
   return null;
@@ -18539,7 +18792,7 @@ function normalizarDiarioV4(d) {
   return d;
 }
 
-function saveDiarioV4(d) {
+function saveDiarioV4(d, obra) {
   // a hora do rascunho decide, quando a fila subir o turno, se ele ainda
   // tem algo NOVO (editado depois de ir para a fila) ou se já subiu inteiro
   d._salvoEm = Date.now();
@@ -18549,11 +18802,11 @@ function saveDiarioV4(d) {
     if (!d._editados) d._editados = {};
     d._editados[DIARIO_TURNO_ATIVO] = true;
   }
-  try { localStorage.setItem(lsObra('teotonio_rdo_diario_v4_' + d.data), JSON.stringify(d)); } catch(e) {}
+  try { localStorage.setItem(chaveDiarioV4(d.data, obra), JSON.stringify(d)); } catch(e) {}
 }
 
-function clearDiarioV4(data) {
-  try { localStorage.removeItem(lsObra('teotonio_rdo_diario_v4_' + data)); } catch(e) {}
+function clearDiarioV4(data, obra) {
+  try { localStorage.removeItem(chaveDiarioV4(data, obra)); } catch(e) {}
 }
 
 function defaultDiarioV4(data) {
@@ -19099,12 +19352,16 @@ function diarioLocalAplicar(linhas) {
   });
   return out;
 }
-function diarioLocalGuardar(data, linha, modo) {
+function diarioLocalGuardar(data, linha, modo, obra) {
   if (!linha) return;
-  _DIARIO_LOCAL[OBRA.id + '|' + data] = { obra: OBRA.id, data, linha, em: Date.now(), modo: modo || '' };
+  /* A obra de QUEM GRAVOU, não a da tela: o turno que termina de subir
+     depois de uma troca de obra punha a linha dele por cima do mesmo dia da
+     obra nova — e o PDF oficial dela podia sair com o dia da outra. */
+  const ob = obra || OBRA.id;
+  _DIARIO_LOCAL[ob + '|' + data] = { obra: ob, data, linha, em: Date.now(), modo: modo || '' };
   // o dia unido já está no STATE (no lugar dele): aplicar agora compararia
   // com a própria linha e daria "o CSV alcançou" antes de o CSV ser relido
-  if (modo === 'uma-linha') return;
+  if (modo === 'uma-linha' || ob !== OBRA.id) return;
   STATE.rdodiario = diarioLocalAplicar(STATE.rdodiario);
 }
 
@@ -19142,10 +19399,12 @@ async function salvarParteV4(d, t, btn, original) {
     // longo) passava do limite da URL e dava um falso "sem internet"
     const result = await enviarAcao({ ...params, ...authParams() }, 0, 0);
     if (!result.ok) throw new Error(result.mensagem || result.error || 'Erro');
-    clearDiarioV4(d.data);
-    diarioLocalGuardar(d.data, result.linha);
+    // a obra da parte é a da hora do envio (ver salvarDiarioV4)
+    const obraEnvio = params.obra;
+    clearDiarioV4(d.data, obraEnvio);
+    diarioLocalGuardar(d.data, result.linha, '', obraEnvio);
     // a MESMA parte (turno e apontador) que esperava na fila é mais velha que esta
-    filaDescartarDiarioVencido(OBRA.id, d.data, p => {
+    filaDescartarDiarioVencido(obraEnvio, d.data, p => {
       try {
         const c = JSON.parse(p.contribuicao || 'null');
         return !!c && !c.remover && c.turno === t &&
@@ -19153,17 +19412,23 @@ async function salvarParteV4(d, t, btn, original) {
       } catch (e) { return false; }
     });
     toast(`Sua parte do ${t.toUpperCase()} foi somada ao RDO de ${fmtData(d.data)}`, 'success', 4000);
+    if (OBRA.id !== obraEnvio) {
+      // trocou de obra enquanto a parte subia: a tela é da outra, e fica como está
+      depositoDepoisDeGravar(obraEnvio, d.data, false);
+      return;
+    }
     DIARIO_V4 = carregarDiarioDaSheet(d.data) || defaultDiarioV4(d.data);
     DIARIO_TURNO_ATIVO = null;
     transitionTo(render);
     setTimeout(() => {
-      carregarTudo().then(() => depositarRDOPdf(d.data)).catch(() => {});
+      (OBRA.id === obraEnvio ? carregarTudo() : Promise.resolve())
+        .then(() => depositoDepoisDeGravar(obraEnvio, d.data, false)).catch(() => {});
     }, 1500);
   } catch (e) {
     btn.disabled = false;
     btn.innerHTML = original;
     if (ehErroDeRede(e)) {
-      saveDiarioV4(d);
+      saveDiarioV4(d, params.obra);
       const guardou = await outboxAdicionar({ kind: 'diario', params, rascunhoEm: d._salvoEm,
         descricao: `RDO Diário · parte de ${contribuicao.apontador} · ${t} · ${d.data}` });
       const avisoParte = toast(guardou
@@ -19182,9 +19447,10 @@ window.removerParteV4 = async function (t, chave) {
   const p = (partesDoDiaRDO(data)[t] || {})[chave];
   if (!p) return;
   if (!confirm(`Tirar a parte de ${p.apontador} do ${t.toUpperCase()} de ${fmtData(data)}?\n\nO efetivo, os equipamentos e as ocorrências dela saem da soma do dia.`)) return;
+  const obraEnvio = OBRA.id;
   try {
     const r = await jsonp(CONFIG.appsScript, {
-      action: 'updateRDODiario', obra: OBRA.id, data,
+      action: 'updateRDODiario', obra: obraEnvio, data,
       contribuicao: JSON.stringify({ turno: t, remover: true }), contribuicao_de: chave,
       ...authParams() }, 0, 0, null);
     if (!r || !r.ok) {
@@ -19193,9 +19459,12 @@ window.removerParteV4 = async function (t, chave) {
         : 'Não foi possível tirar a parte: ' + ((r && (r.mensagem || r.error)) || 'sem resposta'), 'error', 6000);
       return;
     }
-    diarioLocalGuardar(data, r.linha);
-    DIARIO_V4 = carregarDiarioDaSheet(data) || defaultDiarioV4(data);
+    diarioLocalGuardar(data, r.linha, '', obraEnvio);
     toast('Parte de ' + p.apontador + ' retirada do dia.', 'success', 4000);
+    // o dia mudou: o PDF guardado para o e-mail das 6h30 ainda trazia a parte
+    setTimeout(() => depositoDepoisDeGravar(obraEnvio, data, false).catch(() => {}), 1500);
+    if (OBRA.id !== obraEnvio) return;
+    DIARIO_V4 = carregarDiarioDaSheet(data) || defaultDiarioV4(data);
     transitionTo(render);
   } catch (e) {
     toast('Sem conexão: a parte continua no dia. Tente de novo com sinal.', 'error', 6000);
@@ -19927,6 +20196,10 @@ async function salvarDiarioV4() {
   const descricaoFila = `RDO Diário · turno ${t} · ${d.data}`;
   // o que for digitado DURANTE o envio não foi nele (ver o sucesso, abaixo)
   const salvoAntes = d._salvoEm;
+  /* A obra do turno é a da hora do Salvar: no 3G a resposta leva segundos, e
+     quem troca de obra nesse meio não pode ver o rascunho, a linha e o PDF
+     deste turno caírem na obra nova. */
+  const obraEnvio = params.obra;
 
   // NÃO confiamos no navigator.onLine: tentamos enviar de verdade e só caímos
   // na fila se a rede realmente falhar (no catch). Evita falso "sem internet".
@@ -19936,16 +20209,16 @@ async function salvarDiarioV4() {
     if (result && result.error === 'RDO_ASSINADO') {
       btn.disabled = false;
       btn.innerHTML = original;
-      return rdoAssinadoAoSalvar(d, result);
+      return rdoAssinadoAoSalvar(d, result, obraEnvio);
     }
     if (!result.ok) throw new Error(result.error || 'Erro');
     /* A linha como o servidor a gravou (com o número do RDO e a `revisao`)
        vale por cima do CSV até ele alcançá-la. O PDF oficial depositado logo
        abaixo sai DELA: antes saía do formulário, e o número só chegava com o
        CSV — o primeiro depósito ia com "RDO Nº —". */
-    if (result.linha) diarioLocalGuardar(d.data, result.linha);
+    if (result.linha) diarioLocalGuardar(d.data, result.linha, '', obraEnvio);
     // o que este aparelho deixou na fila do MESMO dia é mais velho que isto
-    filaDescartarDiarioVencido(OBRA.id, d.data, p =>
+    filaDescartarDiarioVencido(obraEnvio, d.data, p =>
       !p.contribuicao && ['diurno', 'noturno'].every(x => !String(p['apontador_' + x] || '').trim() || sobe[x]));
     const reaberto = result.reaberto || 0;
     delete d._reabrir;
@@ -19956,7 +20229,7 @@ async function salvarDiarioV4() {
     const mexeuNoMeio = (d._salvoEm || 0) !== (salvoAntes || 0);
     if (mexeuNoMeio) {
       d._editados = { [t]: true };
-      saveDiarioV4(d);
+      saveDiarioV4(d, obraEnvio);
       setTimeout(() => toast('Você mexeu no turno enquanto ele era salvo — essas mudanças ainda não subiram. Salve de novo.', 'info', 8000), 4200);
     } else {
       d._editados = {};
@@ -19964,7 +20237,7 @@ async function salvarDiarioV4() {
       // `clearDiarioV4` existia e nunca era chamada — o rascunho ficava para
       // sempre, e por isso "existe rascunho" não podia significar nada. Agora
       // significa: rascunho presente = trabalho que ainda NÃO subiu.
-      clearDiarioV4(d.data);
+      clearDiarioV4(d.data, obraEnvio);
     }
     toast(`Turno ${t.toUpperCase()} salvo` +
           (totalParalis ? ` · ${totalParalis} paralisação(ões) registrada(s)` : '') +
@@ -19974,10 +20247,11 @@ async function salvarDiarioV4() {
     if (reaberto) _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
     /* Recarrega e deposita o PDF do dia para o envio automático. Reaberto,
        manda o convite de novo — quem assinou recebe o link novo e assina o
-       que ficou. */
+       que ficou. Com a tela já em outra obra, a troca carregou a dela e o
+       PDF fica anotado (depositoDepoisDeGravar). */
     setTimeout(() => {
-      // (o envio para assinatura deposita antes de mandar)
-      carregarTudo().then(() => reaberto ? enviarRDOParaAssinatura(d.data, true) : depositarRDOPdf(d.data))
+      (OBRA.id === obraEnvio ? carregarTudo() : Promise.resolve())
+        .then(() => depositoDepoisDeGravar(obraEnvio, d.data, !!reaberto))
         .catch(() => {});
     }, 1500);
     btn.disabled = false;
@@ -19987,7 +20261,7 @@ async function salvarDiarioV4() {
     btn.innerHTML = original;
     if (ehErroDeRede(e)) {
       // Mesmo cuidado do Lançar Serviço: só avisa "guardado" se guardou mesmo.
-      saveDiarioV4(d);    // o rascunho fica (é o que a tela mostra), carimbado agora
+      saveDiarioV4(d, obraEnvio);    // o rascunho fica (é o que a tela mostra), carimbado agora
       const guardou = await outboxAdicionar({ kind: 'diario', params: params, descricao: descricaoFila,
                                               rascunhoEm: d._salvoEm });
       if (guardou) {
@@ -20006,10 +20280,11 @@ async function salvarDiarioV4() {
    upsertRDODiario). O escritório pode reabrir — as firmas dadas são
    canceladas e o convite sai de novo; o apontador não, e o que ele digitou
    fica guardado no aparelho. */
-function rdoAssinadoAoSalvar(d, r) {
-  saveDiarioV4(d);
+function rdoAssinadoAoSalvar(d, r, obraEnvio) {
+  saveDiarioV4(d, obraEnvio);
   const msg = (r && r.mensagem) || 'O RDO deste dia já foi assinado.';
-  if (!podeEnviarRDOParaAssinatura()) {
+  // a tela já é de outra obra: reabrir dali gravaria o turno com a obra nova
+  if (!podeEnviarRDOParaAssinatura() || (obraEnvio && obraEnvio !== OBRA.id)) {
     toast(msg + ' O que você digitou ficou guardado neste aparelho — peça ao escritório para reabrir.', 'error', 0);
     return;
   }
@@ -20895,6 +21170,79 @@ async function depositarRDOPdf(data, pacotePronto) {
     _DEPOSITO_FALHA = (e && e.message) ? e.message : 'falha de rede';
     return false;   // silêncio proposital: ver o comentário acima
   }
+}
+
+/* O PDF DO DIA DEPOIS DE UMA GRAVAÇÃO — da obra EM QUE se gravou.
+   A tela pode estar em outra obra quando o turno termina de subir: a fila
+   sobe sozinha em qualquer tela, e o 3G do canteiro leva segundos, que dão
+   tempo de trocar. Desenhado agora, o PDF sairia com o cadastro e as linhas
+   da obra da tela; não desenhado, o e-mail das 6h30 levava o depósito velho
+   (ou nenhum). Fica ANOTADO no aparelho e sai quando aquela obra volta a ser
+   a da tela (`depositosPendentesRodar`, depois de cada carga boa). */
+const DEPOSITOS_PENDENTES_KEY = 'teotonio_rdo_depositos_pendentes';
+const DEPOSITO_PENDENTE_VALE_MS = 15 * 24 * 3600 * 1000;
+function depositosPendentesLer() {
+  try {
+    const l = JSON.parse(localStorage.getItem(DEPOSITOS_PENDENTES_KEY) || '[]');
+    return Array.isArray(l) ? l.filter(x => x && x.obra && x.data) : [];
+  } catch (e) { return []; }
+}
+function depositosPendentesGravar(l) {
+  try {
+    if (l.length) localStorage.setItem(DEPOSITOS_PENDENTES_KEY, JSON.stringify(l.slice(-40)));
+    else localStorage.removeItem(DEPOSITOS_PENDENTES_KEY);
+  } catch (e) {}
+}
+function depositoPendenteAnotar(obra, data, reaberto, tentativas) {
+  const l = depositosPendentesLer();
+  const ja = l.find(x => x.obra === obra && x.data === data);
+  if (ja) { ja.reaberto = !!(ja.reaberto || reaberto); ja.em = Date.now(); }
+  else l.push({ obra, data, reaberto: !!reaberto, em: Date.now(), tentativas: tentativas || 0 });
+  depositosPendentesGravar(l);
+}
+function depositoDepoisDeGravar(obra, data, reaberto) {
+  if (OBRAS_COM_RDO_POR_EMAIL.indexOf(obra) === -1) return Promise.resolve(false);
+  if (obra !== OBRA.id) { depositoPendenteAnotar(obra, data, reaberto); return Promise.resolve(false); }
+  // (o envio para assinatura deposita antes de mandar)
+  return reaberto ? enviarRDOParaAssinatura(data, true) : depositarRDOPdf(data);
+}
+let _depositandoPendentes = false;
+async function depositosPendentesRodar() {
+  if (_depositandoPendentes || !tokenSessao()) return 0;
+  // com formulário aberto espera a próxima carga, como a varredura
+  if (TELAS_DE_FORMULARIO.includes(STATE.currentPage)) return 0;
+  const obra = OBRA.id;
+  const todos = depositosPendentesLer();
+  const meus = todos.filter(x => x.obra === obra);
+  if (!meus.length) return 0;
+  const vale = Date.now() - DEPOSITO_PENDENTE_VALE_MS;
+  // sai da lista ANTES de tentar: duas cargas seguidas não desenham o mesmo dia
+  depositosPendentesGravar(todos.filter(x => x.obra !== obra && (x.em || 0) > vale));
+  _depositandoPendentes = true;
+  let feitos = 0;
+  try {
+    for (const p of meus) {
+      if ((p.em || 0) <= vale) continue;
+      if (OBRA.id !== obra) { depositoPendenteAnotar(p.obra, p.data, p.reaberto, p.tentativas); continue; }
+      let ok = false;
+      try {
+        if (p.reaberto) { await enviarRDOParaAssinatura(p.data, true); ok = true; }
+        else ok = await depositarRDOPdf(p.data);
+      } catch (e) { ok = false; }
+      if (ok) feitos++;
+      else if ((p.tentativas || 0) < 2) depositoPendenteAnotar(p.obra, p.data, false, (p.tentativas || 0) + 1);
+    }
+  } finally { _depositandoPendentes = false; }
+  return feitos;
+}
+
+/* Manutenção de fundo depois de uma carga boa: primeiro o PDF que ficou
+   devendo, depois os dias assinados cujo depósito ficou para trás. UM DE
+   CADA VEZ — dois PDFs desenhados juntos no celular simples eram a tela
+   travando. */
+async function manutencaoDosPdfs() {
+  try { await depositosPendentesRodar(); } catch (e) {}
+  return varrerRDOsAssinados();
 }
 
 /* ====================================================================
@@ -22376,6 +22724,8 @@ document.addEventListener('DOMContentLoaded', () => {
   render();
   carregarTudo();
   carregarUsuariosNomes();
+  // longe do boot: aparar o guarda de fotos é manutenção, não pressa
+  setTimeout(() => { fotosAparar(); }, 60000);
 
   // Auto-refresh a cada 5min — em modo "fundo": silencioso e sem re-render
   // por cima de formulário aberto ou campo focado.

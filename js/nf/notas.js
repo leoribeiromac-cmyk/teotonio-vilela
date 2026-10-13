@@ -701,8 +701,8 @@ function nfPrecoExtremos(mat) {
   return { barato: ord[0], caro: ord[ord.length - 1] };
 }
 
-function nfSugerirMaterial(desc, obraId) {
-  return nfMateriais(obraId)
+function nfSugerirMaterial(desc, obraId, catalogo) {
+  return (catalogo || nfMateriais(obraId))
     .map(m => ({ material: m, score: nfSim(desc, m.descricao) }))
     .filter(x => x.score >= 0.62)
     .sort((a, b) => b.score - a.score)
@@ -1082,6 +1082,95 @@ let _nfModoSimples = true; // formulario enxuto: so o essencial para digitar
 let _nfFull = '';          // folha 1 em resolucao cheia da nota em conferencia
 let _nfPags = [];          // folhas 2..N, na ordem (data-uris em resolucao cheia)
 
+/* A NOTA EM CONFERENCIA NAO MORRE COM A ABA. A conferencia e longa (itens,
+   valores, a imagem que a IA leu) e e feita no celular — que descarta a aba
+   quando a pessoa vai ao WhatsApp conferir com o fornecedor. O formulario e
+   guardado FORA da pagina (o mesmo rascunho do RDO e do Bota-Fora:
+   rascunhoGravar, no index.html) e a tela de Notas oferece retomar.
+   "Cancelar" e o descarte de proposito; fechar por fora (Voltar, toque fora
+   da janela) guarda — e a tela oferece de novo. */
+const NF_RASC_VALE = 3 * 24 * 3600 * 1000;
+let _nfRascRelogio = 0;
+function nfRascChave(obraId) { return 'nf-conferencia:' + obraId; }
+function nfRascGuardar(agora) {
+  if (typeof rascunhoGravar !== 'function' || !_nfRascunho) return;
+  clearTimeout(_nfRascRelogio);
+  const gravar = () => {
+    const n = _nfRascunho;
+    if (!n) return;
+    try { nfColetarForm(n); } catch (e) { /* formulario ja fechado: fica o que tinha */ }
+    // a chave e a obra DA NOTA: trocar de obra com ela aberta nao a muda de lugar
+    const obraId = n.obraId || ((obra() || {}).id);
+    if (!obraId) return;
+    /* So guarda o que tem TRABALHO: a nota lancada aberta so para olhar, ou
+       a nova fechada sem nada preenchido, nao viram "nota nao salva". */
+    const semImagemNova = !_nfFull && !(_nfPags || []).length;
+    const salvo = nfPorId(obraId, n.id);
+    const nada = salvo
+      ? semImagemNova && nfRascRelevante(n) === nfRascRelevante(salvo)
+      : semImagemNova && !n.numero && !n.chave && !n.cnpj && !n.razaoSocial && !nfNum(n.vTotal) &&
+        !(n.itens || []).length && !n.obs;
+    if (nada) { rascunhoApagar(nfRascChave(obraId)); return; }
+    rascunhoGravar(nfRascChave(obraId), { nota: n, full: _nfFull || '', pags: _nfPags || [],
+                                          simples: !!_nfModoSimples });
+  };
+  if (agora) gravar(); else _nfRascRelogio = setTimeout(gravar, 600);
+}
+function nfRascRelevante(n) {
+  return JSON.stringify([n.numero, n.serie, n.chave, n.dataEmissao, n.dataEntrada, n.cnpj, n.razaoSocial,
+    n.nomeFantasia, n.municipio, n.uf, nfNum(n.vProd), nfNum(n.vFrete), nfNum(n.vTotal), nfNum(n.vBaseICMS),
+    nfNum(n.vICMS), n.status, n.responsavel, n.obs,
+    (n.itens || []).map(i => [i.descricao, nfNum(i.qtd), i.un, nfNum(i.vUnit), nfNum(i.vTotal), i.materialId || ''])]);
+}
+function nfRascApagar(obraId) {
+  clearTimeout(_nfRascRelogio);
+  const id = obraId || (_nfRascunho && _nfRascunho.obraId) || ((obra() || {}).id);
+  if (id && typeof rascunhoApagar === 'function') rascunhoApagar(nfRascChave(id));
+}
+function nfCancelarConferencia() {
+  nfRascApagar();
+  _nfRascunho = null; _nfFull = ''; _nfPags = [];
+  fecharModal();
+}
+/* A tela de Notas pergunta se ha conferencia guardada (o rascunho mora no
+   IndexedDB: a resposta chega depois do desenho, num lugar reservado). */
+async function nfRascOferecer() {
+  const box = el('nfRascAviso');
+  const o = obra();
+  if (!box || !o || typeof rascunhoLer !== 'function') return;
+  // a conferencia ainda esta aberta (ou acabou de fechar): e ela mesma
+  if (_nfRascunho && _nfRascunho.obraId === o.id) { box.innerHTML = ''; return; }
+  const reg = await rascunhoLer(nfRascChave(o.id), NF_RASC_VALE);
+  const n = reg && reg.dados && reg.dados.nota;
+  if (!n || el('nfRascAviso') !== box) { box.innerHTML = ''; return; }
+  const quem = [n.numero ? 'nº ' + n.numero : '', n.razaoSocial || ''].filter(Boolean).join(' · ') || 'sem número ainda';
+  const quando = new Date(reg.em || Date.now()).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  box.innerHTML = `<div class="card" style="box-shadow:none;margin-bottom:14px;border-color:var(--ylw);background:var(--ylw-l)">
+    <div class="card-b" style="padding:12px 15px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <span style="flex:1;min-width:200px">${ic('rascunho')} Há uma nota em conferência que não foi salva
+        (<b>${esc(quem)}</b>, de ${esc(quando)}).</span>
+      <button class="btn btn-sm btn-primary" onclick="nfRascRetomar()">Continuar a nota</button>
+      <button class="btn btn-sm btn-ghost" onclick="nfRascDescartar()">Descartar</button></div></div>`;
+}
+async function nfRascRetomar() {
+  const o = obra(); if (!o) return;
+  const reg = await rascunhoLer(nfRascChave(o.id), NF_RASC_VALE);
+  const d = reg && reg.dados;
+  if (!d || !d.nota) { toast('A nota guardada não está mais neste aparelho'); render(); return; }
+  _nfRascunho = d.nota; _nfFull = d.full || ''; _nfPags = Array.isArray(d.pags) ? d.pags : [];
+  _nfModoSimples = d.simples !== false;
+  if (reg.semImagens) toast('A imagem da nota não coube no aparelho — anexe a foto de novo antes de salvar.', 'info', 7000);
+  nfConferir();
+}
+function nfRascDescartar() {
+  if (!confirm('Descartar a nota que estava em conferência? O que foi preenchido nela se perde.')) return;
+  const o = obra(); if (o) nfRascApagar(o.id);
+  const box = el('nfRascAviso'); if (box) box.innerHTML = '';
+}
+// saindo da frente (camera, outro app): grava agora, sem esperar a digitacao
+window.addEventListener('pagehide', () => nfRascGuardar(true));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState !== 'visible') nfRascGuardar(true); });
+
 function nfNovaVazia(obraId) {
   return {
     id: 'nf' + uid(), clientId: 'nf' + uid(), obraId: obraId,
@@ -1151,7 +1240,9 @@ function nfCanvasJpeg(canvas, maxLado, q) {
   const x = c.getContext('2d');
   x.imageSmoothingQuality = 'high';
   x.drawImage(canvas, 0, 0, c.width, c.height);
-  return c.toDataURL('image/jpeg', q);
+  const uri = c.toDataURL('image/jpeg', q);
+  c.width = 0; c.height = 0;   // devolve a memoria ja (o iPhone tem teto de canvas)
+  return uri;
 }
 /* Reduz uma imagem que ja esta em data-uri. Fica AQUI, e nao no app que
    hospeda o modulo: o arquivo tem de rodar igual nos dois lados. */
@@ -1257,20 +1348,34 @@ async function nfAbrirPDF(file) {
   const doc = await window.pdfjsLib.getDocument({ data: buf, isEvalSupported: false }).promise;
   out.doc = doc;
   out.paginas = doc.numPages;
-  // a DANFE cabe em poucas folhas; ler tudo de uma nota de 40 páginas é desperdício
-  const lim = Math.min(doc.numPages, 4);
-  for (let i = 1; i <= lim; i++) {
-    const pg = await doc.getPage(i);
-    const tc = await pg.getTextContent();
-    out.texto += tc.items.map(it => it.str).join(' ') + '\n';
-  }
+  try {
+    // a DANFE cabe em poucas folhas; ler tudo de uma nota de 40 páginas é desperdício
+    const lim = Math.min(doc.numPages, 4);
+    for (let i = 1; i <= lim; i++) {
+      const pg = await doc.getPage(i);
+      const tc = await pg.getTextContent();
+      out.texto += tc.items.map(it => it.str).join(' ') + '\n';
+    }
+  } catch (e) { nfPDFFechar(doc); throw e; }
   out.texto = out.texto.replace(/[ \t]+/g, ' ').trim();
   return out;
+}
+
+/* Cada PDF aberto tem o SEU worker do PDF.js (uma thread com o arquivo
+   inteiro na memoria). Nada o fechava: cada nota em PDF deixava um para
+   tras ate recarregar o app. Quem acaba de usar o documento o fecha. */
+function nfPDFFechar(doc) {
+  try { if (doc && typeof doc.destroy === 'function') doc.destroy(); } catch (e) { /* ja fechado */ }
 }
 
 async function nfPDFImagens(doc, comCopiaIA) {
   const out = { thumb: '', full: '', paraIA: '', extras: [] };
   if (!doc) return out;
+  // as folhas sao o ultimo uso do documento: virou imagem, ele fecha
+  try { return await nfPDFImagens_(doc, comCopiaIA, out); }
+  finally { nfPDFFechar(doc); }
+}
+async function nfPDFImagens_(doc, comCopiaIA, out) {
   /* TODAS as folhas viram imagem, nao so a primeira. Antes o PDF de duas
      paginas era lido inteiro (o texto), mas so a folha 1 era guardada: a
      comprovacao da nota ficava pela metade e ninguem era avisado disso.
@@ -1288,16 +1393,21 @@ async function nfPDFImagens(doc, comCopiaIA) {
     await pg.render({ canvasContext: cx, viewport: vp }).promise;
     return c;
   };
+  const zerar = c => { if (c) { c.width = 0; c.height = 0; } };
   const c1 = await paraJpeg(1);
   out.full = nfCanvasJpeg(c1, NF_MAX_LADO, .85);
   out.thumb = nfCanvasJpeg(c1, 320, .6);
   // PDF digitalizado (sem texto) tambem sobe para a IA: vale a copia leve.
   // O que tem texto nao sobe imagem nenhuma, e ai nem se gasta a codificacao.
   if (comCopiaIA) out.paraIA = nfCanvasJpeg(c1, NF_MAX_LADO, NF_IA_Q);
+  zerar(c1);
   const ate = Math.min(doc.numPages, NF_MAX_PAGINAS);
   for (let i = 2; i <= ate; i++) {
-    try { out.extras.push(nfCanvasJpeg(await paraJpeg(i), NF_MAX_LADO, .85)); }
-    catch (e) { break; }   // uma folha ilegivel nao pode derrubar a nota toda
+    try {
+      const ci = await paraJpeg(i);
+      out.extras.push(nfCanvasJpeg(ci, NF_MAX_LADO, .85));
+      zerar(ci);
+    } catch (e) { break; }   // uma folha ilegivel nao pode derrubar a nota toda
   }
   return out;
 }
@@ -1351,7 +1461,7 @@ async function nfArquivoSelecionado(inp) {
     let aberto;
     try { aberto = await nfAbrirPDF(f); }
     catch (e) { if (vale()) { toast('Não consegui abrir esse PDF'); nfAbrirNova(); } return; }
-    if (!vale()) return;
+    if (!vale()) { nfPDFFechar(aberto.doc); return; }
     textoPDF = aberto.texto; totalPDF = aberto.paginas || 1;
     const quantas = Math.min(totalPDF, NF_MAX_PAGINAS);
     const virarImagens = nfPDFImagens(aberto.doc, aberto.texto.length <= 200).then(im => {
@@ -1559,9 +1669,11 @@ function nfAutoVincular(obraId, nota) {
     if (!nota.municipio) nota.municipio = forn.municipio;
     if (!nota.uf) nota.uf = forn.uf;
   }
+  let catalogo = null;   // uma vez para a nota inteira (ver nfRenderItens)
   (nota.itens || []).forEach(it => {
     if (!it.materialId) {
-      const s = nfSugerirMaterial(it.descricao, obraId);
+      if (!catalogo) catalogo = nfMateriais(obraId);
+      const s = nfSugerirMaterial(it.descricao, obraId, catalogo);
       if (s.length && s[0].score >= 0.85 && (s.length === 1 || s[0].score - s[1].score > 0.12)) it.materialId = s[0].material.id;
     }
   });
@@ -1785,12 +1897,22 @@ function nfConferir() {
     </div>
 
     <div style="display:flex;gap:9px">
-      <button class="btn" style="flex:1;justify-content:center" onclick="fecharModal()">Cancelar</button>
+      <button class="btn" style="flex:1;justify-content:center" onclick="nfCancelarConferencia()">Cancelar</button>
       <button class="btn btn-primary" style="flex:2;justify-content:center" onclick="nfSalvarForm()">Salvar nota</button></div>
     ${(n.historico || []).length ? `<button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;margin-top:10px" onclick="nfVerHistorico(${nfJs(n.id)})">${ic('relogio')} Histórico de alterações (${n.historico.length})</button>` : ''}
   `, 680);
   nfRenderItens();
   nfCnpjNoForm();
+  /* Cada tecla vai para o rascunho fora da pagina (nfRascGuardar). O
+     formulario entra na nota NA HORA — so a gravacao espera: fechada a janela
+     antes dela (Voltar, toque fora), o que estava so na tela ja tinha ido. */
+  const janela = document.getElementById('modalRDO');
+  if (janela) {
+    const mexeu = () => { try { nfColetarForm(_nfRascunho); } catch (e) { } nfRascGuardar(); };
+    janela.addEventListener('input', mexeu);
+    janela.addEventListener('change', mexeu);
+  }
+  nfRascGuardar(true);
 }
 
 /* alterna entre o formulário enxuto e o completo, sem recarregar nada:
@@ -1827,9 +1949,14 @@ function nfRenderItens() {
   if (!itens.length) {
     box.innerHTML = `<div class="kpi-s" style="padding:8px 2px 12px">Nenhum item ainda. Use <b>+ Item</b> para lançar o que veio na nota — não é obrigatório para salvar.</div>`;
   } else {
+    /* O catalogo sai de TODAS as notas da obra: montado uma vez por desenho,
+       nao uma (ou duas) por item — nota de 40 itens numa obra com centenas de
+       notas travava a tela a cada item acrescentado. */
+    const catalogo = nfMateriais(o.id);
+    const porId = new Map(catalogo.map(m => [m.id, m]));
     box.innerHTML = itens.map((it, i) => {
-      const sugM = it.materialId ? [] : nfSugerirMaterial(it.descricao, o.id);
-      const mat = it.materialId ? nfMateriais(o.id).find(m => m.id === it.materialId) : null;
+      const sugM = it.materialId ? [] : nfSugerirMaterial(it.descricao, o.id, catalogo);
+      const mat = it.materialId ? (porId.get(it.materialId) || null) : null;
       return `<div class="nf-item">
         <div class="row" style="gap:7px;margin-bottom:6px">
           <div class="field" style="margin:0;flex:3;min-width:150px"><input value="${esc(it.descricao)}" placeholder="Item (descrição do material)" oninput="nfItemCampo(${i},'descricao',this.value)"></div>
@@ -1846,6 +1973,7 @@ function nfRenderItens() {
   const t = (itens).reduce((a, it) => a + nfNum(it.vTotal), 0);
   const tt = el('nfItensTot');
   if (tt) tt.innerHTML = itens.length ? `Soma dos itens: <b class="mono">${fmtBRL(t)}</b>` : '';
+  nfRascGuardar();   // item acrescentado, tirado ou vinculado
 }
 function nfItemCampo(i, campo, valor) {
   const it = (_nfRascunho.itens || [])[i]; if (!it) return;
@@ -2036,6 +2164,7 @@ function nfSalvarForm() {
   nfSubirFolhas(o, n, _nfFull, _nfPags.slice(), primeiraNova);
   nfEnfileirar(o.id, n);
 
+  nfRascApagar(o.id);   // gravada: a conferencia guardada cumpriu o papel
   _nfRascunho = null; _nfFull = ''; _nfPags = [];
   fecharModal(); toast(msg);
   if (estado.tela === 'notas') render();
@@ -2181,6 +2310,7 @@ function nfAbrirDuplicada(id) {
   const o = obra(); if (!o) return;
   if (!nfPorId(o.id, id)) { toast('A nota já lançada não está mais neste aparelho'); return; }
   if (!confirm('Abrir a nota que já está lançada? O que você preencheu aqui será descartado.')) return;
+  nfRascApagar(o.id);
   _nfRascunho = null; _nfFull = ''; _nfPags = [];
   nfEditar(id);
 }
@@ -2192,6 +2322,8 @@ function nfExcluir(id) {
   nfDesfazerEstoque(o.id, id);
   nfSet(o.id, nfGet(o.id).filter(x => x.id !== id));
   nfEnfileirarExcluir(o.id, id);
+  // excluida a nota que estava em conferencia, o rascunho dela vai junto
+  if (_nfRascunho && _nfRascunho.id === id) { nfRascApagar(o.id); _nfRascunho = null; _nfFull = ''; _nfPags = []; }
   fecharModal(); toast('Nota excluída'); render();
 }
 function nfMudarStatus(id, st) {
@@ -2326,7 +2458,8 @@ function viewNotas(o) {
      onde a leitura falha e a pergunta nasce. */
   const topo = `<div class="row nf-topo" style="align-items:center;margin-bottom:16px;gap:9px">
     <div class="btn-toggle-group nf-abas" role="tablist">${abas.map(a => `<button class="btn-toggle ${tab === a[0] ? 'active' : ''}" role="tab" aria-selected="${tab === a[0]}" onclick="nfTab('${a[0]}')">${ic(a[1])} ${a[2]}</button>`).join('')}</div>
-    ${pode('lancarNota')?`<button class="btn btn-primary nf-nova" style="margin-left:auto" onclick="nfAbrirNova()">${ic('camera')} Nova nota fiscal</button>`:''}</div>`;
+    ${pode('lancarNota')?`<button class="btn btn-primary nf-nova" style="margin-left:auto" onclick="nfAbrirNova()">${ic('camera')} Nova nota fiscal</button>`:''}</div>
+    <div id="nfRascAviso"></div>`;
   const corpo = tab === 'estoque' ? nfViewEstoque(o)
     : tab === 'precos' ? nfViewPrecos(o)
     : tab === 'painel' ? nfViewPainel(o)
@@ -2742,8 +2875,20 @@ function nfMais() { estado.nfLimite = (estado.nfLimite || NF_PAGINA) + NF_PAGINA
 /* CSV separado por `;` é o do Excel em pt-BR, e ali o decimal é VÍRGULA:
    "1234.50" vira texto (ou 123450) na planilha do escritório. Todo número
    que sai daqui passa por `.replace('.', ',')`. */
+/* Duas guardas na celula:
+   - `{ texto: '…' }` sai como ="…" — a chave de acesso (44 digitos) aberta
+     no Excel virava 3,51E+43, e os ultimos digitos se perdiam;
+   - texto que comeca com = + - @ e FORMULA para o Excel: o fornecedor lido
+     pela IA (ou digitado) rodaria no computador do escritorio. Ganha um
+     apostrofo na frente; numero negativo ("-12,50") continua numero. */
+function nfCSVcel(v) {
+  if (v && typeof v === 'object' && 'texto' in v) return '="' + String(v.texto).replace(/"/g, '') + '"';
+  let t = String(v == null ? '' : v);
+  if (/^[=+\-@\t\r]/.test(t) && !/^-?[\d.,]+%?$/.test(t)) t = "'" + t;
+  return t;
+}
 function nfCSVbaixar(nome, cab, linhas) {
-  const esc2 = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const esc2 = v => '"' + nfCSVcel(v).replace(/"/g, '""') + '"';
   const csv = '﻿' + cab.map(esc2).join(';') + '\n' + linhas.map(l => l.map(esc2).join(';')).join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -2755,7 +2900,7 @@ function nfExportarCSV() {
   const o = obra();
   const fs = nfFiltrar(o);
   const cab = ['Numero', 'Serie', 'Chave', 'Emissao', 'Recebimento', 'CNPJ', 'Fornecedor', 'Municipio', 'UF', 'Produtos', 'Frete', 'Total', 'BaseICMS', 'ICMS', 'Status', 'Responsavel', 'Itens'];
-  const linhas = fs.map(n => [n.numero, n.serie, n.chave, n.dataEmissao, n.dataEntrada, nfCNPJfmt(n.cnpj), n.razaoSocial,
+  const linhas = fs.map(n => [n.numero, n.serie, n.chave ? { texto: n.chave } : '', n.dataEmissao, n.dataEntrada, nfCNPJfmt(n.cnpj), n.razaoSocial,
     n.municipio, n.uf, nfNum(n.vProd).toFixed(2).replace('.', ','), nfNum(n.vFrete).toFixed(2).replace('.', ','), nfNum(n.vTotal).toFixed(2).replace('.', ','),
     nfNum(n.vBaseICMS).toFixed(2).replace('.', ','), nfNum(n.vICMS).toFixed(2).replace('.', ','), n.status, n.responsavel,
     (n.itens || []).map(i => `${i.descricao} (${fmtQtd(i.qtd)} ${i.un})`).join(' | ')]);
@@ -3835,6 +3980,16 @@ function nfPodeRedesenhar(opcoes) {
   return !(a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName));
 }
 
+/* O que a tela mostra de cada nota (e das saidas): mudou, redesenha. */
+function nfAssinaturaLista(obraId) {
+  return JSON.stringify([
+    nfGet(obraId).map(n => [n.id, n.status, n.atualizadoEm || 0, n.numero, n.vTotal, n.razaoSocial,
+                            (n.itens || []).length, !!(n.drive && n.drive.fileId), (n.paginas || []).length,
+                            !!n.imgPendente, !!n.pagsPendentes]),
+    nfSaiGet(obraId).map(x => [x.id, x.qtd, x.dataISO])
+  ]);
+}
+
 async function nfCarregar(obraId, opcoes) {
   if (!BACKEND || isDemo() || !obraId) return;
   if (_nfCarregando[obraId]) return;
@@ -3843,7 +3998,7 @@ async function nfCarregar(obraId, opcoes) {
     return;
   }
   _nfCarregando[obraId] = true;
-  const antes = JSON.stringify(nfGet(obraId).map(n => [n.id, n.status, n.atualizadoEm || 0]));
+  const antes = nfAssinaturaLista(obraId);
   try {
     const r = await postAcao({ action: 'nfListar', obra: obraId });
     if (r && r.ok && Array.isArray(r.notas)) {
@@ -3891,7 +4046,7 @@ async function nfCarregar(obraId, opcoes) {
        A condicao antiga comparava `estado.obraId`, que nem existia neste
        app: dava sempre falso, a nota nova era gravada no aparelho e a tela
        so mostrava depois de sair e voltar. */
-    const depois = JSON.stringify(nfGet(obraId).map(n => [n.id, n.status, n.atualizadoEm || 0]));
+    const depois = nfAssinaturaLista(obraId);
     if (estado.tela === 'notas' && (depois !== antes || !(opcoes && opcoes.fundo)) && nfPodeRedesenhar(opcoes)) render();
   } catch (e) {
     // offline: fica com o que ja esta no aparelho, mas a tela passa a dizer isso
@@ -3941,7 +4096,11 @@ function nfDoServidor(s, obraId, locais) {
     thumb: (local && local.thumb) || '',
     leitura: leitura, leituraConf: (local && local.leituraConf) || {},
     historico: hist, usuario: s.usuario || '',
-    criadoEm: nfNum(s.criadoEm) || Date.now(), atualizadoEm: Date.now()
+    /* A hora da ULTIMA GRAVACAO, do servidor — nao a desta leitura. Com
+       Date.now() aqui toda sincronizacao parecia mudar a lista inteira, e a
+       tela era redesenhada a cada minuto debaixo de quem estava nela. */
+    criadoEm: nfNum(s.criadoEm) || Date.now(),
+    atualizadoEm: nfNum(s.atualizadoEm) || (local && local.atualizadoEm) || nfNum(s.criadoEm) || Date.now()
   };
 }
 
