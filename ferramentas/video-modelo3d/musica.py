@@ -478,7 +478,7 @@ mix = compressor(mix, limiar=-20, razao=2.2)
 # fades antes da masterização: ela mede o que vai sair
 fade = np.ones(N, np.float32); fi = S(DUR - 2.5); fade[fi:] = np.linspace(1, 0, N - fi) ** 2; mix *= fade[:, None]
 fade_in = np.clip(np.arange(N) / S(0.08), 0, 1); mix *= fade_in[:, None]
-# ---------- MASTER: −14 LUFS integrados (BS.1770-4) e pico verdadeiro abaixo de −1,5 dBTP.
+# ---------- MASTER: −14 LUFS integrados (BS.1770-4) e pico verdadeiro abaixo de −1,5 dBTP já no AAC.
 # A trilha tem impactos ~22 dB acima da média: o volume vem de ganho + limitador com olhar à frente e
 # soltura suave (a redução forte fica só nos impactos), não de um loudnorm dinâmico, que "bombeia".
 from scipy.ndimage import minimum_filter1d, uniform_filter1d
@@ -534,7 +534,8 @@ def masterizar(x, alvo=-14.0, teto_tp=-1.5, sr=48000, log=print):
         ganho += alvo - i1
     return y
 
-mix = masterizar(mix[:S(DUR)], -14.0, -1.5, SR)
+# teto de −2,7 dBTP no WAV: o AAC da entrega passa ~1 dB por cima do original e tem de ficar abaixo de −1,5
+mix = masterizar(mix[:S(DUR)], -14.0, -2.7, SR)
 mix = mix[:S(DUR)]
 saida = sys.argv[1] if len(sys.argv) > 1 else os.path.join(AQ, 'trilha.wav')
 from scipy.io import wavfile

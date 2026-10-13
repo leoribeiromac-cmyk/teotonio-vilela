@@ -485,10 +485,13 @@ def linha_tempo(C, tl, dur, frac):
     hx = x0 + (x1 - x0) * frac
     C.retangulo(hx - 4, y - 3, 8, 8, AMBAR, ks)
     C.poe(im, hx - im.width / 2, y - 46, k * ks)
+    # o aviso de simulação tem de ler sobre qualquer fundo (terra laranja, telhado claro): vai numa chapa escura
     imt, _ = sp('SIMULAÇÃO DA SEQUÊNCIA CONSTRUTIVA', 'mono-m', 15, AMBAR, 0.22)
-    C.poe(imt, X0 - 4, IY + 40, 0.95 * k * ks)
-    imd, _ = sp('ilustrativa · não é o avanço real da obra', 'mono', 14, (220, 226, 232), 0.04)
-    C.poe(imd, X0 - 4, IY + 64, 0.75 * k * ks)
+    imd, _ = sp('ilustrativa · não é o avanço real da obra', 'mono', 15, (232, 236, 240), 0.04)
+    C.retangulo(X0 - 16, IY + 30, max(imt.width, imd.width) + 26, 66, (10, 16, 22), 0.66 * k * ks)
+    C.retangulo(X0 - 16, IY + 30, 2, 66, AMBAR, 0.9 * k * ks)
+    C.poe(imt, X0 - 4, IY + 40, k * ks)
+    C.poe(imd, X0 - 4, IY + 66, 0.95 * k * ks)
 
 ETAPAS = FX['etapas']
 def k_rdo(u):
