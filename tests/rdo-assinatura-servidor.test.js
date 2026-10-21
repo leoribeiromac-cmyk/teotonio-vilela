@@ -75,6 +75,11 @@ const DriveApp = {
     return { hasNext: () => !!p && !usado, next: () => { usado = true; return p; } };
   },
   createFolder(n) { return (DRIVE.pastas[n] = pastaFalsa(n)); },
+  getFilesByName(n) {
+    const achados = Object.values(DRIVE.arquivosPorId).filter(a => a._nome === n);
+    let i = 0;
+    return { hasNext: () => i < achados.length, next: () => achados[i++] };
+  },
   getFileById(id) {
     const a = DRIVE.arquivosPorId[id];
     if (!a) throw new Error('arquivo não existe');
@@ -1465,6 +1470,284 @@ t('as três pontas comparam a revisão do mesmo jeito (o depósito a grava limpa
   verdade(!a.desatualizado, 'a mesma revisão, escrita com hífen, pareceu outra');
   const r = ctx.rdoAssinaturaGravar({ t: tokenDe('fiscalizacao'), assinatura: uriPng(), nome: 'Walter Fiscal', revisao: a.revisao });
   verdade(r.ok, JSON.stringify(r));
+});
+
+/* ====================================================================
+   O SUBSTITUTO DO TITULAR — férias, licença
+   --------------------------------------------------------------------
+   O engenheiro titular sai de férias e outro responde pela obra. A firma
+   do RDO tem de ser a de quem responde NAQUELE DIA — e voltar sozinha para
+   o titular no dia seguinte ao fim do período, porque a ponta da volta é a
+   que ninguém lembra de destrocar.
+
+   E o que já saiu com a firma errada (o substituto quase sempre é
+   registrado com o período já andando) é trocado e reenviado, com aviso —
+   sem tocar na firma da fiscalização nem em quem assinou de próprio punho.
+   ==================================================================== */
+console.log('\nO substituto do titular');
+
+const NOME_SUBST = 'Paulo Eugênio Chaves Façanha';
+const SUBST = { papel: 'engenheiro', de: HOJE, ate: '2026-08-26', nome: NOME_SUBST,
+                titular: 'Marcio Santana dos Santos', motivo: 'férias',
+                arquivo: 'firma_paulo.png', autorizado: true };
+// a imagem que o escritório pôs numa pasta qualquer do Drive
+const firmaNoDrive = (nome, tipo) => arquivoFalso(nome || 'firma_paulo.png', PNG, tipo || 'image/png', null);
+const registrar = (extra) => {
+  if (!ctx.rdoFirmaArquivoDoDrive_((extra && extra.arquivo) || SUBST.arquivo)) firmaNoDrive();
+  return ctx.rdoFirmaSubstitutoRegistrar_(Object.assign({}, SUBST, extra || {}), 'leonardo@gestorengenharia.com.br');
+};
+const reaplicar = () => ctx.rdoFirmaSubstitutoReaplicar_('leonardo@gestorengenharia.com.br');
+// lê a aba crua: o `garantir` não toca linha assinada, e é ela que interessa aqui
+const linhaCrua = (papel, data) => ctx.rdoAssinLinhasDoDia_('teotonio', data || HOJE)
+  .filter(x => x.papel === papel)[0];
+const marcas = () => JSON.parse(PROPS.getProperty('RDO_REDESENHAR') || '{}');
+const assinados = () => paraLista().filter(e => String(e.subject || '').indexOf('ASSINADO') !== -1);
+
+t('no período, o RDO nasce com a firma do substituto', () => {
+  arquivar();
+  verdade(registrar().ok, 'não registrou');
+  const l = linhaDe('engenheiro');
+  eq(l.status, 'assinada');
+  eq(l.nomeAssinante, NOME_SUBST);
+  eq(l.origem, 'arquivada', 'é firma aplicada pelo sistema — as travas da origem valem igual');
+  eq(l.agente, 'firma do substituto');
+});
+t('a observação diz de quando a quando e no lugar de quem', () => {
+  arquivar();
+  registrar();
+  const obs = String(linhaDe('engenheiro').observacao);
+  verdade(obs.indexOf('24/08/2026 a 26/08/2026') !== -1, obs);
+  verdade(obs.indexOf('no lugar de Marcio Santana dos Santos') !== -1, obs);
+  verdade(obs.indexOf('leonardo@gestorengenharia.com.br') !== -1, 'não diz quem autorizou: ' + obs);
+});
+
+/* Vale pela DATA DO RDO, não pelo relógio: o último dia, fechado na manhã
+   seguinte, continua sendo do substituto; o dia da volta já é do titular. */
+t('o dia antes e o dia depois do período são do titular — a volta é sozinha', () => {
+  arquivar();
+  registrar();
+  eq(linhaDe('engenheiro', '2026-08-23').nomeAssinante, 'Marcio Santana dos Santos');
+  eq(linhaDe('engenheiro', '2026-08-26').nomeAssinante, NOME_SUBST, 'o último dia é do substituto');
+  eq(linhaDe('engenheiro', '2026-08-27').nomeAssinante, 'Marcio Santana dos Santos', 'não voltou para o titular');
+});
+t('sem firma do titular arquivada, o substituto vale do mesmo jeito', () => {
+  registrar();
+  eq(linhaDe('engenheiro').nomeAssinante, NOME_SUBST);
+  eq(linhaDe('engenheiro', '2026-08-27').status, 'pendente');
+});
+
+t('a fiscalização nunca ganha substituto — seria a contratada assinando pelo cliente', () => {
+  verdade(!registrar({ papel: 'fiscalizacao' }).ok, 'registrou substituto do fiscal');
+  eq(linhaDe('fiscalizacao').status, 'pendente');
+});
+t('sem a autorização registrada não registra', () => {
+  verdade(!registrar({ autorizado: false }).ok);
+  verdade(!registrar({ autorizado: 'sim' }).ok, 'aceitou um texto no lugar do true');
+  eq(PROPS.getProperty('RDO_FIRMA_SUBSTITUTOS'), null);
+});
+t('período torto, nome curto ou imagem que não acha: não registra', () => {
+  verdade(!registrar({ de: '2026-08-27', ate: '2026-08-24' }).ok, 'aceitou o período ao contrário');
+  verdade(!registrar({ de: '13/10' }).ok, 'aceitou data fora do formato');
+  verdade(!registrar({ nome: 'Pa' }).ok);
+  verdade(!ctx.rdoFirmaSubstitutoRegistrar_(Object.assign({}, SUBST, { arquivo: 'nao_existe.png' })).ok);
+});
+t('foto em JPEG não vira firma — sairia com o fundo cinza dentro do quadro', () => {
+  firmaNoDrive('firma.jpg', 'image/jpeg');
+  verdade(!registrar({ arquivo: 'firma.jpg' }).ok);
+});
+t('a imagem vira uma CÓPIA na pasta privada; a Propriedade guarda o ponteiro', () => {
+  const original = firmaNoDrive();
+  registrar();
+  const s = JSON.parse(PROPS.getProperty('RDO_FIRMA_SUBSTITUTOS'))[0];
+  verdade(String(s.assinatura).indexOf('drive_id:') === 0, s.assinatura);
+  verdade(s.assinatura !== 'drive_id:' + original.getId(), 'apontou para o original solto no Drive');
+  verdade(DRIVE.pastas['Assinaturas do RDO (Teotônio Privado)'].arquivos
+    .some(a => 'drive_id:' + a.getId() === s.assinatura), 'a cópia não está na pasta privada');
+});
+t('registrar de novo o mesmo período troca, não soma; outro período convive', () => {
+  registrar();
+  registrar({ nome: 'Paulo E. C. Façanha' });
+  eq(ctx.rdoFirmaSubstitutos_().length, 1, 'dois substitutos no mesmo quadro');
+  eq(linhaDe('engenheiro').nomeAssinante, 'Paulo E. C. Façanha');
+  registrar({ de: '2026-09-10', ate: '2026-09-12' });
+  eq(ctx.rdoFirmaSubstitutos_().length, 2);
+});
+t('Propriedade com JSON torto não aplica substituto nenhum', () => {
+  arquivar();
+  PROPS.setProperty('RDO_FIRMA_SUBSTITUTOS', '{isto não é json');
+  eq(linhaDe('engenheiro').nomeAssinante, 'Marcio Santana dos Santos');
+});
+
+console.log('Os RDOs que já saíram com a firma do titular');
+
+t('troca a firma do titular só nos dias do período', () => {
+  arquivar();
+  convites('2026-08-23'); convites(HOJE); convites('2026-08-25');   // saíram com o Marcio
+  registrar();
+  const r = reaplicar();
+  eq(r.trocados.join(','), HOJE + ',2026-08-25');
+  eq(linhaCrua('engenheiro').nomeAssinante, NOME_SUBST);
+  eq(linhaCrua('engenheiro', '2026-08-25').nomeAssinante, NOME_SUBST);
+  eq(linhaCrua('engenheiro', '2026-08-23').nomeAssinante, 'Marcio Santana dos Santos', 'mexeu fora do período');
+  verdade(String(linhaCrua('engenheiro').observacao).indexOf('Trocou a firma arquivada de Marcio') !== -1,
+          linhaCrua('engenheiro').observacao);
+});
+t('a firma do fiscal fica — o conteúdo que ele assinou não mudou', () => {
+  arquivar();
+  convites();
+  assinar('fiscalizacao', { nome: 'Willian Botelho' });
+  const antes = JSON.stringify(linhaCrua('fiscalizacao'));
+  registrar();
+  reaplicar();
+  eq(JSON.stringify(linhaCrua('fiscalizacao')), antes, 'tocou na linha da fiscalização');
+});
+t('quem assinou pelo LINK não é reescrito — fica na lista para o escritório', () => {
+  assinar('engenheiro', { nome: 'Marcio Santana dos Santos' });   // assinou de próprio punho
+  arquivar();
+  registrar();
+  const r = reaplicar();
+  eq(r.trocados.length, 0);
+  eq(r.ficaram.length, 1, JSON.stringify(r));
+  eq(linhaCrua('engenheiro').origem, 'link');
+  eq(linhaCrua('engenheiro').nomeAssinante, 'Marcio Santana dos Santos');
+});
+t('linha cancelada não é tocada', () => {
+  arquivar();
+  convites();
+  ctx.rdoAssinaturaCancelar(HOJE, 'engenheiro', 'à mão');
+  registrar();
+  eq(reaplicar().trocados.length, 0);
+  eq(linhaCrua('engenheiro').status, 'pendente');
+  eq(linhaCrua('engenheiro').origem, 'manual');
+});
+t('rodar de novo não troca nada', () => {
+  arquivar();
+  convites();
+  registrar();
+  eq(reaplicar().trocados.length, 1);
+  eq(reaplicar().trocados.length, 0);
+});
+t('cada troca deixa rastro na Auditoria, sem o token', () => {
+  arquivar();
+  convites();
+  registrar();
+  reaplicar();
+  const acoes = PLANILHA.Auditoria.map(l => l[CAB_AUDIT.indexOf('acao')]);
+  verdade(acoes.indexOf('rdoFirmaSubstitutoRegistrado') !== -1, JSON.stringify(acoes));
+  verdade(acoes.indexOf('rdoFirmaSubstituida') !== -1, JSON.stringify(acoes));
+  verdade(JSON.stringify(PLANILHA.Auditoria).indexOf(linhaCrua('engenheiro').token) === -1, 'vazou o token');
+});
+
+console.log('O reenvio dos dias trocados');
+
+/* O dia já estava fechado: assinado pelos dois, PDF com as duas firmas, RDO
+   ASSINADO enviado. Na conta de firmas está tudo em dia — sem a marca,
+   nenhum aparelho redesenharia. */
+const diaFechadoComTitular = () => {
+  arquivar();
+  convites();
+  assinar('fiscalizacao', { nome: 'Willian Botelho' });
+  depositar({ assinaturas: '2' });
+  eq(assinados().length, 1, 'o cenário pede o assinado já enviado');
+  CORREIO.enviados = [];
+};
+
+t('o dia trocado volta para a varredura, mesmo com o depósito em dia', () => {
+  diaFechadoComTitular();
+  eq(pendentes({ dias: 60 }).length, 0, 'antes da troca não havia o que repor');
+  registrar();
+  reaplicar();
+  const l = pendentes();
+  eq(l.length, 1, JSON.stringify(l));
+  eq(l[0].data, HOJE);
+  verdade(l[0].redesenhar, 'sem a marca de redesenho');
+});
+t('o redepósito manda o RDO ASSINADO de novo, dizendo que é reenvio e por quê', () => {
+  diaFechadoComTitular();
+  registrar();
+  reaplicar();
+  depositar({ assinaturas: '2' });                    // o app redesenhou com a firma nova
+  const e = assinados();
+  eq(e.length, 1, JSON.stringify(paraLista().map(x => x.subject)));
+  verdade(String(e[0].subject).indexOf('(reenvio)') !== -1, e[0].subject);
+  verdade(String(e[0].body).indexOf('REENVIO') === 0, e[0].body);
+  verdade(String(e[0].body).indexOf(NOME_SUBST) !== -1, 'o motivo não diz quem assina agora');
+  verdade(String(e[0].body).indexOf('no lugar de Marcio Santana dos Santos') !== -1, e[0].body);
+  verdade(e[0].to.split(',').length > 1, 'o reenvio tem de ir para a lista toda');
+});
+t('e depois disso o dia sai da varredura e a marca some', () => {
+  diaFechadoComTitular();
+  registrar();
+  reaplicar();
+  depositar({ assinaturas: '2' });
+  eq(pendentes().length, 0);
+  eq(JSON.stringify(marcas()), '{}');
+  depositar({ assinaturas: '2' });
+  eq(assinados().length, 1, 'o reenvio saiu duas vezes');
+});
+t('antes do redesenho, o reenvio à mão não manda a via com a firma velha', () => {
+  diaFechadoComTitular();
+  registrar();
+  reaplicar();
+  const r = ctx.reenviarRDOAssinado(HOJE);
+  verdade(!r.ok, JSON.stringify(r));
+  eq(assinados().length, 0, 'mandou o PDF com a firma do titular');
+});
+t('dia em que a fiscalização ainda não assinou: redesenha já, e o aviso vai quando ela assinar', () => {
+  arquivar();
+  convites();
+  depositar({ assinaturas: '1' });                    // o das 6h30, com a firma do titular
+  registrar();
+  reaplicar();
+  eq(pendentes().length, 1, 'o PDF guardado continuaria com a firma do titular');
+  depositar({ assinaturas: '1' });
+  eq(pendentes().length, 0);
+  eq(assinados().length, 0, 'mandou o assinado sem a fiscalização');
+  assinar('fiscalizacao', { nome: 'Willian Botelho' });
+  depositar({ assinaturas: '2' });
+  eq(assinados().length, 1);
+  verdade(String(assinados()[0].subject).indexOf('(reenvio)') !== -1, assinados()[0].subject);
+});
+
+t('o e-mail do titular no período não diz que a firma DELE foi aplicada', () => {
+  arquivar();
+  registrar();
+  depositar();
+  ctx.rdoEnviarPorEmail_(HOJE, 'teotonio', false);
+  const meu = paraLista().filter(e => String(e.to) === 'msantana@gestorengenharia.com.br')[0];
+  verdade(!!meu, 'o titular deixou de receber a cópia');
+  verdade(String(meu.body).indexOf('Sua firma arquivada') === -1, meu.body);
+  verdade(String(meu.body).indexOf(NOME_SUBST) !== -1, meu.body);
+  verdade(String(meu.html).indexOf('Sua firma arquivada') === -1, 'o HTML ainda diz que a firma é dele');
+});
+t('a conferência do envio mostra quem assina naquele dia', () => {
+  arquivar();
+  registrar();
+  const no = ctx.rdoDiagEmail({ obra: 'teotonio', data: HOJE }).firmasArquivadas[0];
+  eq(no.nome, NOME_SUBST);
+  verdade(no.substituto);
+  eq(no.titular, 'Marcio Santana dos Santos');
+  eq(ctx.rdoDiagEmail({ obra: 'teotonio', data: '2026-08-27' }).firmasArquivadas[0].nome,
+     'Marcio Santana dos Santos');
+});
+t('a tela da firma arquivada continua mostrando a do titular', () => {
+  arquivar();
+  registrar();
+  eq(ctx.rdoFirmasArquivadasLer({}).firmas[0].nome, 'Marcio Santana dos Santos');
+});
+
+t('▶ Executar registrarSubstitutoDaFirma registra e já troca os dias que saíram', () => {
+  const antes = ctx.SUBSTITUTO_FIRMA;
+  try {
+    arquivar();
+    convites();
+    firmaNoDrive();
+    ctx.SUBSTITUTO_FIRMA = Object.assign({}, SUBST);
+    const r = ctx.registrarSubstitutoDaFirma();
+    verdade(r.ok, JSON.stringify(r));
+    eq(r.reaplicado.trocados.join(','), HOJE);
+    eq(linhaCrua('engenheiro').nomeAssinante, NOME_SUBST);
+  } finally { ctx.SUBSTITUTO_FIRMA = antes; }
 });
 
 console.log(falhas ? `\n${falhas} falha(s)\n` : '\nTudo certo.\n');

@@ -553,6 +553,43 @@ quem tem de assinar o RDO como ficou. Tudo fica na Auditoria
 (`reabrirRDOAssinado`). A firma arquivada do engenheiro não trava nada — ela
 volta sozinha no RDO reaberto.
 
+#### Engenheiro de férias: o substituto assina no período
+
+Quando o titular da firma arquivada sai (férias, licença), quem responde pela
+obra naqueles dias assina o RDO no lugar dele. A substituição tem **período** e
+vale pela **data do RDO**, não pelo relógio: o RDO do último dia, fechado na
+manhã seguinte, ainda é do substituto, e o do dia da volta já nasce com a firma
+do titular — **não há nada a destrocar** na volta. O titular continua
+recebendo a cópia do RDO por e-mail, com o aviso de que quem assinou foi o
+substituto. A fiscalização nunca tem substituto: a firma dela é sempre pelo link.
+
+1. Ponha a imagem da firma (**PNG com fundo transparente**) em qualquer pasta do
+   Drive da conta do script, com o nome que está em `SUBSTITUTO_FIRMA.arquivo`
+   (ou cole ali o id ou o link do arquivo).
+2. Confira `SUBSTITUTO_FIRMA` no `Code.gs`: papel, `de`, `ate`, nome de quem
+   assina, titular, motivo e a confirmação `autorizado: true` (o substituto
+   autorizou o uso da firma — quem executa responde por ela, e o e-mail dele
+   fica na Auditoria e em cada linha).
+3. ▶ Executar **`registrarSubstitutoDaFirma`**.
+
+Ela grava a Propriedade `RDO_FIRMA_SUBSTITUTOS` (com uma cópia da imagem na
+pasta privada) **e já corrige o que saiu antes**: nos dias do período em que o
+sistema aplicou a firma do titular, a firma é trocada pela do substituto — a da
+fiscalização fica, porque o conteúdo que ela assinou não mudou. Quem assinou
+pelo link de próprio punho não é reescrito (sai na lista `ficaram`, para o
+escritório decidir). Cada dia trocado fica marcado em `RDO_REDESENHAR`: a
+varredura do app o redesenha e redeposita, e o depósito manda o **RDO ASSINADO
+de novo, com "(reenvio)" no assunto e o motivo no corpo**. Dia em que a
+fiscalização ainda não assinou é redesenhado na hora, e o reenvio sai quando
+ela assinar. Basta alguém do escritório abrir o app logado: a varredura repõe
+até 3 dias a cada 5 minutos.
+
+| Função (▶ Executar) | O que faz |
+| --- | --- |
+| `registrarSubstitutoDaFirma()` | Registra o período de `SUBSTITUTO_FIRMA` e troca a firma nos RDOs do período que já saíram. |
+| `aplicarSubstitutoNosRDOsJaEmitidos()` | Só a troca nos RDOs já emitidos. Rodar de novo não troca nada. |
+| `verSubstitutosDaFirma()` | Os períodos registrados e os dias que ainda faltam redesenhar. Só lê. |
+
 #### Ensaiar antes de o link chegar à fiscalização
 
 Aponte tudo para você, com duas Propriedades temporárias — `RDO_EMAILS` só com

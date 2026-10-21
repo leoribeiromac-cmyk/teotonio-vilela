@@ -3715,6 +3715,18 @@ function rdoPdfDoDia(p) {
   registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoPdfDoDia', obra,
                      dataISO, '', arq.getId());
 
+  /* Era o redesenho que a marca pedia: o dia sai da varredura. A marca
+     continua (com a hora do depósito) até o RDO ASSINADO sair — é ela que
+     põe no e-mail o aviso de que é reenvio, e por quê. */
+  try {
+    var marcados = rdoRedesenharLer_();
+    var marca = marcados[obra + '|' + dataISO];
+    if (marca && !marca.depositadoEm) {
+      marca.depositadoEm = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss');
+      rdoRedesenharGravar_(marcados);
+    }
+  } catch (eMarca) {}
+
   /* Chegou o depósito com TODAS as firmas: é a hora de mandar o RDO assinado
      para a lista — o das 6h30 saiu com os quadros em branco, porque de manhã
      ninguém tinha assinado ainda. Nunca derruba o depósito: o PDF já está
@@ -3875,13 +3887,20 @@ function rdoDiagEmail(p) {
     /* Quem está pré-assinado. Fica aqui porque "por que o engenheiro não
        recebeu link?" é a mesma pergunta que esta tela já responde — e a
        resposta é que ele não precisa de um. */
+    /* A firma que vale NAQUELE DIA: no período de um substituto é a dele,
+       e a conferência diz de quando a quando e no lugar de quem. */
     firmasArquivadas: RDO_FIRMA_PAPEIS.filter(function (papel) {
-      return !!rdoFirmaArquivadaDe_(papel);
+      return !!rdoFirmaArquivadaDe_(papel, dataISO);
     }).map(function (papel) {
-      var f = rdoFirmasArquivadas_()[papel] || {};
-      return { papel: papel, nome: String(f.nome || ''),
-               autorizadaPor: String(f.autorizadaPor || ''),
-               autorizadaEm: String(f.autorizadaEm || '') };
+      var f = rdoFirmaArquivadaDe_(papel, dataISO) || {};
+      var reg = { papel: papel, nome: String(f.nome || ''),
+                  autorizadaPor: String(f.autorizadaPor || ''),
+                  autorizadaEm: String(f.autorizadaEm || '') };
+      if (f.substituto) {
+        reg.substituto = true;
+        reg.de = f.de; reg.ate = f.ate; reg.titular = f.titular;
+      }
+      return reg;
     })
   };
 }
@@ -4238,6 +4257,12 @@ function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha, nServicosJa) {
      é o único lugar onde o titular vê isso acontecendo todo dia — se ele
      mudar de ideia, é por aqui que vai saber que precisa avisar. */
   var minhaArquivada = !!(minha && String(minha.origem || '') === 'arquivada');
+  /* No período de um substituto o convite continua sendo do titular (é o
+     e-mail dele que está na linha), mas a firma no quadro é a do outro.
+     "Sua firma foi aplicada" seria mentira justamente na caixa de quem está
+     de férias e só acompanha a cópia. */
+  var minhaSubstituida = minhaArquivada && String(minha.agente || '') === RDO_FIRMA_AGENTE_SUBST;
+  var quemSubstitui = minhaSubstituida ? String(minha.nomeAssinante || 'o substituto') : '';
 
   var textoAss = '';
   if (listaAss.length) {
@@ -4250,7 +4275,10 @@ function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha, nServicosJa) {
     textoAss += '\nVocê assina este RDO. Abra o seu link pessoal (não repasse — ele ' +
                 'assina no seu nome):\n' + linkMeu + '\n';
   } else if (jaAssinei) {
-    textoAss += minhaArquivada
+    textoAss += minhaSubstituida
+      ? '\nNeste RDO quem assina como engenheiro é ' + quemSubstitui + ', no seu lugar ' +
+        'durante este período — você recebe a cópia para acompanhar.\n'
+      : minhaArquivada
       ? '\nSua firma arquivada foi aplicada a este RDO — você não precisa assinar.\n' +
         'Para deixar de pré-assinar os RDOs, avise o escritório.\n'
       : '\nVocê já assinou este RDO. Obrigado.\n';
@@ -4314,7 +4342,11 @@ function rdoEmailCorpo_(dataISO, obra, linha, assinaturas, minha, nServicosJa) {
         'O link é pessoal e assina no seu nome — não repasse. ' +
         'Abre no celular: dá para assinar com o dedo.</div></div>'
       : (jaAssinei
-          ? (minhaArquivada
+          ? (minhaSubstituida
+              ? '<p style="font-size:13px;color:#1a7f45;margin:14px 0 4px">' +
+                '&#10003; Neste RDO quem assina como engenheiro é <strong>' + esc(quemSubstitui) +
+                '</strong>, no seu lugar durante este período — você recebe a cópia para acompanhar.</p>'
+              : minhaArquivada
               ? '<p style="font-size:13px;color:#1a7f45;margin:14px 0 4px">' +
                 '&#10003; <strong>Sua firma arquivada foi aplicada a este RDO</strong> — ' +
                 'você não precisa assinar. Para deixar de pré-assinar os RDOs, avise o escritório.</p>'
@@ -4580,9 +4612,17 @@ function rdoFirmasArquivadas_() {
   }
 }
 
-function rdoFirmaArquivadaDe_(papel) {
+/* Com a DATA DO RDO, o substituto daquele período vem antes da firma do
+   titular (ver "O SUBSTITUTO DO TITULAR", logo abaixo). Sem data, a
+   pergunta é "qual é a firma do titular" — a da tela de arquivamento e a
+   do armar, que não têm dia nenhum em vista. */
+function rdoFirmaArquivadaDe_(papel, dataISO) {
   var p = String(papel || '').trim().toLowerCase();
   if (RDO_FIRMA_PAPEIS.indexOf(p) === -1) return null;
+  if (dataISO) {
+    var sub = rdoFirmaSubstitutoDe_(p, dataISO);
+    if (sub) return sub;
+  }
   var f = rdoFirmasArquivadas_()[p];
   if (!f || String(f.assinatura || '').indexOf('drive_id:') !== 0) return null;
   if (String(f.nome || '').trim().length < 3) return null;
@@ -4592,10 +4632,23 @@ function rdoFirmaArquivadaDe_(papel) {
 /* O que fica escrito na linha, e é o que alguém lendo a planilha daqui a um
    ano precisa encontrar para entender por que aquela firma está ali. */
 function rdoFirmaTexto_(firma) {
-  return 'Firma arquivada do titular, aplicada pelo sistema. Autorizada por ' +
-         String(firma.autorizadaPor || '—') + ' em ' +
-         String(firma.autorizadaEm || '—').slice(0, 16) + '.';
+  var autorizada = ' Autorizada por ' + String(firma.autorizadaPor || '—') + ' em ' +
+                   String(firma.autorizadaEm || '—').slice(0, 16) + '.';
+  if (firma.substituto) {
+    return 'Firma de ' + String(firma.nome || '—') + ', que responde pelo RDO de ' +
+           rdoDataBR_(firma.de) + ' a ' + rdoDataBR_(firma.ate) +
+           (firma.titular ? ' no lugar de ' + firma.titular : '') +
+           (firma.motivo ? ' (' + firma.motivo + ')' : '') +
+           ', aplicada pelo sistema.' + autorizada;
+  }
+  return 'Firma arquivada do titular, aplicada pelo sistema.' + autorizada;
 }
+
+/* O `agente` separa a firma do substituto da do titular sem mexer na
+   `origem`: as duas são 'arquivada' — aplicadas pelo sistema, nunca dadas
+   pelo link —, e todas as travas que olham a origem (não reaproveitar como
+   "firma que ele deu", não cancelar no RDO reaberto) valem igual. */
+var RDO_FIRMA_AGENTE_SUBST = 'firma do substituto';
 
 function rdoFirmaCampos_(firma, agora) {
   return {
@@ -4603,7 +4656,7 @@ function rdoFirmaCampos_(firma, agora) {
     nomeAssinante: String(firma.nome || ''),
     documento: String(firma.documento || ''),
     assinadoEm: agora,
-    agente: 'firma arquivada',
+    agente: firma.substituto ? RDO_FIRMA_AGENTE_SUBST : 'firma arquivada',
     observacao: rdoFirmaTexto_(firma),
     origem: 'arquivada',
     status: 'assinada'
@@ -4612,7 +4665,7 @@ function rdoFirmaCampos_(firma, agora) {
 
 function rdoFirmaAuditar_(obra, dataISO, linha) {
   try {
-    registrarAuditoria(String(linha.nomeAssinante || ''), 'firma arquivada', 'rdoFirmaAplicada',
+    registrarAuditoria(String(linha.nomeAssinante || ''), String(linha.agente || 'firma arquivada'), 'rdoFirmaAplicada',
                        obra, dataISO, String(linha.papel || ''),
                        rdoAssinCodigo_(linha.token) + ' · ' + String(linha.assinadoEm || ''));
   } catch (e) {}
@@ -4941,6 +4994,257 @@ function rdoFirmasArquivadasLer(p) {
   return { ok: true, firmas: out };
 }
 
+/* ------------------------------------------------------------
+   O SUBSTITUTO DO TITULAR — férias, licença, afastamento
+   ------------------------------------------------------------
+   O titular sai de férias e o RDO não pode continuar saindo com a firma
+   dele: quem responde pela obra naqueles dias é outro engenheiro com ART
+   ativa (o cabeçalho do RDO já lista os dois). Trocar a firma arquivada no
+   dia em que ele sai e destrocar na volta é pedir para alguém esquecer uma
+   das pontas — e a da volta é a que ninguém lembra.
+
+   Então a substituição tem PERÍODO, e vale pela DATA DO RDO, não pelo
+   relógio: o RDO do último dia, fechado na manhã seguinte, continua sendo
+   do substituto, e o do dia da volta já nasce com o titular, sozinho. A
+   firma do titular segue arquivada o tempo todo — não há nada a refazer
+   quando ele volta.
+
+   Propriedade `RDO_FIRMA_SUBSTITUTOS`: lista JSON de
+     { papel, de, ate, nome, documento, assinatura: 'drive_id:…',
+       titular, motivo, autorizadaPor, autorizadaEm }
+   gravada por `registrarSubstitutoDaFirma()` (▶ Executar), nunca à mão.
+
+   As travas são as da firma arquivada, pelo mesmo motivo: só os papéis de
+   RDO_FIRMA_PAPEIS (a fiscalização NUNCA), autorização registrada, imagem
+   na pasta privada, e a observação da linha diz que foi o substituto, de
+   quando a quando e no lugar de quem. */
+var RDO_FIRMA_SUBST_PROP = 'RDO_FIRMA_SUBSTITUTOS';
+
+function rdoFirmaSubstitutos_() {
+  var raw = PropertiesService.getScriptProperties().getProperty(RDO_FIRMA_SUBST_PROP);
+  if (!raw) return [];
+  try {
+    var j = JSON.parse(raw);
+    return (j && j.length) ? j : [];
+  } catch (e) {
+    // Mesma regra da firma arquivada: JSON torto não vira firma aplicada a esmo.
+    Logger.log('RDO_FIRMA_SUBSTITUTOS não é um JSON válido — nenhum substituto será aplicado.');
+    return [];
+  }
+}
+
+/* O substituto daquele papel no dia do RDO, já no formato de firma
+   arquivada (com `substituto: true`), ou null. Entrada torta — sem período,
+   sem nome, sem ponteiro do Drive — não vira firma de ninguém. */
+function rdoFirmaSubstitutoDe_(papel, dataISO) {
+  var p = String(papel || '').trim().toLowerCase();
+  var d = normData(dataISO);
+  if (RDO_FIRMA_PAPEIS.indexOf(p) === -1 || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return null;
+  var achado = null;
+  rdoFirmaSubstitutos_().forEach(function (s) {
+    if (!s || String(s.papel || '').toLowerCase() !== p) return;
+    var de = normData(s.de), ate = normData(s.ate);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) return;
+    if (d < de || d > ate) return;
+    if (String(s.assinatura || '').indexOf('drive_id:') !== 0) return;
+    if (String(s.nome || '').trim().length < 3) return;
+    achado = s;
+  });
+  if (!achado) return null;
+  return {
+    papel: p, substituto: true,
+    assinatura: String(achado.assinatura), nome: String(achado.nome).trim(),
+    documento: String(achado.documento || ''),
+    de: normData(achado.de), ate: normData(achado.ate),
+    titular: String(achado.titular || ''), motivo: String(achado.motivo || ''),
+    autorizadaPor: String(achado.autorizadaPor || ''),
+    autorizadaEm: String(achado.autorizadaEm || '')
+  };
+}
+
+/* A imagem que o escritório pôs no Drive: pelo id, pelo link de
+   compartilhar ou pelo NOME do arquivo. Nome é o que dá para combinar por
+   mensagem antes de alguém ter o arquivo em mãos. */
+function rdoFirmaArquivoDoDrive_(ref) {
+  var r = String(ref || '').trim();
+  if (!r) return null;
+  var m = r.match(/\/d\/([A-Za-z0-9_-]{20,})/) || r.match(/[?&]id=([A-Za-z0-9_-]{20,})/);
+  var id = m ? m[1] : (/^[A-Za-z0-9_-]{20,}$/.test(r) ? r : '');
+  if (id) {
+    // um nome sem extensão também tem cara de id: não achou, procura pelo nome
+    try { return DriveApp.getFileById(id); } catch (e) {}
+  }
+  var achados = DriveApp.getFilesByName(r);
+  while (achados.hasNext()) {
+    var a = achados.next();
+    if (!a.isTrashed()) return a;
+  }
+  return null;
+}
+
+/* Registrar é decidir que, naquele período, outro nome sai no quadro do
+   titular em TODO RDO. Por isso as mesmas exigências do arquivamento:
+   autorização registrada, nome de quem assina e a imagem numa cópia
+   PRIVADA — o original pode estar em qualquer pasta, ou ser apagado
+   depois, e a linha do RDO tem de apontar para um arquivo que só o script
+   mexe. */
+function rdoFirmaSubstitutoRegistrar_(cfg, quem) {
+  cfg = cfg || {};
+  var papel = String(cfg.papel || '').trim().toLowerCase().replace(/[^a-z]/g, '');
+  if (RDO_FIRMA_PAPEIS.indexOf(papel) === -1) {
+    return { ok: false, error: 'Substituto é só do engenheiro responsável. A fiscalização assina o ' +
+                               'RDO dela, pelo link pessoal — essa firma não se aplica por aqui.' };
+  }
+  var de = normData(cfg.de), ate = normData(cfg.ate);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(de) || !/^\d{4}-\d{2}-\d{2}$/.test(ate)) {
+    return { ok: false, error: 'Período inválido — use AAAA-MM-DD em "de" e em "ate".' };
+  }
+  if (de > ate) return { ok: false, error: 'O período termina antes de começar.' };
+  var nome = String(cfg.nome || '').trim().slice(0, 120);
+  if (nome.length < 3) return { ok: false, error: 'Escreva o nome de quem assina no período.' };
+  if (cfg.autorizado !== true) {
+    return { ok: false, error: 'Falta a confirmação de que o substituto autorizou o uso da firma dele nos RDOs.' };
+  }
+
+  var arq = rdoFirmaArquivoDoDrive_(cfg.arquivo);
+  if (!arq) return { ok: false, error: 'Não achei a imagem da firma no Drive: "' + String(cfg.arquivo || '') + '".' };
+  var blob = arq.getBlob();
+  var tipo = String(blob.getContentType() || '');
+  /* PNG, e com fundo transparente: é desenhado por cima da linha do quadro,
+     como o traço que a página de assinatura manda. Foto de papel em JPEG
+     sairia com o retângulo cinza do fundo dentro do RDO. */
+  if (tipo !== 'image/png') {
+    return { ok: false, error: 'A firma tem de ser PNG com fundo transparente — o arquivo é ' + (tipo || 'sem tipo') + '.' };
+  }
+  var bytes = blob.getBytes();
+  if (!bytes.length) return { ok: false, error: 'Firma vazia.' };
+  if (bytes.length > RDO_ASSIN_MAX_BYTES) return { ok: false, error: 'Firma grande demais.' };
+
+  quem = String(quem || 'editor');
+  var agora = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss');
+  var copia = rdoAssinPasta_().createFile(Utilities.newBlob(bytes, 'image/png',
+    'firma_substituto_' + OBRA_ID + '_' + papel + '_' + de.replace(/-/g, '') + '_' +
+    ate.replace(/-/g, '') + '.png'));
+  copia.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
+
+  var reg = {
+    papel: papel, de: de, ate: ate, nome: nome,
+    documento: String(cfg.documento || '').trim().slice(0, 60),
+    assinatura: 'drive_id:' + copia.getId(),
+    titular: String(cfg.titular || '').trim().slice(0, 120),
+    motivo: String(cfg.motivo || '').trim().slice(0, 80),
+    autorizadaPor: quem, autorizadaEm: agora
+  };
+  /* Período do mesmo papel que se cruza com este é TROCADO, não somado:
+     dois substitutos no mesmo dia seriam dois nomes disputando um quadro
+     só. Períodos que não se tocam convivem — as férias de julho não apagam
+     a licença de março. */
+  var lista = rdoFirmaSubstitutos_().filter(function (s) {
+    if (!s || String(s.papel || '').toLowerCase() !== papel) return true;
+    return normData(s.ate) < de || normData(s.de) > ate;
+  });
+  lista.push(reg);
+  PropertiesService.getScriptProperties().setProperty(RDO_FIRMA_SUBST_PROP, JSON.stringify(lista));
+
+  registrarAuditoria(quem, 'admin', 'rdoFirmaSubstitutoRegistrado', OBRA_ID, de + ' a ' + ate,
+                     papel + (reg.titular ? ' · no lugar de ' + reg.titular : ''), nome + ' · ' + agora);
+  return { ok: true, substituto: reg };
+}
+
+/* A frase que acompanha o reenvio. Vai no e-mail da fiscalização: tem de
+   dizer o que mudou sem ninguém precisar abrir a planilha. */
+function rdoFirmaSubstitutoMotivo_(sub) {
+  return 'Correção da assinatura do engenheiro: de ' + rdoDataBR_(sub.de) + ' a ' + rdoDataBR_(sub.ate) +
+         ' quem assina o RDO como engenheiro é ' + sub.nome +
+         (sub.titular ? ', no lugar de ' + sub.titular : '') +
+         (sub.motivo ? ' (' + sub.motivo + ')' : '') + '.';
+}
+
+/* NOS RDOs QUE JÁ SAÍRAM COM A FIRMA DO TITULAR.
+   O substituto quase sempre é registrado DEPOIS de o período começar: o
+   titular saiu na segunda e alguém percebeu na quarta. Os dias do meio
+   nasceram com a firma arquivada dele — e o RDO assinado desses dias já foi
+   para a fiscalização com o nome de quem estava de férias.
+
+   Troca SÓ a firma que o sistema aplicou sozinho (origem 'arquivada'). Não
+   toca a fiscalização, nem quem assinou pelo LINK (o titular que assinou
+   nas férias assinou de fato: fica na lista `ficaram`, para o escritório
+   decidir), nem linha pendente (o `garantir` já a preenche com o
+   substituto) ou cancelada, nem dia fora do período.
+
+   A FIRMA DO FISCAL FICA. O que ele assinou foi o conteúdo do RDO — a
+   `revisao` da linha do dia —, e o conteúdo não muda: muda quem assina
+   pela contratada.
+
+   Cada dia trocado é MARCADO PARA REDESENHAR e tem o "RDO ASSINADO"
+   esquecido: o app varre, redesenha e redeposita, e o depósito manda o RDO
+   assinado de novo, dizendo que é reenvio e por quê. O servidor continua
+   sem desenhar nada. Rodar duas vezes não troca nada na segunda. */
+function rdoFirmaSubstitutoReaplicar_(quem) {
+  quem = String(quem || 'editor');
+  var agora = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss');
+  var trocados = [], ficaram = [], motivoDe = {};
+
+  linhasObj(ABA_RDO_ASSIN, OBRA_ID).map(rdoAssinHorasEmTexto_).forEach(function (l) {
+    var papel = String(l.papel || '').toLowerCase();
+    var d = normData(l.data);
+    var sub = rdoFirmaSubstitutoDe_(papel, d);
+    if (!sub) return;
+    if (String(l.status || '') !== 'assinada') return;
+    if (String(l.assinatura || '') === sub.assinatura) return;   // já é a dele
+    if (String(l.origem || '') !== 'arquivada') {
+      ficaram.push({ data: d, papel: papel, nome: String(l.nomeAssinante || ''),
+                     origem: String(l.origem || 'link') });
+      return;
+    }
+    var alvo = rdoAssinPorToken_(l.token);
+    if (!alvo) return;
+    var antes = String(alvo.obj.nomeAssinante || '—') + ' (' + String(alvo.obj.assinadoEm || '').slice(0, 16) + ')';
+    var campos = rdoFirmaCampos_(sub, agora);
+    campos.observacao += ' Trocou a firma arquivada de ' + antes + '.';
+    Object.keys(campos).forEach(function (k) { rdoAssinGravarCampo_(alvo, k, campos[k]); });
+    registrarAuditoria(quem, 'admin', 'rdoFirmaSubstituida', OBRA_ID, d, papel + ' · ' + antes,
+                       sub.nome + ' · ' + agora);
+    if (trocados.indexOf(d) === -1) trocados.push(d);
+    motivoDe[d] = rdoFirmaSubstitutoMotivo_(sub);
+  });
+
+  if (trocados.length) {
+    var log = rdoAssinadoLogLer_();
+    var marcados = rdoRedesenharLer_();
+    trocados.forEach(function (d) {
+      var chave = OBRA_ID + '|' + d;
+      delete log[chave];
+      marcados[chave] = { motivo: motivoDe[d], desde: agora, depositadoEm: '' };
+    });
+    PropertiesService.getScriptProperties().setProperty(RDO_ASSINADO_LOG, JSON.stringify(log));
+    rdoRedesenharGravar_(marcados);
+  }
+  trocados.sort();
+  return { ok: true, trocados: trocados, ficaram: ficaram };
+}
+
+/* OS DIAS QUE TÊM DE SER REDESENHADOS, mesmo com o depósito "em dia" na
+   conta de firmas: a firma de alguém mudou (o substituto no lugar do
+   titular) e o número de quadros preenchidos continua o mesmo. Sem a marca,
+   nenhum aparelho redesenharia esses dias. Chave 'obra|data' →
+   { motivo, desde, depositadoEm }. A marca fica até o RDO ASSINADO sair: é
+   ela que leva ao e-mail o aviso de reenvio. */
+var RDO_REDESENHAR_PROP = 'RDO_REDESENHAR';
+
+function rdoRedesenharLer_() {
+  try {
+    var j = JSON.parse(PropertiesService.getScriptProperties().getProperty(RDO_REDESENHAR_PROP) || '{}');
+    return (j && typeof j === 'object') ? j : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function rdoRedesenharGravar_(marcados) {
+  PropertiesService.getScriptProperties().setProperty(RDO_REDESENHAR_PROP, JSON.stringify(marcados || {}));
+}
+
 function rdoAssinValidadeDias() {
   var d = parseInt(PropertiesService.getScriptProperties().getProperty('RDO_ASSINATURA_DIAS'), 10);
   return (!isNaN(d) && d >= 1 && d <= 365) ? d : RDO_ASSIN_DIAS;
@@ -5059,7 +5363,7 @@ function rdoAssinaturasGarantir_(obra, dataISO) {
        num passo depois: é uma gravação só, e o dia nunca chega a existir
        com o quadro do engenheiro em branco — nem para o e-mail das 6h30, que
        é quem costuma chamar esta função primeiro. */
-    var firma = rdoFirmaArquivadaDe_(a.papel);
+    var firma = rdoFirmaArquivadaDe_(a.papel, d);
     if (firma) {
       var campos = rdoFirmaCampos_(firma, agora);
       Object.keys(campos).forEach(function (k) { reg[k] = campos[k]; });
@@ -5079,7 +5383,7 @@ function rdoAssinaturasGarantir_(obra, dataISO) {
     if (!l) return;
     if (String(l.status || '') !== 'pendente') return;   // assinada ou cancelada: não se mexe
     if (String(l.origem || '') !== '') return;           // 'manual': quem cancelou quer à mão
-    var firma = rdoFirmaArquivadaDe_(papel);
+    var firma = rdoFirmaArquivadaDe_(papel, d);
     if (!firma) return;
     var alvo = rdoAssinPorToken_(l.token);
     if (!alvo) return;
@@ -5591,6 +5895,17 @@ function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
   var log = rdoAssinadoLogLer_();
   if (log[chave]) return { ok: true, pulado: 'assinado já enviado' };
 
+  /* DIA MARCADO PARA REDESENHAR: a firma mudou depois do PDF guardado.
+     Antes do redesenho, o que iria em anexo é a via com a firma velha —
+     justamente a que o reenvio existe para corrigir. */
+  var marcados = rdoRedesenharLer_();
+  var marca = marcados[chave] || null;
+  if (marca && !marca.depositadoEm) {
+    return { ok: false, error: 'O PDF deste dia ainda não foi redesenhado com a firma nova — ' +
+                               'abra o app (a varredura redesenha sozinha) e tente de novo.' };
+  }
+  var reenvio = marca ? String(marca.motivo || '') : '';
+
   var destinos = rdoEmailDestinatarios();
   if (!destinos.length) return { ok: false, error: 'Sem destinatários' };
   if (MailApp.getRemainingDailyQuota() < destinos.length) {
@@ -5621,9 +5936,10 @@ function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
   try {
     MailApp.sendEmail({
       to: destinos.join(','),
-      subject: 'RDO' + (numero ? ' nº ' + numero : '') + ' ASSINADO — ' + rdoObraNome_(obra) +
-               ' — ' + rdoDataBR_(dataISO),
-      body: 'O RDO de ' + rdoDataBR_(dataISO) + ' (' + rdoDiaSemana_(dataISO) + ') está assinado ' +
+      subject: 'RDO' + (numero ? ' nº ' + numero : '') + ' ASSINADO' + (reenvio ? ' (reenvio)' : '') +
+               ' — ' + rdoObraNome_(obra) + ' — ' + rdoDataBR_(dataISO),
+      body: (reenvio ? 'REENVIO — ' + reenvio + '\nEste PDF substitui o enviado antes para este dia.\n\n' : '') +
+            'O RDO de ' + rdoDataBR_(dataISO) + ' (' + rdoDiaSemana_(dataISO) + ') está assinado ' +
             'por todos.\n\n' + quem + '\n\nO PDF com as assinaturas vai em anexo.\n' +
             '\n— Enviado automaticamente pelo app de campo da Gestor Engenharia.\n',
       name: 'Gestor Engenharia — RDO ' + rdoObraNome_(obra),
@@ -5639,7 +5955,12 @@ function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
 
   log[chave] = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm');
   rdoLogGravar_(RDO_ASSINADO_LOG, log);
-  return { ok: true, data: dataISO, para: destinos };
+  if (marca) {
+    // O reenvio saiu: a marca cumpriu o papel dela.
+    delete marcados[chave];
+    rdoRedesenharGravar_(marcados);
+  }
+  return { ok: true, data: dataISO, para: destinos, reenvio: !!reenvio };
 }
 
 /* OS DIAS QUE JÁ ESTÃO ASSINADOS E AINDA NÃO SAÍRAM.
@@ -5713,6 +6034,23 @@ function rdoAssinadosPendentes(p) {
                enviado: !!log[obra + '|' + d] });
   });
 
+  /* E OS DIAS MARCADOS PARA REDESENHAR (ver rdoRedesenharLer_): a conta de
+     firmas fecha, mas a firma de um quadro mudou. Entram mesmo fora da
+     janela — foram pedidos um a um — e saem quando o depósito novo chega. */
+  var marcados = rdoRedesenharLer_();
+  Object.keys(marcados).forEach(function (chave) {
+    var partes = chave.split('|');
+    if (partes[0] !== obra || !marcados[chave] || marcados[chave].depositadoEm) return;
+    var d = partes[1];
+    if (out.some(function (x) { return x.data === d; })) return;
+    var linhasDia = porData[d] || rdoAssinLinhasDoDia_(obra, d);
+    out.push({ data: d,
+               assinadas: linhasDia.filter(function (x) { return String(x.status) === 'assinada'; }).length,
+               noDeposito: rdoPdfAssinaturasNoDeposito_(obra, d),
+               enviado: !!log[chave], redesenhar: true });
+  });
+  out.sort(function (a, b) { return a.data < b.data ? -1 : (a.data > b.data ? 1 : 0); });
+
   return { ok: true, obra: obra, previstas: previstas, pendentes: out };
 }
 
@@ -5774,6 +6112,60 @@ function reenviarRDOAssinadoDoDiaAlvo() {
    "o assinado desse dia saiu?" sem abrir o app. */
 function verRDOsAssinadosPendentes() {
   var r = rdoAssinadosPendentes({ obra: OBRA_ID });
+  Logger.log(JSON.stringify(r, null, 2));
+  return r;
+}
+
+/* O SUBSTITUTO DO ENGENHEIRO — férias, licença. Ver "O SUBSTITUTO DO
+   TITULAR" no bloco da firma arquivada.
+
+   1. Ponha a imagem da firma (PNG, fundo transparente) em qualquer pasta do
+      Drive desta conta, com o nome que está em `arquivo` (ou cole ali o id
+      ou o link dela).
+   2. Confira o período e os nomes abaixo.
+   3. ▶ Executar `registrarSubstitutoDaFirma`.
+
+   Ela registra o período E já troca a firma nos RDOs do período que saíram
+   com a do titular; esses dias voltam para a lista como REENVIO assim que
+   um aparelho com o app aberto os redesenhar. Na volta do titular não há
+   nada a fazer: o RDO do dia seguinte ao `ate` já nasce com a firma dele. */
+var SUBSTITUTO_FIRMA = {
+  papel: 'engenheiro',
+  de: '2026-10-13',
+  ate: '2026-11-12',
+  nome: 'Paulo Eugênio Chaves Façanha',
+  documento: '',
+  titular: 'Marcio Santana dos Santos',
+  motivo: 'férias',
+  arquivo: 'firma_paulo_eugenio_chaves_facanha.png',
+  /* A mesma confirmação do "o titular autorizou" da tela de arquivamento:
+     sem ela nada é registrado. Quem executa responde por ela — o e-mail
+     dele fica na Auditoria e em cada linha de RDO. */
+  autorizado: true
+};
+
+function registrarSubstitutoDaFirma() {
+  var quem = '';
+  try { quem = Session.getEffectiveUser().getEmail(); } catch (e) {}
+  var r = rdoFirmaSubstitutoRegistrar_(SUBSTITUTO_FIRMA, quem || 'editor');
+  if (r.ok) r.reaplicado = rdoFirmaSubstitutoReaplicar_(quem || 'editor');
+  Logger.log(JSON.stringify(r, null, 2));
+  return r;
+}
+
+/* Só a segunda metade: troca, nos RDOs do período, a firma do titular
+   pela do substituto já registrado. Rodar de novo não troca nada. */
+function aplicarSubstitutoNosRDOsJaEmitidos() {
+  var quem = '';
+  try { quem = Session.getEffectiveUser().getEmail(); } catch (e) {}
+  var r = rdoFirmaSubstitutoReaplicar_(quem || 'editor');
+  Logger.log(JSON.stringify(r, null, 2));
+  return r;
+}
+
+/* O que está registrado e o que falta redesenhar. Só lê. */
+function verSubstitutosDaFirma() {
+  var r = { substitutos: rdoFirmaSubstitutos_(), redesenhar: rdoRedesenharLer_() };
   Logger.log(JSON.stringify(r, null, 2));
   return r;
 }
