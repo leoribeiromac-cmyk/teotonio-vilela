@@ -195,6 +195,37 @@ oficial e REDEPOSITA — e é o depósito com todas as firmas que dispara o e-ma
 do "RDO ASSINADO". Daí o `assinaturas: N` do `rdoPdfDoDia`: é como o servidor
 sabe que o PDF guardado ficou para trás de quem assinou depois.
 
+### Titular de férias: o substituto tem PERÍODO
+
+Quem responde pela obra muda (férias, licença) e o RDO não pode sair com a
+firma de quem está fora. `RDO_FIRMA_SUBSTITUTOS` (gravada por
+`registrarSubstitutoDaFirma`, editor, a partir da constante
+`SUBSTITUTO_FIRMA`) guarda `{papel, de, ate, nome, assinatura, titular,
+motivo, autorizadaPor…}`, e `rdoFirmaArquivadaDe_(papel, dataISO)` devolve o
+substituto quando a DATA DO RDO cai no período — nunca pelo relógio, para o
+último dia fechado na manhã seguinte continuar do substituto e a volta do
+titular ser sozinha. Sem data (a tela de arquivamento, o armar), a resposta é
+sempre a firma do titular.
+
+- A linha sai com `origem = arquivada` (todas as travas da origem valem) e
+  `agente = firma do substituto`; a observação diz período e no lugar de
+  quem. O e-mail do titular no período não diz "sua firma foi aplicada".
+- `RDO_FIRMA_PAPEIS` vale aqui também: a fiscalização nunca tem substituto.
+- O registro corrige o que já saiu (`rdoFirmaSubstitutoReaplicar_`): troca
+  só firma APLICADA PELO SISTEMA no período; link e manual ficam. A firma do
+  fiscal fica — ele assinou o conteúdo (`revisao`), que não mudou. É a
+  exceção deliberada ao "reescrever o que já foi não se faz por botão": é
+  decisão do escritório, rodada no editor, com rastro na Auditoria
+  (`rdoFirmaSubstituida`) e aviso de reenvio no e-mail.
+- Como a contagem de firmas não muda, o dia trocado entra em
+  `RDO_REDESENHAR` (`obra|data` → `{motivo, desde, depositadoEm}`):
+  `rdoAssinadosPendentes` o devolve mesmo com o depósito "em dia" e fora da
+  janela, `rdoPdfDoDia` anota o depósito, e `rdoEnviarAssinadoSePronto_`
+  manda "(reenvio)" com o motivo e só então apaga a marca. Antes do
+  redesenho ele RECUSA mandar — o anexo seria a via com a firma velha.
+- A imagem do substituto também não entra no repositório: vai para o Drive
+  e o registro faz uma cópia na pasta privada.
+
 ### Ninguém precisa lembrar de abrir a tela do dia
 
 O fiscal assina à tarde, e a tela daquele dia está fechada em todo lugar —
