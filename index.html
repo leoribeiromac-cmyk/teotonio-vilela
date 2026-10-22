@@ -16294,9 +16294,23 @@ function rdosDaData(data) {
   });
 }
 
+/* AJUSTE DE AVANÇO — a linha da RDO_Avanco com Turno "Ajuste".
+   O apontador que escreve o serviço como texto (avulso, `OUTRO`) não move o
+   avanço: o pacote fica parado no painel enquanto a obra anda. O escritório
+   corrige gravando o que falta na aba, com o pacote e a quantidade, no turno
+   "Ajuste". Ela conta no avanço e no consumo como qualquer lançamento — mas
+   não é serviço DAQUELE dia: não sai no RDO (tela, PDF, planilha), no "já
+   lancei hoje?" nem no "repetir o último dia". O RDO é o papel que a
+   fiscalização assina; o servidor tira a mesma linha da contagem do e-mail
+   (`rdoServicosDoDia_` no Code.gs). */
+function ehAjusteDeAvanco(r) {
+  return String(getCSVField(r, 'Turno') || '').trim().toLowerCase() === 'ajuste';
+}
+
 // Serviços (RDO_Avanco) lançados numa data.
 function servicosDaData(data) {
   return (STATE.rdoavanco || []).filter(r => {
+    if (ehAjusteDeAvanco(r)) return false;
     const rd = parseISODate(getCSVField(r, 'Data'));
     return rd && getLocalISODate(rd) === data;
   });
@@ -16897,6 +16911,7 @@ function linhasEquipExport(d) {
 // Serviços (rdoavanco) do dia, separados por turno — mesmo filtro do PDF.
 function servicosDataExport(data) {
   const filtra = noturno => STATE.rdoavanco.filter(r => {
+    if (ehAjusteDeAvanco(r)) return false;
     const rd = parseISODate(getCSVField(r, 'Data'));
     if (!rd || getLocalISODate(rd) !== data) return false;
     const t = String(getCSVField(r, 'Turno') || (noturno ? '' : 'Diurno')).trim().toLowerCase();
@@ -17415,6 +17430,7 @@ function renderRDO() {
   // Banner "já lancei hoje?" — conta lançamentos do dia + pendentes na fila offline
   const hojeISO = getLocalISODate(new Date());
   const lancHoje = (STATE.rdoavanco || []).filter(r => {
+    if (ehAjusteDeAvanco(r)) return false;
     const rd = parseISODate(getCSVField(r, 'Data'));
     return rd && getLocalISODate(rd) === hojeISO;
   });
@@ -18062,6 +18078,7 @@ window.copiarServicosDeOntem = function() {
   const hoje = STATE.draft && STATE.draft.data ? STATE.draft.data : getLocalISODate(new Date());
   let ultimaData = '';
   STATE.rdoavanco.forEach(r => {
+    if (ehAjusteDeAvanco(r)) return;
     const d = parseISODate(getCSVField(r, 'Data'));
     if (!d) return;
     const iso = getLocalISODate(d);
@@ -20498,6 +20515,7 @@ function _gerarPDFDiario(data, opcoes) {
   }
   
   const servicosDiurnos = STATE.rdoavanco.filter(r => {
+    if (ehAjusteDeAvanco(r)) return false;
     const rd = parseISODate(getCSVField(r, 'Data'));
     if (!rd) return false;
     const t = String(getCSVField(r, 'Turno') || 'Diurno').trim().toLowerCase();
@@ -22395,6 +22413,7 @@ async function _gerarPDFInterno(data, turnoFocus) {
 
   // Filtro robusto que ignora letras maiúsculas/minúsculas e espaços em branco
   let servicosDiurnos = STATE.rdoavanco.filter(r => {
+    if (ehAjusteDeAvanco(r)) return false;
     const rd = parseISODate(r['Data']);
     if (!rd) return false;
     const t = String(r['Turno'] || 'Diurno').trim().toLowerCase();

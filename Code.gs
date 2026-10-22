@@ -4145,7 +4145,10 @@ function rdoRevisoesDoDia_(obra, dataISO) {
 }
 
 /* Quantos serviços foram lançados no dia — o número que diz, de relance,
-   se o RDO anexado tem produção dentro ou está vazio. */
+   se o RDO anexado tem produção dentro ou está vazio.
+   A linha de Turno "Ajuste" é o AJUSTE DE AVANÇO do escritório (ver
+   `ehAjusteDeAvanco` no index.html): conta no avanço, mas não é serviço do
+   dia e não sai no PDF — então também não entra nesta conta. */
 function rdoServicosDoDia_(obra, dataISO) {
   try {
     var aba = abaServicos();
@@ -4154,11 +4157,13 @@ function rdoServicosDoDia_(obra, dataISO) {
     var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
     var iData = idxColuna(cab, 'data');
     var iObra = idxColuna(cab, 'obra');
+    var iTurno = idxColuna(cab, 'turno');
     if (iData === -1) return 0;
     var n = 0;
     for (var i = 1; i < dados.length; i++) {
       if (normData(dados[i][iData]) !== dataISO) continue;
       if (iObra !== -1 && normObra(dados[i][iObra]) !== normObra(obra)) continue;
+      if (iTurno !== -1 && String(dados[i][iTurno]).trim().toLowerCase() === 'ajuste') continue;
       n++;
     }
     return n;

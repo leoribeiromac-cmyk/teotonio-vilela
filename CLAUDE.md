@@ -923,6 +923,23 @@ no lugar.
 A tela de Projetos não é redesenhada pela carga de fundo (não lê nada dela):
 voltava o zoom ao início e tirava a prancha da tela cheia a cada 5 minutos.
 
+## Ajuste de avanço: Turno "Ajuste" conta no painel e não sai no RDO
+
+Apontador que escreve o serviço como texto (avulso, `OUTRO`) não move o
+avanço — em out/2026 o Johnny lançava muro E, drenagem e paradas assim, e o
+painel ficava parado. O escritório corrige gravando na RDO_Avanco o que
+falta: pacote e quantidade, **Turno `Ajuste`**, Equipe `Ajuste de avanço`,
+Apontador `Ajuste`, e na Observação quem informou e o percentual.
+
+`ehAjusteDeAvanco(r)` reconhece a linha. Ela entra no avanço e no consumo
+como qualquer lançamento, mas fica de fora de tudo que é "serviço DO DIA":
+a lista do RDO (`servicosDaData`), os dois PDFs, a planilha exportada
+(`servicosDataExport`), o "já lancei hoje?" e o "repetir o último dia". No
+servidor, `rdoServicosDoDia_` também a pula — o e-mail não pode contar
+serviço que o PDF não mostra. Lista nova de serviços do dia tem de pular o
+ajuste também. `tests/ajuste-de-avanco.ui.test.js` e
+`tests/ajuste-de-avanco-servidor.test.js`.
+
 ## Sem app irmão
 
 O `gestor-obras` ("Gestor — Controle de Obras") não é mais usado.
