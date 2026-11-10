@@ -25,7 +25,7 @@
 // v4: conjunto de ícones redesenhado + marca do app. Trocar a versão é o que
 // descarta o cache antigo — sem isso o aparelho seguiria servindo os ícones
 // e o js/ui/icones.js anteriores até a revalidação em segundo plano rodar.
-const VERSAO = 'teotonio-v69'; // v69: revisão total — segurança (login, assinatura, obra de cada linha), fila e depósito por obra, rascunho da nota, estoque entre aparelhos, Painel com filtro de mês, prazos de rede, apresentação do 3D
+const VERSAO = 'teotonio-v70'; // v70: Painel em volume (maquete da pista por camada e relevo do ritmo, js/ui/iso.js), produtividade real no Cronograma, atalhos do ícone; revisão: serviço do dia na trava do RDO assinado e no depósito do PDF, fila e sobreposições locais, Painel com mês no filtro, Equipamentos, Bota-Fora e Notas
 // As bibliotecas do vendor/ têm balde PRÓPRIO, que NÃO é descartado quando o
 // app muda de versão. Antes, cada atualização do sistema jogava fora 1,2 MB de
 // Chart.js, jsPDF, xlsx, PDF.js e fontes — e o aparelho baixava tudo de novo no

@@ -249,7 +249,7 @@ function camposMultipart(corpo) {
      tela ainda nela, é o depositarRDOPdf de sempre. */
   ok('salvar o turno dispara o depósito',
      corpoSalvar.indexOf('depositoDepoisDeGravar(obraEnvio, d.data') !== -1 &&
-     /function depositoDepoisDeGravar\(obra, data, reaberto\)[\s\S]{0,500}depositarRDOPdf\(data\)/.test(html));
+     /function depositoDepoisDeGravar\(obra, data, reaberto\)[\s\S]{0,1200}depositarRDOPdf\(data\)/.test(html));
   /* O número do RDO nasce no servidor. O depósito sai da linha que ele
      devolve ao gravar (guardada por cima do CSV atrasado) — e depois da
      recarga, como sempre. Sem isso o primeiro depósito ia com "RDO Nº —". */

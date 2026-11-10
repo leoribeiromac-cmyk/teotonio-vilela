@@ -616,10 +616,26 @@
         function fecharConfirmacao() { EQ.fechar('confirmModal'); }
         function confirmarEnvio() { enviarApontamento(false); }
 
+        /* O que identifica o apontamento que está na tela. O envio leva até
+           90 s no sinal ruim, e só o botão fica travado: quem lança dez
+           máquinas no fim do turno já está digitando a seguinte quando a
+           resposta chega — e o `limparApontamento()` apagava a máquina NOVA,
+           com o rascunho dela. Só se limpa o formulário que ainda é o enviado. */
+        function marcaDoApontamento() {
+            const v = id => { const e = document.getElementById(id); return e ? String(e.value) : ''; };
+            return ['equipamento', 'turno', 'operador', 'inicio', 'fim', 'horimInicial', 'horimFinal', 'combustivel', 'observacoesUI']
+                .map(v).join('\u0001') + '\u0001' + document.getElementById('paradasList').children.length;
+        }
         async function enviarApontamento(forcar) {
             fecharConfirmacao();
             setLoading(true);
             let fdParaFila = null;
+            const marcaEnvio = marcaDoApontamento();
+            const limparSeAindaEhEste = () => {
+                if (marcaDoApontamento() === marcaEnvio) { limparApontamento(); return true; }
+                showToast('O apontamento anterior foi registrado — o que você já preencheu do próximo continua na tela.', 'success');
+                return false;
+            };
             try {
                 /* NÃO se captura o canvas aqui: o que vale é o que o operador
                    CONFIRMOU no modal (hidden #assinatura). Traço deixado no
@@ -699,7 +715,7 @@
                 const r = await resp.json();
                 if (r.ok) {
                     showToast('Transmissão concluída com sucesso!', 'success');
-                    limparApontamento();
+                    limparSeAindaEhEste();
                 } else if (r.duplicado) {
                     if (confirm(r.erro + '\n\nDeseja registrar mesmo assim (2º apontamento)?')) {
                         await enviarApontamento(true);
@@ -723,7 +739,7 @@
                                             campos: fdParaFila.campos, descricao: fdParaFila.descricao });
                 if (guardou) {
                     showToast('Sem sinal — apontamento guardado no aparelho. Ele sobe sozinho quando a internet voltar.', 'success');
-                    limparApontamento();
+                    limparSeAindaEhEste();
                 } else {
                     showToast('Erro de conexão com o servidor. Tente novamente.', 'error');
                 }
@@ -888,8 +904,19 @@
             set('data', paraISO(a.data));
             set('turno', a.turno);
             set('operador', a.operador);
-            set('inicio', a.inicio);
-            set('fim', a.fim);
+            /* No LEGADO (a Teotônio) início, fim e paradas não existem como
+               colunas: só dentro do texto de `observacoes`, que é de onde a
+               planilha da medição os tira. Lidos só de `a.inicio`/`a.paradas`,
+               o formulário abria com as horas em branco e "nenhuma parada" —
+               o apontador redigitava 07:00/17:00, a parada do almoço sumia e
+               a correção gravava uma hora de máquina a MAIS. */
+            const obsLida = parseObs(a.observacoes);
+            const hhmm = v => {
+                const m = /^(\d{1,2}):(\d{2})/.exec(String(v == null ? '' : v).trim());
+                return m ? m[1].padStart(2, '0') + ':' + m[2] : '';
+            };
+            set('inicio', hhmm(a.inicio) || hhmm(obsLida.inicio));
+            set('fim', hhmm(a.fim) || hhmm(obsLida.fim));
             set('horimInicial', a.horimInicial != null && a.horimInicial !== '' ? a.horimInicial : a.horimIni);
             set('horimFinal', a.horimFinal != null && a.horimFinal !== '' ? a.horimFinal : a.horimFim);
             set('combustivel', a.combustivel);
@@ -911,7 +938,7 @@
             }
 
             g('paradasList').innerHTML = '';
-            paradasDoTexto(a.paradas).forEach(p => adicionarParada(p.motivo, p.ini, p.fim));
+            paradasDoTexto(a.paradas || obsLida.paradas).forEach(p => adicionarParada(p.motivo, p.ini, p.fim));
             atualizarParadasVazio();
             calcularHoras();
 

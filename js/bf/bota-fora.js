@@ -300,7 +300,8 @@
     const digitou = ['bfPlaca', 'bfMotorista', 'bfObs'].some(id => (campos[id] || '').trim());
     const anexou = !!(PROVAS.carga || PROVAS.ticket || PROVAS.assinatura);
     if (!digitou && !anexou) return null;
-    return { campos, provas: { carga: PROVAS.carga, ticket: PROVAS.ticket, assinatura: PROVAS.assinatura } };
+    return { campos, provas: { carga: PROVAS.carga, ticket: PROVAS.ticket, assinatura: PROVAS.assinatura },
+             cid: CID_VIAGEM };
   }
 
   function gravarRascunho() { if (rasc) rasc.agora(); }
@@ -323,6 +324,7 @@
     });
     const pr = d.provas || {};
     PROVAS = { carga: pr.carga || null, ticket: pr.ticket || null, assinatura: pr.assinatura || '' };
+    CID_VIAGEM = String(d.cid || '');      // a mesma viagem, com o mesmo número de envio
     pintarProvas();
     avisarRascunho(!!reg.semImagens);
     ligarRascunho();
@@ -400,12 +402,46 @@
     abrir('bfConfirmModal');
   }
 
+  /* O NÚMERO DE ENVIO É DA VIAGEM, não do toque no botão. Ele nascia dentro
+     do envio: quem saía da tela com a viagem subindo (até 90 s no sinal ruim)
+     e voltava recebia o rascunho restaurado, com o botão ativo — registrar
+     de novo gerava OUTRO número, o servidor não reconhecia a repetição e a
+     viagem era cobrada em dobro. Agora ele nasce uma vez, vai junto no
+     rascunho e só é renovado quando a viagem é limpa. */
+  let CID_VIAGEM = '';
+  function cidDaViagem() {
+    if (!CID_VIAGEM) CID_VIAGEM = 'bf_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+    return CID_VIAGEM;
+  }
+  /* O que identifica a viagem que está na tela — para a resposta do envio não
+     limpar a placa e a foto do caminhão SEGUINTE, que o apontador já começou
+     a preencher enquanto a anterior subia. */
+  function marcaDaViagem() {
+    return [val('bfPlaca'), val('bfMotorista'), val('bfObs')].join('\u0001') + '\u0001' +
+      [PROVAS.carga, PROVAS.ticket, PROVAS.assinatura].map(x => (x ? String(x).length : 0)).join(',');
+  }
+
   window.bfConfirmar = async function () {
     fechar('bfConfirmModal');
     enviando(true);
+    const cid = cidDaViagem();
+    gravarRascunho();                 // o rascunho já sabe o número desta viagem
+    const marcaEnvio = marcaDaViagem(), chaveEnvio = chaveRasc();
+    const limparSeAindaEhEsta = () => {
+      if (!g('bfForm')) {
+        // saiu da tela: o rascunho guardado é o desta viagem, que já está registrada
+        CID_VIAGEM = '';
+        if (typeof rascunhoApagar === 'function') { try { rascunhoApagar(chaveEnvio); } catch (e) { } }
+        return;
+      }
+      if (marcaDaViagem() === marcaEnvio) { limparFormulario(); return; }
+      CID_VIAGEM = '';                // o que está na tela é OUTRA viagem
+      gravarRascunho();
+      aviso('A viagem anterior foi registrada — o que você já preencheu da próxima continua na tela.', 'info');
+    };
     const p = {
       action: 'bfSalvar',
-      clientId: 'bf_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      clientId: cid,
       obra: obraId(),
       data: val('bfData'),
       fornecedor: val('bfFornecedor'),
@@ -435,9 +471,10 @@
       const r = await enviarAcao({ ...p, ...authParams() }, 1, 2000);
       if (r && r.ok) {
         aviso('Viagem registrada.', 'success');
-        limparFormulario();
+        limparSeAindaEhEsta();
       } else {
-        throw new Error((r && (r.error || r.mensagem)) || 'erro');
+        // a mensagem do servidor primeiro: "PROVA_NAO_GUARDADA" não diz nada a quem está na boca da obra
+        throw new Error((r && (r.mensagem || r.error)) || 'erro');
       }
     } catch (e) {
       /* Sem sinal, a viagem NÃO se perde: entra na fila do aparelho com as
@@ -451,7 +488,7 @@
         const guardou = await outboxAdicionar({ tipo: 'botafora', params: p, descricao });
         if (guardou) {
           aviso('Sem sinal — a viagem ficou guardada no aparelho e sobe sozinha.', 'info');
-          limparFormulario();
+          limparSeAindaEhEsta();
         }
       } else {
         aviso('Não foi possível registrar: ' + (e && e.message ? e.message : 'erro do servidor'));
@@ -474,6 +511,7 @@
   function limparFormulario() {
     ['bfPlaca', 'bfMotorista', 'bfObs'].forEach(id => { const e = g(id); if (e) e.value = ''; });
     PROVAS = { carga: null, ticket: null, assinatura: '' };
+    CID_VIAGEM = '';                  // a próxima é outra viagem
     const c = g('bfCanvas'); if (c && c._limpar) c._limpar();
     pintarProvas();
     // A viagem foi gravada (ou descartada): o rascunho dela não pode
@@ -498,11 +536,17 @@
   window.bfPeriodoTudo = function () { g('bfDe').value = ''; g('bfAte').value = ''; carregarViagens(); };
   window.bfCarregarViagens = function () { carregarViagens(); };
 
+  let _seqViagens = 0;
   async function carregarViagens() {
     const box = g('bfLista');
     if (!box || carregando) return;
     carregando = true;
     box.innerHTML = '<p class="eq-vazio">Carregando…</p>';
+    /* DE QUAL OBRA é este pedido. A resposta demorada da obra A chegava com
+       a tela já na obra B, preenchia a lista — e "Gerar planilha" exportava as
+       viagens de A como o FRETE de B. A resposta que não é mais da obra da
+       tela é descartada. */
+    const obraDoPedido = obraId(), pedido = ++_seqViagens;
     try {
       const periodo = { de: val('bfDe'), ate: val('bfAte') };
       const url = urlBF('bfListar', periodo);
@@ -514,13 +558,14 @@
       let r;
       try { r = await (await fetch(url, ctl ? { signal: ctl.signal } : undefined)).json(); }
       finally { clearTimeout(relogio); }
+      if (obraDoPedido !== obraId() || pedido !== _seqViagens) return;
       VIAGENS = (r && r.viagens) || [];
       VIAGENS_DE = periodo;
       pintarViagens();
     } catch (e) {
-      box.innerHTML = '<p class="eq-vazio">Não consegui buscar as viagens. Tente de novo.</p>';
+      if (pedido === _seqViagens && g('bfLista')) g('bfLista').innerHTML = '<p class="eq-vazio">Não consegui buscar as viagens. Tente de novo.</p>';
     } finally {
-      carregando = false;
+      if (pedido === _seqViagens) carregando = false;
     }
   }
 
@@ -934,8 +979,11 @@
     if (!form) return;
     // Provas são da viagem que estava na tela; remontar a tela zera.
     PROVAS = { carga: null, ticket: null, assinatura: '' };
+    CID_VIAGEM = '';                  // (o rascunho restaurado, se houver, traz o dele)
     VIAGENS = [];
     VIAGENS_DE = null;
+    // o pedido que ainda está no ar é da tela de antes: não vale mais, nem segura o próximo
+    _seqViagens++; carregando = false;
     rasc = null;
     mexeu = false;
     ligarForm();

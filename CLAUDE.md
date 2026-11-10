@@ -19,6 +19,9 @@ para a navegação, então a mudança chega sem precisar limpar cache.
   DOIS backends: a Teotônio no Apps Script legado (campo `equipamentos` do
   cadastro dela), as demais no `Code.gs`. `backendEquip()` decide a cada
   chamada — mexer numa ação exige pensar nos dois dialetos.
+- `js/ui/iso.js` — o desenho em volume do Painel, em SVG puro (sem three.js):
+  a maquete da pista por camada e o relevo do ritmo dia a dia. Ver "O Painel
+  em volume".
 - `assinar.html` — página de assinatura online do RDO, aberta pelo link do
   e-mail. Autônoma: não carrega o app, só fala com o `Code.gs`.
 - `js/rdo/mapa-chuva.js` — o mapa de chuva circular do mês (tela Dias
@@ -266,6 +269,47 @@ fila guarda o turno recusado e tenta de novo a cada 10 min, sem travar os
 outros. `tests/rdo-turno-assinado-servidor.test.js` e
 `tests/rdo-gravado-e-assinado.ui.test.js`.
 
+### O serviço do dia é parte do RDO
+
+O PDF oficial traz os SERVIÇOS do dia (aba `RDO_Avanco`), não só o efetivo e
+o clima. Lançar, corrigir ou apagar serviço muda o RDO daquele dia — e isso
+não passava por nenhuma das travas da assinatura nem pelo depósito:
+
+- **Depois da firma**: `addBatchRDO`, `updateRDO` e `deleteRDO` recusam com
+  `RDO_ASSINADO` (`rdoServicoPorta_`, no `Code.gs`). Mudar exige
+  `reabrir=1`, que só o escritório manda — as firmas voltam a pendentes com
+  link novo, igual ao RDO Diário. No app, `servicoEmDiaAssinado` avisa o
+  apontador (nada do que ele preencheu se perde, e NÃO vai para a fila como
+  falta de sinal) e pergunta ao escritório. O `updateRDO` confere o dia de
+  onde o serviço SAI e o dia para onde VAI.
+- **Antes da firma**: o dia ganha `revisao` nova (`rdoRevisaoTocar_`). O PDF
+  guardado fica para trás — o link avisa `desatualizado` e a firma é
+  recusada com `mudou` — até o app redepositar. A resposta traz a linha do
+  dia como ficou (`dias: { 'aaaa-mm-dd': linha }`); o app a guarda por cima
+  do CSV e anota o PDF (`servicoGravadoNoRdo` → `depositoPendenteAnotar`).
+  Sem isso o e-mail das 6h30 e o link levavam o PDF de quando o turno foi
+  salvo, sem o serviço lançado depois.
+- **O depósito velho se cura sozinho**: o dia vai para a Propriedade
+  `RDO_DEPOSITO_VELHO`, e o `rdoAssinadosPendentes` o devolve
+  (`desatualizado`) para a varredura de QUALQUER aparelho repor; o depósito
+  desenhado da revisão do dia tira a marca. E `depositoDepoisDeGravar` anota
+  o depósito que não subiu (o turno grava, o PDF de 300 KB não passa no sinal
+  ruim) para a manutenção tentar de novo.
+- Ficam de fora: o **ajuste de avanço** (não sai no RDO), as outras obras, o
+  dia sem RDO Diário (não há PDF para ficar para trás) e o **lote reenviado
+  pela fila** — o dedup por `clientId` vem ANTES da trava.
+- Apagar o RDO Diário leva o PDF depositado junto (`deleteRDODiario`): o
+  gatilho das 6h30 só confere se o arquivo existe, e mandava à fiscalização,
+  com link de assinar, o RDO que tinha sido apagado. A assinatura recusa o
+  PDF de um dia que não existe mais.
+- O e-mail "RDO ASSINADO" marca o envio NA LINHA da assinatura
+  (`assinadoEnviadoEm`): o `RDO_ASSINADO_LOG` é aparado em 60 dias, e baixar o
+  PDF de um RDO antigo (todo download deposita) mandava o e-mail de novo
+  para a lista inteira. Reabrir e `reenviarRDOAssinado` soltam a marca.
+
+`tests/rdo-servico-assinado-servidor.test.js` e
+`tests/rdo-servico-assinado.ui.test.js` (o app com o `Code.gs` de verdade).
+
 ## O servidor confere QUEM é e de que obra é CADA linha
 
 **Em produção `EXIGIR_TOKEN` é `true`.** Desligado (modo de implantação),
@@ -291,9 +335,27 @@ pessoa abaixo (dono da linha, parte de outro, apagar) deixam de existir.
   casava com a aba inteira.
 - Medição, cadastro de máquinas e `nfImagem` estão no `POR_OBRA`, e cada um
   confere a obra da LINHA que mexe (`OUTRA_OBRA`).
+- **As LEITURAS também são da obra**: `nfListar`, `bfListar`, `equipListar`,
+  `equipApontamentos` e `equipUltimos` estão no `POR_OBRA` (quem só tem o
+  Ranário lia as notas e as viagens da Teotônio), e `nfListar` sem obra não
+  devolve as notas de todas. Ação de leitura nova entra na lista.
+- **A firma arquivada confere a obra** (arquivar e ler a imagem), não só o
+  perfil.
+- `deleteRDODiario` confere a obra da LINHA (sem `obra` no pedido, o
+  roteador conferia contra a Teotônio e a linha podia ser de outra) e guarda
+  a linha inteira na Auditoria.
+- **Linha com `obra` em branco é da Teotônio** também no `regravarNaObra_` e
+  no `nfImagem`: a conferência só rodava com a célula preenchida.
+- **O admin que troca a própria senha derruba as OUTRAS sessões dele**
+  (`sessoesDoUsuarioRevogar(nome, motivo, manterToken)`): a exceção "não
+  derrubar quem está mexendo" poupava todas, e o celular perdido seguia
+  dentro. "Sou eu" é comparado sem diferença de caixa.
+- **Prova que o Drive não guardou não some calada**: `bfSalvar` e
+  `equipApontar` recusam (`PROVA_NAO_GUARDADA`) em vez de gravar sem a foto
+  ou a assinatura que veio — o app mantém a viagem para tentar de novo.
 
-`tests/seguranca-servidor.test.js` (o Code.gs de verdade, via
-`tests/servidor-falso.js`).
+`tests/seguranca-servidor.test.js` e `tests/revisao-v70-servidor.test.js` (o
+Code.gs de verdade, via `tests/servidor-falso.js`).
 
 ## O RDO Diário é UMA linha por dia, com os dois turnos
 
@@ -588,6 +650,50 @@ software — inclusive a apresentação, a legenda que realça e o sol dourado),
 decodificador de verdade, índice × arquivos, vendor × lista do Offline) e
 `tests/modelo3d-etapas.test.js` (a etapa de cada pacote real).
 
+## O Painel em volume: a maquete da pista e o relevo do ritmo
+
+Dois desenhos do Painel Executivo que precisam de terceira dimensão para
+dizer o que dizem e que NÃO podem custar o que o Modelo 3D custa: são SVG
+montado como texto (`js/ui/iso.js`), em projeção oblíqua (o comprido da via
+quase deitado, a profundidade fugindo para cima e para a direita — numa
+isométrica de verdade 44 estacas viram uma diagonal que não cabe no cartão).
+
+- **Maquete da pista** — o modo **Camadas** do cartão "Trecho da obra"
+  (`renderAvenida3D`; o modo "Atividade" é a cena de sempre). Cada estaca é
+  uma coluna que sobe até a etapa MAIS ALTA lançada nela, pelos degraus de
+  baixo; o tracejado é a pista pronta. A regra de etapa não mora no desenho:
+  vem da tela Modelo 3D (`m3dBase`, `m3dEtapaDe`, `M3D_ETAPAS`), e os degraus
+  são só os que os pacotes do filtro TÊM. O filtro é o do PAINEL, não o da
+  tela 3D: frente escolhida mostra as etapas dela; mês escolhido mostra a
+  pista como estava no FIM dele (`ateISO` — é acumulado, como tudo o que o
+  Painel diz "até aquela data"). Muro e urbanismo não sobem a pista. Frente
+  ou obra sem etapa de pista não tem maquete, e o cartão fica como era.
+- **Relevo do ritmo** (`renderRitmoCard`) — 26 semanas × 7 dias; cada dia
+  sobe conforme o avanço que ganhou. O ganho sai da MESMA série do Painel
+  (`calcCumulativoDia`, com o teto de 100% por pacote): a soma dos blocos
+  fecha com o número grande. Chuva e paralisação vêm do RDO Diário pela
+  leitura do mapa de chuva (`mapaChuvaDoMes`), não do INMET. Dia útil sem RDO
+  nem lançamento é contado e marcado. O domingo fica na FRENTE do desenho (não
+  tem produção, e ali não tapa ninguém).
+
+As travas:
+
+- **Ordem de pintura**: a pista do fundo inteira (arestas de trás, camadas,
+  arestas da frente) e só então a de perto; dentro da pista, de baixo para
+  cima e da esquerda para a direita. Trocar a ordem faz um bloco de trás
+  passar por cima de um da frente.
+- **Trocar de modo refaz só o cartão** (`setTrechoModo`): redesenhar o Painel
+  repetia a entrada de todos os cartões e recriava a Curva S.
+- **A camada apagada pela legenda usa `animation-fill-mode: backwards`**: com
+  `both`, a animação terminada continua mandando na opacidade e a camada não
+  apaga.
+- **Texto e botão ficam fora do palco** (que é escuro nos dois temas), no pé
+  do cartão, com os tokens do tema.
+- A estaca ou o dia tocado é estado do módulo (`MAQ.sel`, `RIT.sel`) e é
+  solto quando sai do filtro ou da obra.
+
+`tests/maquete-ritmo.ui.test.js` (o app de verdade).
+
 ## O mapa de chuva sai do RDO
 
 O mapa de chuva é o gráfico circular do mês que acompanha a medição: uma
@@ -630,6 +736,25 @@ tarde chamava o coletor sem o formulário na tela — "não há nada digitado" �
 e APAGAVA o rascunho. E `trocarObra()` zera também o `DIARIO_V4` e as
 `MEDICOES_FECHADAS`: são da obra que sai.
 
+`fazerLogout()` também grava e solta o gravador — sair com a viagem de
+bota-fora pela metade a apagava no `pagehide` seguinte.
+
+**A resposta do envio só limpa o formulário que ainda é o enviado**
+(`marcaDaViagem`, no bota-fora; `marcaDoApontamento`, nos equipamentos): o
+envio leva até 90 s no sinal ruim, e quem lança dez máquinas seguidas já
+estava digitando a seguinte quando a resposta chegava e apagava tudo. E o
+número de envio da viagem (`CID_VIAGEM`) nasce UMA vez e vai no rascunho:
+gerado a cada toque, sair da tela e registrar de novo cobrava a viagem em
+dobro.
+
+**O RDO Diário de ontem não fica aberto recebendo o dia de hoje**
+(`diarioConferirViradaDoDia`): o PWA fica vivo de um dia para o outro, e o
+formulário do dia 9, já preenchido, era salvo por cima no dia 10. Virou o
+dia sem nada por enviar, a tela volta a ser a de hoje; com trabalho por
+enviar ela fica, e avisa de que dia é. O turno que o servidor RECUSA não
+fica marcado `preenchido` ("já enviado" de um turno que não está em lugar
+nenhum).
+
 O RDO Diário de QUALQUER data abre por `abrirDiaV4(iso)`: rascunho presente
 (que não seja parte) manda sobre a planilha — é trabalho que não subiu. O
 turno que sobe pela FILA limpa o rascunho só se ele não foi editado depois
@@ -663,6 +788,15 @@ O que não subiu fica no aparelho (IndexedDB) e sobe sozinho. As travas:
   manutenção depois de cada carga boa, junto da varredura) e sai quando
   aquela obra volta à tela — sem isso o e-mail das 6h30 levava o depósito
   velho.
+- **A rodada confere se o item AINDA está na fila**: ela percorre a cópia
+  tirada no começo e demora (uma foto no 3G leva 90 s) — o turno corrigido e
+  salvo direto tirava o velho da fila, e ele subia assim mesmo, por cima.
+- **A foto não sobe na frente do serviço dela** (`servicosEsperando`), e a
+  que o servidor não anexou (`anexada: false` no `rdoFoto`: a linha ainda
+  não existe) fica guardada para ir de novo.
+- **As fotos do lote passam pela fila mesmo com sinal** (`fotosDoLoteSubir`):
+  só na memória da tela, o envio morria quando o celular era bloqueado no
+  meio, e o serviço ficava sem a prova.
 - **Todo pedido tem prazo**: `POST_TEMPO` no `enviarPost`, 60 s no CSV e na
   `assinar.html`, `fetchEquip` nos Equipamentos (inclusive o da fila: um
   envio pendurado segurava a fila inteira), e a lista do Bota-Fora.
@@ -699,6 +833,17 @@ e, se nada mudou, não reinterpreta nem redesenha. Voltar para a frente
 apagado fica em `_APAGADOS_LOCAL` até o CSV publicado também parar de
 trazê-lo — antes ele "voltava" 4 s depois de apagado.
 `tests/abrir-sem-sinal.ui.test.js`.
+
+As sobreposições locais (`comLancadosLocais`, `comEditadosLocais`) são
+reaplicadas sobre o próprio `STATE` depois de salvar, de editar e da fila —
+então têm de ser IDEMPOTENTES: só linha vinda do CSV diz que "o CSV
+alcançou". A linha que já era a nossa era lida como o CSV, saía do mapa, e
+o serviço recém-salvo sumia na carga seguinte (bastava salvar dois lotes em
+cinco minutos; o apontador relançava e a medição ganhava duas linhas).
+
+A carga que o próprio app agenda depois de gravar também respeita a linha
+em edição e o campo com foco (não só a de fundo): ela chegava com a
+correção SEGUINTE já aberta e a fechava.
 
 ## Texto de fora nunca vai cru para a tela
 
@@ -744,6 +889,13 @@ O dia do INMET é em UTC: 00h–23h UTC é 21h da véspera até 20h59 daqui.
 UTC) e o `somarChuva_` fica só com as horas cujo dia LOCAL é `d` — antes, a
 chuva das 21h de ontem entrava na noite de hoje e a das 21h–meia-noite de
 hoje sumia. `tests/clima-estacao.test.js` (INMET falso com `DT_MEDICAO`).
+
+**O dia da obra vai das 6h às 6h**: a madrugada (0–5h) fecha a NOITE DA
+VÉSPERA, como no mapa de chuva ("Noite 18:00 às 06:00") e no turno noturno.
+Ela era contada como lida e não entrava em período nenhum, de dia nenhum.
+E **hora sem dado não é hora seca**: a linha com `CHUVA` nula não conta — a
+estação em pane devolvia as 24 horas vazias e virava "0 mm / Bom", sem a
+busca descer para a estação seguinte.
 
 ## Previsão do tempo da obra
 
@@ -810,6 +962,10 @@ e mais baixa, e a mensagem diz quanto se perdeu. A trava que não pode cair:
 horizonte liso NÃO é tarja — recortar foto sem carimbo seria comer pedaço de
 prova. `tests/foto-sem-carimbo.ui.test.js` (o app de verdade) e
 `tests/foto-limpa-servidor.test.js` (o servidor, com Drive falso).
+
+O carimbo QUEBRA a linha que não cabe (`desenharCarimbo` mede com a fonte
+dela): cortada, a linha "frente · pacote" perdia o fim do nome — nas Ruas de
+Terra, a rua.
 
 - `vendor/` — bibliotecas servidas pelo próprio site (Chart.js, jsPDF +
   AutoTable, xlsx-js-style, PDF.js). **Não voltar a usar CDN**: o app precisa
@@ -914,6 +1070,18 @@ velocidade, o término no ritmo, a leitura da semana, a IA e o PDF — lê
 `metricsAcum`, ancorado no FIM do mês (`calcExecMetrics(…, { hoje: dataRef
 })`). O PDF saía com 3% enquanto a tela dizia 45%.
 
+O ESTADO da obra também é acumulado: pacotes iniciados e concluídos e o
+avanço de cada frente saem de `pacotesEstado` (os lançamentos até a data de
+referência; `rdosEstado` no `STATE.dashData`, para o PDF). Fatiada pelo mês,
+a Demolição concluída aparecia com 0% no cartão e "Não Iniciado" no PDF.
+
+`calcFrentesAnalise` (destaques da semana, "merecem atenção", o KPI de
+frentes paradas) segue as MESMAS regras da série do Painel: ganho com o teto
+de 100% do pacote (lançar por cima de pacote cheio não é liderar o ritmo),
+quantidade negativa de fora, Pacote_ID casado por `_chavePacote`, e a data
+de referência em `opts.hoje`. Frente 100% concluída não está parada: sai de
+"merecem atenção". `tests/painel-frentes-e-mes.ui.test.js`.
+
 A conta do avanço sobre o STATE inteiro (`calcularAvancoPorPacote()` sem
 recorte) fica guardada pela REFERÊNCIA de `STATE.rdoavanco` e
 `STATE.pacotes` — o Lançar Serviço a refazia por linha de serviço. Por isso
@@ -922,6 +1090,24 @@ no lugar.
 
 A tela de Projetos não é redesenhada pela carga de fundo (não lê nada dela):
 voltava o zoom ao início e tirava a prancha da tela cheia a cada 5 minutos.
+
+## Produtividade real no planejamento reverso
+
+O Cronograma divide o saldo pela produtividade do CADASTRO. Embaixo de cada
+uma sai a **real** (`produtividadeReal()`): quantidade lançada ÷ dias com
+lançamento — a produção de um dia TRABALHADO (o dia sem lançamento é do
+calendário, não da produtividade). Dois lançamentos no mesmo dia são um dia;
+ajuste de avanço e quantidade negativa ficam de fora; o id é casado por
+`_chavePacote`. Com três dias ou mais vira botão (`planUsarProdReal`): um
+toque põe o real no campo. `tests/produtividade-real.ui.test.js`.
+
+## Medição fechada
+
+`medicaoFechar` grava quem fechou e quando (as chaves do registro em
+MINÚSCULAS, como o cabeçalho lido — com `fechadaEm` a coluna nunca foi
+preenchida). A competência vai com apóstrofo (texto) e é lida por
+`medCompetencia_`, que aceita a célula que a planilha converteu em data:
+comparada como texto cru, fechava em dobro e não reabria.
 
 ## Ajuste de avanço: Turno "Ajuste" conta no painel e não sai no RDO
 

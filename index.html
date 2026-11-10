@@ -72,24 +72,27 @@
      index novo junto com um js/nf/notas.js velho, guardado do dia anterior — e
      tudo que mudou nos módulos simplesmente não rodava. O número tem de subir
      junto com o VERSAO do sw.js; tests/versao.test.js falha se esquecerem. -->
-<script src="dados/ranario.js?v=69"></script>
-<script src="dados/ruas-de-terra.js?v=69"></script>
+<script src="dados/ranario.js?v=70"></script>
+<script src="dados/ruas-de-terra.js?v=70"></script>
 <!-- Serviço que o contrato já tem e a planilha publicada ainda não: os muros
      de contenção do capítulo 10.0. Mesmo formato de sempre (pacote físico +
      matriz de coeficientes), só que servido pelo repositório até alguém colar
      as linhas na planilha — ver aplicarComplemento(). -->
-<script src="dados/teotonio-muros.js?v=69"></script>
+<script src="dados/teotonio-muros.js?v=70"></script>
 <!-- Módulo de Notas Fiscais: os dois primeiros arquivos são cópias do app
      "Gestor — Controle de Obras"; o adaptador traduz o vocabulário. -->
-<script src="js/ui/icones.js?v=69"></script>
-<script src="js/nf/adaptador.js?v=69"></script>
-<script src="js/nf/notas.js?v=69"></script>
-<script src="js/equip/equipamentos.js?v=69"></script>
+<script src="js/ui/icones.js?v=70"></script>
+<script src="js/nf/adaptador.js?v=70"></script>
+<script src="js/nf/notas.js?v=70"></script>
+<script src="js/equip/equipamentos.js?v=70"></script>
 <!-- Controle de bota-fora: a viagem de caminhão que sai do canteiro, com as
      provas que permitem conferir a fatura do transportador. -->
-<script src="js/bf/bota-fora.js?v=69"></script>
-<script src="js/rdo/mapa-chuva.js?v=69"></script>
-<script src="js/modelo3d/tela.js?v=69"></script>
+<script src="js/bf/bota-fora.js?v=70"></script>
+<script src="js/rdo/mapa-chuva.js?v=70"></script>
+<script src="js/modelo3d/tela.js?v=70"></script>
+<!-- Desenho em volume do Painel (maquete da pista e relevo do ritmo): SVG
+     puro, sem three.js. Vem DEPOIS do tela.js, de quem usa a leitura de etapa. -->
+<script src="js/ui/iso.js?v=70"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root {
@@ -2933,6 +2936,135 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .road-3d { width: 90%; height: 90px; }
 }
 
+/* Produtividade real, embaixo do campo do planejamento reverso */
+.plan-real {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px 2px 6px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--muted);
+  font-family: 'JetBrains Mono', monospace; font-size: var(--fs-2xs); font-weight: 500; line-height: 1.5;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+button.plan-real { cursor: pointer; transition: border-color .15s, background .15s; }
+button.plan-real:hover { border-color: var(--border-strong); background: var(--surface); }
+.plan-real .ic { width: 12px; height: 12px; }
+.plan-real.acima { color: var(--grn); border-color: color-mix(in oklab, var(--grn) 35%, var(--border)); }
+.plan-real.perto { color: var(--ylw-d); border-color: color-mix(in oklab, var(--ylw) 45%, var(--border)); }
+.plan-real.abaixo { color: var(--red); border-color: color-mix(in oklab, var(--red) 35%, var(--border)); }
+.plan-real.pouco { padding-left: 8px; opacity: .8; }
+@media (max-width: 700px) { button.plan-real { min-height: 40px; padding: 4px 12px 4px 10px; } }
+
+/* ==================================================================
+   DESENHO EM VOLUME (js/ui/iso.js) — maquete da pista e relevo do ritmo
+   ------------------------------------------------------------------
+   O palco é escuro nos dois temas, como a cena de atividade e o cartão
+   do topo: as cores das etapas são as da legenda do Modelo 3D, e só
+   sobre fundo escuro o amarelo da sinalização e o cinza da demolição
+   se leem lado a lado. Tudo que é texto e botão fica FORA do palco, no
+   pé do cartão, com os tokens do tema.
+   ================================================================== */
+.maq-palco {
+  position: relative; padding: 50px 18px 46px; overflow: hidden;
+  background:
+    radial-gradient(ellipse at 50% 0%, oklch(0.62 0.18 38 / 0.14) 0%, transparent 62%),
+    linear-gradient(180deg, #0c0a07 0%, #1a1612 55%, #0c0a07 100%);
+}
+.maq-palco + .maq-palco { border-top: 1px solid rgba(255,255,255,.07); }
+.maq-palco.solo { padding-bottom: 22px; }
+.maq-palco .scene-lane-label { animation-delay: .25s; white-space: nowrap; }
+/* O calendário é lido da direita (hoje) para a esquerda: no celular, onde ele
+   rola de lado, a rolagem já começa na ponta de HOJE. `direction: rtl` no
+   rolo faz isso sem JavaScript; o desenho volta a ser ltr. */
+.rit-palco .maq-rolo { direction: rtl; }
+.rit-palco .rit-svg { direction: ltr; }
+.rit-palco { padding: 16px 18px 10px; }
+.maq-rolo { overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch; scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.25) transparent; }
+.maq-svg, .rit-svg { display: block; width: 100%; height: auto; min-width: 640px; max-height: 440px; margin: 0 auto; }
+.rit-svg { max-height: 300px; }
+
+.iso-projeto { stroke: rgba(255,255,255,.27); stroke-width: .7; stroke-dasharray: 3 3; fill: none; }
+.iso-sombra { fill: rgba(0,0,0,.42); filter: blur(3px); }
+.iso-marca { stroke: rgba(255,255,255,.11); stroke-width: .6; }
+.iso-tique { stroke: rgba(255,255,255,.4); stroke-width: .7; }
+.iso-num { font: 500 8px 'JetBrains Mono', monospace; fill: rgba(255,255,255,.58); text-anchor: middle; }
+.iso-l path, .iso-leito path { stroke: rgba(0,0,0,.3); stroke-width: .4; stroke-linejoin: round; }
+/* `backwards`, não `both`: com `both` a animação terminada continuaria
+   mandando na opacidade, e a camada apagada pela legenda não apagava. */
+.iso-l { animation: isoSobe calc(.6s * var(--anim-speed)) cubic-bezier(.2,.7,.2,1) backwards; transition: opacity .25s; }
+.iso-l.apagada { opacity: .12; }
+@keyframes isoSobe { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.iso-hit { fill: transparent; stroke: transparent; stroke-width: 1; cursor: pointer; }
+.iso-hit:hover { fill: rgba(255,255,255,.16); }
+.iso-hit.on { fill: rgba(255,255,255,.24); stroke: #fff; }
+
+.maq-pe { padding: 14px 18px 16px; display: grid; gap: 12px; }
+.maq-legenda { display: flex; flex-wrap: wrap; gap: 6px; }
+.maq-chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 12px 4px 10px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-2);
+  font-family: inherit; font-size: var(--fs-sm); cursor: pointer;
+  transition: border-color .15s, background .15s, opacity .15s;
+}
+.maq-chip i { width: 10px; height: 10px; border-radius: 3px; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.2); }
+.maq-chip b { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
+.maq-chip:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.maq-chip[aria-pressed="true"] { border-color: var(--acc); background: var(--acc-l); color: var(--text); }
+.maq[data-realce] .maq-chip[aria-pressed="false"] { opacity: .55; }
+.maq-detalhe {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap;
+  min-height: 44px; padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: var(--surface-2); font-size: var(--fs-md); line-height: 1.5;
+}
+.maq-dica { color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+.maq-det-txt { flex: 1 1 260px; min-width: 0; }
+.maq-det-acoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.maq-et { display: inline-flex; align-items: center; gap: 6px; font-weight: 700; }
+.maq-et::before { content: ''; width: 9px; height: 9px; border-radius: 3px; background: var(--c); box-shadow: inset 0 0 0 1px rgba(0,0,0,.2); }
+.maq-prox { color: var(--muted); }
+.maq-nota { font-size: var(--fs-xs); color: var(--muted); line-height: 1.5; }
+
+.rit-chao { fill: rgba(255,255,255,.035); stroke: rgba(255,255,255,.09); stroke-width: .6; }
+.rit-dia path { stroke: rgba(0,0,0,.38); stroke-width: .35; stroke-linejoin: round; }
+.rit-dia { animation: isoSobe calc(.5s * var(--anim-speed)) cubic-bezier(.2,.7,.2,1) backwards; }
+.rit-dia .rit-chuva { fill: #4aa3ff; stroke: none; }
+.rit-parada { stroke: #ffc24a; stroke-width: 1.7; stroke-linecap: round; }
+.rit-dia .rit-falta { fill: none; stroke: #ff6b57; stroke-width: .8; stroke-dasharray: 2 1.6; }
+.rit-rot { font: 500 7.5px 'JetBrains Mono', monospace; fill: rgba(255,255,255,.5); }
+.rit-rot.mes { fill: rgba(255,255,255,.75); letter-spacing: .04em; }
+.rit-resumo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px 14px; }
+.rit-resumo > div { display: flex; flex-direction: column; gap: 2px; padding: 2px 0 2px 12px; border-left: 2px solid var(--border-strong); min-width: 0; }
+.rit-resumo b { font-family: 'JetBrains Mono', monospace; font-size: var(--fs-2xl); font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.rit-resumo span { font-size: var(--fs-xs); color: var(--muted); line-height: 1.35; }
+.rit-resumo .alerta { border-left-color: var(--red); }
+.rit-resumo .alerta b { color: var(--red); }
+.rit-legenda { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--fs-xs); color: var(--muted); }
+.rit-legenda span { display: inline-flex; align-items: center; gap: 6px; }
+.rit-sw { width: 11px; height: 11px; border-radius: 3px; display: inline-block; flex: none; }
+.rit-sw.prod { background: linear-gradient(135deg, #8a4a26, #ff9a4d); }
+.rit-sw.chuva { background: #4aa3ff; }
+.rit-sw.parada { background: #ffc24a; height: 3px; border-radius: 2px; }
+.rit-sw.falta { border: 1.5px dashed #ff6b57; background: transparent; }
+.rit-ganho { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--grn); }
+.rit-tag { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 600; line-height: 1.7; }
+.rit-tag.chuva { background: var(--blu-l); color: var(--blu); }
+.rit-tag.parada { background: var(--ylw-l); color: var(--ylw-d); }
+.rit-tag.falta { background: var(--red-l); color: var(--red); }
+@media (max-width: 700px) {
+  /* no celular os dois números do cabeçalho repetem o subtítulo: saem, e o
+     seletor de modo fica numa linha só, ao lado do atalho do 3D */
+  #trechoCard .avenue-meta-stat { display: none; }
+  #trechoCard .avenue-header-stats { gap: 8px; flex-wrap: wrap; }
+  #trechoCard .curva-horizonte { flex-wrap: nowrap; }
+  #trechoCard .curva-hz-btn { min-height: 40px; padding: 6px 14px; }
+  .maq-palco { padding: 46px 0 42px; }
+  .rit-palco { padding: 12px 0 8px; }
+  .maq-rolo { padding: 0 12px; }
+  .maq-pe { padding: 12px 14px 14px; }
+  .maq-chip { min-height: 40px; }
+  .rit-resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .maq-det-acoes .btn { min-height: 40px; }
+}
+@media (prefers-reduced-motion: reduce) { .iso-l, .rit-dia { animation: none; } }
+
 
 /* ====================================================================
    MOBILE PASS — otimizações universais para celular/tablet
@@ -4102,6 +4234,12 @@ function trocarObra(id, opcoes) {
   Object.keys(GAL_FILTRO).forEach(k => { GAL_FILTRO[k] = ''; });
   STATE.galMes = 'Todos'; STATE.galPacote = 'Todos';
   IMPROD_MES = ''; MEDICAO_MES = '';
+  /* Idem a seleção de fotos da Galeria (a obra nova abria esmaecida, com a
+     exportação vazia), os dias de RDO marcados para o lote (eram exportados
+     os dias marcados na OUTRA obra) e o mês do Teórico × Real. */
+  GAL_SELECAO = null; GAL_MODO_SELECAO = false;
+  SELECTED_RDO_DATAS = new Set();
+  TR_MES = '';
   localStorage.setItem(LS_OBRA, id);
   OBRA = OBRAS_CFG[id];
   CONFIG = montarConfig(id);
@@ -4289,7 +4427,15 @@ async function fetchCSVTexto(url) {
   try {
     const res = await fetch(url + buster, { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    return await res.text();
+    const texto = await res.text();
+    /* PÁGINA NÃO É PLANILHA. O Wi-Fi que pede login e o Google em manutenção
+       respondem 200 com uma página HTML — que virava "dados", esvaziava o app
+       e SUBSTITUÍA a última cópia boa guardada no aparelho. CSV publicado não
+       começa com "<": isso é falha de rede, e a cópia guardada assume. */
+    if (/^\s*<(!doctype|html|head|body|\?xml)/i.test(texto.slice(0, 200))) {
+      throw new Error('Falha de rede: a planilha respondeu com uma página, não com os dados');
+    }
+    return texto;
   } catch (e) {
     if (e && e.name === 'AbortError') throw new Error('Falha de rede: a planilha não respondeu em 1 minuto');
     throw e;
@@ -4703,9 +4849,25 @@ async function outboxFlush(manual = false) {
      turnos guardados eram seis cargas em paralelo no 4G e cinco PDFs
      desenhados juntos (o mesmo dia duas vezes, com diurno e noturno). */
   const diasDepositar = new Map();
+  /* Os serviços cujo LOTE ainda está na fila: a foto deles não sobe na
+     frente. O lote pode estar esperando (o dia assinado, à espera do
+     escritório), e a foto que subisse antes não acharia a linha — 300 KB
+     gastos no 4G para o servidor responder "não anexei". */
+  const servicosEsperando = new Set();
+  const idsDoLote = it => {
+    try { return JSON.parse(it.params.batch).map(o => String(o.id || '')).filter(Boolean); } catch (e) { return []; }
+  };
+  itens.forEach(it => { if (it.kind === 'rdo' && it.params && it.params.batch) idsDoLote(it).forEach(id => servicosEsperando.add(id)); });
   try {
     for (const item of itens) {
+      /* O item ainda está na fila? A lista é a cópia tirada no começo da
+         rodada, e a rodada demora (uma foto no 3G leva até 90 s): o turno
+         corrigido e salvo DIRETO nesse meio-tempo tira o velho da fila
+         (filaDescartarDiarioVencido), e ele subia assim mesmo, por cima da
+         correção. Idem os envios descartados na limpeza de duplicatas. */
+      if (!_fila.some(i => i.id === item.id)) continue;
       if (!manual && item.esperarAte && Date.now() < item.esperarAte) continue;
+      if (item.kind === 'foto' && item.params && servicosEsperando.has(String(item.params.id || ''))) continue;
       /* O LANÇAMENTO SOBE COM O LOGIN DE QUEM O FEZ. O token vai no envio, e
          o aparelho do canteiro passa de mão: o turno do apontador A subia
          com o login de B — gravado em nome de B, ou recusado (SEM_PERMISSAO,
@@ -4720,14 +4882,34 @@ async function outboxFlush(manual = false) {
           ? await enviarEquipDaFila(item)
           : await enviarAcao({...item.params, ...authParams()}, 1, 2000);
         if (!result.ok) throw new Error('servidor: ' + (result.error || 'erro'));
+        /* A foto está no Drive mas NÃO entrou na linha: o serviço dela ainda
+           não existe na planilha (ver `anexada`, no rdoFoto). Fica guardada e
+           vai de novo — o reenvio reaproveita o arquivo. Com teto: serviço
+           que nunca subir não pode prender a foto na fila para sempre. */
+        if (item.kind === 'foto' && result.anexada === false && (item.tentativas || 0) < 6) {
+          item.tentativas = (item.tentativas || 0) + 1;
+          item.ultimoErro = 'aguardando o serviço desta foto subir';
+          item.esperarAte = Date.now() + 10 * 60 * 1000;
+          outboxAtualizar(item);
+          continue;
+        }
         outboxRemover(item.id);
         enviados++;
         subiram.push(item);
         if (item.kind === 'rdo' && item.params && item.params.batch) {
+          idsDoLote(item).forEach(id => servicosEsperando.delete(id));
           try {
             lancadosLocaisGuardar(JSON.parse(item.params.batch));
-            STATE.rdoavanco = comLancadosLocais(STATE.rdoavanco || []);
+            reaplicarLocais();
           } catch (eLote) {}
+          /* O serviço entrou num dia que já tinha RDO Diário: a linha do dia
+             ganhou revisão nova e o PDF guardado ficou para trás. */
+          const obraLote = (() => { try { return (JSON.parse(item.params.batch)[0] || {}).obra || 'teotonio'; } catch (e) { return 'teotonio'; } })();
+          Object.keys(result.dias || {}).forEach(dia => {
+            diarioLocalGuardar(dia, result.dias[dia], '', obraLote);
+            const ch = obraLote + '|' + dia, ja = diasDepositar.get(ch);
+            diasDepositar.set(ch, { obra: obraLote, data: dia, reaberto: !!result.reaberto || !!(ja && ja.reaberto) });
+          });
         }
         /* O turno do RDO que subiu pela FILA não passava pelo que o envio
            direto faz depois de gravar: o PDF do dia não era depositado (o
@@ -4778,7 +4960,8 @@ async function outboxFlush(manual = false) {
           item.esperarAte = Date.now() + 10 * 60 * 1000;
           outboxAtualizar(item);
           if (item.tentativas === 1) {
-            toast('Um turno guardado (' + descricaoDaFila([item]) + ') não subiu: o RDO desse dia já foi assinado. ' +
+            toast((item.kind === 'diario' ? 'Um turno guardado' : 'Um lançamento guardado') +
+                  ' (' + descricaoDaFila([item]) + ') não subiu: o RDO desse dia já foi assinado. ' +
                   'Ele fica guardado no aparelho — peça ao escritório para reabrir o RDO.', 'error', 0);
           }
           continue;
@@ -6618,6 +6801,8 @@ function concluirLogin(u, perfil) {
   // fechados é buscada de novo (antes do login ela ficava [] para sempre)
   MEDICOES_FECHADAS = null;
   _avisouSessaoVencida = false;
+  // o painel de assinaturas de quem estava antes (com o link do fiscal) não é deste usuário
+  _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
   // A obra aberta pode não ser das que este usuário enxerga (o aparelho é
   // compartilhado, ou o acesso mudou). Troca antes de desenhar, senão ele
   // veria os dados de uma obra que o servidor vai recusar a cada gravação.
@@ -6654,6 +6839,15 @@ window.fazerLogout = function() {
   localStorage.removeItem(APP.lsGlobal.obras);
   toast('Você saiu do sistema.', 'info');
   MEDICOES_FECHADAS = null;
+  /* O rascunho da tela aberta é gravado e SOLTO antes de a tela sumir, como
+     no navigate() e no trocarObra(). Deixado armado, o próximo `pagehide`
+     chamava o coletor sem o formulário na tela — "não há nada digitado" — e
+     APAGAVA a viagem de bota-fora (foto da carga, assinatura do motorista)
+     que estava pela metade quando alguém tocou em Sair. */
+  if (_rascAtivo) { try { _rascAtivo.agora(); } catch (e) {} _rascAtivo = null; }
+  /* E o painel de assinaturas guardado na memória traz o LINK do fiscal, que
+     só o escritório recebe: não sobra para quem entrar depois neste aparelho. */
+  _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
   renderShell();
   atualizarBotoesTopo();
   if (!podeVer(STATE.currentPage)) STATE.currentPage = 'executivo';
@@ -6684,7 +6878,7 @@ window.atualizarBotoesTopo = function() {
     '<button class="btn btn-outline btn-sm btn-icone" onclick="buscaAbrir()" title="Buscar estaca, pacote, lançamento ou RDO (Ctrl+K)" aria-label="Buscar">' + ic('lupa') + '</button>' +
     // Único lugar de atualizar no app (o rodapé do menu lateral tinha o
     // segundo). É também o portador do estado de erro — ver setSyncStatus.
-    '<button id="btnAtualizarTopo" class="btn btn-outline btn-sm btn-icone" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">' + ic('atualizar') + '</button>' +
+    '<button id="btnAtualizarTopo" class="btn btn-outline btn-sm btn-icone" onclick="carregarTudo({pedida:true})" title="Atualizar dados" aria-label="Atualizar dados">' + ic('atualizar') + '</button>' +
     novo;
   // O botão nasce a cada render; o estado de erro tem de ser reaplicado.
   const bt = document.getElementById('btnAtualizarTopo');
@@ -6856,7 +7050,30 @@ function desenharCarimbo(dataUri, ctxDados, cfg) {
         var fs = Math.max(10, Math.round(Math.min(w, h * 1.4) * k));
         var lh = Math.round(fs * 1.42);
         var pad = Math.round(fs * 0.72);
-        var alturaTarja = linhas.length * lh + pad * 2 - Math.round(fs * 0.32);
+        /* A LINHA QUE NÃO CABE É QUEBRADA, não cortada. O `fillText` não
+           mede: "frente · pacote" passa da largura da foto em quase todos os
+           serviços das Ruas de Terra e do Ranário, e o que se perdia era o
+           FIM do nome — nas Ruas de Terra, justamente a rua. Cada linha é
+           medida com a fonte dela e quebrada entre palavras. */
+        var fonteDe = function (negrito) {
+          return (negrito ? '700 ' : '400 ') + fs + 'px ui-monospace, "JetBrains Mono", Menlo, monospace';
+        };
+        var larguraUtil = w - pad * 2;
+        var visuais = [];
+        linhas.forEach(function (t, i) {
+          g.font = fonteDe(i === 0);
+          if (g.measureText(t).width <= larguraUtil) { visuais.push({ t: t, neg: i === 0 }); return; }
+          var atual = '';
+          String(t).split(/ +/).forEach(function (palavra) {
+            var tenta = atual ? atual + ' ' + palavra : palavra;
+            if (atual && g.measureText(tenta).width > larguraUtil) {
+              visuais.push({ t: atual.replace(/[ ·]+$/, ''), neg: i === 0 });
+              atual = palavra === '·' ? '' : palavra;
+            } else atual = tenta;
+          });
+          if (atual.trim()) visuais.push({ t: atual, neg: i === 0 });
+        });
+        var alturaTarja = visuais.length * lh + pad * 2 - Math.round(fs * 0.32);
         var y0 = cfg.posicao === 'superior' ? 0 : h - alturaTarja;
 
         g.fillStyle = 'rgba(8,6,4,' + cfg.fundo + ')';
@@ -6869,11 +7086,11 @@ function desenharCarimbo(dataUri, ctxDados, cfg) {
         g.textBaseline = 'top';
         g.shadowColor = 'rgba(0,0,0,.6)';
         g.shadowBlur = Math.round(fs * 0.25);
-        linhas.forEach(function (t, i) {
+        visuais.forEach(function (v, i) {
           // a primeira linha (data/hora) sai em negrito: é a que se lê de longe
-          g.font = (i === 0 ? '700 ' : '400 ') + fs + 'px ui-monospace, "JetBrains Mono", Menlo, monospace';
-          g.fillStyle = i === 0 ? '#ffffff' : 'rgba(255,255,255,.88)';
-          g.fillText(t, pad, y0 + pad + i * lh);
+          g.font = fonteDe(v.neg);
+          g.fillStyle = v.neg ? '#ffffff' : 'rgba(255,255,255,.88)';
+          g.fillText(v.t, pad, y0 + pad + i * lh);
         });
         var saida = c.toDataURL('image/jpeg', 0.82);
         zerarCanvas(c);
@@ -7651,6 +7868,29 @@ async function baixarFotoServidor(fileId, mini) {
   }
 }
 
+/* AS FOTOS DO LOTE PASSAM PELA FILA, MESMO COM SINAL.
+   O serviço já está gravado, e a foto só existia na MEMÓRIA desta tela até
+   terminar de subir — no 3G, três fotos são minutos. O apontador via "2 itens
+   salvos", bloqueava o celular (ou o Android fechava o app) e o envio morria
+   no meio: o serviço ficava sem a prova, e nada tentava de novo. Guardada na
+   fila (IndexedDB) antes de subir, ela sobe agora — e, se o app fechar,
+   sobe na próxima vez que ele abrir. A que não couber no aparelho vai
+   direto, da memória, como sempre foi. */
+async function fotosDoLoteSubir(mapaIdParaFotos, obraId) {
+  const direto = {};
+  let guardadas = 0;
+  for (const id of Object.keys(mapaIdParaFotos)) {
+    const lista = mapaIdParaFotos[id];
+    for (let i = 0; i < lista.length; i++) {
+      if (await fotoParaAFila(id, i, lista[i], obraId)) guardadas++;
+      else (direto[id] = direto[id] || []).push(lista[i]);
+    }
+  }
+  if (guardadas) outboxFlush();
+  if (Object.keys(direto).length) return enviarFotosDoLote(direto, 0, obraId);
+  return guardadas;
+}
+
 // Sobe as fotos DEPOIS que os serviços foram gravados: cada foto vai ligada
 // ao id do serviço, que o app gera antes de enviar o lote.
 async function enviarFotosDoLote(mapaIdParaFotos, idxBase, obraDoLote) {
@@ -8019,6 +8259,21 @@ function editadosLocaisGuardar(id, mud) {
   const antes = _EDITADOS_LOCAL.get(id0);
   _EDITADOS_LOCAL.set(id0, { em: Date.now(), campos: Object.assign({}, antes ? antes.campos : {}, campos) });
 }
+/* As cópias que ESTA função já corrigiu. Três pontos reaplicam as
+   sobreposições sobre o próprio STATE (depois de salvar, de editar e da
+   fila), e a cópia já corrigida era lida como "o CSV já traz estes valores":
+   a edição saía do mapa, e a carga seguinte — com o CSV ainda velho — a
+   desfazia na tela. Só linha VINDA DO CSV diz se o CSV alcançou. */
+const _linhasEditadas = new WeakSet();
+/* As linhas que NÃO vieram do CSV: as do mapa de lançados locais e as cópias
+   editadas delas (ver comLancadosLocais). */
+const _linhasLocais = new WeakSet();
+/* As duas sobreposições, na ordem da carga, sobre o que está na tela. É o
+   que os caminhos que acabaram de gravar chamam — aplicar só uma delas
+   devolvia a linha local sem a correção que já tinha recebido. */
+function reaplicarLocais() {
+  STATE.rdoavanco = comEditadosLocais(comLancadosLocais(STATE.rdoavanco || []));
+}
 function comEditadosLocais(linhas) {
   if (!_EDITADOS_LOCAL.size) return linhas;
   const agora = Date.now();
@@ -8032,13 +8287,18 @@ function comEditadosLocais(linhas) {
     if (!ed) return l;
     if (agora - ed.em > LANCADO_LOCAL_VALIDADE) { _EDITADOS_LOCAL.delete(id); return l; }
     const falta = Object.keys(ed.campos).filter(c => !igual(c, getCSVField(l, c), ed.campos[c]));
-    if (!falta.length) { _EDITADOS_LOCAL.delete(id); return l; }
+    if (!falta.length) {
+      if (!_linhasEditadas.has(l)) _EDITADOS_LOCAL.delete(id);   // é o CSV que já traz
+      return l;
+    }
     trocou = true;
     const copia = Object.assign({}, l);   // a linha do STATE não é mexida no lugar
     falta.forEach(c => {
       const k = Object.keys(copia).find(x => x.toLowerCase() === c.toLowerCase()) || c;
       copia[k] = ed.campos[c];
     });
+    _linhasEditadas.add(copia);
+    if (_linhasLocais.has(l)) _linhasLocais.add(copia);
     return copia;
   });
   return trocou ? out : linhas;
@@ -8046,6 +8306,17 @@ function comEditadosLocais(linhas) {
 
 function comLancadosLocais(linhas) {
   if (!_LANCADOS_LOCAL.size) return linhas;
+  /* As linhas que são as NOSSAS (já postas por cima numa chamada anterior)
+     saem antes da conta: reaplicada sobre o próprio STATE, a função as via
+     como "o CSV já trouxe", tirava do mapa — e na carga seguinte, com o CSV
+     ainda sem elas, o serviço recém-salvo SUMIA do Histórico e da trava
+     anti-duplicação. O apontador lançava de novo, e a medição ganhava duas
+     linhas. (Bastava salvar dois lotes em menos de cinco minutos.) */
+  /* "Nossas" são as linhas do mapa E as cópias que a edição faz delas (o
+     serviço recém-salvo e corrigido em seguida): a cópia passava por linha
+     do CSV e tirava o serviço do mapa do mesmo jeito. */
+  [..._LANCADOS_LOCAL.values()].forEach(v => _linhasLocais.add(v.linha));
+  if (linhas.some(l => _linhasLocais.has(l))) linhas = linhas.filter(l => !_linhasLocais.has(l));
   const noCsv = new Set(linhas.map(l => String(getCSVField(l, 'ID') || '').trim()));
   const agora = Date.now();
   const extra = [];
@@ -8082,6 +8353,7 @@ function aplicarCarga(c, p, k, r, d) {
 
 async function carregarTudo(opts = {}) {
   const fundo = opts && opts.fundo === true;
+  const pedida = opts && opts.pedida === true;      // o usuário tocou em atualizar
   const minhaEpoca = ++_epocaCarga;
   const minhaObra = OBRA.id;
   if (!fundo) setSyncStatus('loading', 'Carregando dados…');
@@ -8148,7 +8420,13 @@ async function carregarTudo(opts = {}) {
   /* A PRIMEIRA carga boa desenha sempre: aberto direto num formulário, o
      app mostrava "carregando…" e, sendo a carga de fundo, ninguém redesenhava
      — a tela ficava presa no aviso com os dados já chegados. */
-  if (fundo && jaHaviaTela && (emFormulario || digitando || editandoLinha)) {
+  /* E a linha em edição (ou o campo com foco) segura também a carga que NÃO
+     é de fundo: o próprio app agenda uma depois de cada gravação, e ela
+     chegava 1–5 s depois, já com a correção SEGUINTE aberta — a linha
+     fechava e o que tinha sido digitado se perdia. A carga PEDIDA (o ⟳ do
+     cabeçalho, o "Tentar de novo") redesenha sempre: quem pede dados novos
+     quer vê-los — e no iPhone tocar no botão nem tira o foco do campo. */
+  if (jaHaviaTela && !pedida && (editandoLinha || digitando || (fundo && emFormulario))) {
     const rc = document.getElementById('rdoCount');
     if (rc) rc.textContent = STATE.rdoavanco.length;
     const dc = document.getElementById('diarioCount');
@@ -8204,7 +8482,7 @@ async function cargaFalhou(minhaEpoca, minhaObra, fundo) {
         STATE.cargaFalhou = true;
         STATE.dadosDoAparelho = g.em;
         const quando = new Date(g.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-        setSyncStatus('error', `Sem sinal · dados guardados de ${quando} · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar de novo</span>`);
+        setSyncStatus('error', `Sem sinal · dados guardados de ${quando} · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo({pedida:true})">Tentar de novo</span>`);
         try { render(); } catch (e) { console.error('render', e); }
         if (!fundo) toast('Sem sinal. Mostrando os dados guardados no aparelho (' + quando + '). O que você lançar entra na fila e sobe quando a internet voltar.', 'info', 7000);
         return;
@@ -8215,7 +8493,7 @@ async function cargaFalhou(minhaEpoca, minhaObra, fundo) {
   // continuam navegáveis (antes, uma falha de fundo deixava toda navegação em
   // branco até a próxima sincronização bem-sucedida).
   STATE.cargaFalhou = true;
-  setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar novamente</span>');
+  setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo({pedida:true})">Tentar novamente</span>');
   // Sem nenhuma carga boa antes, a tela é a mensagem: `render()` pinta a
   // falha em vez de sair sem desenhar nada. COM dado na tela, não redesenha:
   // a falha não mudou nada do que está lá, e redesenhar passava por cima do
@@ -8268,7 +8546,7 @@ function telaFalhaCarga() {
         entra na fila do aparelho e sobe sozinho quando a internet voltar.
       </div>
       <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="carregarTudo()">${ic('atualizar')} Tentar novamente</button>
+        <button class="btn btn-primary" onclick="carregarTudo({pedida:true})">${ic('atualizar')} Tentar novamente</button>
         <button class="btn btn-outline" onclick="navigate('rdo')">${ic('lancar')} Lançar assim mesmo</button>
       </div>
     </div>`;
@@ -8394,7 +8672,9 @@ function calcularConsumoItens(avanco) {
   Object.values(avanco).forEach(a => {
     if (a.qtdExecutada <= 0) return;
     const pid = getCSVField(a.pacote, 'ID');
-    const coefs = STATE.coeficientes.filter(c => (getCSVField(c, 'Pacote ID') || getCSVField(c, 'Pacote_ID')) === pid);
+    // casado como o avanço casa (`_chavePacote`): um "p01 " na aba Coeficientes sumia da prévia de medição, calado
+    const chavePid = _chavePacote(pid);
+    const coefs = STATE.coeficientes.filter(c => _chavePacote(getCSVField(c, 'Pacote ID') || getCSVField(c, 'Pacote_ID')) === chavePid);
     coefs.forEach(c => {
       const item = getCSVField(c, 'Item Contratual');
       if (!item) return;
@@ -11499,31 +11779,54 @@ function calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados, opts) {
   return { sparkPts, cumulative: cum, sortedDays, current: total, delta7d, delta30d, velocity, daysToComplete, dataPrevista, diasVsPrazo, janela, diasUteis, rdos7d, rdos30d };
 }
 
-function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
-  const today = new Date(); today.setHours(0,0,0,0);
+/* AS FRENTES QUE AVANÇARAM E AS QUE PARARAM.
+   Quatro coisas que esta conta fazia diferente do resto do Painel, e que
+   punham na reunião um número que a tela ao lado desmentia:
+   • o ganho dos 7 dias era a soma CRUA dos lançamentos, sem o teto de 100%
+     do pacote — a frente que lançou por cima de um pacote já cheio aparecia
+     "liderando o ritmo" com +7 p.p. numa semana em que a obra andou +0,9;
+   • a frente 100% CONCLUÍDA ficava para sempre em "merecem atenção" (não
+     lança há 60 dias porque acabou) e, por ser a mais antiga, tirava do
+     top 3 as que tinham parado de verdade;
+   • "hoje" era sempre hoje: com um mês passado no filtro, a frente que
+     lançou ontem aparecia "45 dias sem RDO" (`opts.hoje` é o fim do mês);
+   • o Pacote_ID era casado letra por letra — " p01" é o P01 no avanço. */
+function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados, opts) {
+  const today = (opts && opts.hoje) ? new Date(opts.hoje) : new Date(); today.setHours(0,0,0,0);
   const d7 = today.getTime() - 7*86400000;
-  const por = {};
+  const por = {}, info = {}, porChave = {};
   pacotesAtivos.forEach(p => {
     const f = getCSVField(p, 'Frente') || 'Outros';
-    if (!por[f]) por[f] = { ult7d: 0, ultData: null, pacotes: 0, executou: false };
+    if (!por[f]) por[f] = { ult7d: 0, ultData: null, pacotes: 0, executou: false, diasEst: 0, diasExec: 0 };
     por[f].pacotes++;
+    const id = getCSVField(p, 'ID');
+    if (!id || info[id]) return;
+    const est = Math.max(0, num(getCSVField(p, 'Qtd Estimada')));
+    info[id] = { f, est, dias: diasEquivalentes(est, id), exec: 0 };
+    porChave[_chavePacote(id)] = id;
+    por[f].diasEst += info[id].dias;
   });
-  // pacote por ID num mapa: o `find` dentro do laço era lançamentos × pacotes
-  const pacPorId = new Map();
-  pacotesAtivos.forEach(p => { const id = getCSVField(p, 'ID'); if (!pacPorId.has(id)) pacPorId.set(id, p); });
+  const lancs = [];
   rdosAtivos.forEach(r => {
     const d = parseISODate(getCSVField(r, 'Data'));
     if (!d) return;
-    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
-    const pac = pacPorId.get(pid);
-    if (!pac) return;
-    const f = getCSVField(pac, 'Frente') || 'Outros';
-    if (!por[f]) por[f] = { ult7d: 0, ultData: null, pacotes: 0, executou: false };
-    const dias = diasDoLancamento(num(getCSVField(r, 'Quantidade')), pid);
-    const contrib = totalDiasEstimados > 0 ? dias / totalDiasEstimados : 0;
-    if (d.getTime() >= d7) por[f].ult7d += contrib;
-    if (!por[f].ultData || d > por[f].ultData) por[f].ultData = d;
-    por[f].executou = true;
+    const cru = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    const pid = info[cru] ? cru : porChave[_chavePacote(cru)];
+    if (!pid) return;
+    lancs.push({ t: d.getTime(), d, pid, q: num(getCSVField(r, 'Quantidade')) });
+  });
+  // em ordem de data: o teto vale sobre o acumulado do pacote
+  lancs.sort((a, b) => a.t - b.t);
+  lancs.forEach(l => {
+    const it = info[l.pid], fr = por[it.f];
+    if (!fr.ultData || l.d > fr.ultData) fr.ultData = l.d;
+    fr.executou = true;
+    if (l.q < 0 || it.est <= 0 || it.dias <= 0) return;   // dado sujo e pacote sem peso não movem o avanço
+    const antes = Math.min(it.exec / it.est, 1);
+    it.exec += l.q;
+    const ganho = (Math.min(it.exec / it.est, 1) - antes) * it.dias;
+    fr.diasExec += ganho;
+    if (l.t >= d7 && totalDiasEstimados > 0) fr.ult7d += ganho / totalDiasEstimados;
   });
   const destaques = Object.entries(por)
     .filter(([, d]) => d.ult7d > 0)
@@ -11531,6 +11834,8 @@ function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
     .slice(0, 3)
     .map(([f, d]) => ({ frente: f, valor: d.ult7d, ultData: d.ultData }));
   const atencaoTodas = Object.entries(por)
+    // frente concluída não está parada: está pronta
+    .filter(([, d]) => !(d.diasEst > 0 && d.diasExec / d.diasEst >= 0.999))
     .map(([f, d]) => {
       const diasSemRDO = d.ultData ? Math.floor((today - d.ultData) / 86400000) : null;
       return { frente: f, dias: diasSemRDO, ultData: d.ultData, pacotes: d.pacotes };
@@ -11588,7 +11893,8 @@ function calcCurvaPrevista(pacotesAtivos, totalDiasEstimados) {
   pacotesAtivos.forEach(p => {
     const pid = getCSVField(p, 'ID');
     if (!pid) return;
-    const qtd = num(getCSVField(p, 'Qtd Estimada'));
+    // negativa é dado sujo (o avanço a trata como zero): crua, o previsto fechava em −200%
+    const qtd = Math.max(0, num(getCSVField(p, 'Qtd Estimada')));
     const totalDiasEquiv = diasEquivalentes(qtd, pid);
     const contribPct = totalDiasEquiv / totalDiasEstimados;
     let dIni, dFim;
@@ -11734,10 +12040,11 @@ function calcAvancoPorEstaca(rdosAtivos, pacotesAtivos) {
   listarEstacas().forEach(e => {
     estacas[e.id] = { ...e, lancamentos: 0, qtd: 0, pacotes: new Set() };
   });
-  const validPids = new Set(pacotesAtivos.map(p => getCSVField(p, 'ID')));
+  // o id casado como no avanço (ver _chavePacote): " p01" é o P01
+  const idPorChave = new Map(pacotesAtivos.map(p => [_chavePacote(getCSVField(p, 'ID')), getCSVField(p, 'ID')]));
   rdosAtivos.forEach(r => {
-    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
-    if (!validPids.has(pid)) return;
+    const pid = idPorChave.get(_chavePacote(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
+    if (!pid) return;
     const q = num(getCSVField(r, 'Quantidade'));
     const est = lerLocalEstaca(getCSVField(r, 'Local_Estaca'));
     if (!est.length) return;
@@ -11751,7 +12058,7 @@ function calcAvancoPorEstaca(rdosAtivos, pacotesAtivos) {
   return estacas;
 }
 
-function renderAvenida3D(rdosAtivos, pacotesAtivos) {
+function renderAvenida3D(rdosAtivos, pacotesAtivos, ateISO) {
   // desenho da via em perspectiva: só existe para obra estaqueada. Nas
   // demais, o bloco simplesmente não entra na página.
   if (!temEstacas()) return '';
@@ -11829,25 +12136,70 @@ function renderAvenida3D(rdosAtivos, pacotesAtivos) {
     ? topEstaca.rot + ' da ' + ((eixoPorId(topEstaca.eixo) || {}).label || topEstaca.eixo)
     : topEstaca.rot);
 
+  /* DOIS MODOS NO MESMO CARTÃO. "Atividade" (o de sempre) diz ONDE se
+     trabalhou; "Camadas" diz ATÉ ONDE a pista chegou em cada estaca — a
+     maquete do js/ui/iso.js. A obra sem pacote de etapa da pista (só muro,
+     só urbanismo) não tem maquete, e o cartão fica como era. */
+  const maquete = maqueteHtml({ pacotes: pacotesAtivos, ate: ateISO || '' });
+  const modo = maquete && trechoModo() === 'camadas' ? 'camadas' : 'atividade';
+  const D = MAQ.D;
+  const topoEt = D && D.etapas.length ? D.etapas[D.etapas.length - 1] : null;
+  const subCamadas = D ? `${escHtml(OBRA.nome || '')} · ${D.total} estacas · <strong style="color:var(--acc)">${D.comEtapa}</strong> já com etapa da pista lançada${topoEt ? ` · <strong style="color:var(--text)">${topoEt.pc}%</strong> chegou a ${escHtml(topoEt.nome)}` : ''}${ateISO ? ' · até ' + escHtml(fmtData(ateISO)) : ''}` : '';
+  const subAtividade = `${escHtml(OBRA.nome || '')} · ${total} estacas · <strong style="color:var(--acc)">${ativas}</strong> com lançamentos${topEstaca && topEstaca.lancamentos > 0 ? ' · pico em <strong style="color:var(--text)">'+escHtml(rotPico)+'</strong> ('+topEstaca.lancamentos+' RDOs)' : ''}`;
+
   return `
-    <div class="card stagger-item avenue-card" style="animation-delay:.20s">
+    <div class="card stagger-item avenue-card" style="animation-delay:.20s" id="trechoCard" data-modo="${modo}">
       <div class="card-header">
         <div>
-          <div class="card-title-lg">Trecho da obra · atividade por estaca</div>
-          <div class="card-title-sub">${escHtml(OBRA.nome || '')} · ${total} estacas · <strong style="color:var(--acc)">${ativas}</strong> com lançamentos${topEstaca && topEstaca.lancamentos > 0 ? ' · pico em <strong style="color:var(--text)">'+escHtml(rotPico)+'</strong> ('+topEstaca.lancamentos+' RDOs)' : ''}</div>
+          <div class="card-title-lg">Trecho da obra · ${modo === 'camadas' ? 'a pista por camada' : 'atividade por estaca'}</div>
+          <div class="card-title-sub">${modo === 'camadas' ? subCamadas : subAtividade}</div>
         </div>
         <div class="avenue-header-stats">
+          ${modo === 'camadas' ? `
+          <div class="avenue-meta-stat"><div class="avenue-meta-num">${D.comEtapa}</div><div class="avenue-meta-lbl">iniciadas</div></div>
+          <div class="avenue-meta-stat"><div class="avenue-meta-num" style="color:var(--muted-2)">${D.total - D.comEtapa}</div><div class="avenue-meta-lbl">por iniciar</div></div>` : `
           <div class="avenue-meta-stat"><div class="avenue-meta-num">${ativas}</div><div class="avenue-meta-lbl">ativas</div></div>
-          <div class="avenue-meta-stat"><div class="avenue-meta-num" style="color:var(--muted-2)">${inativas}</div><div class="avenue-meta-lbl">sem RDO</div></div>
+          <div class="avenue-meta-stat"><div class="avenue-meta-num" style="color:var(--muted-2)">${inativas}</div><div class="avenue-meta-lbl">sem RDO</div></div>`}
+          ${maquete ? `<div class="curva-horizonte" role="group" aria-label="O que o desenho do trecho mostra">
+            <button type="button" class="curva-hz-btn${modo === 'camadas' ? ' on' : ''}" aria-pressed="${modo === 'camadas'}" onclick="setTrechoModo('camadas')"
+              title="Até onde a pista chegou em cada estaca, etapa por etapa">Camadas</button>
+            <button type="button" class="curva-hz-btn${modo === 'atividade' ? ' on' : ''}" aria-pressed="${modo === 'atividade'}" onclick="setTrechoModo('atividade')"
+              title="Quantos RDOs cada estaca recebeu">Atividade</button>
+          </div>` : ''}
           ${m3dDisponivel() ? `<button type="button" class="btn btn-outline btn-sm" onclick="navigate('modelo3d')"
             title="A avenida em 3D, com cada estaca pintada pelo que foi lançado">${ic('cubo')} Ver no modelo 3D</button>` : ''}
         </div>
       </div>
-      <div class="card-body">${cenas.join('')}
+      <div class="card-body">${modo === 'camadas' ? maquete : cenas.join('')}
       </div>
     </div>
   `;
 }
+
+/* O modo do cartão do trecho é escolha de quem olha, por aparelho — como a
+   cor do Modelo 3D. Sem escolha, vale "camadas": é o desenho que responde
+   "quanto da avenida já está pronto", que é a pergunta de quem abre o Painel. */
+const LS_TRECHO_MODO = 'teotonio_trecho_modo';
+function trechoModo() {
+  let m = '';
+  try { m = localStorage.getItem(LS_TRECHO_MODO) || ''; } catch (e) {}
+  return m === 'atividade' ? 'atividade' : 'camadas';
+}
+window.setTrechoModo = function (m) {
+  try { localStorage.setItem(LS_TRECHO_MODO, m === 'atividade' ? 'atividade' : 'camadas'); } catch (e) {}
+  /* Só ESTE cartão é refeito: redesenhar o Painel inteiro para trocar um
+     desenho repetia a entrada de todos os cartões e recriava a Curva S. */
+  const card = document.getElementById('trechoCard');
+  const d = STATE.dashData;
+  if (!card || !d || STATE.currentPage !== 'executivo') return;
+  const tmp = document.createElement('div');
+  tmp.innerHTML = renderAvenida3D(d.rdosAtivos, d.pacotesAtivos, d.ateISO || '');
+  const novo = tmp.firstElementChild;
+  if (!novo) return;
+  novo.classList.remove('stagger-item');
+  novo.style.animationDelay = '';
+  card.replaceWith(novo);
+};
 
 // ====================================================================
 // VIEW: EXECUTIVO COM FILTROS E INTERATIVIDADE
@@ -11912,14 +12264,15 @@ function previsaoDoOpenMeteo(j) {
   const d = j && j.daily;
   if (!d || !Array.isArray(d.time)) return null;
   const n = v => (v == null || isNaN(v)) ? null : +v;
+  // a data vem de FORA e vai para atributo e texto da faixa: só entra a que é data
   return d.time.map((iso, i) => ({
-    iso,
+    iso: /^\d{4}-\d{2}-\d{2}$/.test(String(iso)) ? String(iso) : '',
     mm: n(d.precipitation_sum && d.precipitation_sum[i]),
     prob: n(d.precipitation_probability_max && d.precipitation_probability_max[i]),
     max: n(d.temperature_2m_max && d.temperature_2m_max[i]),
     min: n(d.temperature_2m_min && d.temperature_2m_min[i]),
     cod: n(d.weather_code && d.weather_code[i]),
-  }));
+  })).filter(x => x.iso);
 }
 
 let _previsaoBuscando = null, _previsaoBuscandoObra = '';
@@ -12086,6 +12439,41 @@ function renderCentralCampo() {
     </section>`;
 }
 
+/* O RITMO DIA A DIA — o avanço ganho em CADA dia das últimas 26 semanas, num
+   relevo (js/ui/iso.js). A Curva S e a linha dos 30 dias mostram o acumulado,
+   que sobe sempre: nelas não se vê a semana que parou, o sábado que rende
+   metade, a chuva que comeu três dias. Aqui cada dia é um bloco.
+
+   O ganho do dia sai da MESMA série do Painel (`calcCumulativoDia`, já com o
+   teto de 100% por pacote), então a soma dos blocos fecha com o número
+   grande. Chuva e paralisação vêm do RDO Diário, pela leitura do mapa de
+   chuva — não do INMET. */
+function renderRitmoCard(mH, rdosAcum, dataRef) {
+  if (!mH || !mH.sortedDays || !mH.sortedDays.length) return '';
+  const porDia = {}; let ant = 0;
+  mH.sortedDays.forEach(d => { porDia[d] = mH.cumulative[d] - ant; ant = mH.cumulative[d]; });
+  const lanc = {};
+  rdosAcum.forEach(r => {
+    if (ehAjusteDeAvanco(r)) return;          // ajuste do escritório não é serviço do dia
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (!d) return;
+    const k = ymd(d);
+    lanc[k] = (lanc[k] || 0) + 1;
+  });
+  const miolo = ritmoHtml({ porDia, lanc, fim: ymd(dataRef) });
+  const D = RIT.D;
+  return `
+    <div class="card stagger-item avenue-card ritmo-card" style="animation-delay:.26s" id="ritmoCard">
+      <div class="card-header">
+        <div>
+          <div class="card-title-lg">Ritmo da obra · dia a dia</div>
+          <div class="card-title-sub">Avanço ganho em cada dia, de ${escHtml(fmtData(D.inicio))} a ${escHtml(fmtData(D.fim))}${STATE.filtros.frente ? ' · ' + escHtml(STATE.filtros.frente) : ''} · chuva e paralisação vêm do RDO Diário</div>
+        </div>
+      </div>
+      <div class="card-body">${miolo}</div>
+    </div>`;
+}
+
 function renderExecutivo() {
   const todasFrentes = [...new Set(STATE.pacotes.map(p => getCSVField(p, 'Frente')).filter(Boolean))].sort();
   const todosMesesSet = new Set();
@@ -12104,8 +12492,11 @@ function renderExecutivo() {
 
   if (STATE.filtros.frente) {
     pacotesAtivos = pacotesAtivos.filter(p => getCSVField(p, 'Frente') === STATE.filtros.frente);
-    const pacotesIds = new Set(pacotesAtivos.map(p => getCSVField(p, 'ID')));
-    rdosAtivos = rdosAtivos.filter(r => pacotesIds.has(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
+    /* Casado sem caixa e sem espaço, como o avanço (`_chavePacote`): com a
+       comparação exata, o lançamento digitado " p01" contava nos 60% do
+       cartão da Drenagem e SUMIA ao clicar nele — o número caía para 20%. */
+    const pacotesIds = new Set(pacotesAtivos.map(p => _chavePacote(getCSVField(p, 'ID'))));
+    rdosAtivos = rdosAtivos.filter(r => pacotesIds.has(_chavePacote(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id'))));
   }
 
   /* O escopo é o que o filtro de FRENTE deixou passar, com todos os meses.
@@ -12162,16 +12553,26 @@ function renderExecutivo() {
   const av = calcularAvancoPorPacote(rdosAtivos, pacotesAtivos);
   const pacotesFiltrados = Object.values(av).filter(a => a.pacote);
   
+  /* O ESTADO da obra — quantos pacotes começaram, quantos acabaram, quanto
+     cada frente avançou — é ACUMULADO, como o número grande. Fatiado pelo mês
+     (como estava), a Demolição concluída há dois meses aparecia no cartão
+     com "0,0%" e no PDF como "Não Iniciado", ao lado dos 45% do topo; e o
+     KPI dizia "0 concluídos". Sem mês escolhido as duas listas são a mesma. */
+  const pacotesEstado = STATE.filtros.mes
+    ? Object.values(calcularAvancoPorPacote(rdosAcum, pacotesAtivos)).filter(a => a.pacote)
+    : pacotesFiltrados;
   const totalPac = pacotesFiltrados.length;
-  const iniciados = pacotesFiltrados.filter(a => a.qtdExecutada > 0).length;
-  const concluidos = pacotesFiltrados.filter(a => a.pct >= 0.999).length;
+  const iniciados = pacotesEstado.filter(a => a.qtdExecutada > 0).length;
+  const concluidos = pacotesEstado.filter(a => a.pct >= 0.999).length;
   const totalRDOs = rdosAtivos.length;
   
-  pacotesFiltrados.forEach(a => {
+  const pesar = a => {
     const pid = getCSVField(a.pacote, 'ID');
     a.diasEstimados = diasEquivalentes(a.qtdEstimada, pid);
     a.diasExecutados = a.pct * a.diasEstimados;
-  });
+  };
+  pacotesFiltrados.forEach(pesar);
+  if (pacotesEstado !== pacotesFiltrados) pacotesEstado.forEach(pesar);
 
   const totalDiasEstimados = pacotesFiltrados.reduce((s,a) => s + a.diasEstimados, 0);
   const pctPond = totalDiasEstimados > 0 ? pacotesFiltrados.reduce((s,a) => s + a.diasExecutados, 0) / totalDiasEstimados : 0;
@@ -12210,7 +12611,7 @@ function renderExecutivo() {
   }
 
   const porFrente = {};
-  pacotesFiltrados.forEach(a => {
+  pacotesEstado.forEach(a => {
     const f = getCSVField(a.pacote, 'Frente') || 'Outros';
     if (!porFrente[f]) porFrente[f] = { items: [], totalDiasEstim: 0, totalDiasExec: 0 };
     porFrente[f].items.push(a);
@@ -12232,7 +12633,11 @@ function renderExecutivo() {
     .sort((a,b) => a.data - b.data);
   
   STATE.dashData = {
-     totalDiasEstimados, pacotesAtivos, rdosAtivos
+     totalDiasEstimados, pacotesAtivos, rdosAtivos,
+     // os lançamentos do ESTADO da obra (até a data de referência): o PDF lê daqui
+     rdosEstado: rdosAcum,
+     // a data até onde o acumulado vai (só com mês escolhido): a maquete lê daqui
+     ateISO: STATE.filtros.mes ? ymd(dataRef) : ''
   };
 
   // ====== Métricas executivas V2 ======
@@ -12244,7 +12649,10 @@ function renderExecutivo() {
   const metricsAcum = STATE.filtros.mes
     ? calcExecMetrics(rdosAcum, pacotesAtivos, totalDiasEstimados, { hoje: dataRef })
     : metrics;
-  const fa      = calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados);
+  /* "Há quantos dias a frente não lança" e "quem avançou na semana" são da
+     obra ATÉ a data de referência: com os lançamentos só do mês e o relógio
+     em hoje, a frente que lançou ontem aparecia parada há 45 dias. */
+  const fa      = calcFrentesAnalise(rdosAcum, pacotesAtivos, totalDiasEstimados, { hoje: dataRef });
   const baseline = calcCurvaPrevista(pacotesAtivos, totalDiasEstimados);
   const todayHoje = new Date(); todayHoje.setHours(0,0,0,0);
   /* A meta do cronograma é lida na MESMA data do acumulado. Era sempre "hoje",
@@ -12325,7 +12733,7 @@ function renderExecutivo() {
       <div class="hero-main">
         <div>
           <span class="hero-label">${(() => { const b = baseDoAvanco(); return escHtml(b.rotulo + ' · ' + b.nota); })()}${STATE.filtros.mes ? ` · acumulado até ${escHtml(fmtData(dataRef))}` : ''}</span>
-          <span class="hero-period">${periodoTag}${frenteTag ? ' · ' + frenteTag : ''}</span>
+          <span class="hero-period">${periodoTag}${frenteTag ? ' · ' + escHtml(frenteTag) : ''}</span>
         </div>
         <div class="hero-value-row">
           <div class="hero-value">${(pctPondAcum*100).toFixed(1).replace('.', ',')}<span class="pp">%</span></div>
@@ -12436,7 +12844,9 @@ function renderExecutivo() {
     </div>
 
     <!-- ============ VISUALIZAÇÃO 3D DO TRECHO ============ -->
-    ${renderAvenida3D(rdosAtivos, pacotesAtivos)}
+    <!-- A maquete (modo "Camadas") é o ESTADO da pista: com um mês escolhido
+         ela mostra a pista como estava no fim dele, como todo o acumulado. -->
+    ${renderAvenida3D(rdosAtivos, pacotesAtivos, STATE.filtros.mes ? ymd(dataRef) : '')}
 
 
     <!-- ============ CURVA S + DESTAQUES ============ -->
@@ -12497,6 +12907,9 @@ function renderExecutivo() {
         </div>
       </div>
     </div>
+
+    <!-- ============ RITMO DIA A DIA ============ -->
+    ${renderRitmoCard(mH, rdosAcum, dataRef)}
 
     <div class="section-title stagger-item" style="animation-delay:.2s">Infraestrutura & Avanço Físico</div>
     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin-bottom: 24px;">
@@ -12695,7 +13108,10 @@ function _exportarRelatorioExecutivoPDF() {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(175, 170, 160);
-  doc.text(`Meta do cronograma hoje: ${(todayPlanned * 100).toFixed(1).replace('.', ',')}%`, 17, y + 37);
+  // com um mês passado no filtro os números são do FIM dele — o rótulo diz a data
+  const refHoje = !data.dataRef || getLocalISODate(new Date(data.dataRef)) === getLocalISODate(new Date());
+  const ateRef = refHoje ? '' : 'até ' + fmtData(getLocalISODate(new Date(data.dataRef)));
+  doc.text(`Meta do cronograma ${refHoje ? 'hoje' : ateRef}: ${(todayPlanned * 100).toFixed(1).replace('.', ',')}%`, 17, y + 37);
 
   // Divisor 1
   doc.setDrawColor(...BORDER_DARK);
@@ -12747,7 +13163,7 @@ function _exportarRelatorioExecutivoPDF() {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(150, 145, 135);
-  doc.text('últimos 7 dias', 139, y + 31, { align: 'center' });
+  doc.text(refHoje ? 'últimos 7 dias' : '7 dias ' + ateRef, 139, y + 31, { align: 'center' });
 
   // Delta 30d Box
   doc.setFillColor(42, 37, 30);
@@ -12811,7 +13227,7 @@ function _exportarRelatorioExecutivoPDF() {
   const ultimoRDO = rdosOrdenados.length > 0 ? rdosOrdenados[rdosOrdenados.length - 1].data : null;
   const todayHoje = new Date(); todayHoje.setHours(0,0,0,0);
   const diasDesdeUltimo = ultimoRDO ? Math.floor((todayHoje - ultimoRDO) / 86400000) : null;
-  const concluidos = (Object.values(calcularAvancoPorPacote(data.rdosAtivos, data.pacotesAtivos)).filter(a => a.pct >= 0.999)).length;
+  const concluidos = (Object.values(calcularAvancoPorPacote(data.rdosEstado || data.rdosAtivos, data.pacotesAtivos)).filter(a => a.pct >= 0.999)).length;
 
   const kpiCards = [
     { title: 'PACOTES INICIADOS', val: `${iniciados} de ${totalPac}`, sub: `${concluidos} já concluídos` },
@@ -12852,8 +13268,12 @@ function _exportarRelatorioExecutivoPDF() {
 
   const av = calcularAvancoPorPacote(data.rdosAtivos, data.pacotesAtivos);
   const pacotesFiltrados = Object.values(av).filter(a => a.pacote);
+  // o ESTADO de cada frente é acumulado (ver renderExecutivo): com mês no filtro, não só o mês
+  const pacotesEstado = (data.rdosEstado && data.rdosEstado !== data.rdosAtivos)
+    ? Object.values(calcularAvancoPorPacote(data.rdosEstado, data.pacotesAtivos)).filter(a => a.pacote)
+    : pacotesFiltrados;
   const porFrente = {};
-  pacotesFiltrados.forEach(a => {
+  pacotesEstado.forEach(a => {
     const f = getCSVField(a.pacote, 'Frente') || 'Outros';
     if (!porFrente[f]) porFrente[f] = { items: 0, totalDiasEstim: 0, totalDiasExec: 0 };
     const pid = getCSVField(a.pacote, 'ID');
@@ -13737,10 +14157,28 @@ function renderAvancoFisico() {
     porFrente[f].push(a);
   });
   
+  /* A MAQUETE DA PISTA (js/ui/iso.js): a planta acima diz ONDE cada frente
+     trabalhou; a maquete diz ATÉ ONDE a pista chegou em cada estaca. Aqui
+     ela é sempre a da obra inteira, até hoje — esta tela não tem filtro. */
+  const pacotesDaObra = STATE.pacotes.filter(p => getCSVField(p, 'Status') !== 'Histórico' && getCSVField(p, 'ID'));
+  const maquete = temEstacas() ? maqueteHtml({ pacotes: pacotesDaObra, ate: '' }) : '';
+
   return `
     ${renderCroquiEstacas()}
 
     ${renderPlantaAvanco()}
+
+    ${maquete ? `<div class="card stagger-item avenue-card" id="maqCardAvanco">
+      <div class="card-header">
+        <div>
+          <div class="card-title">A pista por camada</div>
+          <div class="card-title-sub">${MAQ.D.comEtapa} de ${MAQ.D.total} estacas já com etapa da pista lançada · cada estaca sobe até a etapa mais avançada que o RDO registrou</div>
+        </div>
+        ${m3dDisponivel() ? `<button type="button" class="btn btn-outline btn-sm" onclick="navigate('modelo3d')"
+          title="A avenida em 3D, com cada estaca pintada pelo que foi lançado">${ic('cubo')} Ver no modelo 3D</button>` : ''}
+      </div>
+      <div class="card-body">${maquete}</div>
+    </div>` : ''}
 
     <div class="card stagger-item">
       <div class="card-header">
@@ -14263,8 +14701,75 @@ function calcularDataInicioReversa(dataFimStr, diasDuracao) {
   return d;
 }
 
+/* ------------------------------------------------------------------
+   A PRODUTIVIDADE QUE A OBRA ESTÁ FAZENDO DE VERDADE
+   ------------------------------------------------------------------
+   O planejamento reverso divide o saldo pela produtividade do CADASTRO —
+   um número escrito antes de a obra começar. Se a frente rende a metade
+   dele, a "data de início necessária" está errada pela metade, e ninguém
+   vê: a tela não tinha como saber.
+
+   Aqui sai, por pacote, o que o RDO registrou: quantidade lançada ÷ dias
+   em que houve lançamento. É a produção de um dia TRABALHADO (o dia sem
+   lançamento não entra na conta — chuva e falta de frente são do
+   calendário, não da produtividade). Ajuste de avanço do escritório
+   (`ehAjusteDeAvanco`) fica de fora: não é produção de dia nenhum.
+
+   Guardado pela referência das listas, que são trocadas a cada carga. */
+const PROD_REAL_MIN_DIAS = 3;      // menos que isso é um dia bom ou ruim, não um ritmo
+let _prodReal = { fonte: null, pac: null, mapa: null };
+function produtividadeReal() {
+  if (_prodReal.mapa && _prodReal.fonte === STATE.rdoavanco && _prodReal.pac === STATE.pacotes) return _prodReal.mapa;
+  const porChave = {};
+  (STATE.pacotes || []).forEach(p => { const id = getCSVField(p, 'ID'); if (id) porChave[_chavePacote(id)] = id; });
+  const porPac = new Map();
+  (STATE.rdoavanco || []).forEach(r => {
+    if (ehAjusteDeAvanco(r)) return;
+    const pid = porChave[_chavePacote(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id'))];
+    if (!pid) return;
+    const q = num(getCSVField(r, 'Quantidade'));
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (!(q > 0) || !d) return;
+    let a = porPac.get(pid);
+    if (!a) porPac.set(pid, a = { dias: new Set(), qtd: 0 });
+    a.dias.add(getLocalISODate(d));
+    a.qtd += q;
+  });
+  const mapa = {};
+  porPac.forEach((a, pid) => { mapa[pid] = { dias: a.dias.size, qtd: a.qtd, media: a.qtd / a.dias.size }; });
+  _prodReal = { fonte: STATE.rdoavanco, pac: STATE.pacotes, mapa };
+  return mapa;
+}
+
+/* Usar o ritmo real como produtividade do planejamento, pacote a pacote. */
+window.planUsarProdReal = function (pid) {
+  const r = produtividadeReal()[pid];
+  if (!r || r.dias < PROD_REAL_MIN_DIAS) return;
+  // duas casas, com ponto: é o formato do <input type="number"> que o numCampo lê
+  atualizarPlan(pid, 'prod', String(Math.round(r.media * 100) / 100));
+};
+
 function renderCronograma() {
   return renderCronogramaReverso();
+}
+
+/* A linha "real" embaixo do campo da produtividade: o que o RDO mostra, com a
+   seta dizendo se rende mais ou menos do que o planejamento está usando. Com
+   três dias trabalhados ou mais vira botão — um toque põe o real no campo. */
+function planProdRealHtml(pid, prodUsada, unid) {
+  const r = produtividadeReal()[pid];
+  if (!r || !r.dias) return '';
+  const txt = fmtNum(r.media) + ' ' + unid + '/dia';
+  const dias = r.dias + ' dia' + (r.dias !== 1 ? 's' : '') + ' trabalhado' + (r.dias !== 1 ? 's' : '');
+  if (r.dias < PROD_REAL_MIN_DIAS) {
+    return `<div class="plan-real pouco" title="${escHtml('Só ' + dias + ' no RDO: ainda é cedo para chamar de ritmo.')}">real ${escHtml(txt)} · ${r.dias} d</div>`;
+  }
+  const razao = prodUsada > 0 ? r.media / prodUsada : null;
+  const cls = razao === null ? '' : razao >= 1 ? ' acima' : razao >= 0.8 ? ' perto' : ' abaixo';
+  const seta = razao === null ? '' : razao >= 1.02 ? ic('tendSobe') : razao <= 0.98 ? ic('tendDesce') : ic('tendEstavel');
+  const dica = `Pelo RDO: ${fmtNum(r.qtd)} ${unid} em ${dias} = ${txt}` +
+    (razao === null ? '' : ` (${Math.round(razao * 100)}% da produtividade em uso)`) + '. Toque para planejar com este ritmo.';
+  return `<button type="button" class="plan-real${cls}" title="${escHtml(dica)}" onclick="planUsarProdReal(${jsArg(pid)})">${seta}<span>real ${escHtml(txt)} · ${r.dias} d</span></button>`;
 }
 
 // Limiar (em dias úteis de folga) abaixo do qual um pacote é considerado CRÍTICO.
@@ -14360,7 +14865,7 @@ function renderCronogramaReverso() {
     <div class="card-header">
       <div>
         <div class="card-title">Motor de Planejamento Reverso</div>
-        <div class="card-title-sub">A partir do <strong>término alvo</strong>, o sistema recua o <strong>saldo restante</strong> pela produtividade (em dias úteis: domingos, feriados e sábados conforme config) e indica <strong>quando iniciar</strong> e o <strong>ritmo necessário a partir de hoje</strong>.</div>
+        <div class="card-title-sub">A partir do <strong>término alvo</strong>, o sistema recua o <strong>saldo restante</strong> pela produtividade (em dias úteis: domingos, feriados e sábados conforme config) e indica <strong>quando iniciar</strong> e o <strong>ritmo necessário a partir de hoje</strong>. Embaixo de cada produtividade, o <strong>real</strong> é o que o RDO registrou por dia trabalhado — um toque nele planeja com esse ritmo.</div>
       </div>
     </div>
     <div class="card-body" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
@@ -14444,7 +14949,7 @@ function renderCronogramaReverso() {
         <input type="number" min="0" step="any" placeholder="${escHtml(phProd)}" value="${escHtml(valProd)}"
                style="width:72px;padding:4px 8px;font-size:var(--fs-sm);border:1px solid var(--border);border-radius:4px"
                onkeyup="if(event.key==='Enter') atualizarPlan(${jsArg(pid)},'prod',this.value)" onblur="atualizarPlan(${jsArg(pid)},'prod',this.value)">
-        <span style="font-size:var(--fs-xs);color:var(--muted)">${escHtml(unid)}/dia</span></div></td>`;
+        <span style="font-size:var(--fs-xs);color:var(--muted)">${escHtml(unid)}/dia</span></div>${planProdRealHtml(pid, l.prodAtual, unid)}</td>`;
 
       // Coluna 5 — duração em dias úteis
       row += `<td class="t-num" style="text-align:center">${l.duracao > 0 ? Math.ceil(l.duracao) + ' du' : '—'}</td>`;
@@ -14922,6 +15427,10 @@ function calcDiasImprodutivos(mes) {
   Object.keys(porData).forEach(iso => { porData[iso] = linhaDoDiaRDO(iso); });
   const servicosPorData = {};
   (STATE.rdoavanco || []).forEach(r => {
+    /* O ajuste de avanço do escritório não é serviço do dia: gravado na data
+       de um dia de chuva sem produção, fazia o dia sair "Produtivo" — fora
+       dos improdutivos e dos pleiteáveis, na tela e no CSV do pleito. */
+    if (ehAjusteDeAvanco(r)) return;
     const d = parseISODate(getCSVField(r, 'Data'));
     if (!d) return;
     const k = getLocalISODate(d);
@@ -16072,7 +16581,12 @@ window.histSalvarEdicao = async function(idx) {
   // campo numérico vazio (ou recusado pelo navegador, que é o que acontece
   // quando a planilha guarda "250,5") não pode virar zero na planilha
   if (mexeu('qtd') && qtdTexto !== '' && !isNaN(qtd) && qtd !== num(getCSVField(r, 'Quantidade'))) mud.quantidade = qtd;
-  if (mexeu('sentido', 'estini', 'estfim', 'lado') && localEstaca !== (getCSVField(r, 'Local_Estaca') || '')) mud.local_estaca = localEstaca;
+  /* Sem estaca inicial o formulário não tem local para escrever. O local
+     livre ("canteiro central, em frente ao 120") abre com as estacas em
+     branco, e bastava tocar no Sentido para ele ser gravado VAZIO. Só vai em
+     branco quando a estaca inicial ESTAVA preenchida e foi apagada. */
+  if (mexeu('sentido', 'estini', 'estfim', 'lado') && localEstaca !== (getCSVField(r, 'Local_Estaca') || '') &&
+      (localEstaca || !orig || orig.estini)) mud.local_estaca = localEstaca;
   if (mexeu('equipe') && equipe !== (getCSVField(r, 'Equipe') || getCSVField(r, 'Subcontratado') || '')) {
     mud.equipe = equipe; mud.subcontratado = equipe;
   }
@@ -16091,12 +16605,22 @@ window.histSalvarEdicao = async function(idx) {
 
   try {
     if (Object.keys(mud).length) {
-      const result = await jsonp(CONFIG.appsScript,
-        { action: 'updateRDO', payload: JSON.stringify({ id, ...mud }), ...authParams() }, 0);
-      if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+      const obraEnvio = OBRA.id;
+      const pedido = { action: 'updateRDO', payload: JSON.stringify({ id, ...mud }), ...authParams() };
+      let result = await jsonp(CONFIG.appsScript, pedido, 0);
+      if (!result.ok && result.error === 'RDO_ASSINADO') {
+        if (!servicoEmDiaAssinado(result, obraEnvio,
+              'A correção não foi gravada — peça ao escritório para reabrir o RDO.', 'gravar a correção')) {
+          if (btn) { btn.disabled = false; btn.innerHTML = 'Salvar'; }
+          return;
+        }
+        result = await jsonp(CONFIG.appsScript, { ...pedido, reabrir: '1' }, 0);
+      }
+      if (!result.ok) throw new Error(result.mensagem || result.error || 'Erro desconhecido');
       toast('Lançamento atualizado', 'success');
+      servicoGravadoNoRdo(result, obraEnvio);
       editadosLocaisGuardar(id, mud);
-      STATE.rdoavanco = comEditadosLocais(STATE.rdoavanco || []);
+      reaplicarLocais();
     }
 
     // As fotos sobem ligadas ao id que já existe: o backend anexa o ponteiro
@@ -16126,8 +16650,15 @@ window.histDeletarServico = async function(idx) {
 
   const antes = STATE.rdoavanco.length;
   try {
-    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id, ...authParams() }, 0);
-    if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+    const obraEnvio = OBRA.id;
+    let result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id, ...authParams() }, 0);
+    if (!result.ok && result.error === 'RDO_ASSINADO') {
+      if (!servicoEmDiaAssinado(result, obraEnvio,
+            'O lançamento não foi apagado — peça ao escritório para reabrir o RDO.', 'apagar o lançamento')) return;
+      result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id, reabrir: '1', ...authParams() }, 0);
+    }
+    if (!result.ok) throw new Error(result.mensagem || result.error || 'Erro desconhecido');
+    servicoGravadoNoRdo(result, obraEnvio);
 
     // Remoção otimista: tira da tela na hora, sem esperar o CSV publicado
     // (que é cacheado pelo Google e demora minutos para atualizar).
@@ -18087,6 +18618,8 @@ window.copiarServicosDeOntem = function() {
   if (!ultimaData) { toast('Nenhum dia anterior com lançamentos.', 'info'); return; }
 
   const doDia = STATE.rdoavanco.filter(r => {
+    // o ajuste do escritório não é serviço do dia (a data acima já o pulava; a lista, não)
+    if (ehAjusteDeAvanco(r)) return false;
     const d = parseISODate(getCSVField(r, 'Data'));
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
     return d && getLocalISODate(d) === ultimaData && pid && pid !== 'OUTRO';
@@ -18495,26 +19028,39 @@ async function salvarRDO() {
 
        `enviarAcao` mede o tamanho e troca para POST quando não cabe, que é
        exatamente o caminho que já existia e não estava sendo usado aqui. */
-    const result = await enviarAcao(reqParams, 0, 0);
+    let result = await enviarAcao(reqParams, 0, 0);
+    if (!result.ok && result.error === 'RDO_ASSINADO') {
+      if (!servicoEmDiaAssinado(result, obraEnvio,
+            'O que você preencheu continua nesta tela — peça ao escritório para reabrir o RDO e salve de novo.',
+            'lançar ' + (totalItens > 1 ? 'os serviços' : 'o serviço'))) {
+        btn.disabled = false;
+        btn.innerHTML = btnTxtOriginal;
+        return;
+      }
+      reqParams.reabrir = '1';       // vai junto para a fila, se o sinal cair agora
+      result = await enviarAcao(reqParams, 0, 0);
+    }
 
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
 
-    toast(`${totalItens} item${totalItens>1?'s':''} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
+    // a data vai no aviso: "2 itens salvos" não dizia de que dia
+    toast(`${totalItens} item${totalItens>1?'s':''} de ${fmtData(d.data)} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
     // aparece já no Histórico e na trava anti-duplicação (ver _LANCADOS_LOCAL)
     lancadosLocaisGuardar(batch);
+    servicoGravadoNoRdo(result, obraEnvio);
     if (OBRA.id !== obraEnvio) {
       /* Trocou de obra enquanto o envio estava no ar: o lançamento é da
          obra de ANTES. Sai o rascunho dela (pela chave dela); as fotos sobem
          com a obra dela; o formulário e a tela da obra nova ficam como estão. */
       try { localStorage.removeItem(chaveDraftEnvio); } catch (eDr) {}
-      if (totalFotos) enviarFotosDoLote(fotosEnviar, 0, obraEnvio);
+      if (totalFotos) fotosDoLoteSubir(fotosEnviar, obraEnvio);
       return;
     }
-    STATE.rdoavanco = comLancadosLocais(STATE.rdoavanco || []);
+    reaplicarLocais();
 
     if (totalFotos) {
       toast(`Enviando ${totalFotos} foto(s)…`, 'info', 2500);
-      enviarFotosDoLote(fotosEnviar, 0, obraEnvio);   // não segura o apontador esperando
+      fotosDoLoteSubir(fotosEnviar, obraEnvio);   // não segura o apontador esperando
     }
     limparFotosDoFormulario();
 
@@ -18555,11 +19101,21 @@ async function salvarRDO() {
           // isso a foto subia carimbada (o carimbo é queimado na imagem)
           // mas chegava na planilha sem coordenada, justamente quando o
           // apontador está em campo.
-          if (await fotoParaAFila(id, i, f)) fotosNaFila++;
+          // a obra do LOTE, não a da tela: com a obra trocada no meio do envio a
+          // foto entrava na fila com a obra nova, e o servidor a recusava para sempre
+          if (await fotoParaAFila(id, i, f, obraEnvio)) fotosNaFila++;
         })));
-      limparFotosDoFormulario();
       avisoDaFila(toast('Sem internet — RDO' + (fotosNaFila ? ` e ${fotosNaFila} foto(s)` : '') +
         ' guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0));
+      if (OBRA.id !== obraEnvio) {
+        /* Trocou de obra com o envio no ar (o caminho do sucesso já tratava
+           isto; o da falha, não): o formulário e as fotos na tela são da obra
+           NOVA e ficam como estão. Sai só o rascunho da obra do lote, que já
+           está guardado na fila. */
+        try { localStorage.removeItem(chaveDraftEnvio); } catch (eDr) {}
+        return;
+      }
+      limparFotosDoFormulario();
       limparFormularioRDO();
       transitionTo(render);
     } else {
@@ -19077,8 +19633,28 @@ window.editarRDODiario = function(data) {
   toast('Editando RDO de ' + fmtData(data) + ' — escolha o turno para ajustar.', 'info', 4000);
 };
 
+/* O dia em que esta tela foi desenhada pela última vez. O PWA fica vivo no
+   bolso de um dia para o outro: o apontador salvava o diurno do dia 9,
+   guardava o celular e, no dia 10, "RDO Diário" abria o formulário do dia 9
+   já preenchido — ele ajustava o efetivo e salvava POR CIMA do dia 9 (e o
+   dia 10 ficava sem RDO). Virou o dia e não há nada por enviar: a tela volta
+   a ser a de hoje. Com trabalho por enviar ela fica, e avisa de que dia é. */
+let _diarioTelaDia = '';
+function diarioConferirViradaDoDia(dataHoje) {
+  const virou = _diarioTelaDia && _diarioTelaDia !== dataHoje;
+  _diarioTelaDia = dataHoje;
+  if (!virou || !DIARIO_V4 || DIARIO_V4.data === dataHoje) return;
+  const ed = DIARIO_V4._editados || {};
+  const pendente = !!(ed.diurno || ed.noturno) || !!loadDiarioV4(DIARIO_V4.data);
+  if (!pendente) { DIARIO_V4 = null; DIARIO_TURNO_ATIVO = null; return; }
+  const de = fmtData(DIARIO_V4.data);
+  setTimeout(() => toast('Este RDO é de ' + de + ' e ainda tem alterações que não foram enviadas. ' +
+    'Salve (ou descarte) antes de abrir o de hoje.', 'info', 9000), 400);
+}
+
 function renderRDODiarioV4() {
   const dataHoje = getLocalISODate(new Date());
+  diarioConferirViradaDoDia(dataHoje);
   if (!DIARIO_V4) {
     /* PRECEDÊNCIA: o rascunho local vem PRIMEIRO.
        Antes a planilha vencia, e `carregarDiarioDaSheet` só reaproveitava do
@@ -20220,6 +20796,12 @@ async function salvarDiarioV4() {
      Rascunho de antes desta versão não sabe quem foi mexido: sobem os dois,
      como sempre subiram. */
   const editados = d._editados ? { ...d._editados } : null;
+  /* `preenchido` é o que faz o cartão do seletor dizer "Já enviado por…". Ele
+     é marcado ANTES do envio (o envio lê o turno marcado), e voltava a ficar
+     marcado quando o servidor RECUSAVA: sessão vencida, e o cartão dizia "já
+     enviado", com o PDF oficial à vista, de um turno que não estava em lugar
+     nenhum — nem no servidor, nem na fila. */
+  const preenchidoAntes = !!td.preenchido;
   td.preenchido = true;
   // O outro turno, se outro aparelho já o enviou, aparece na tela (não sobe).
   completarDiarioComPlanilha(d);
@@ -20299,6 +20881,7 @@ async function salvarDiarioV4() {
     if (result && result.error === 'RDO_ASSINADO') {
       btn.disabled = false;
       btn.innerHTML = original;
+      td.preenchido = preenchidoAntes;      // não subiu (rdoAssinadoAoSalvar guarda o rascunho)
       return rdoAssinadoAoSalvar(d, result, obraEnvio);
     }
     if (!result.ok) throw new Error(result.error || 'Erro');
@@ -20329,7 +20912,8 @@ async function salvarDiarioV4() {
       // significa: rascunho presente = trabalho que ainda NÃO subiu.
       clearDiarioV4(d.data, obraEnvio);
     }
-    toast(`Turno ${t.toUpperCase()} salvo` +
+    // a data vai no aviso: é o que denuncia o turno salvo no dia errado
+    toast(`Turno ${t.toUpperCase()} de ${fmtData(d.data)} salvo` +
           (totalParalis ? ` · ${totalParalis} paralisação(ões) registrada(s)` : '') +
           (reaberto ? ` · RDO reaberto: ${reaberto} assinatura(s) cancelada(s), o convite sai de novo` : ''),
           'success', reaberto ? 8000 : 4000);
@@ -20361,7 +20945,10 @@ async function salvarDiarioV4() {
               'não feche esta tela e tente de novo.', 'error', 0);
       }
     } else {
-      toast('Falha: ' + e.message, 'error', 0);
+      // recusado pelo servidor: o turno NÃO está enviado — o que foi digitado fica no rascunho
+      td.preenchido = preenchidoAntes;
+      saveDiarioV4(d, obraEnvio);
+      toast('O turno não foi salvo: ' + erroLegivel(e.message) + ' O que você digitou continua aqui.', 'error', 0);
     }
   }
 }
@@ -21295,7 +21882,49 @@ function depositoDepoisDeGravar(obra, data, reaberto) {
   if (OBRAS_COM_RDO_POR_EMAIL.indexOf(obra) === -1) return Promise.resolve(false);
   if (obra !== OBRA.id) { depositoPendenteAnotar(obra, data, reaberto); return Promise.resolve(false); }
   // (o envio para assinatura deposita antes de mandar)
-  return reaberto ? enviarRDOParaAssinatura(data, true) : depositarRDOPdf(data);
+  if (reaberto) return enviarRDOParaAssinatura(data, true);
+  /* O depósito que NÃO subiu fica anotado: o turno grava (pedido pequeno) e
+     o PDF de 300 KB não passa no sinal ruim das 23h — o e-mail das 6h30 ia
+     com o PDF de antes, e o link do fiscal ficava em "volte em alguns
+     minutos" até alguém abrir aquele dia. A manutenção depois de cada carga
+     tenta de novo (até três vezes). */
+  return depositarRDOPdf(data).then(ok => {
+    if (!ok) depositoPendenteAnotar(obra, data, false);
+    return ok;
+  });
+}
+
+/* ------------------------------------------------------------------
+   O SERVIÇO DO DIA É PARTE DO RDO (ver rdoServicoPorta_, no Code.gs)
+   ------------------------------------------------------------------
+   Lançar, corrigir ou apagar um serviço muda o RDO daquele dia. Duas
+   consequências, que valem para os três caminhos (Lançar Serviço, editar e
+   apagar no Histórico) e para a fila:
+
+   • o servidor devolve a linha do dia como ficou (`dias`, com a revisão
+     nova): ela é guardada por cima do CSV e o PDF do dia é anotado para
+     ser redesenhado — o e-mail das 6h30 e o link do fiscal levavam o PDF
+     de quando o turno foi salvo, sem o serviço que entrou depois;
+   • dia já ASSINADO é recusado (RDO_ASSINADO): o escritório pode reabrir,
+     o apontador não — e nada do que ele preencheu se perde.
+   ------------------------------------------------------------------ */
+function servicoGravadoNoRdo(result, obra) {
+  const dias = (result && result.dias) || {};
+  Object.keys(dias).forEach(dia => {
+    diarioLocalGuardar(dia, dias[dia], '', obra);
+    depositoPendenteAnotar(obra, dia, !!result.reaberto);
+  });
+  if (result && result.reaberto && obra === OBRA.id) _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
+}
+/* → true quando o escritório decide reabrir; false quando o aviso já foi dado. */
+function servicoEmDiaAssinado(r, obraEnvio, guardado, acao) {
+  const msg = (r && r.mensagem) || 'O RDO deste dia já foi assinado.';
+  if (!podeEnviarRDOParaAssinatura() || (obraEnvio && obraEnvio !== OBRA.id)) {
+    toast(msg + ' ' + guardado, 'error', 0);
+    return false;
+  }
+  return confirm(msg + '\n\nReabrir o RDO e ' + acao + '?\n\n' +
+                 'Quem assinou recebe um link novo e assina de novo o RDO como ficou.');
 }
 let _depositandoPendentes = false;
 async function depositosPendentesRodar() {
@@ -22393,7 +23022,8 @@ async function _gerarPDFInterno(data, turnoFocus) {
     d.customEquip_noturno = [];
     if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data && !DIARIO_V4.parte) {
       d.visitas = DIARIO_V4.diurno.visitas || '';
-      d.ocorrencias = DIARIO_V4.diurno.ocorrencias || '';
+      // (com as paralisações do turno: o texto cru jogava fora a parada registrada)
+      d.ocorrencias = ocorrenciasComParalisacoes(DIARIO_V4.diurno.ocorrencias || '', DIARIO_V4.diurno.paralisacoes);
       d.observacoes_gerais = DIARIO_V4.diurno.observacoes || '';
     }
   } else if (focus === 'noturno') {
@@ -22406,7 +23036,7 @@ async function _gerarPDFInterno(data, turnoFocus) {
     d.customEquip_diurno = [];
     if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data && !DIARIO_V4.parte) {
       d.visitas = DIARIO_V4.noturno.visitas || '';
-      d.ocorrencias = DIARIO_V4.noturno.ocorrencias || '';
+      d.ocorrencias = ocorrenciasComParalisacoes(DIARIO_V4.noturno.ocorrencias || '', DIARIO_V4.noturno.paralisacoes);
       d.observacoes_gerais = DIARIO_V4.noturno.observacoes || '';
     }
   }
@@ -22802,10 +23432,23 @@ async function _gerarPDFInterno(data, turnoFocus) {
 // ====================================================================
 // BOOT
 // ====================================================================
+const TELAS_DE_ATALHO = ['rdo', 'rdodiario', 'botafora', 'executivo'];
 document.addEventListener('DOMContentLoaded', () => {
   /* O perfil de campo não enxerga o Painel: abrir nele era cair em "Acesso
      não liberado" a cada boot. Quem não vê o Painel começa no lançamento. */
   if (!podeVer(STATE.currentPage)) STATE.currentPage = podeVer('executivo') ? 'executivo' : 'rdo';
+  /* OS ATALHOS DO ÍCONE (manifest.json › shortcuts): segurar o dedo no ícone
+     do app oferece "Lançar serviço", "RDO Diário", "Bota-Fora" e "Painel" —
+     o apontador chega à tela do dia sem passar pelo menu. O endereço traz
+     `?tela=`; só as telas dos atalhos valem, e o parâmetro sai do endereço
+     para um recarregamento mais tarde não voltar à tela do atalho. */
+  try {
+    const tela = new URLSearchParams(location.search).get('tela');
+    if (tela) {
+      if (TELAS_DE_ATALHO.indexOf(tela) !== -1 && podeVer(tela)) STATE.currentPage = tela;
+      if (history.replaceState) history.replaceState(history.state, '', location.pathname + location.hash);
+    }
+  } catch (e) {}
   /* A fila offline, os rascunhos e as fotos moram no armazenamento do site.
      Sem "persistente", o navegador pode apagá-lo inteiro sob pressão de
      espaço — com lançamento que ainda não subiu dentro. */
