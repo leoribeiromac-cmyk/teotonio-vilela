@@ -73,6 +73,11 @@ const UrlFetchApp = {
     REDE.pedidos.push(cod);
     if (REDE.fora.indexOf(cod) !== -1) return { getResponseCode: () => 500, getContentText: () => '' };
     if (REDE.mudas.indexOf(cod) !== -1) return { getResponseCode: () => 200, getContentText: () => '[]' };
+    // estação em pane: devolve as horas do dia, todas SEM dado
+    if ((REDE.nulas || []).indexOf(cod) !== -1) {
+      return { getResponseCode: () => 200, getContentText: () =>
+        JSON.stringify(horas(ini, fim, {}, {}).map(l => Object.assign(l, { CHUVA: null }))) };
+    }
     return { getResponseCode: () => 200, getContentText: () => JSON.stringify(horas(ini, fim, REDE.chuvaPorHora, REDE.outrosDias)) };
   }
 };
@@ -113,7 +118,7 @@ function limpar() {
   Object.keys(_props).forEach(k => delete _props[k]);
   _cache = {};
   REDE.catalogoNoAr = true; REDE.catalogoBuscas = 0;
-  REDE.mudas = []; REDE.fora = []; REDE.chuvaPorHora = {}; REDE.pedidos = [];
+  REDE.mudas = []; REDE.fora = []; REDE.nulas = []; REDE.chuvaPorHora = {}; REDE.pedidos = [];
 }
 
 let falhas = 0;
@@ -230,6 +235,32 @@ t('a chuva das 21h–meia-noite é do dia dela, e não do seguinte', () => {
   assert.strictEqual(r.mm.noite, 6, 'perdeu a chuva das 22h ou somou a da véspera: ' + JSON.stringify(r.mm));
   assert.strictEqual(r.total_mm, 6);
   assert.ok(REDE.janelas.includes('2026-08-10/2026-08-11'), REDE.janelas.join(','));
+});
+
+t('a chuva da madrugada fecha a noite da véspera (o dia da obra vai das 6h às 6h)', () => {
+  // 02h de 11/08 parou o noturno que começou em 10/08
+  _cache = {};
+  REDE.chuvaPorHora = {};
+  REDE.outrosDias = { '2026-08-11': { 2: 40 } };
+  const r = ctx.climaDoDia('2026-08-10', 'teotonio');
+  assert.strictEqual(r.mm.noite, 40, 'a chuva das 2h não entrou na noite do dia 10: ' + JSON.stringify(r.mm));
+  assert.strictEqual(r.total_mm, 40);
+  assert.strictEqual(r.noite, 'Chuva forte');
+  // e NÃO entra de novo no dia 11
+  _cache = {};
+  REDE.chuvaPorHora = { 2: 40 };
+  REDE.outrosDias = {};
+  const r11 = ctx.climaDoDia('2026-08-11', 'teotonio');
+  assert.strictEqual(r11.total_mm, 0, 'a madrugada do dia 11 foi contada no próprio dia 11: ' + JSON.stringify(r11.mm));
+});
+
+t('estação em pane (as horas vêm, mas sem dado) não vira "0 mm": a busca desce', () => {
+  REDE.nulas = ['A771'];
+  REDE.chuvaPorHora = { 14: 3 };
+  const r = ctx.climaDoDia('2026-08-10', 'teotonio');
+  assert.ok(r.ok, 'devolveu erro: ' + r.motivo);
+  assert.notStrictEqual(r.estacao, 'A771', 'ficou com a estação muda');
+  assert.strictEqual(r.mm.tarde, 3);
 });
 
 t('o dia de hoje não pede amanhã (em UTC ainda não começou)', () => {

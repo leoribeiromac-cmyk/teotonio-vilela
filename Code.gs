@@ -140,7 +140,11 @@ function rotear(e) {
                        imagem da nota também são da obra que o app diz: sem estar
                        aqui, quem só tem o Ranário fechava a medição da Teotônio */
                     'medicaoFechar', 'medicaoReabrir',
-                    'equipCadastrar', 'locadoraCadastrar', 'equipDesativar', 'nfImagem'];
+                    'equipCadastrar', 'locadoraCadastrar', 'equipDesativar', 'nfImagem',
+                    /* e as LEITURAS: só as escritas estavam aqui, e quem só tem
+                       o Ranário lia as notas (fornecedor, valor, imagem), as
+                       viagens e as horas de máquina da Teotônio */
+                    'nfListar', 'bfListar', 'equipListar', 'equipApontamentos', 'equipUltimos'];
     if (POR_OBRA.indexOf(action) !== -1) {
       var sessObraR = sessaoDoToken(p.token);
       if (sessObraR && !sessaoPodeNaObra(sessObraR, p.obra)) {
@@ -450,14 +454,17 @@ function sessaoRevogar(token) {
    token continuava valendo, com o perfil ANTIGO, até alguém clicar em Sair
    — que é justamente o que o demitido não vai fazer.
    ------------------------------------------------------------------- */
-function sessoesDoUsuarioRevogar(nome, motivo) {
+function sessoesDoUsuarioRevogar(nome, motivo, manterToken) {
   var alvo = String(nome == null ? '' : nome).trim().toLowerCase();
   if (!alvo) return 0;
   var props = PropertiesService.getScriptProperties();
   var todas = props.getProperties();
   var n = 0;
+  // a sessão que fica: a de quem está fazendo a mudança, e só ela
+  var poupar = manterToken ? SESSAO_PREFIXO + String(manterToken) : '';
   Object.keys(todas).forEach(function (k) {
     if (k.indexOf(SESSAO_PREFIXO) !== 0) return;
+    if (poupar && k === poupar) return;
     var s;
     try { s = JSON.parse(todas[k]); } catch (e) { return; }
     var dono = String((s && (s.u || s.usuario)) || '').trim().toLowerCase();
@@ -1313,7 +1320,7 @@ function estacoesDaObra_(obraId, quantas) {
   if (travada) return [{ cod: String(travada).trim(), nome: '', km: null, travada: true }];
 
   // 2) obra sem coordenada declarada: não há como escolher — não invento
-  if (!CLIMA_OBRAS[id]) {
+  if (!Object.prototype.hasOwnProperty.call(CLIMA_OBRAS, id)) {   // `obra=constructor` não é obra
     return [{ cod: INMET_ESTACAO_PADRAO, nome: '', km: null, semCoordenada: true }];
   }
 
@@ -1363,7 +1370,7 @@ function climaDoDia(dataISO, obraId) {
     // Só para obra CADASTRADA: esta ação é pública, e gravar uma Propriedade
     // por `obra` inventada deixava qualquer um encher o cofre de 500 KB do
     // script — e cofre cheio é login que não grava sessão, ninguém entra.
-    if (CLIMA_OBRAS[id]) {
+    if (Object.prototype.hasOwnProperty.call(CLIMA_OBRAS, id)) {
       try {
         PropertiesService.getScriptProperties()
           .setProperty('INMET_ULTIMA_' + id, candidatas[i].cod);
@@ -1416,26 +1423,41 @@ function diaISOMais_(d, n) {
 /* Somatório de chuva por período do dia. A hora do INMET vem em UTC
    ("HH00", com a data em DT_MEDICAO); São Paulo é UTC-3, então 09 UTC = 06
    local e 01 UTC do dia seguinte = 22h local de hoje. Linha sem DT_MEDICAO
-   (provedor de CLIMA_URL que não a mande) é tida como do próprio `d`. */
+   (provedor de CLIMA_URL que não a mande) é tida como do próprio `d`.
+
+   O DIA DA OBRA VAI DAS 6h ÀS 6h — é a régua do mapa de chuva ("Noite 18:00
+   às 06:00") e do turno noturno, que atravessa a meia-noite. As horas 0–5
+   eram contadas como lidas e não entravam em período nenhum, de dia nenhum:
+   40 mm às 2h paravam o noturno e a estação gravava "noite: 0 mm" nos DOIS
+   dias. Agora a madrugada é da NOITE DA VÉSPERA.
+
+   E hora SEM DADO não é hora seca: a linha com CHUVA nula não conta como
+   lida. A estação em pane devolve as 24 linhas do dia com tudo nulo — virava
+   "0 mm / Bom" com a fonte do INMET escrita ao lado, e a busca nunca descia
+   para a estação seguinte. */
 function somarChuva_(linhas, d, est) {
   var soma = { manha: 0, tarde: 0, noite: 0 }, lidas = 0, comHora = 0;
   linhas.forEach(function (l) {
     var hh = parseInt(String(l.HR_MEDICAO == null ? '' : l.HR_MEDICAO).slice(0, 2), 10);
     if (!isFinite(hh)) return;
     comHora++;
+    var local = (hh - 3 + 24) % 24;
     var dUtc = String(l.DT_MEDICAO == null ? '' : l.DT_MEDICAO).slice(0, 10);
     if (/^\d{4}-\d{2}-\d{2}$/.test(dUtc)) {
       // a hora local volta 3 h: 00–02 UTC são 21–23 h do dia anterior
       var diaLocal = hh < 3 ? diaISOMais_(dUtc, -1) : dUtc;
+      // e a madrugada (0–5 h) fecha a noite da véspera
+      if (local < 6) diaLocal = diaISOMais_(diaLocal, -1);
       if (diaLocal !== d) return;
+    } else if (local < 6) {
+      return;   // sem data não dá para saber de que noite é a madrugada
     }
-    var local = (hh - 3 + 24) % 24;
     var mm = parseFloat(String(l.CHUVA == null ? '' : l.CHUVA).replace(',', '.'));
-    if (!isFinite(mm)) mm = 0;
+    if (!isFinite(mm)) return;
     lidas++;
     if (local >= 6 && local < 12) soma.manha += mm;
     else if (local >= 12 && local < 18) soma.tarde += mm;
-    else if (local >= 18) soma.noite += mm;
+    else soma.noite += mm;
   });
   if (!comHora) {
     return { ok: false, motivo: 'Registro sem hora legível — provedor mudou o formato?' };
@@ -3331,7 +3353,10 @@ function gerarIdDiario(dados, iId) {
     var m = v.match(/(\d+)/);
     if (m) { var n = parseInt(m[1], 10); if (!isNaN(n) && n > max) max = n; }
   }
-  return 'D' + ('0000' + (max + 1)).slice(-4);
+  // (com `slice(-4)`, depois do D9999 — ou de um id com mais dígitos na
+  //  coluna — o próximo saía D0000/D0001, repetindo um id que já existe)
+  var prox = String(max + 1);
+  return 'D' + (prox.length < 4 ? ('0000' + prox).slice(-4) : prox);
 }
 
 /* -------------------------------------------------------------------
@@ -5028,6 +5053,10 @@ function rdoFirmaGuardarSeArmada_(alvo) {
 function rdoFirmaArquivar(p) {
   var barrado = exigirPodeEnviarRDO(p.token, 'rdoFirmaArquivar');
   if (barrado) return barrado;
+  /* E a OBRA: só o perfil era conferido, e a engenharia de outra obra
+     arquivava um traço que saía em todo RDO da Teotônio. */
+  var sessFirma = sessaoDoToken(p.token);
+  if (sessFirma && !sessaoPodeNaObra(sessFirma, OBRA_ID)) return negarPorObra(p.token, 'rdoFirmaArquivar', OBRA_ID);
 
   var papel = String(p.papel || '').trim().toLowerCase().replace(/[^a-z]/g, '');
   if (RDO_FIRMA_PAPEIS.indexOf(papel) === -1) {
@@ -5156,6 +5185,9 @@ function rdoFirmaArquivar(p) {
 function rdoFirmasArquivadasLer(p) {
   var barrado = exigirPodeEnviarRDO(p.token, 'rdoFirmasArquivadasLer');
   if (barrado) return barrado;
+  // devolve a IMAGEM da firma do engenheiro: só para quem tem a obra
+  var sessLer = sessaoDoToken(p.token);
+  if (sessLer && !sessaoPodeNaObra(sessLer, OBRA_ID)) return negarPorObra(p.token, 'rdoFirmasArquivadasLer', OBRA_ID);
 
   var guardadas = rdoFirmasArquivadas_();
   var armadas = rdoFirmasArmadas_();
@@ -5949,6 +5981,21 @@ function rdoFirmasDePessoa_(obra, dataISO) {
   }
 }
 
+/* O "RDO ASSINADO" deste dia saiu (ou deixou de valer, com `quando` vazio):
+   fica escrito em cada linha de assinatura do dia. */
+function rdoAssinadoEnviadoMarcar_(obra, dataISO, quando) {
+  try {
+    rdoAssinLinhasDoDia_(obra, dataISO).forEach(function (l) {
+      var temMarca = String(l.assinadoEnviadoEm == null ? '' : l.assinadoEnviadoEm).trim() !== '';
+      if (!quando && !temMarca) return;
+      var alvo = rdoAssinPorToken_(l.token);
+      if (alvo) rdoAssinGravarCampo_(alvo, 'assinadoEnviadoEm', quando || '');
+    });
+  } catch (e) {
+    Logger.log('Marca de RDO assinado enviado (' + dataISO + ') não gravada: ' + e);
+  }
+}
+
 /* REABRIR o RDO assinado: cada firma dada volta a pendente, com link NOVO
    (o velho deixa de abrir) e o rastro na observação e na Auditoria. A
    origem volta a vazia — a firma arquivada do engenheiro, se houver, entra
@@ -5977,6 +6024,7 @@ function rdoReabrirAssinaturas_(obra, dataISO, firmas, sess) {
     rdoAssinGravarCampo_(alvo, 'convidadoEm', agora);
     n++;
   });
+  rdoAssinadoEnviadoMarcar_(obra, dataISO, '');
   try {
     var log = rdoAssinadoLogLer_();
     var chave = normObra(obra) + '|' + dataISO;
@@ -6134,6 +6182,17 @@ function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
      justamente a que o reenvio existe para corrigir. */
   var marcados = rdoRedesenharLer_();
   var marca = marcados[chave] || null;
+  /* O REGISTRO ACIMA É APARADO (rdoLogGravar_ guarda os 60 dias mais novos):
+     o dia antigo sai dele, e "não está no registro" era lido como "nunca
+     enviado". Bastava baixar o PDF oficial de um RDO de três meses atrás —
+     todo download deposita — para a lista inteira receber "RDO ASSINADO"
+     de novo. A marca que não se perde fica NA LINHA da assinatura
+     (`assinadoEnviadoEm`); reabrir o RDO ou marcar o redesenho a soltam. */
+  if (!marca && rdoAssinLinhasDoDia_(obra, dataISO).some(function (x) {
+        return String(x.assinadoEnviadoEm == null ? '' : x.assinadoEnviadoEm).trim() !== '';
+      })) {
+    return { ok: true, pulado: 'assinado já enviado' };
+  }
   if (marca && !marca.depositadoEm) {
     return { ok: false, error: 'O PDF deste dia ainda não foi redesenhado com a firma nova — ' +
                                'abra o app (a varredura redesenha sozinha) e tente de novo.' };
@@ -6189,6 +6248,7 @@ function rdoEnviarAssinadoSePronto_(obra, dataISO, quantasNoPdf) {
 
   log[chave] = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm');
   rdoLogGravar_(RDO_ASSINADO_LOG, log);
+  rdoAssinadoEnviadoMarcar_(obra, dataISO, log[chave]);
   if (marca) {
     // O reenvio saiu: a marca cumpriu o papel dela.
     delete marcados[chave];
@@ -6308,6 +6368,7 @@ function reenviarRDOAssinado(dataISO) {
   var log = rdoAssinadoLogLer_();
   delete log[OBRA_ID + '|' + d];
   PropertiesService.getScriptProperties().setProperty(RDO_ASSINADO_LOG, JSON.stringify(log));
+  rdoAssinadoEnviadoMarcar_(OBRA_ID, d, '');
   return rdoEnviarAssinadoSePronto_(OBRA_ID, d, rdoPdfAssinaturasNoDeposito_(OBRA_ID, d));
 }
 
@@ -6995,6 +7056,17 @@ function usuariosListar(token) {
    foi feito naquele dia); o que muda é que a divergência passa a ser
    VISÍVEL, em vez de reescrever o passado sem ninguém ver.
    ------------------------------------------------------------ */
+/* A competência "AAAA-MM", do jeito que estiver na célula. Gravada como
+   texto cru, a planilha pode guardá-la como DATA (o mesmo que faz com as
+   horas das assinaturas): aí `String(celula)` nunca casava com "2026-10" —
+   a medição fechava em dobro, não reabria, e o app não via o mês fechado. */
+function medCompetencia_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, fusoDoScript(), 'yyyy-MM');
+  var t = String(v == null ? '' : v).trim().replace(/^'/, '');
+  var m = /^(\d{4})-(\d{2})/.exec(t);
+  return m ? m[1] + '-' + m[2] : t;
+}
+
 function medicaoListar(obra) {
   var aba = getOrCreateAba('Medicoes');
   var cab = cabecalhoNormalizado(aba);
@@ -7006,6 +7078,7 @@ function medicaoListar(obra) {
     if (iObra !== -1 && normObra(dados[i][iObra]) !== alvo) continue;
     var o = {};
     cab.forEach(function (nome, k) { o[nome] = dados[i][k]; });
+    if (o.hasOwnProperty('competencia')) o.competencia = medCompetencia_(o.competencia);
     // `itens` é JSON; devolve como texto e o app decide quando abrir
     out.push(o);
   }
@@ -7032,22 +7105,28 @@ function medicaoFechar(p) {
         iReab = idxColuna(cab, 'reaberta');
 
     for (var i = 1; i < dados.length; i++) {
-      if (normObra(dados[i][iObra]) === alvo && String(dados[i][iComp]).trim() === comp
+      if (normObra(dados[i][iObra]) === alvo && medCompetencia_(dados[i][iComp]) === comp
           && String(dados[i][iReab]).trim().toLowerCase() !== 'sim') {
         return { ok: false, error: 'JA_FECHADA', mensagem: 'A competência ' + comp + ' já está fechada.' };
       }
     }
 
+    /* As chaves em MINÚSCULAS, como o cabeçalho lido (`cabecalhoNormalizado`):
+       com `fechadaEm`/`fechadaPor` a busca por 'fechadaem' não achava nada, e
+       QUEM fechou e QUANDO nunca foram gravados — a tela da medição lê as
+       duas colunas e mostrava o mês fechado sem data nem autor. */
     var reg = {
       id: 'M' + comp.replace('-', '') + '_' + Utilities.getUuid().slice(0, 6),
-      obra: alvo, competencia: comp,
-      fechadaEm: new Date(), fechadaPor: usuarioDoToken(p.token) || p.usuario || '',
+      obra: alvo,
+      // o apóstrofo segura a célula como TEXTO (ver medCompetencia_)
+      competencia: "'" + comp,
+      fechadaem: new Date(), fechadapor: usuarioDoToken(p.token) || p.usuario || '',
       itens: String(p.itens || '[]'), observacao: String(p.observacao || ''),
-      reaberta: '', reabertaEm: '', reabertaPor: ''
+      reaberta: '', reabertaem: '', reabertapor: ''
     };
     var linha = cab.map(function (n) { return reg.hasOwnProperty(n) ? reg[n] : ''; });
     aba.getRange(aba.getLastRow() + 1, 1, 1, cab.length).setValues([seguroLinha(linha)]);
-    registrarAuditoria(reg.fechadaPor, perfil, 'medicaoFechar', alvo, comp, '', reg.itens.length + ' bytes de snapshot');
+    registrarAuditoria(reg.fechadapor, perfil, 'medicaoFechar', alvo, comp, '', reg.itens.length + ' bytes de snapshot');
     return { ok: true, id: reg.id, competencia: comp };
   } catch (err) {
     return { ok: false, error: String(err && err.message ? err.message : err) };
@@ -7076,7 +7155,7 @@ function medicaoReabrir(p) {
         iReab = idxColuna(cab, 'reaberta'), iRem = idxColuna(cab, 'reabertaem'),
         iRpor = idxColuna(cab, 'reabertapor');
     for (var i = dados.length - 1; i >= 1; i--) {
-      if (normObra(dados[i][iObra]) === alvo && String(dados[i][iComp]).trim() === comp
+      if (normObra(dados[i][iObra]) === alvo && medCompetencia_(dados[i][iComp]) === comp
           && String(dados[i][iReab]).trim().toLowerCase() !== 'sim') {
         aba.getRange(i + 1, iReab + 1).setValue('sim');
         if (iRem !== -1) aba.getRange(i + 1, iRem + 1).setValue(new Date());
@@ -7135,7 +7214,11 @@ function usuarioSalvar(p) {
   if (editando && perfilAnterior === 'admin' && perfil !== 'admin' && contarAdmins(mapa, nomeAntigo) === 0) {
     return { ok: false, error: 'SEM_ADMIN', mensagem: 'Este é o único administrador. Promova outra pessoa antes de rebaixá-lo.' };
   }
-  if (editando && nomeAntigo === eu && perfil !== 'admin') {
+  /* "Sou eu" sem diferença de caixa: o login aceita o nome em minúsculas, e
+     comparado letra por letra o admin "Leonardo" que entrou como "leonardo"
+     conseguia tirar o próprio acesso (e apagar o próprio usuário). */
+  var souEu = function (n) { return String(n || '').trim().toLowerCase() === String(eu || '').trim().toLowerCase(); };
+  if (editando && souEu(nomeAntigo) && perfil !== 'admin') {
     return { ok: false, error: 'AUTO_REBAIXA', mensagem: 'Você não pode tirar o seu próprio acesso de administrador.' };
   }
 
@@ -7170,14 +7253,17 @@ function usuarioSalvar(p) {
      o token antigo continuasse aceito — a pessoa seguia com o acesso velho.
      Quem mudou de fato é derrubado e entra de novo; quem só teve o cadastro
      tocado sem mudar nada disso continua onde está.
-     Exceção: o próprio admin que está mexendo não se derruba, senão ele perde
-     a tela no meio do trabalho. */
+     Exceção: o próprio admin que está mexendo não perde a tela no meio do
+     trabalho — mas só a sessão DELE, a deste pedido. As outras sessões do
+     mesmo usuário caem: quem troca a senha porque o celular sumiu (ou o
+     token vazou) precisa que o outro aparelho pare de valer, e a exceção
+     antiga poupava todas. */
   var derrubadas = 0;
   var mudouAcesso = !!senha || (editando && (perfil !== perfilAnterior || nomeAntigo !== nome ||
     JSON.stringify(obrasAntes) !== JSON.stringify(usuarioObrasDe(mapa[nome]))));
   if (editando && mudouAcesso) {
-    if (nomeAntigo !== eu) derrubadas += sessoesDoUsuarioRevogar(nomeAntigo, 'cadastro alterado');
-    if (nome !== nomeAntigo && nome !== eu) derrubadas += sessoesDoUsuarioRevogar(nome, 'cadastro alterado');
+    derrubadas += sessoesDoUsuarioRevogar(nomeAntigo, 'cadastro alterado', souEu(nomeAntigo) ? p.token : '');
+    if (nome !== nomeAntigo) derrubadas += sessoesDoUsuarioRevogar(nome, 'cadastro alterado', souEu(nomeAntigo) ? p.token : '');
   }
 
   registrarAuditoria(eu, 'admin', editando ? 'usuarioAlterar' : 'usuarioCriar', OBRA_ID, nome,
@@ -7194,7 +7280,9 @@ function usuarioExcluir(p) {
   if (!usuarioTem_(mapa, nome)) return { ok: false, error: 'NAO_ENCONTRADO', mensagem: 'Usuário não encontrado.' };
 
   var eu = usuarioDoToken(p.token);
-  if (nome === eu) return { ok: false, error: 'AUTO_EXCLUSAO', mensagem: 'Você não pode excluir o seu próprio usuário.' };
+  if (nome.toLowerCase() === String(eu || '').trim().toLowerCase()) {
+    return { ok: false, error: 'AUTO_EXCLUSAO', mensagem: 'Você não pode excluir o seu próprio usuário.' };
+  }
   if (usuarioPerfilDe(nome, mapa[nome]) === 'admin' && contarAdmins(mapa, nome) === 0) {
     return { ok: false, error: 'SEM_ADMIN', mensagem: 'Não dá para excluir o único administrador.' };
   }
@@ -7275,6 +7363,8 @@ function nfPastaDaNota(obra, competencia) {
 }
 
 function nfListar(obra) {
+  // obra vazia em `linhasObj` quer dizer "todas": a lista é sempre de UMA obra
+  obra = normObra(obra);
   var notas = linhasObj(ABA_NF, obra).map(function (n) {
     n.dataEmissao = normData(n.dataEmissao);
     n.dataEntrada = normData(n.dataEntrada);
@@ -7295,8 +7385,10 @@ function nfListar(obra) {
    podia apagá-la. O dono e a data de criação ficam os da linha. */
 function regravarNaObra_(cab, antiga, linha, obra) {
   var iObra = cab.indexOf('obra');
-  if (iObra !== -1 && String(antiga[iObra] == null ? '' : antiga[iObra]).trim() &&
-      normObra(antiga[iObra]) !== normObra(obra)) {
+  /* Obra em BRANCO na linha é Teotônio (a regra do sistema inteiro): a
+     conferência só rodava com a célula preenchida, e a nota antiga da
+     Teotônio, sem obra escrita, era regravada como do Ranário. */
+  if (iObra !== -1 && normObra(antiga[iObra]) !== normObra(obra)) {
     return { ok: false, error: 'OUTRA_OBRA', mensagem: 'Este registro é de outra obra — nada foi gravado.' };
   }
   ['usuario', 'criadoem'].forEach(function (c) {
@@ -7437,8 +7529,7 @@ function nfImagem(p) {
     var bateNf = (iIdNf !== -1 && String(dadosNf[n][iIdNf]).trim() === String(p.id || '').trim()) ||
                  (iCliNf !== -1 && String(dadosNf[n][iCliNf]).trim() === String(p.id || '').trim());
     if (!bateNf) continue;
-    if (iObraNf !== -1 && String(dadosNf[n][iObraNf] == null ? '' : dadosNf[n][iObraNf]).trim() &&
-        normObra(dadosNf[n][iObraNf]) !== normObra(p.obra)) {
+    if (iObraNf !== -1 && normObra(dadosNf[n][iObraNf]) !== normObra(p.obra)) {
       return { ok: false, error: 'OUTRA_OBRA', mensagem: 'Esta nota é de outra obra — a imagem não foi guardada.' };
     }
     linhaNf = n;
@@ -7446,13 +7537,16 @@ function nfImagem(p) {
   }
   var pasta = nfPastaDaNota(p.obra, p.competencia);
 
-  // se a mesma nota ja tem arquivo, substitui em vez de acumular copias
-  var antigos = pasta.getFilesByName(nome);
-  while (antigos.hasNext()) { try { antigos.next().setTrashed(true); } catch (e) {} }
-
+  /* Se a mesma nota já tem arquivo, substitui em vez de acumular cópias — e
+     o novo é criado ANTES de o velho ir para a lixeira (como no PDF do RDO):
+     na ordem inversa, o Drive falhando no meio deixava a nota sem prova. */
   var f = pasta.createFile(blob);
   f.setSharing(DriveApp.Access.PRIVATE, DriveApp.Permission.NONE);
   var fileId = f.getId();
+  var antigos = pasta.getFilesByName(nome);
+  while (antigos.hasNext()) {
+    try { var velhoNf = antigos.next(); if (velhoNf.getId() !== fileId) velhoNf.setTrashed(true); } catch (e) {}
+  }
 
   // grava o arquivo na linha da nota, se ela ja existir (só a página 1:
   // as outras vão para a coluna `paginas`, montada pelo app)
@@ -8014,7 +8108,9 @@ function nfeDeBase64(v) {
 
 function nfeAcharXML(txt) {
   var t = String(txt || '');
-  if (t.indexOf('<infNFe') !== -1) return t;
+  /* Só é o XML cru se COMEÇA como XML: um JSON que traz o XML dentro de um
+     campo também "contém <infNFe", e ia inteiro para o XmlService. */
+  if (t.indexOf('<infNFe') !== -1 && t.replace(/^[\s\uFEFF]+/, '').charAt(0) === '<') return t;
   var j = null;
   try { j = JSON.parse(t); } catch (e) { return ''; }
   var achado = '';

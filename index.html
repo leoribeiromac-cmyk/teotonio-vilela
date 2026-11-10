@@ -2938,7 +2938,7 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
 
 /* Produtividade real, embaixo do campo do planejamento reverso */
 .plan-real {
-  display: inline-flex; align-items: center; gap: 4px; margin-top: 5px; padding: 2px 7px 2px 5px;
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 2px 8px 2px 6px;
   border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--muted);
   font-family: 'JetBrains Mono', monospace; font-size: var(--fs-2xs); font-weight: 500; line-height: 1.5;
   white-space: nowrap; font-variant-numeric: tabular-nums;
@@ -2949,8 +2949,8 @@ button.plan-real:hover { border-color: var(--border-strong); background: var(--s
 .plan-real.acima { color: var(--grn); border-color: color-mix(in oklab, var(--grn) 35%, var(--border)); }
 .plan-real.perto { color: var(--ylw-d); border-color: color-mix(in oklab, var(--ylw) 45%, var(--border)); }
 .plan-real.abaixo { color: var(--red); border-color: color-mix(in oklab, var(--red) 35%, var(--border)); }
-.plan-real.pouco { padding-left: 7px; opacity: .8; }
-@media (max-width: 700px) { button.plan-real { min-height: 30px; padding: 4px 10px 4px 8px; } }
+.plan-real.pouco { padding-left: 8px; opacity: .8; }
+@media (max-width: 700px) { button.plan-real { min-height: 40px; padding: 4px 12px 4px 10px; } }
 
 /* ==================================================================
    DESENHO EM VOLUME (js/ui/iso.js) — maquete da pista e relevo do ritmo
@@ -2999,7 +2999,7 @@ button.plan-real:hover { border-color: var(--border-strong); background: var(--s
 .maq-pe { padding: 14px 18px 16px; display: grid; gap: 12px; }
 .maq-legenda { display: flex; flex-wrap: wrap; gap: 6px; }
 .maq-chip {
-  display: inline-flex; align-items: center; gap: 7px; min-height: 32px; padding: 4px 11px 4px 9px;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 4px 12px 4px 10px;
   border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-2);
   font-family: inherit; font-size: var(--fs-sm); cursor: pointer;
   transition: border-color .15s, background .15s, opacity .15s;
@@ -3044,7 +3044,7 @@ button.plan-real:hover { border-color: var(--border-strong); background: var(--s
 .rit-sw.parada { background: #ffc24a; height: 3px; border-radius: 2px; }
 .rit-sw.falta { border: 1.5px dashed #ff6b57; background: transparent; }
 .rit-ganho { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--grn); }
-.rit-tag { display: inline-block; padding: 0 7px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 600; line-height: 1.7; }
+.rit-tag { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 600; line-height: 1.7; }
 .rit-tag.chuva { background: var(--blu-l); color: var(--blu); }
 .rit-tag.parada { background: var(--ylw-l); color: var(--ylw-d); }
 .rit-tag.falta { background: var(--red-l); color: var(--red); }
@@ -3059,7 +3059,7 @@ button.plan-real:hover { border-color: var(--border-strong); background: var(--s
   .rit-palco { padding: 12px 0 8px; }
   .maq-rolo { padding: 0 12px; }
   .maq-pe { padding: 12px 14px 14px; }
-  .maq-chip { min-height: 38px; }
+  .maq-chip { min-height: 40px; }
   .rit-resumo { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .maq-det-acoes .btn { min-height: 40px; }
 }
@@ -4835,9 +4835,25 @@ async function outboxFlush(manual = false) {
      turnos guardados eram seis cargas em paralelo no 4G e cinco PDFs
      desenhados juntos (o mesmo dia duas vezes, com diurno e noturno). */
   const diasDepositar = new Map();
+  /* Os serviços cujo LOTE ainda está na fila: a foto deles não sobe na
+     frente. O lote pode estar esperando (o dia assinado, à espera do
+     escritório), e a foto que subisse antes não acharia a linha — 300 KB
+     gastos no 4G para o servidor responder "não anexei". */
+  const servicosEsperando = new Set();
+  const idsDoLote = it => {
+    try { return JSON.parse(it.params.batch).map(o => String(o.id || '')).filter(Boolean); } catch (e) { return []; }
+  };
+  itens.forEach(it => { if (it.kind === 'rdo' && it.params && it.params.batch) idsDoLote(it).forEach(id => servicosEsperando.add(id)); });
   try {
     for (const item of itens) {
+      /* O item ainda está na fila? A lista é a cópia tirada no começo da
+         rodada, e a rodada demora (uma foto no 3G leva até 90 s): o turno
+         corrigido e salvo DIRETO nesse meio-tempo tira o velho da fila
+         (filaDescartarDiarioVencido), e ele subia assim mesmo, por cima da
+         correção. Idem os envios descartados na limpeza de duplicatas. */
+      if (!_fila.some(i => i.id === item.id)) continue;
       if (!manual && item.esperarAte && Date.now() < item.esperarAte) continue;
+      if (item.kind === 'foto' && item.params && servicosEsperando.has(String(item.params.id || ''))) continue;
       /* O LANÇAMENTO SOBE COM O LOGIN DE QUEM O FEZ. O token vai no envio, e
          o aparelho do canteiro passa de mão: o turno do apontador A subia
          com o login de B — gravado em nome de B, ou recusado (SEM_PERMISSAO,
@@ -4852,14 +4868,34 @@ async function outboxFlush(manual = false) {
           ? await enviarEquipDaFila(item)
           : await enviarAcao({...item.params, ...authParams()}, 1, 2000);
         if (!result.ok) throw new Error('servidor: ' + (result.error || 'erro'));
+        /* A foto está no Drive mas NÃO entrou na linha: o serviço dela ainda
+           não existe na planilha (ver `anexada`, no rdoFoto). Fica guardada e
+           vai de novo — o reenvio reaproveita o arquivo. Com teto: serviço
+           que nunca subir não pode prender a foto na fila para sempre. */
+        if (item.kind === 'foto' && result.anexada === false && (item.tentativas || 0) < 6) {
+          item.tentativas = (item.tentativas || 0) + 1;
+          item.ultimoErro = 'aguardando o serviço desta foto subir';
+          item.esperarAte = Date.now() + 10 * 60 * 1000;
+          outboxAtualizar(item);
+          continue;
+        }
         outboxRemover(item.id);
         enviados++;
         subiram.push(item);
         if (item.kind === 'rdo' && item.params && item.params.batch) {
+          idsDoLote(item).forEach(id => servicosEsperando.delete(id));
           try {
             lancadosLocaisGuardar(JSON.parse(item.params.batch));
             STATE.rdoavanco = comLancadosLocais(STATE.rdoavanco || []);
           } catch (eLote) {}
+          /* O serviço entrou num dia que já tinha RDO Diário: a linha do dia
+             ganhou revisão nova e o PDF guardado ficou para trás. */
+          const obraLote = (() => { try { return (JSON.parse(item.params.batch)[0] || {}).obra || 'teotonio'; } catch (e) { return 'teotonio'; } })();
+          Object.keys(result.dias || {}).forEach(dia => {
+            diarioLocalGuardar(dia, result.dias[dia], '', obraLote);
+            const ch = obraLote + '|' + dia, ja = diasDepositar.get(ch);
+            diasDepositar.set(ch, { obra: obraLote, data: dia, reaberto: !!result.reaberto || !!(ja && ja.reaberto) });
+          });
         }
         /* O turno do RDO que subiu pela FILA não passava pelo que o envio
            direto faz depois de gravar: o PDF do dia não era depositado (o
@@ -4910,7 +4946,8 @@ async function outboxFlush(manual = false) {
           item.esperarAte = Date.now() + 10 * 60 * 1000;
           outboxAtualizar(item);
           if (item.tentativas === 1) {
-            toast('Um turno guardado (' + descricaoDaFila([item]) + ') não subiu: o RDO desse dia já foi assinado. ' +
+            toast((item.kind === 'diario' ? 'Um turno guardado' : 'Um lançamento guardado') +
+                  ' (' + descricaoDaFila([item]) + ') não subiu: o RDO desse dia já foi assinado. ' +
                   'Ele fica guardado no aparelho — peça ao escritório para reabrir o RDO.', 'error', 0);
           }
           continue;
@@ -8151,6 +8188,12 @@ function editadosLocaisGuardar(id, mud) {
   const antes = _EDITADOS_LOCAL.get(id0);
   _EDITADOS_LOCAL.set(id0, { em: Date.now(), campos: Object.assign({}, antes ? antes.campos : {}, campos) });
 }
+/* As cópias que ESTA função já corrigiu. Três pontos reaplicam as
+   sobreposições sobre o próprio STATE (depois de salvar, de editar e da
+   fila), e a cópia já corrigida era lida como "o CSV já traz estes valores":
+   a edição saía do mapa, e a carga seguinte — com o CSV ainda velho — a
+   desfazia na tela. Só linha VINDA DO CSV diz se o CSV alcançou. */
+const _linhasEditadas = new WeakSet();
 function comEditadosLocais(linhas) {
   if (!_EDITADOS_LOCAL.size) return linhas;
   const agora = Date.now();
@@ -8164,13 +8207,17 @@ function comEditadosLocais(linhas) {
     if (!ed) return l;
     if (agora - ed.em > LANCADO_LOCAL_VALIDADE) { _EDITADOS_LOCAL.delete(id); return l; }
     const falta = Object.keys(ed.campos).filter(c => !igual(c, getCSVField(l, c), ed.campos[c]));
-    if (!falta.length) { _EDITADOS_LOCAL.delete(id); return l; }
+    if (!falta.length) {
+      if (!_linhasEditadas.has(l)) _EDITADOS_LOCAL.delete(id);   // é o CSV que já traz
+      return l;
+    }
     trocou = true;
     const copia = Object.assign({}, l);   // a linha do STATE não é mexida no lugar
     falta.forEach(c => {
       const k = Object.keys(copia).find(x => x.toLowerCase() === c.toLowerCase()) || c;
       copia[k] = ed.campos[c];
     });
+    _linhasEditadas.add(copia);
     return copia;
   });
   return trocou ? out : linhas;
@@ -8178,6 +8225,14 @@ function comEditadosLocais(linhas) {
 
 function comLancadosLocais(linhas) {
   if (!_LANCADOS_LOCAL.size) return linhas;
+  /* As linhas que são as NOSSAS (já postas por cima numa chamada anterior)
+     saem antes da conta: reaplicada sobre o próprio STATE, a função as via
+     como "o CSV já trouxe", tirava do mapa — e na carga seguinte, com o CSV
+     ainda sem elas, o serviço recém-salvo SUMIA do Histórico e da trava
+     anti-duplicação. O apontador lançava de novo, e a medição ganhava duas
+     linhas. (Bastava salvar dois lotes em menos de cinco minutos.) */
+  const nossas = new Set([..._LANCADOS_LOCAL.values()].map(v => v.linha));
+  if (linhas.some(l => nossas.has(l))) linhas = linhas.filter(l => !nossas.has(l));
   const noCsv = new Set(linhas.map(l => String(getCSVField(l, 'ID') || '').trim()));
   const agora = Date.now();
   const extra = [];
@@ -8280,7 +8335,12 @@ async function carregarTudo(opts = {}) {
   /* A PRIMEIRA carga boa desenha sempre: aberto direto num formulário, o
      app mostrava "carregando…" e, sendo a carga de fundo, ninguém redesenhava
      — a tela ficava presa no aviso com os dados já chegados. */
-  if (fundo && jaHaviaTela && (emFormulario || digitando || editandoLinha)) {
+  /* E a linha em edição (ou o campo com foco) segura também a carga que NÃO
+     é de fundo: o próprio app agenda uma depois de cada gravação, e ela
+     chegava 1–5 s depois, já com a correção SEGUINTE aberta — a linha
+     fechava e o que tinha sido digitado se perdia. O ⟳ continua
+     redesenhando: tocar nele tira o foco do campo. */
+  if (jaHaviaTela && (editandoLinha || digitando || (fundo && emFormulario))) {
     const rc = document.getElementById('rdoCount');
     if (rc) rc.textContent = STATE.rdoavanco.length;
     const dc = document.getElementById('diarioCount');
@@ -16377,10 +16437,20 @@ window.histSalvarEdicao = async function(idx) {
 
   try {
     if (Object.keys(mud).length) {
-      const result = await jsonp(CONFIG.appsScript,
-        { action: 'updateRDO', payload: JSON.stringify({ id, ...mud }), ...authParams() }, 0);
-      if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+      const obraEnvio = OBRA.id;
+      const pedido = { action: 'updateRDO', payload: JSON.stringify({ id, ...mud }), ...authParams() };
+      let result = await jsonp(CONFIG.appsScript, pedido, 0);
+      if (!result.ok && result.error === 'RDO_ASSINADO') {
+        if (!servicoEmDiaAssinado(result, obraEnvio,
+              'A correção não foi gravada — peça ao escritório para reabrir o RDO.', 'gravar a correção')) {
+          if (btn) { btn.disabled = false; btn.innerHTML = 'Salvar'; }
+          return;
+        }
+        result = await jsonp(CONFIG.appsScript, { ...pedido, reabrir: '1' }, 0);
+      }
+      if (!result.ok) throw new Error(result.mensagem || result.error || 'Erro desconhecido');
       toast('Lançamento atualizado', 'success');
+      servicoGravadoNoRdo(result, obraEnvio);
       editadosLocaisGuardar(id, mud);
       STATE.rdoavanco = comEditadosLocais(STATE.rdoavanco || []);
     }
@@ -16412,8 +16482,15 @@ window.histDeletarServico = async function(idx) {
 
   const antes = STATE.rdoavanco.length;
   try {
-    const result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id, ...authParams() }, 0);
-    if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
+    const obraEnvio = OBRA.id;
+    let result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id, ...authParams() }, 0);
+    if (!result.ok && result.error === 'RDO_ASSINADO') {
+      if (!servicoEmDiaAssinado(result, obraEnvio,
+            'O lançamento não foi apagado — peça ao escritório para reabrir o RDO.', 'apagar o lançamento')) return;
+      result = await jsonp(CONFIG.appsScript, { action: 'deleteRDO', id, reabrir: '1', ...authParams() }, 0);
+    }
+    if (!result.ok) throw new Error(result.mensagem || result.error || 'Erro desconhecido');
+    servicoGravadoNoRdo(result, obraEnvio);
 
     // Remoção otimista: tira da tela na hora, sem esperar o CSV publicado
     // (que é cacheado pelo Google e demora minutos para atualizar).
@@ -18781,13 +18858,26 @@ async function salvarRDO() {
 
        `enviarAcao` mede o tamanho e troca para POST quando não cabe, que é
        exatamente o caminho que já existia e não estava sendo usado aqui. */
-    const result = await enviarAcao(reqParams, 0, 0);
+    let result = await enviarAcao(reqParams, 0, 0);
+    if (!result.ok && result.error === 'RDO_ASSINADO') {
+      if (!servicoEmDiaAssinado(result, obraEnvio,
+            'O que você preencheu continua nesta tela — peça ao escritório para reabrir o RDO e salve de novo.',
+            'lançar ' + (totalItens > 1 ? 'os serviços' : 'o serviço'))) {
+        btn.disabled = false;
+        btn.innerHTML = btnTxtOriginal;
+        return;
+      }
+      reqParams.reabrir = '1';       // vai junto para a fila, se o sinal cair agora
+      result = await enviarAcao(reqParams, 0, 0);
+    }
 
     if (!result.ok) throw new Error(result.error || 'Erro desconhecido');
 
-    toast(`${totalItens} item${totalItens>1?'s':''} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
+    // a data vai no aviso: "2 itens salvos" não dizia de que dia
+    toast(`${totalItens} item${totalItens>1?'s':''} de ${fmtData(d.data)} salvo${totalItens>1?'s':''} (${d.turno})`, 'success', 4000);
     // aparece já no Histórico e na trava anti-duplicação (ver _LANCADOS_LOCAL)
     lancadosLocaisGuardar(batch);
+    servicoGravadoNoRdo(result, obraEnvio);
     if (OBRA.id !== obraEnvio) {
       /* Trocou de obra enquanto o envio estava no ar: o lançamento é da
          obra de ANTES. Sai o rascunho dela (pela chave dela); as fotos sobem
@@ -21581,7 +21671,49 @@ function depositoDepoisDeGravar(obra, data, reaberto) {
   if (OBRAS_COM_RDO_POR_EMAIL.indexOf(obra) === -1) return Promise.resolve(false);
   if (obra !== OBRA.id) { depositoPendenteAnotar(obra, data, reaberto); return Promise.resolve(false); }
   // (o envio para assinatura deposita antes de mandar)
-  return reaberto ? enviarRDOParaAssinatura(data, true) : depositarRDOPdf(data);
+  if (reaberto) return enviarRDOParaAssinatura(data, true);
+  /* O depósito que NÃO subiu fica anotado: o turno grava (pedido pequeno) e
+     o PDF de 300 KB não passa no sinal ruim das 23h — o e-mail das 6h30 ia
+     com o PDF de antes, e o link do fiscal ficava em "volte em alguns
+     minutos" até alguém abrir aquele dia. A manutenção depois de cada carga
+     tenta de novo (até três vezes). */
+  return depositarRDOPdf(data).then(ok => {
+    if (!ok) depositoPendenteAnotar(obra, data, false);
+    return ok;
+  });
+}
+
+/* ------------------------------------------------------------------
+   O SERVIÇO DO DIA É PARTE DO RDO (ver rdoServicoPorta_, no Code.gs)
+   ------------------------------------------------------------------
+   Lançar, corrigir ou apagar um serviço muda o RDO daquele dia. Duas
+   consequências, que valem para os três caminhos (Lançar Serviço, editar e
+   apagar no Histórico) e para a fila:
+
+   • o servidor devolve a linha do dia como ficou (`dias`, com a revisão
+     nova): ela é guardada por cima do CSV e o PDF do dia é anotado para
+     ser redesenhado — o e-mail das 6h30 e o link do fiscal levavam o PDF
+     de quando o turno foi salvo, sem o serviço que entrou depois;
+   • dia já ASSINADO é recusado (RDO_ASSINADO): o escritório pode reabrir,
+     o apontador não — e nada do que ele preencheu se perde.
+   ------------------------------------------------------------------ */
+function servicoGravadoNoRdo(result, obra) {
+  const dias = (result && result.dias) || {};
+  Object.keys(dias).forEach(dia => {
+    diarioLocalGuardar(dia, dias[dia], '', obra);
+    depositoPendenteAnotar(obra, dia, !!result.reaberto);
+  });
+  if (result && result.reaberto && obra === OBRA.id) _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
+}
+/* → true quando o escritório decide reabrir; false quando o aviso já foi dado. */
+function servicoEmDiaAssinado(r, obraEnvio, guardado, acao) {
+  const msg = (r && r.mensagem) || 'O RDO deste dia já foi assinado.';
+  if (!podeEnviarRDOParaAssinatura() || (obraEnvio && obraEnvio !== OBRA.id)) {
+    toast(msg + ' ' + guardado, 'error', 0);
+    return false;
+  }
+  return confirm(msg + '\n\nReabrir o RDO e ' + acao + '?\n\n' +
+                 'Quem assinou recebe um link novo e assina de novo o RDO como ficou.');
 }
 let _depositandoPendentes = false;
 async function depositosPendentesRodar() {
