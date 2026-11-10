@@ -1903,6 +1903,11 @@ function equipApontar(p) {
     // A assinatura do operador é imagem: vai para o Drive privado, e a
     // planilha guarda o ponteiro (igual às fotos do serviço).
     var assin = assinaturaParaDrive(p.assinatura, p.carimbo);
+    // a assinatura que VEIO e o Drive não guardou: não grava a hora sem ela, calado
+    if (String(p.assinatura == null ? '' : p.assinatura).indexOf('data:image') === 0 && !assin) {
+      return { ok: false, erro: 'O servidor não conseguiu guardar a assinatura do operador — o apontamento NÃO foi ' +
+                                'registrado. Tente de novo em instantes.', error: 'ASSINATURA_NAO_GUARDADA' };
+    }
 
     var sess = sessaoDoToken(p.token) || { usuario: '', perfil: '' };
     var carimbo = p.carimbo || String(Date.now());
@@ -2036,7 +2041,12 @@ function equipEditar(p) {
       if (col === -1 || col === iC || col === iU || col === iO) continue;
       var valor = p[campo];
       // Assinatura nova vira ponteiro do Drive; a que já era ponteiro fica.
-      if (campo === 'assinatura') valor = assinaturaParaDrive(valor, carimbo);
+      if (campo === 'assinatura') {
+        var veioImagem = String(valor == null ? '' : valor).indexOf('data:image') === 0;
+        valor = assinaturaParaDrive(valor, carimbo);
+        // o Drive falhou: a assinatura ANTIGA fica (gravar '' por cima a apagava, com "Correção salva")
+        if (veioImagem && !valor) continue;
+      }
       if (String(dados[i][col]) === String(valor)) continue;
       antes.push(campo + '=' + dados[i][col]);
       depois.push(campo + '=' + valor);
@@ -2116,6 +2126,25 @@ function bfSalvar(p) {
     }
     var id = p.id || gerarId(new Date(), 'bf');
     var sess = sessaoDoToken(p.token) || { usuario: '', perfil: '' };
+    /* AS PROVAS VÃO PARA O DRIVE ANTES DE A VIAGEM SER GRAVADA. O
+       `bfProvaParaDrive` engole a falha do Drive (cota, 5xx) e devolve '': a
+       linha entrava SEM a prova, a resposta era `ok`, o app dizia "Viagem
+       registrada" e limpava a foto — a única cópia — e o reenvio era barrado
+       pelo clientId. Viagem de bota-fora sem prova não contesta fatura.
+       Agora, se uma prova que VEIO não ficou guardada, nada é gravado e o
+       app mantém a viagem (na tela, ou na fila) para tentar de novo. */
+    var provas = { carga: bfProvaParaDrive(p.fotoCarga, id, 'carga'),
+                   assinatura: bfProvaParaDrive(p.assinatura, id, 'assinatura'),
+                   ticket: bfProvaParaDrive(p.fotoTicket, id, 'ticket') };
+    var veio = { carga: p.fotoCarga, assinatura: p.assinatura, ticket: p.fotoTicket };
+    var perdidas = Object.keys(provas).filter(function (k) {
+      return String(veio[k] == null ? '' : veio[k]).indexOf('data:image') === 0 && !provas[k];
+    });
+    if (perdidas.length) {
+      return { ok: false, error: 'PROVA_NAO_GUARDADA', provas: perdidas,
+               mensagem: 'O servidor não conseguiu guardar ' + (perdidas.length > 1 ? 'as provas' : 'a prova') +
+                         ' (' + perdidas.join(', ') + ') — a viagem NÃO foi registrada. Tente de novo em instantes.' };
+    }
     appendObj(ABA_BOTAFORA, {
       id: id, clientId: p.clientId || '', obra: normObra(p.obra),
       data: normData(p.data), fornecedor: p.fornecedor || '',
@@ -2123,9 +2152,9 @@ function bfSalvar(p) {
       servico: p.servico || 'FRETE', projeto: p.projeto || '',
       motorista: p.motorista || '', valor: p.valor === '' || p.valor == null ? '' : Number(p.valor) || 0,
       origem: p.origem || '', destino: p.destino || '', obs: p.obs || '',
-      fotoCarga: bfProvaParaDrive(p.fotoCarga, id, 'carga'),
-      assinatura: bfProvaParaDrive(p.assinatura, id, 'assinatura'),
-      fotoTicket: bfProvaParaDrive(p.fotoTicket, id, 'ticket'),
+      fotoCarga: provas.carga,
+      assinatura: provas.assinatura,
+      fotoTicket: provas.ticket,
       // O DONO vem do TOKEN, nunca do que o cliente declarou: é este campo
       // que a regra "só admin ou quem lançou apaga" consulta.
       usuario: sess.usuario, criadoEm: Date.now()

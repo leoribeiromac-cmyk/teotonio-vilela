@@ -34,5 +34,59 @@
       "type": "image/svg+xml",
       "purpose": "any"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Lançar serviço",
+      "short_name": "Lançar",
+      "description": "Registrar os serviços executados",
+      "url": "./?tela=rdo",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "RDO Diário",
+      "short_name": "RDO",
+      "description": "Efetivo, equipamentos e clima do dia",
+      "url": "./?tela=rdodiario",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Bota-Fora",
+      "short_name": "Bota-Fora",
+      "description": "Registrar uma viagem de caminhão",
+      "url": "./?tela=botafora",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Painel da obra",
+      "short_name": "Painel",
+      "description": "Avanço, ritmo e pendências",
+      "url": "./?tela=executivo",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

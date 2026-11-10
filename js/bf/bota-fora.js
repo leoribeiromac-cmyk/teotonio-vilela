@@ -473,7 +473,8 @@
         aviso('Viagem registrada.', 'success');
         limparSeAindaEhEsta();
       } else {
-        throw new Error((r && (r.error || r.mensagem)) || 'erro');
+        // a mensagem do servidor primeiro: "PROVA_NAO_GUARDADA" não diz nada a quem está na boca da obra
+        throw new Error((r && (r.mensagem || r.error)) || 'erro');
       }
     } catch (e) {
       /* Sem sinal, a viagem NÃO se perde: entra na fila do aparelho com as

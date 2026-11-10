@@ -521,6 +521,19 @@ Na tela do RDO Diário há o painel **Assinatura online**: quem já assinou, qua
 e o botão **Link** para copiar o link pessoal de quem ainda não assinou — é o que
 resolve o "não me chegou nada" sem esperar o e-mail do dia seguinte.
 
+**Depois de assinado, o dia só muda reaberto — e isso vale também para os
+serviços.** O PDF oficial traz os serviços do dia, então lançar, corrigir ou
+apagar um serviço de um dia que o fiscal já assinou é recusado. O apontador
+recebe o aviso (o que ele preencheu continua na tela); a engenharia e o
+administrador são perguntados e podem **reabrir**: a firma dada é cancelada,
+quem assinou recebe um link novo e assina o RDO como ficou. O ajuste de avanço
+do escritório (Turno "Ajuste") não sai no RDO e não passa por isso.
+
+Antes da assinatura, o serviço que entra, muda ou sai faz o app **redepositar
+o PDF do dia** sozinho — o e-mail das 6h30 e o link do fiscal não levam mais o
+PDF de quando o turno foi salvo. Se o aparelho fechar antes, qualquer outro
+aparelho com sessão repõe o depósito na carga seguinte.
+
 #### Funções para rodar no editor
 
 O **▶ Executar** do Apps Script não passa argumentos: ele roda a função
@@ -830,6 +843,45 @@ o clima que o apontador viu e a chuva medida pelo INMET). Vem do
 hora e, sem sinal, a última previsão aparece dizendo de quando é. A coordenada
 de cada obra fica em `COORD_OBRAS` no `index.html` (as mesmas de
 `CLIMA_OBRAS` no `Code.gs`).
+
+## O Painel em volume
+
+Dois desenhos do Painel Executivo feitos em SVG puro (`js/ui/iso.js`) — sem
+WebGL, abrem no celular junto com o resto da tela:
+
+- **A pista por camada** — o modo *Camadas* do cartão "Trecho da obra" (e um
+  cartão na tela Avanço Físico). Cada estaca é uma coluna que sobe até a etapa
+  mais avançada que o RDO lançou nela: demolição, terraplenagem, drenagem,
+  guias, sub-base, base, imprimação, binder, capa, sinalização. O tracejado é
+  a pista pronta. A legenda diz quanto da avenida já chegou a cada etapa
+  (tocar numa etapa deixa só ela acesa) e a estaca tocada leva aos
+  lançamentos dela e ao Modelo 3D. O modo *Atividade* — quantos RDOs cada
+  estaca recebeu — continua a um toque, e a escolha fica guardada no aparelho.
+- **Ritmo da obra, dia a dia** — as últimas 26 semanas, um bloco por dia: a
+  altura e a cor são o avanço ganho naquele dia; a tampa azul é chuva e o
+  filete âmbar é paralisação (os dois vêm do RDO Diário); o contorno
+  tracejado é dia útil sem RDO nem lançamento. Tocar num dia leva aos
+  lançamentos dele e ao RDO do dia.
+
+Os dois obedecem aos filtros do Painel. Com um mês escolhido, mostram a obra
+como estava no **fim** daquele mês — como todo número acumulado da tela.
+
+A maquete mede **extensão**, não quantidade: a medição continua na Avanço
+Físico.
+
+### Produtividade real no Cronograma
+
+No planejamento reverso, embaixo da produtividade de cada pacote aparece a
+**real**: o que o RDO registrou por dia trabalhado (quantidade lançada ÷ dias
+com lançamento), com a seta dizendo se rende mais ou menos do que o
+planejamento está usando. Com três dias trabalhados ou mais, um toque nela
+planeja com esse ritmo — e a duração e a data de início necessária são
+refeitas na hora.
+
+### Atalhos no ícone do app
+
+Com o app instalado, segurar o dedo no ícone oferece **Lançar serviço**, **RDO
+Diário**, **Bota-Fora** e **Painel da obra**.
 
 ## Projetos
 
@@ -1249,6 +1301,7 @@ agregando por código, como sempre foi.
 | `dados/teotonio-muros.js` | Pacotes e coeficientes dos muros de contenção, enquanto a planilha não os tem (ver acima) |
 | `ferramentas/croqui-estacas.py` | Gera o croqui de estaqueamento (planta + posição de cada estaca) a partir da prancha em PDF |
 | `docs/muros-planilha.csv` | As mesmas linhas prontas para colar nas abas `Pacotes` e `Coeficientes` |
+| `js/ui/iso.js` | O desenho em volume do Painel, em SVG: a maquete da pista por camada e o relevo do ritmo dia a dia |
 | `js/ui/icones.js` | Conjunto de ícones do app — traço único na grade de 24, cor herdada do tema. Cobre navegação, ações e frentes de serviço (`icFrente()` escolhe pelo nome da frente) |
 | `js/equip/equipamentos.js` | Tela de Equipamentos: apontamento de hora de máquina, correção de apontamento, painel e medição mensal |
 | `js/bf/bota-fora.js` | Tela de Bota-Fora: a viagem de caminhão com as três provas, e a planilha no formato da aba FRETE |

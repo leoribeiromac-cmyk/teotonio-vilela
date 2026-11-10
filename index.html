@@ -4427,7 +4427,15 @@ async function fetchCSVTexto(url) {
   try {
     const res = await fetch(url + buster, { cache: 'no-store', signal: ctl ? ctl.signal : undefined });
     if (!res.ok) throw new Error('HTTP ' + res.status);
-    return await res.text();
+    const texto = await res.text();
+    /* PÁGINA NÃO É PLANILHA. O Wi-Fi que pede login e o Google em manutenção
+       respondem 200 com uma página HTML — que virava "dados", esvaziava o app
+       e SUBSTITUÍA a última cópia boa guardada no aparelho. CSV publicado não
+       começa com "<": isso é falha de rede, e a cópia guardada assume. */
+    if (/^\s*<(!doctype|html|head|body|\?xml)/i.test(texto.slice(0, 200))) {
+      throw new Error('Falha de rede: a planilha respondeu com uma página, não com os dados');
+    }
+    return texto;
   } catch (e) {
     if (e && e.name === 'AbortError') throw new Error('Falha de rede: a planilha não respondeu em 1 minuto');
     throw e;
@@ -4892,7 +4900,7 @@ async function outboxFlush(manual = false) {
           idsDoLote(item).forEach(id => servicosEsperando.delete(id));
           try {
             lancadosLocaisGuardar(JSON.parse(item.params.batch));
-            STATE.rdoavanco = comLancadosLocais(STATE.rdoavanco || []);
+            reaplicarLocais();
           } catch (eLote) {}
           /* O serviço entrou num dia que já tinha RDO Diário: a linha do dia
              ganhou revisão nova e o PDF guardado ficou para trás. */
@@ -6870,7 +6878,7 @@ window.atualizarBotoesTopo = function() {
     '<button class="btn btn-outline btn-sm btn-icone" onclick="buscaAbrir()" title="Buscar estaca, pacote, lançamento ou RDO (Ctrl+K)" aria-label="Buscar">' + ic('lupa') + '</button>' +
     // Único lugar de atualizar no app (o rodapé do menu lateral tinha o
     // segundo). É também o portador do estado de erro — ver setSyncStatus.
-    '<button id="btnAtualizarTopo" class="btn btn-outline btn-sm btn-icone" onclick="carregarTudo()" title="Atualizar dados" aria-label="Atualizar dados">' + ic('atualizar') + '</button>' +
+    '<button id="btnAtualizarTopo" class="btn btn-outline btn-sm btn-icone" onclick="carregarTudo({pedida:true})" title="Atualizar dados" aria-label="Atualizar dados">' + ic('atualizar') + '</button>' +
     novo;
   // O botão nasce a cada render; o estado de erro tem de ser reaplicado.
   const bt = document.getElementById('btnAtualizarTopo');
@@ -8257,6 +8265,15 @@ function editadosLocaisGuardar(id, mud) {
    a edição saía do mapa, e a carga seguinte — com o CSV ainda velho — a
    desfazia na tela. Só linha VINDA DO CSV diz se o CSV alcançou. */
 const _linhasEditadas = new WeakSet();
+/* As linhas que NÃO vieram do CSV: as do mapa de lançados locais e as cópias
+   editadas delas (ver comLancadosLocais). */
+const _linhasLocais = new WeakSet();
+/* As duas sobreposições, na ordem da carga, sobre o que está na tela. É o
+   que os caminhos que acabaram de gravar chamam — aplicar só uma delas
+   devolvia a linha local sem a correção que já tinha recebido. */
+function reaplicarLocais() {
+  STATE.rdoavanco = comEditadosLocais(comLancadosLocais(STATE.rdoavanco || []));
+}
 function comEditadosLocais(linhas) {
   if (!_EDITADOS_LOCAL.size) return linhas;
   const agora = Date.now();
@@ -8281,6 +8298,7 @@ function comEditadosLocais(linhas) {
       copia[k] = ed.campos[c];
     });
     _linhasEditadas.add(copia);
+    if (_linhasLocais.has(l)) _linhasLocais.add(copia);
     return copia;
   });
   return trocou ? out : linhas;
@@ -8294,8 +8312,11 @@ function comLancadosLocais(linhas) {
      ainda sem elas, o serviço recém-salvo SUMIA do Histórico e da trava
      anti-duplicação. O apontador lançava de novo, e a medição ganhava duas
      linhas. (Bastava salvar dois lotes em menos de cinco minutos.) */
-  const nossas = new Set([..._LANCADOS_LOCAL.values()].map(v => v.linha));
-  if (linhas.some(l => nossas.has(l))) linhas = linhas.filter(l => !nossas.has(l));
+  /* "Nossas" são as linhas do mapa E as cópias que a edição faz delas (o
+     serviço recém-salvo e corrigido em seguida): a cópia passava por linha
+     do CSV e tirava o serviço do mapa do mesmo jeito. */
+  [..._LANCADOS_LOCAL.values()].forEach(v => _linhasLocais.add(v.linha));
+  if (linhas.some(l => _linhasLocais.has(l))) linhas = linhas.filter(l => !_linhasLocais.has(l));
   const noCsv = new Set(linhas.map(l => String(getCSVField(l, 'ID') || '').trim()));
   const agora = Date.now();
   const extra = [];
@@ -8332,6 +8353,7 @@ function aplicarCarga(c, p, k, r, d) {
 
 async function carregarTudo(opts = {}) {
   const fundo = opts && opts.fundo === true;
+  const pedida = opts && opts.pedida === true;      // o usuário tocou em atualizar
   const minhaEpoca = ++_epocaCarga;
   const minhaObra = OBRA.id;
   if (!fundo) setSyncStatus('loading', 'Carregando dados…');
@@ -8401,9 +8423,10 @@ async function carregarTudo(opts = {}) {
   /* E a linha em edição (ou o campo com foco) segura também a carga que NÃO
      é de fundo: o próprio app agenda uma depois de cada gravação, e ela
      chegava 1–5 s depois, já com a correção SEGUINTE aberta — a linha
-     fechava e o que tinha sido digitado se perdia. O ⟳ continua
-     redesenhando: tocar nele tira o foco do campo. */
-  if (jaHaviaTela && (editandoLinha || digitando || (fundo && emFormulario))) {
+     fechava e o que tinha sido digitado se perdia. A carga PEDIDA (o ⟳ do
+     cabeçalho, o "Tentar de novo") redesenha sempre: quem pede dados novos
+     quer vê-los — e no iPhone tocar no botão nem tira o foco do campo. */
+  if (jaHaviaTela && !pedida && (editandoLinha || digitando || (fundo && emFormulario))) {
     const rc = document.getElementById('rdoCount');
     if (rc) rc.textContent = STATE.rdoavanco.length;
     const dc = document.getElementById('diarioCount');
@@ -8459,7 +8482,7 @@ async function cargaFalhou(minhaEpoca, minhaObra, fundo) {
         STATE.cargaFalhou = true;
         STATE.dadosDoAparelho = g.em;
         const quando = new Date(g.em).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-        setSyncStatus('error', `Sem sinal · dados guardados de ${quando} · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar de novo</span>`);
+        setSyncStatus('error', `Sem sinal · dados guardados de ${quando} · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo({pedida:true})">Tentar de novo</span>`);
         try { render(); } catch (e) { console.error('render', e); }
         if (!fundo) toast('Sem sinal. Mostrando os dados guardados no aparelho (' + quando + '). O que você lançar entra na fila e sobe quando a internet voltar.', 'info', 7000);
         return;
@@ -8470,7 +8493,7 @@ async function cargaFalhou(minhaEpoca, minhaObra, fundo) {
   // continuam navegáveis (antes, uma falha de fundo deixava toda navegação em
   // branco até a próxima sincronização bem-sucedida).
   STATE.cargaFalhou = true;
-  setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo()">Tentar novamente</span>');
+  setSyncStatus('error', 'Erro de conexão · <span style="cursor:pointer;text-decoration:underline" onclick="carregarTudo({pedida:true})">Tentar novamente</span>');
   // Sem nenhuma carga boa antes, a tela é a mensagem: `render()` pinta a
   // falha em vez de sair sem desenhar nada. COM dado na tela, não redesenha:
   // a falha não mudou nada do que está lá, e redesenhar passava por cima do
@@ -8523,7 +8546,7 @@ function telaFalhaCarga() {
         entra na fila do aparelho e sobe sozinho quando a internet voltar.
       </div>
       <div style="margin-top:20px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick="carregarTudo()">${ic('atualizar')} Tentar novamente</button>
+        <button class="btn btn-primary" onclick="carregarTudo({pedida:true})">${ic('atualizar')} Tentar novamente</button>
         <button class="btn btn-outline" onclick="navigate('rdo')">${ic('lancar')} Lançar assim mesmo</button>
       </div>
     </div>`;
@@ -8649,7 +8672,9 @@ function calcularConsumoItens(avanco) {
   Object.values(avanco).forEach(a => {
     if (a.qtdExecutada <= 0) return;
     const pid = getCSVField(a.pacote, 'ID');
-    const coefs = STATE.coeficientes.filter(c => (getCSVField(c, 'Pacote ID') || getCSVField(c, 'Pacote_ID')) === pid);
+    // casado como o avanço casa (`_chavePacote`): um "p01 " na aba Coeficientes sumia da prévia de medição, calado
+    const chavePid = _chavePacote(pid);
+    const coefs = STATE.coeficientes.filter(c => _chavePacote(getCSVField(c, 'Pacote ID') || getCSVField(c, 'Pacote_ID')) === chavePid);
     coefs.forEach(c => {
       const item = getCSVField(c, 'Item Contratual');
       if (!item) return;
@@ -12239,14 +12264,15 @@ function previsaoDoOpenMeteo(j) {
   const d = j && j.daily;
   if (!d || !Array.isArray(d.time)) return null;
   const n = v => (v == null || isNaN(v)) ? null : +v;
+  // a data vem de FORA e vai para atributo e texto da faixa: só entra a que é data
   return d.time.map((iso, i) => ({
-    iso,
+    iso: /^\d{4}-\d{2}-\d{2}$/.test(String(iso)) ? String(iso) : '',
     mm: n(d.precipitation_sum && d.precipitation_sum[i]),
     prob: n(d.precipitation_probability_max && d.precipitation_probability_max[i]),
     max: n(d.temperature_2m_max && d.temperature_2m_max[i]),
     min: n(d.temperature_2m_min && d.temperature_2m_min[i]),
     cod: n(d.weather_code && d.weather_code[i]),
-  }));
+  })).filter(x => x.iso);
 }
 
 let _previsaoBuscando = null, _previsaoBuscandoObra = '';
@@ -14131,10 +14157,28 @@ function renderAvancoFisico() {
     porFrente[f].push(a);
   });
   
+  /* A MAQUETE DA PISTA (js/ui/iso.js): a planta acima diz ONDE cada frente
+     trabalhou; a maquete diz ATÉ ONDE a pista chegou em cada estaca. Aqui
+     ela é sempre a da obra inteira, até hoje — esta tela não tem filtro. */
+  const pacotesDaObra = STATE.pacotes.filter(p => getCSVField(p, 'Status') !== 'Histórico' && getCSVField(p, 'ID'));
+  const maquete = temEstacas() ? maqueteHtml({ pacotes: pacotesDaObra, ate: '' }) : '';
+
   return `
     ${renderCroquiEstacas()}
 
     ${renderPlantaAvanco()}
+
+    ${maquete ? `<div class="card stagger-item avenue-card" id="maqCardAvanco">
+      <div class="card-header">
+        <div>
+          <div class="card-title">A pista por camada</div>
+          <div class="card-title-sub">${MAQ.D.comEtapa} de ${MAQ.D.total} estacas já com etapa da pista lançada · cada estaca sobe até a etapa mais avançada que o RDO registrou</div>
+        </div>
+        ${m3dDisponivel() ? `<button type="button" class="btn btn-outline btn-sm" onclick="navigate('modelo3d')"
+          title="A avenida em 3D, com cada estaca pintada pelo que foi lançado">${ic('cubo')} Ver no modelo 3D</button>` : ''}
+      </div>
+      <div class="card-body">${maquete}</div>
+    </div>` : ''}
 
     <div class="card stagger-item">
       <div class="card-header">
@@ -16576,7 +16620,7 @@ window.histSalvarEdicao = async function(idx) {
       toast('Lançamento atualizado', 'success');
       servicoGravadoNoRdo(result, obraEnvio);
       editadosLocaisGuardar(id, mud);
-      STATE.rdoavanco = comEditadosLocais(STATE.rdoavanco || []);
+      reaplicarLocais();
     }
 
     // As fotos sobem ligadas ao id que já existe: o backend anexa o ponteiro
@@ -19012,7 +19056,7 @@ async function salvarRDO() {
       if (totalFotos) fotosDoLoteSubir(fotosEnviar, obraEnvio);
       return;
     }
-    STATE.rdoavanco = comLancadosLocais(STATE.rdoavanco || []);
+    reaplicarLocais();
 
     if (totalFotos) {
       toast(`Enviando ${totalFotos} foto(s)…`, 'info', 2500);
@@ -23388,10 +23432,23 @@ async function _gerarPDFInterno(data, turnoFocus) {
 // ====================================================================
 // BOOT
 // ====================================================================
+const TELAS_DE_ATALHO = ['rdo', 'rdodiario', 'botafora', 'executivo'];
 document.addEventListener('DOMContentLoaded', () => {
   /* O perfil de campo não enxerga o Painel: abrir nele era cair em "Acesso
      não liberado" a cada boot. Quem não vê o Painel começa no lançamento. */
   if (!podeVer(STATE.currentPage)) STATE.currentPage = podeVer('executivo') ? 'executivo' : 'rdo';
+  /* OS ATALHOS DO ÍCONE (manifest.json › shortcuts): segurar o dedo no ícone
+     do app oferece "Lançar serviço", "RDO Diário", "Bota-Fora" e "Painel" —
+     o apontador chega à tela do dia sem passar pelo menu. O endereço traz
+     `?tela=`; só as telas dos atalhos valem, e o parâmetro sai do endereço
+     para um recarregamento mais tarde não voltar à tela do atalho. */
+  try {
+    const tela = new URLSearchParams(location.search).get('tela');
+    if (tela) {
+      if (TELAS_DE_ATALHO.indexOf(tela) !== -1 && podeVer(tela)) STATE.currentPage = tela;
+      if (history.replaceState) history.replaceState(history.state, '', location.pathname + location.hash);
+    }
+  } catch (e) {}
   /* A fila offline, os rascunhos e as fotos moram no armazenamento do site.
      Sem "persistente", o navegador pode apagá-lo inteiro sob pressão de
      espaço — com lançamento que ainda não subiu dentro. */

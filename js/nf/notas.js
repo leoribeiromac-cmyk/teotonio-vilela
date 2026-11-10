@@ -1000,9 +1000,16 @@ async function nfSubirFolhas(o, n, capa, extras, primeiraNova) {
           → nao da para acusar o Code.gs; o certo e dizer que fica para depois.
        E o aviso e por NOTA, nao por sessao: da segunda nota em diante as
        folhas sumiam caladas. */
+    /* SEM RESPOSTA, AS FOLHAS FICAM MARCADAS PARA SUBIR DEPOIS. Só a capa era
+       marcada (`imgPendente`); as folhas 2..N saíam daqui sem marca nenhuma, e
+       o reenvio (nfReenviarImagens) só leva folha marcada — a nota de duas
+       folhas lançada sem sinal ficava para sempre com a folha 2 só neste
+       celular. E o conselho antigo ("abra a nota e salve de novo") não
+       adiantava: o salvar só manda as folhas NOVAS. */
+    if (!respondeu) nfMarcarImagemPendente(o.id, n.id, 2, true);
     const msg = respondeu
       ? 'As folhas extras ficaram guardadas neste aparelho. O Code.gs do Apps Script precisa ser republicado para elas subirem ao Drive — depois disso, abra a nota e salve de novo.'
-      : 'Não consegui enviar as folhas extras agora. Elas estão guardadas neste aparelho; abra a nota e salve de novo quando houver sinal.';
+      : 'Não consegui enviar as folhas extras agora. Elas estão guardadas neste aparelho e sobem sozinhas quando houver sinal.';
     toast(msg, 'info', 0);
     return;
   }

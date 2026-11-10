@@ -200,6 +200,27 @@ const DIARIO = H.csv([
   const rh = await s.p.evaluate(() => ({ pagina: STATE.currentPage, data: HIST_FILTRO.data, linhas: document.querySelectorAll('#page tbody tr[data-id]').length }));
   ok('"Ver lançamentos" abre o Histórico no dia tocado', rh.pagina === 'historico' && rh.data === dB && rh.linhas === 1, JSON.stringify(rh));
 
+  console.log('\nA MAQUETE NA AVANÇO FÍSICO E O ATALHO DO ÍCONE');
+  await s.p.evaluate(() => { limparHistFiltro && limparHistFiltro(); });
+  await s.ir('avancofisico'); await s.p.waitForTimeout(500);
+  const af = await s.p.evaluate(() => {
+    const c = document.getElementById('maqCardAvanco');
+    return c ? { toques: c.querySelectorAll('.iso-hit').length, sub: c.querySelector('.card-title-sub').textContent } : null;
+  });
+  ok('a tela Avanço Físico traz a maquete da obra inteira', af && af.toques === 87 && /^6 de 87 estacas/.test(af.sub), JSON.stringify(af));
+  // o atalho do ícone do app (manifest.json › shortcuts) abre direto na tela
+  await s.p.goto(H.BASE + '?tela=rdodiario', { waitUntil: 'load' });
+  await s.p.waitForFunction(() => typeof STATE !== 'undefined' && STATE.loaded === true, null, { timeout: 60000 });
+  const at = await s.p.evaluate(() => ({ pagina: STATE.currentPage, busca: location.search }));
+  ok('"?tela=rdodiario" abre no RDO Diário, e o parâmetro sai do endereço', at.pagina === 'rdodiario' && at.busca === '', JSON.stringify(at));
+  await s.p.goto(H.BASE + '?tela=usuarios', { waitUntil: 'load' });
+  await s.p.waitForFunction(() => typeof STATE !== 'undefined' && STATE.loaded === true, null, { timeout: 60000 });
+  ok('tela que não é de atalho é ignorada', await s.p.evaluate(() => STATE.currentPage === 'executivo' && location.search === ''));
+  const man = JSON.parse(require('fs').readFileSync(require('path').join(__dirname, '..', 'manifest.json'), 'utf8'));
+  ok('e os atalhos do manifesto apontam para telas que o app aceita',
+     (man.shortcuts || []).length === 4 && await s.p.evaluate(us => us.every(u => TELAS_DE_ATALHO.indexOf(new URL(u, location.href).searchParams.get('tela')) !== -1),
+       man.shortcuts.map(x => x.url)), JSON.stringify((man.shortcuts || []).map(x => x.url)));
+
   console.log('\nOBRA SEM ESTACA DE PISTA E SEM ERRO');
   await s.p.evaluate(() => { limparHistFiltro && limparHistFiltro(); });
   await s.ir('executivo');

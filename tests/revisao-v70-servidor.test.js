@@ -144,6 +144,35 @@ console.log('\nMEDIÇÃO FECHADA');
   ok('e reabre', r.ok === true && m[1][c('reaberta')] === 'sim', j(r));
 }
 
+console.log('\nA PROVA QUE O DRIVE NÃO GUARDOU');
+{
+  const S = servidor();
+  S.aba('BotaFora', [['id', 'clientId', 'obra', 'data', 'fornecedor', 'placa', 'material', 'servico', 'projeto', 'motorista',
+                      'valor', 'origem', 'destino', 'obs', 'fotoCarga', 'assinatura', 'fotoTicket', 'usuario', 'criadoEm']]);
+  let driveFora = true, criados = 0;
+  S.ctx.Utilities.base64Decode = () => [1, 2, 3];
+  S.ctx.Utilities.newBlob = (bytes, tipo, nome) => ({ nome });
+  S.ctx.DriveApp = { Access: { PRIVATE: 'PRIVATE' }, Permission: { NONE: 'NONE' } };
+  S.ctx.bfPastaProvas = () => ({ createFile: () => {
+    if (driveFora) throw new Error('Limite de serviço excedido');
+    criados++;
+    return { setSharing() {}, getId: () => 'arq' + criados };
+  } });
+  const viagem = { token: 'tok-wallace-campo', obra: 'teotonio', clientId: 'bf_1', data: '2026-11-09', placa: 'abc1d23',
+                   material: 'ENTULHO', valor: '900', fotoCarga: 'data:image/jpeg;base64,AAAA', fotoTicket: 'data:image/jpeg;base64,BBBB' };
+  const bf = S.abas.BotaFora;
+  let r = S.ctx.bfSalvar(viagem);
+  ok('com o Drive fora, a viagem NÃO é gravada sem as provas (o app a mantém para tentar de novo)',
+     r.ok === false && r.error === 'PROVA_NAO_GUARDADA' && /carga/.test(r.mensagem) && bf.dados.length === 1, j(r));
+  driveFora = false;
+  r = S.ctx.bfSalvar(viagem);
+  const c = n => bf.dados[0].indexOf(n);
+  ok('com o Drive de volta, o MESMO envio entra — com as duas provas', r.ok === true && bf.dados.length === 2 &&
+     /^drive_id:/.test(bf.dados[1][c('fotoCarga')]) && /^drive_id:/.test(bf.dados[1][c('fotoTicket')]), j(bf.dados[1]));
+  r = S.ctx.bfSalvar(Object.assign({}, viagem, { clientId: 'bf_2', fotoCarga: '', fotoTicket: '' }));
+  ok('viagem sem prova nenhuma continua podendo ser registrada', r.ok === true && bf.dados.length === 3, j(r));
+}
+
 console.log('\nMIÚDOS');
 {
   const S = servidor();
