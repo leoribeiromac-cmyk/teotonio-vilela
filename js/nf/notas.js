@@ -118,10 +118,25 @@ function nfSet(obraId, arr) {
    momento. SAIDAS nao — ninguem consegue reconstruir um consumo depois. Por
    isso ficam em chave propria, com fila de sincronizacao e linha na planilha. */
 function nfMovGet(obraId) { try { return JSON.parse(localStorage.getItem('gestor:nfmov:' + obraId) || '[]'); } catch (e) { return []; } }
-function nfMovSet(obraId, arr) { localStorage.setItem('gestor:nfmov:' + obraId, JSON.stringify(arr)); }
+/* Com o armazenamento do aparelho cheio o `setItem` ESTOURA. Sem proteção,
+   a exceção saía do meio do "Salvar nota" — depois de a nota estar gravada
+   no aparelho e ANTES de ela entrar na fila de envio: nada acontecia na
+   tela, a nota aparecia na lista local e nunca subia ao servidor. As
+   entradas do estoque são derivadas (a sincronização as refaz); a nota não. */
+function nfMovSet(obraId, arr) {
+  try { localStorage.setItem('gestor:nfmov:' + obraId, JSON.stringify(arr)); return true; }
+  catch (e) { console.warn('estoque: sem espaço para gravar as entradas', e); return false; }
+}
 function nfSaiKey(obraId) { return 'gestor:nfsaida:' + obraId; }
 function nfSaiGet(obraId) { try { return JSON.parse(localStorage.getItem(nfSaiKey(obraId)) || '[]'); } catch (e) { return []; } }
-function nfSaiSet(obraId, arr) { localStorage.setItem(nfSaiKey(obraId), JSON.stringify(arr)); }
+function nfSaiSet(obraId, arr) {
+  try { localStorage.setItem(nfSaiKey(obraId), JSON.stringify(arr)); return true; }
+  catch (e) {
+    console.warn('estoque: sem espaço para gravar as saídas', e);
+    if (typeof toast === 'function') toast('Sem espaço no aparelho para guardar a saída de material. Libere espaço e lance de novo.', 'error', 0);
+    return false;
+  }
+}
 function nfPorId(obraId, id) { return nfGet(obraId).find(n => n.id === id) || null; }
 
 /* imagem em resolucao cheia: mesmo IndexedDB das fotos do RDO */
@@ -1126,6 +1141,10 @@ let _nfPags = [];          // folhas 2..N, na ordem (data-uris em resolucao chei
    da janela) guarda — e a tela oferece de novo. */
 const NF_RASC_VALE = 3 * 24 * 3600 * 1000;
 let _nfRascRelogio = 0;
+/* De qual obra há conferência GUARDADA no aparelho ('' = nenhuma que se
+   saiba). É o que a "Nova nota fiscal" consulta antes de trocar a nota em
+   memória por uma vazia. */
+let _nfRascDe = '';
 function nfRascChave(obraId) { return 'nf-conferencia:' + obraId; }
 function nfRascGuardar(agora) {
   if (typeof rascunhoGravar !== 'function' || !_nfRascunho) return;
@@ -1145,9 +1164,10 @@ function nfRascGuardar(agora) {
       ? semImagemNova && nfRascRelevante(n) === nfRascRelevante(salvo)
       : semImagemNova && !n.numero && !n.chave && !n.cnpj && !n.razaoSocial && !nfNum(n.vTotal) &&
         !(n.itens || []).length && !n.obs;
-    if (nada) { rascunhoApagar(nfRascChave(obraId)); return; }
+    if (nada) { rascunhoApagar(nfRascChave(obraId)); if (_nfRascDe === obraId) _nfRascDe = ''; return; }
     rascunhoGravar(nfRascChave(obraId), { nota: n, full: _nfFull || '', pags: _nfPags || [],
                                           simples: !!_nfModoSimples });
+    _nfRascDe = obraId;
   };
   if (agora) gravar(); else _nfRascRelogio = setTimeout(gravar, 600);
 }
@@ -1161,6 +1181,7 @@ function nfRascApagar(obraId) {
   clearTimeout(_nfRascRelogio);
   const id = obraId || (_nfRascunho && _nfRascunho.obraId) || ((obra() || {}).id);
   if (id && typeof rascunhoApagar === 'function') rascunhoApagar(nfRascChave(id));
+  if (_nfRascDe === id) _nfRascDe = '';
 }
 function nfCancelarConferencia() {
   nfRascApagar();
@@ -1173,10 +1194,15 @@ async function nfRascOferecer() {
   const box = el('nfRascAviso');
   const o = obra();
   if (!box || !o || typeof rascunhoLer !== 'function') return;
-  // a conferencia ainda esta aberta (ou acabou de fechar): e ela mesma
-  if (_nfRascunho && _nfRascunho.obraId === o.id) { box.innerHTML = ''; return; }
+  /* Só se cala com a conferência ABERTA na tela. A nota em memória continua
+     lá depois de fechar por fora (X, Voltar, toque fora da janela) — e era
+     justamente aí, na mesma sessão, que o aviso não aparecia: a pessoa não
+     via "Continuar a nota", tocava em "Nova nota fiscal" e a conferência
+     longa era apagada do aparelho. */
+  if (el('nfForm') && _nfRascunho && _nfRascunho.obraId === o.id) { box.innerHTML = ''; return; }
   const reg = await rascunhoLer(nfRascChave(o.id), NF_RASC_VALE);
   const n = reg && reg.dados && reg.dados.nota;
+  _nfRascDe = n ? o.id : (_nfRascDe === o.id ? '' : _nfRascDe);
   if (!n || el('nfRascAviso') !== box) { box.innerHTML = ''; return; }
   const quem = [n.numero ? 'nº ' + n.numero : '', n.razaoSocial || ''].filter(Boolean).join(' · ') || 'sem número ainda';
   const quando = new Date(reg.em || Date.now()).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -1218,9 +1244,19 @@ function nfNovaVazia(obraId) {
   };
 }
 
-function nfAbrirNova() {
+/* `direto` = chamada de dentro da própria leitura (o arquivo não abriu, volta
+   ao começo da MESMA nota): aí não há o que perguntar. */
+function nfAbrirNova(direto) {
   const o = obra(); if (!o) return;
   if (!pode('lancarNota')) { toast('Seu acesso não cadastra nota fiscal'); return; }
+  /* Há uma conferência guardada desta obra: a nota vazia que entra aqui a
+     substituiria em memória, e a primeira gravação do rascunho ("nada
+     preenchido") a apagaria do aparelho. Pergunta antes. */
+  if (!direto && _nfRascDe === o.id && !el('nfForm')) {
+    if (confirm('Há uma nota em conferência que não foi salva neste aparelho.\n\n' +
+                'OK — continuar essa nota\nCancelar — descartá-la e começar uma nova')) { nfRascRetomar(); return; }
+    nfRascApagar(o.id);
+  }
   _nfRascunho = nfNovaVazia(o.id); _nfFull = ''; _nfPags = [];
   abrirModal('Nova nota fiscal', `
     <div id="nfPasso">
@@ -1495,7 +1531,7 @@ async function nfArquivoSelecionado(inp) {
   if (ehPDF) {
     let aberto;
     try { aberto = await nfAbrirPDF(f); }
-    catch (e) { if (vale()) { toast('Não consegui abrir esse PDF'); nfAbrirNova(); } return; }
+    catch (e) { if (vale()) { toast('Não consegui abrir esse PDF'); nfAbrirNova(true); } return; }
     if (!vale()) { nfPDFFechar(aberto.doc); return; }
     textoPDF = aberto.texto; totalPDF = aberto.paginas || 1;
     const quantas = Math.min(totalPDF, NF_MAX_PAGINAS);
@@ -1517,7 +1553,7 @@ async function nfArquivoSelecionado(inp) {
     try {
       const prep = await nfPrepararFoto(f);
       thumb = prep.thumb; full = prep.full; paraIA = prep.paraIA; reduzida = prep.canvas;
-    } catch (e) { if (vale()) { toast('Não consegui ler essa imagem'); nfAbrirNova(); } return; }
+    } catch (e) { if (vale()) { toast('Não consegui ler essa imagem'); nfAbrirNova(true); } return; }
     if (!vale()) return;
     const seguintes = outrasFotos.slice(0, NF_MAX_PAGINAS - 1);
     if (seguintes.length) {
@@ -2181,6 +2217,13 @@ function nfSalvarForm() {
        o status que os outros aparelhos leem para dar a entrada (sem isto a
        sincronização seguinte devolvia o que acabou de ser tirado). */
     if (n.status === 'Integrada ao estoque') { n.status = 'Conferida'; nfRegistrar(n, 'saída do estoque', 'entradas da nota retiradas'); }
+  } else {
+    /* "Dar entrada" marcado (é o padrão, e fica escondido no modo enxuto),
+       mas a nota foi CANCELADA ou ficou SEM ITENS: nenhum dos dois ramos de
+       cima rodava, e as entradas antigas dela ficavam no estoque — a
+       duplicata cancelada pelo formulário continuava contando material. */
+    nfDesfazerEstoque(o.id, n.id);
+    if (n.status === 'Integrada ao estoque') { n.status = 'Conferida'; nfRegistrar(n, 'saída do estoque', 'nota sem itens: entradas retiradas'); }
   }
   nfSet(o.id, nfGet(o.id).map(x => x.id === n.id ? n : x));
 

@@ -4234,6 +4234,12 @@ function trocarObra(id, opcoes) {
   Object.keys(GAL_FILTRO).forEach(k => { GAL_FILTRO[k] = ''; });
   STATE.galMes = 'Todos'; STATE.galPacote = 'Todos';
   IMPROD_MES = ''; MEDICAO_MES = '';
+  /* Idem a seleção de fotos da Galeria (a obra nova abria esmaecida, com a
+     exportação vazia), os dias de RDO marcados para o lote (eram exportados
+     os dias marcados na OUTRA obra) e o mês do Teórico × Real. */
+  GAL_SELECAO = null; GAL_MODO_SELECAO = false;
+  SELECTED_RDO_DATAS = new Set();
+  TR_MES = '';
   localStorage.setItem(LS_OBRA, id);
   OBRA = OBRAS_CFG[id];
   CONFIG = montarConfig(id);
@@ -6787,6 +6793,8 @@ function concluirLogin(u, perfil) {
   // fechados é buscada de novo (antes do login ela ficava [] para sempre)
   MEDICOES_FECHADAS = null;
   _avisouSessaoVencida = false;
+  // o painel de assinaturas de quem estava antes (com o link do fiscal) não é deste usuário
+  _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
   // A obra aberta pode não ser das que este usuário enxerga (o aparelho é
   // compartilhado, ou o acesso mudou). Troca antes de desenhar, senão ele
   // veria os dados de uma obra que o servidor vai recusar a cada gravação.
@@ -6823,6 +6831,15 @@ window.fazerLogout = function() {
   localStorage.removeItem(APP.lsGlobal.obras);
   toast('Você saiu do sistema.', 'info');
   MEDICOES_FECHADAS = null;
+  /* O rascunho da tela aberta é gravado e SOLTO antes de a tela sumir, como
+     no navigate() e no trocarObra(). Deixado armado, o próximo `pagehide`
+     chamava o coletor sem o formulário na tela — "não há nada digitado" — e
+     APAGAVA a viagem de bota-fora (foto da carga, assinatura do motorista)
+     que estava pela metade quando alguém tocou em Sair. */
+  if (_rascAtivo) { try { _rascAtivo.agora(); } catch (e) {} _rascAtivo = null; }
+  /* E o painel de assinaturas guardado na memória traz o LINK do fiscal, que
+     só o escritório recebe: não sobra para quem entrar depois neste aparelho. */
+  _ASSIN_RDO = { obra: '', data: '', lista: [], noDeposito: -1, em: 0 };
   renderShell();
   atualizarBotoesTopo();
   if (!podeVer(STATE.currentPage)) STATE.currentPage = 'executivo';
@@ -7025,7 +7042,30 @@ function desenharCarimbo(dataUri, ctxDados, cfg) {
         var fs = Math.max(10, Math.round(Math.min(w, h * 1.4) * k));
         var lh = Math.round(fs * 1.42);
         var pad = Math.round(fs * 0.72);
-        var alturaTarja = linhas.length * lh + pad * 2 - Math.round(fs * 0.32);
+        /* A LINHA QUE NÃO CABE É QUEBRADA, não cortada. O `fillText` não
+           mede: "frente · pacote" passa da largura da foto em quase todos os
+           serviços das Ruas de Terra e do Ranário, e o que se perdia era o
+           FIM do nome — nas Ruas de Terra, justamente a rua. Cada linha é
+           medida com a fonte dela e quebrada entre palavras. */
+        var fonteDe = function (negrito) {
+          return (negrito ? '700 ' : '400 ') + fs + 'px ui-monospace, "JetBrains Mono", Menlo, monospace';
+        };
+        var larguraUtil = w - pad * 2;
+        var visuais = [];
+        linhas.forEach(function (t, i) {
+          g.font = fonteDe(i === 0);
+          if (g.measureText(t).width <= larguraUtil) { visuais.push({ t: t, neg: i === 0 }); return; }
+          var atual = '';
+          String(t).split(/ +/).forEach(function (palavra) {
+            var tenta = atual ? atual + ' ' + palavra : palavra;
+            if (atual && g.measureText(tenta).width > larguraUtil) {
+              visuais.push({ t: atual.replace(/[ ·]+$/, ''), neg: i === 0 });
+              atual = palavra === '·' ? '' : palavra;
+            } else atual = tenta;
+          });
+          if (atual.trim()) visuais.push({ t: atual, neg: i === 0 });
+        });
+        var alturaTarja = visuais.length * lh + pad * 2 - Math.round(fs * 0.32);
         var y0 = cfg.posicao === 'superior' ? 0 : h - alturaTarja;
 
         g.fillStyle = 'rgba(8,6,4,' + cfg.fundo + ')';
@@ -7038,11 +7078,11 @@ function desenharCarimbo(dataUri, ctxDados, cfg) {
         g.textBaseline = 'top';
         g.shadowColor = 'rgba(0,0,0,.6)';
         g.shadowBlur = Math.round(fs * 0.25);
-        linhas.forEach(function (t, i) {
+        visuais.forEach(function (v, i) {
           // a primeira linha (data/hora) sai em negrito: é a que se lê de longe
-          g.font = (i === 0 ? '700 ' : '400 ') + fs + 'px ui-monospace, "JetBrains Mono", Menlo, monospace';
-          g.fillStyle = i === 0 ? '#ffffff' : 'rgba(255,255,255,.88)';
-          g.fillText(t, pad, y0 + pad + i * lh);
+          g.font = fonteDe(v.neg);
+          g.fillStyle = v.neg ? '#ffffff' : 'rgba(255,255,255,.88)';
+          g.fillText(v.t, pad, y0 + pad + i * lh);
         });
         var saida = c.toDataURL('image/jpeg', 0.82);
         zerarCanvas(c);
@@ -7818,6 +7858,29 @@ async function baixarFotoServidor(fileId, mini) {
   } finally {
     _fotoPendingRequests.delete(chave);
   }
+}
+
+/* AS FOTOS DO LOTE PASSAM PELA FILA, MESMO COM SINAL.
+   O serviço já está gravado, e a foto só existia na MEMÓRIA desta tela até
+   terminar de subir — no 3G, três fotos são minutos. O apontador via "2 itens
+   salvos", bloqueava o celular (ou o Android fechava o app) e o envio morria
+   no meio: o serviço ficava sem a prova, e nada tentava de novo. Guardada na
+   fila (IndexedDB) antes de subir, ela sobe agora — e, se o app fechar,
+   sobe na próxima vez que ele abrir. A que não couber no aparelho vai
+   direto, da memória, como sempre foi. */
+async function fotosDoLoteSubir(mapaIdParaFotos, obraId) {
+  const direto = {};
+  let guardadas = 0;
+  for (const id of Object.keys(mapaIdParaFotos)) {
+    const lista = mapaIdParaFotos[id];
+    for (let i = 0; i < lista.length; i++) {
+      if (await fotoParaAFila(id, i, lista[i], obraId)) guardadas++;
+      else (direto[id] = direto[id] || []).push(lista[i]);
+    }
+  }
+  if (guardadas) outboxFlush();
+  if (Object.keys(direto).length) return enviarFotosDoLote(direto, 0, obraId);
+  return guardadas;
 }
 
 // Sobe as fotos DEPOIS que os serviços foram gravados: cada foto vai ligada
@@ -11691,31 +11754,54 @@ function calcExecMetrics(rdosAtivos, pacotesAtivos, totalDiasEstimados, opts) {
   return { sparkPts, cumulative: cum, sortedDays, current: total, delta7d, delta30d, velocity, daysToComplete, dataPrevista, diasVsPrazo, janela, diasUteis, rdos7d, rdos30d };
 }
 
-function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
-  const today = new Date(); today.setHours(0,0,0,0);
+/* AS FRENTES QUE AVANÇARAM E AS QUE PARARAM.
+   Quatro coisas que esta conta fazia diferente do resto do Painel, e que
+   punham na reunião um número que a tela ao lado desmentia:
+   • o ganho dos 7 dias era a soma CRUA dos lançamentos, sem o teto de 100%
+     do pacote — a frente que lançou por cima de um pacote já cheio aparecia
+     "liderando o ritmo" com +7 p.p. numa semana em que a obra andou +0,9;
+   • a frente 100% CONCLUÍDA ficava para sempre em "merecem atenção" (não
+     lança há 60 dias porque acabou) e, por ser a mais antiga, tirava do
+     top 3 as que tinham parado de verdade;
+   • "hoje" era sempre hoje: com um mês passado no filtro, a frente que
+     lançou ontem aparecia "45 dias sem RDO" (`opts.hoje` é o fim do mês);
+   • o Pacote_ID era casado letra por letra — " p01" é o P01 no avanço. */
+function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados, opts) {
+  const today = (opts && opts.hoje) ? new Date(opts.hoje) : new Date(); today.setHours(0,0,0,0);
   const d7 = today.getTime() - 7*86400000;
-  const por = {};
+  const por = {}, info = {}, porChave = {};
   pacotesAtivos.forEach(p => {
     const f = getCSVField(p, 'Frente') || 'Outros';
-    if (!por[f]) por[f] = { ult7d: 0, ultData: null, pacotes: 0, executou: false };
+    if (!por[f]) por[f] = { ult7d: 0, ultData: null, pacotes: 0, executou: false, diasEst: 0, diasExec: 0 };
     por[f].pacotes++;
+    const id = getCSVField(p, 'ID');
+    if (!id || info[id]) return;
+    const est = Math.max(0, num(getCSVField(p, 'Qtd Estimada')));
+    info[id] = { f, est, dias: diasEquivalentes(est, id), exec: 0 };
+    porChave[_chavePacote(id)] = id;
+    por[f].diasEst += info[id].dias;
   });
-  // pacote por ID num mapa: o `find` dentro do laço era lançamentos × pacotes
-  const pacPorId = new Map();
-  pacotesAtivos.forEach(p => { const id = getCSVField(p, 'ID'); if (!pacPorId.has(id)) pacPorId.set(id, p); });
+  const lancs = [];
   rdosAtivos.forEach(r => {
     const d = parseISODate(getCSVField(r, 'Data'));
     if (!d) return;
-    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
-    const pac = pacPorId.get(pid);
-    if (!pac) return;
-    const f = getCSVField(pac, 'Frente') || 'Outros';
-    if (!por[f]) por[f] = { ult7d: 0, ultData: null, pacotes: 0, executou: false };
-    const dias = diasDoLancamento(num(getCSVField(r, 'Quantidade')), pid);
-    const contrib = totalDiasEstimados > 0 ? dias / totalDiasEstimados : 0;
-    if (d.getTime() >= d7) por[f].ult7d += contrib;
-    if (!por[f].ultData || d > por[f].ultData) por[f].ultData = d;
-    por[f].executou = true;
+    const cru = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
+    const pid = info[cru] ? cru : porChave[_chavePacote(cru)];
+    if (!pid) return;
+    lancs.push({ t: d.getTime(), d, pid, q: num(getCSVField(r, 'Quantidade')) });
+  });
+  // em ordem de data: o teto vale sobre o acumulado do pacote
+  lancs.sort((a, b) => a.t - b.t);
+  lancs.forEach(l => {
+    const it = info[l.pid], fr = por[it.f];
+    if (!fr.ultData || l.d > fr.ultData) fr.ultData = l.d;
+    fr.executou = true;
+    if (l.q < 0 || it.est <= 0 || it.dias <= 0) return;   // dado sujo e pacote sem peso não movem o avanço
+    const antes = Math.min(it.exec / it.est, 1);
+    it.exec += l.q;
+    const ganho = (Math.min(it.exec / it.est, 1) - antes) * it.dias;
+    fr.diasExec += ganho;
+    if (l.t >= d7 && totalDiasEstimados > 0) fr.ult7d += ganho / totalDiasEstimados;
   });
   const destaques = Object.entries(por)
     .filter(([, d]) => d.ult7d > 0)
@@ -11723,6 +11809,8 @@ function calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados) {
     .slice(0, 3)
     .map(([f, d]) => ({ frente: f, valor: d.ult7d, ultData: d.ultData }));
   const atencaoTodas = Object.entries(por)
+    // frente concluída não está parada: está pronta
+    .filter(([, d]) => !(d.diasEst > 0 && d.diasExec / d.diasEst >= 0.999))
     .map(([f, d]) => {
       const diasSemRDO = d.ultData ? Math.floor((today - d.ultData) / 86400000) : null;
       return { frente: f, dias: diasSemRDO, ultData: d.ultData, pacotes: d.pacotes };
@@ -11780,7 +11868,8 @@ function calcCurvaPrevista(pacotesAtivos, totalDiasEstimados) {
   pacotesAtivos.forEach(p => {
     const pid = getCSVField(p, 'ID');
     if (!pid) return;
-    const qtd = num(getCSVField(p, 'Qtd Estimada'));
+    // negativa é dado sujo (o avanço a trata como zero): crua, o previsto fechava em −200%
+    const qtd = Math.max(0, num(getCSVField(p, 'Qtd Estimada')));
     const totalDiasEquiv = diasEquivalentes(qtd, pid);
     const contribPct = totalDiasEquiv / totalDiasEstimados;
     let dIni, dFim;
@@ -11926,10 +12015,11 @@ function calcAvancoPorEstaca(rdosAtivos, pacotesAtivos) {
   listarEstacas().forEach(e => {
     estacas[e.id] = { ...e, lancamentos: 0, qtd: 0, pacotes: new Set() };
   });
-  const validPids = new Set(pacotesAtivos.map(p => getCSVField(p, 'ID')));
+  // o id casado como no avanço (ver _chavePacote): " p01" é o P01
+  const idPorChave = new Map(pacotesAtivos.map(p => [_chavePacote(getCSVField(p, 'ID')), getCSVField(p, 'ID')]));
   rdosAtivos.forEach(r => {
-    const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
-    if (!validPids.has(pid)) return;
+    const pid = idPorChave.get(_chavePacote(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
+    if (!pid) return;
     const q = num(getCSVField(r, 'Quantidade'));
     const est = lerLocalEstaca(getCSVField(r, 'Local_Estaca'));
     if (!est.length) return;
@@ -12376,8 +12466,11 @@ function renderExecutivo() {
 
   if (STATE.filtros.frente) {
     pacotesAtivos = pacotesAtivos.filter(p => getCSVField(p, 'Frente') === STATE.filtros.frente);
-    const pacotesIds = new Set(pacotesAtivos.map(p => getCSVField(p, 'ID')));
-    rdosAtivos = rdosAtivos.filter(r => pacotesIds.has(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id')));
+    /* Casado sem caixa e sem espaço, como o avanço (`_chavePacote`): com a
+       comparação exata, o lançamento digitado " p01" contava nos 60% do
+       cartão da Drenagem e SUMIA ao clicar nele — o número caía para 20%. */
+    const pacotesIds = new Set(pacotesAtivos.map(p => _chavePacote(getCSVField(p, 'ID'))));
+    rdosAtivos = rdosAtivos.filter(r => pacotesIds.has(_chavePacote(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id'))));
   }
 
   /* O escopo é o que o filtro de FRENTE deixou passar, com todos os meses.
@@ -12434,16 +12527,26 @@ function renderExecutivo() {
   const av = calcularAvancoPorPacote(rdosAtivos, pacotesAtivos);
   const pacotesFiltrados = Object.values(av).filter(a => a.pacote);
   
+  /* O ESTADO da obra — quantos pacotes começaram, quantos acabaram, quanto
+     cada frente avançou — é ACUMULADO, como o número grande. Fatiado pelo mês
+     (como estava), a Demolição concluída há dois meses aparecia no cartão
+     com "0,0%" e no PDF como "Não Iniciado", ao lado dos 45% do topo; e o
+     KPI dizia "0 concluídos". Sem mês escolhido as duas listas são a mesma. */
+  const pacotesEstado = STATE.filtros.mes
+    ? Object.values(calcularAvancoPorPacote(rdosAcum, pacotesAtivos)).filter(a => a.pacote)
+    : pacotesFiltrados;
   const totalPac = pacotesFiltrados.length;
-  const iniciados = pacotesFiltrados.filter(a => a.qtdExecutada > 0).length;
-  const concluidos = pacotesFiltrados.filter(a => a.pct >= 0.999).length;
+  const iniciados = pacotesEstado.filter(a => a.qtdExecutada > 0).length;
+  const concluidos = pacotesEstado.filter(a => a.pct >= 0.999).length;
   const totalRDOs = rdosAtivos.length;
   
-  pacotesFiltrados.forEach(a => {
+  const pesar = a => {
     const pid = getCSVField(a.pacote, 'ID');
     a.diasEstimados = diasEquivalentes(a.qtdEstimada, pid);
     a.diasExecutados = a.pct * a.diasEstimados;
-  });
+  };
+  pacotesFiltrados.forEach(pesar);
+  if (pacotesEstado !== pacotesFiltrados) pacotesEstado.forEach(pesar);
 
   const totalDiasEstimados = pacotesFiltrados.reduce((s,a) => s + a.diasEstimados, 0);
   const pctPond = totalDiasEstimados > 0 ? pacotesFiltrados.reduce((s,a) => s + a.diasExecutados, 0) / totalDiasEstimados : 0;
@@ -12482,7 +12585,7 @@ function renderExecutivo() {
   }
 
   const porFrente = {};
-  pacotesFiltrados.forEach(a => {
+  pacotesEstado.forEach(a => {
     const f = getCSVField(a.pacote, 'Frente') || 'Outros';
     if (!porFrente[f]) porFrente[f] = { items: [], totalDiasEstim: 0, totalDiasExec: 0 };
     porFrente[f].items.push(a);
@@ -12505,6 +12608,8 @@ function renderExecutivo() {
   
   STATE.dashData = {
      totalDiasEstimados, pacotesAtivos, rdosAtivos,
+     // os lançamentos do ESTADO da obra (até a data de referência): o PDF lê daqui
+     rdosEstado: rdosAcum,
      // a data até onde o acumulado vai (só com mês escolhido): a maquete lê daqui
      ateISO: STATE.filtros.mes ? ymd(dataRef) : ''
   };
@@ -12518,7 +12623,10 @@ function renderExecutivo() {
   const metricsAcum = STATE.filtros.mes
     ? calcExecMetrics(rdosAcum, pacotesAtivos, totalDiasEstimados, { hoje: dataRef })
     : metrics;
-  const fa      = calcFrentesAnalise(rdosAtivos, pacotesAtivos, totalDiasEstimados);
+  /* "Há quantos dias a frente não lança" e "quem avançou na semana" são da
+     obra ATÉ a data de referência: com os lançamentos só do mês e o relógio
+     em hoje, a frente que lançou ontem aparecia parada há 45 dias. */
+  const fa      = calcFrentesAnalise(rdosAcum, pacotesAtivos, totalDiasEstimados, { hoje: dataRef });
   const baseline = calcCurvaPrevista(pacotesAtivos, totalDiasEstimados);
   const todayHoje = new Date(); todayHoje.setHours(0,0,0,0);
   /* A meta do cronograma é lida na MESMA data do acumulado. Era sempre "hoje",
@@ -12599,7 +12707,7 @@ function renderExecutivo() {
       <div class="hero-main">
         <div>
           <span class="hero-label">${(() => { const b = baseDoAvanco(); return escHtml(b.rotulo + ' · ' + b.nota); })()}${STATE.filtros.mes ? ` · acumulado até ${escHtml(fmtData(dataRef))}` : ''}</span>
-          <span class="hero-period">${periodoTag}${frenteTag ? ' · ' + frenteTag : ''}</span>
+          <span class="hero-period">${periodoTag}${frenteTag ? ' · ' + escHtml(frenteTag) : ''}</span>
         </div>
         <div class="hero-value-row">
           <div class="hero-value">${(pctPondAcum*100).toFixed(1).replace('.', ',')}<span class="pp">%</span></div>
@@ -12974,7 +13082,10 @@ function _exportarRelatorioExecutivoPDF() {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
   doc.setTextColor(175, 170, 160);
-  doc.text(`Meta do cronograma hoje: ${(todayPlanned * 100).toFixed(1).replace('.', ',')}%`, 17, y + 37);
+  // com um mês passado no filtro os números são do FIM dele — o rótulo diz a data
+  const refHoje = !data.dataRef || getLocalISODate(new Date(data.dataRef)) === getLocalISODate(new Date());
+  const ateRef = refHoje ? '' : 'até ' + fmtData(getLocalISODate(new Date(data.dataRef)));
+  doc.text(`Meta do cronograma ${refHoje ? 'hoje' : ateRef}: ${(todayPlanned * 100).toFixed(1).replace('.', ',')}%`, 17, y + 37);
 
   // Divisor 1
   doc.setDrawColor(...BORDER_DARK);
@@ -13026,7 +13137,7 @@ function _exportarRelatorioExecutivoPDF() {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(150, 145, 135);
-  doc.text('últimos 7 dias', 139, y + 31, { align: 'center' });
+  doc.text(refHoje ? 'últimos 7 dias' : '7 dias ' + ateRef, 139, y + 31, { align: 'center' });
 
   // Delta 30d Box
   doc.setFillColor(42, 37, 30);
@@ -13090,7 +13201,7 @@ function _exportarRelatorioExecutivoPDF() {
   const ultimoRDO = rdosOrdenados.length > 0 ? rdosOrdenados[rdosOrdenados.length - 1].data : null;
   const todayHoje = new Date(); todayHoje.setHours(0,0,0,0);
   const diasDesdeUltimo = ultimoRDO ? Math.floor((todayHoje - ultimoRDO) / 86400000) : null;
-  const concluidos = (Object.values(calcularAvancoPorPacote(data.rdosAtivos, data.pacotesAtivos)).filter(a => a.pct >= 0.999)).length;
+  const concluidos = (Object.values(calcularAvancoPorPacote(data.rdosEstado || data.rdosAtivos, data.pacotesAtivos)).filter(a => a.pct >= 0.999)).length;
 
   const kpiCards = [
     { title: 'PACOTES INICIADOS', val: `${iniciados} de ${totalPac}`, sub: `${concluidos} já concluídos` },
@@ -13131,8 +13242,12 @@ function _exportarRelatorioExecutivoPDF() {
 
   const av = calcularAvancoPorPacote(data.rdosAtivos, data.pacotesAtivos);
   const pacotesFiltrados = Object.values(av).filter(a => a.pacote);
+  // o ESTADO de cada frente é acumulado (ver renderExecutivo): com mês no filtro, não só o mês
+  const pacotesEstado = (data.rdosEstado && data.rdosEstado !== data.rdosAtivos)
+    ? Object.values(calcularAvancoPorPacote(data.rdosEstado, data.pacotesAtivos)).filter(a => a.pacote)
+    : pacotesFiltrados;
   const porFrente = {};
-  pacotesFiltrados.forEach(a => {
+  pacotesEstado.forEach(a => {
     const f = getCSVField(a.pacote, 'Frente') || 'Outros';
     if (!porFrente[f]) porFrente[f] = { items: 0, totalDiasEstim: 0, totalDiasExec: 0 };
     const pid = getCSVField(a.pacote, 'ID');
@@ -15268,6 +15383,10 @@ function calcDiasImprodutivos(mes) {
   Object.keys(porData).forEach(iso => { porData[iso] = linhaDoDiaRDO(iso); });
   const servicosPorData = {};
   (STATE.rdoavanco || []).forEach(r => {
+    /* O ajuste de avanço do escritório não é serviço do dia: gravado na data
+       de um dia de chuva sem produção, fazia o dia sair "Produtivo" — fora
+       dos improdutivos e dos pleiteáveis, na tela e no CSV do pleito. */
+    if (ehAjusteDeAvanco(r)) return;
     const d = parseISODate(getCSVField(r, 'Data'));
     if (!d) return;
     const k = getLocalISODate(d);
@@ -16418,7 +16537,12 @@ window.histSalvarEdicao = async function(idx) {
   // campo numérico vazio (ou recusado pelo navegador, que é o que acontece
   // quando a planilha guarda "250,5") não pode virar zero na planilha
   if (mexeu('qtd') && qtdTexto !== '' && !isNaN(qtd) && qtd !== num(getCSVField(r, 'Quantidade'))) mud.quantidade = qtd;
-  if (mexeu('sentido', 'estini', 'estfim', 'lado') && localEstaca !== (getCSVField(r, 'Local_Estaca') || '')) mud.local_estaca = localEstaca;
+  /* Sem estaca inicial o formulário não tem local para escrever. O local
+     livre ("canteiro central, em frente ao 120") abre com as estacas em
+     branco, e bastava tocar no Sentido para ele ser gravado VAZIO. Só vai em
+     branco quando a estaca inicial ESTAVA preenchida e foi apagada. */
+  if (mexeu('sentido', 'estini', 'estfim', 'lado') && localEstaca !== (getCSVField(r, 'Local_Estaca') || '') &&
+      (localEstaca || !orig || orig.estini)) mud.local_estaca = localEstaca;
   if (mexeu('equipe') && equipe !== (getCSVField(r, 'Equipe') || getCSVField(r, 'Subcontratado') || '')) {
     mud.equipe = equipe; mud.subcontratado = equipe;
   }
@@ -18450,6 +18574,8 @@ window.copiarServicosDeOntem = function() {
   if (!ultimaData) { toast('Nenhum dia anterior com lançamentos.', 'info'); return; }
 
   const doDia = STATE.rdoavanco.filter(r => {
+    // o ajuste do escritório não é serviço do dia (a data acima já o pulava; a lista, não)
+    if (ehAjusteDeAvanco(r)) return false;
     const d = parseISODate(getCSVField(r, 'Data'));
     const pid = getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id');
     return d && getLocalISODate(d) === ultimaData && pid && pid !== 'OUTRO';
@@ -18883,14 +19009,14 @@ async function salvarRDO() {
          obra de ANTES. Sai o rascunho dela (pela chave dela); as fotos sobem
          com a obra dela; o formulário e a tela da obra nova ficam como estão. */
       try { localStorage.removeItem(chaveDraftEnvio); } catch (eDr) {}
-      if (totalFotos) enviarFotosDoLote(fotosEnviar, 0, obraEnvio);
+      if (totalFotos) fotosDoLoteSubir(fotosEnviar, obraEnvio);
       return;
     }
     STATE.rdoavanco = comLancadosLocais(STATE.rdoavanco || []);
 
     if (totalFotos) {
       toast(`Enviando ${totalFotos} foto(s)…`, 'info', 2500);
-      enviarFotosDoLote(fotosEnviar, 0, obraEnvio);   // não segura o apontador esperando
+      fotosDoLoteSubir(fotosEnviar, obraEnvio);   // não segura o apontador esperando
     }
     limparFotosDoFormulario();
 
@@ -18931,11 +19057,21 @@ async function salvarRDO() {
           // isso a foto subia carimbada (o carimbo é queimado na imagem)
           // mas chegava na planilha sem coordenada, justamente quando o
           // apontador está em campo.
-          if (await fotoParaAFila(id, i, f)) fotosNaFila++;
+          // a obra do LOTE, não a da tela: com a obra trocada no meio do envio a
+          // foto entrava na fila com a obra nova, e o servidor a recusava para sempre
+          if (await fotoParaAFila(id, i, f, obraEnvio)) fotosNaFila++;
         })));
-      limparFotosDoFormulario();
       avisoDaFila(toast('Sem internet — RDO' + (fotosNaFila ? ` e ${fotosNaFila} foto(s)` : '') +
         ' guardado no aparelho. Vai enviar sozinho quando o sinal voltar.', 'info', 0));
+      if (OBRA.id !== obraEnvio) {
+        /* Trocou de obra com o envio no ar (o caminho do sucesso já tratava
+           isto; o da falha, não): o formulário e as fotos na tela são da obra
+           NOVA e ficam como estão. Sai só o rascunho da obra do lote, que já
+           está guardado na fila. */
+        try { localStorage.removeItem(chaveDraftEnvio); } catch (eDr) {}
+        return;
+      }
+      limparFotosDoFormulario();
       limparFormularioRDO();
       transitionTo(render);
     } else {
@@ -19453,8 +19589,28 @@ window.editarRDODiario = function(data) {
   toast('Editando RDO de ' + fmtData(data) + ' — escolha o turno para ajustar.', 'info', 4000);
 };
 
+/* O dia em que esta tela foi desenhada pela última vez. O PWA fica vivo no
+   bolso de um dia para o outro: o apontador salvava o diurno do dia 9,
+   guardava o celular e, no dia 10, "RDO Diário" abria o formulário do dia 9
+   já preenchido — ele ajustava o efetivo e salvava POR CIMA do dia 9 (e o
+   dia 10 ficava sem RDO). Virou o dia e não há nada por enviar: a tela volta
+   a ser a de hoje. Com trabalho por enviar ela fica, e avisa de que dia é. */
+let _diarioTelaDia = '';
+function diarioConferirViradaDoDia(dataHoje) {
+  const virou = _diarioTelaDia && _diarioTelaDia !== dataHoje;
+  _diarioTelaDia = dataHoje;
+  if (!virou || !DIARIO_V4 || DIARIO_V4.data === dataHoje) return;
+  const ed = DIARIO_V4._editados || {};
+  const pendente = !!(ed.diurno || ed.noturno) || !!loadDiarioV4(DIARIO_V4.data);
+  if (!pendente) { DIARIO_V4 = null; DIARIO_TURNO_ATIVO = null; return; }
+  const de = fmtData(DIARIO_V4.data);
+  setTimeout(() => toast('Este RDO é de ' + de + ' e ainda tem alterações que não foram enviadas. ' +
+    'Salve (ou descarte) antes de abrir o de hoje.', 'info', 9000), 400);
+}
+
 function renderRDODiarioV4() {
   const dataHoje = getLocalISODate(new Date());
+  diarioConferirViradaDoDia(dataHoje);
   if (!DIARIO_V4) {
     /* PRECEDÊNCIA: o rascunho local vem PRIMEIRO.
        Antes a planilha vencia, e `carregarDiarioDaSheet` só reaproveitava do
@@ -20596,6 +20752,12 @@ async function salvarDiarioV4() {
      Rascunho de antes desta versão não sabe quem foi mexido: sobem os dois,
      como sempre subiram. */
   const editados = d._editados ? { ...d._editados } : null;
+  /* `preenchido` é o que faz o cartão do seletor dizer "Já enviado por…". Ele
+     é marcado ANTES do envio (o envio lê o turno marcado), e voltava a ficar
+     marcado quando o servidor RECUSAVA: sessão vencida, e o cartão dizia "já
+     enviado", com o PDF oficial à vista, de um turno que não estava em lugar
+     nenhum — nem no servidor, nem na fila. */
+  const preenchidoAntes = !!td.preenchido;
   td.preenchido = true;
   // O outro turno, se outro aparelho já o enviou, aparece na tela (não sobe).
   completarDiarioComPlanilha(d);
@@ -20675,6 +20837,7 @@ async function salvarDiarioV4() {
     if (result && result.error === 'RDO_ASSINADO') {
       btn.disabled = false;
       btn.innerHTML = original;
+      td.preenchido = preenchidoAntes;      // não subiu (rdoAssinadoAoSalvar guarda o rascunho)
       return rdoAssinadoAoSalvar(d, result, obraEnvio);
     }
     if (!result.ok) throw new Error(result.error || 'Erro');
@@ -20705,7 +20868,8 @@ async function salvarDiarioV4() {
       // significa: rascunho presente = trabalho que ainda NÃO subiu.
       clearDiarioV4(d.data, obraEnvio);
     }
-    toast(`Turno ${t.toUpperCase()} salvo` +
+    // a data vai no aviso: é o que denuncia o turno salvo no dia errado
+    toast(`Turno ${t.toUpperCase()} de ${fmtData(d.data)} salvo` +
           (totalParalis ? ` · ${totalParalis} paralisação(ões) registrada(s)` : '') +
           (reaberto ? ` · RDO reaberto: ${reaberto} assinatura(s) cancelada(s), o convite sai de novo` : ''),
           'success', reaberto ? 8000 : 4000);
@@ -20737,7 +20901,10 @@ async function salvarDiarioV4() {
               'não feche esta tela e tente de novo.', 'error', 0);
       }
     } else {
-      toast('Falha: ' + e.message, 'error', 0);
+      // recusado pelo servidor: o turno NÃO está enviado — o que foi digitado fica no rascunho
+      td.preenchido = preenchidoAntes;
+      saveDiarioV4(d, obraEnvio);
+      toast('O turno não foi salvo: ' + erroLegivel(e.message) + ' O que você digitou continua aqui.', 'error', 0);
     }
   }
 }
@@ -22811,7 +22978,8 @@ async function _gerarPDFInterno(data, turnoFocus) {
     d.customEquip_noturno = [];
     if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data && !DIARIO_V4.parte) {
       d.visitas = DIARIO_V4.diurno.visitas || '';
-      d.ocorrencias = DIARIO_V4.diurno.ocorrencias || '';
+      // (com as paralisações do turno: o texto cru jogava fora a parada registrada)
+      d.ocorrencias = ocorrenciasComParalisacoes(DIARIO_V4.diurno.ocorrencias || '', DIARIO_V4.diurno.paralisacoes);
       d.observacoes_gerais = DIARIO_V4.diurno.observacoes || '';
     }
   } else if (focus === 'noturno') {
@@ -22824,7 +22992,7 @@ async function _gerarPDFInterno(data, turnoFocus) {
     d.customEquip_diurno = [];
     if (typeof DIARIO_V4 !== 'undefined' && DIARIO_V4 && DIARIO_V4.data === data && !DIARIO_V4.parte) {
       d.visitas = DIARIO_V4.noturno.visitas || '';
-      d.ocorrencias = DIARIO_V4.noturno.ocorrencias || '';
+      d.ocorrencias = ocorrenciasComParalisacoes(DIARIO_V4.noturno.ocorrencias || '', DIARIO_V4.noturno.paralisacoes);
       d.observacoes_gerais = DIARIO_V4.noturno.observacoes || '';
     }
   }
