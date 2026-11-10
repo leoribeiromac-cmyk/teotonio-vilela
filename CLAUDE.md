@@ -19,6 +19,9 @@ para a navegação, então a mudança chega sem precisar limpar cache.
   DOIS backends: a Teotônio no Apps Script legado (campo `equipamentos` do
   cadastro dela), as demais no `Code.gs`. `backendEquip()` decide a cada
   chamada — mexer numa ação exige pensar nos dois dialetos.
+- `js/ui/iso.js` — o desenho em volume do Painel, em SVG puro (sem three.js):
+  a maquete da pista por camada e o relevo do ritmo dia a dia. Ver "O Painel
+  em volume".
 - `assinar.html` — página de assinatura online do RDO, aberta pelo link do
   e-mail. Autônoma: não carrega o app, só fala com o `Code.gs`.
 - `js/rdo/mapa-chuva.js` — o mapa de chuva circular do mês (tela Dias
@@ -587,6 +590,50 @@ software — inclusive a apresentação, a legenda que realça e o sol dourado),
 `tests/modelo3d-manifesto.test.js` (os .bin abrem no
 decodificador de verdade, índice × arquivos, vendor × lista do Offline) e
 `tests/modelo3d-etapas.test.js` (a etapa de cada pacote real).
+
+## O Painel em volume: a maquete da pista e o relevo do ritmo
+
+Dois desenhos do Painel Executivo que precisam de terceira dimensão para
+dizer o que dizem e que NÃO podem custar o que o Modelo 3D custa: são SVG
+montado como texto (`js/ui/iso.js`), em projeção oblíqua (o comprido da via
+quase deitado, a profundidade fugindo para cima e para a direita — numa
+isométrica de verdade 44 estacas viram uma diagonal que não cabe no cartão).
+
+- **Maquete da pista** — o modo **Camadas** do cartão "Trecho da obra"
+  (`renderAvenida3D`; o modo "Atividade" é a cena de sempre). Cada estaca é
+  uma coluna que sobe até a etapa MAIS ALTA lançada nela, pelos degraus de
+  baixo; o tracejado é a pista pronta. A regra de etapa não mora no desenho:
+  vem da tela Modelo 3D (`m3dBase`, `m3dEtapaDe`, `M3D_ETAPAS`), e os degraus
+  são só os que os pacotes do filtro TÊM. O filtro é o do PAINEL, não o da
+  tela 3D: frente escolhida mostra as etapas dela; mês escolhido mostra a
+  pista como estava no FIM dele (`ateISO` — é acumulado, como tudo o que o
+  Painel diz "até aquela data"). Muro e urbanismo não sobem a pista. Frente
+  ou obra sem etapa de pista não tem maquete, e o cartão fica como era.
+- **Relevo do ritmo** (`renderRitmoCard`) — 26 semanas × 7 dias; cada dia
+  sobe conforme o avanço que ganhou. O ganho sai da MESMA série do Painel
+  (`calcCumulativoDia`, com o teto de 100% por pacote): a soma dos blocos
+  fecha com o número grande. Chuva e paralisação vêm do RDO Diário pela
+  leitura do mapa de chuva (`mapaChuvaDoMes`), não do INMET. Dia útil sem RDO
+  nem lançamento é contado e marcado. O domingo fica na FRENTE do desenho (não
+  tem produção, e ali não tapa ninguém).
+
+As travas:
+
+- **Ordem de pintura**: a pista do fundo inteira (arestas de trás, camadas,
+  arestas da frente) e só então a de perto; dentro da pista, de baixo para
+  cima e da esquerda para a direita. Trocar a ordem faz um bloco de trás
+  passar por cima de um da frente.
+- **Trocar de modo refaz só o cartão** (`setTrechoModo`): redesenhar o Painel
+  repetia a entrada de todos os cartões e recriava a Curva S.
+- **A camada apagada pela legenda usa `animation-fill-mode: backwards`**: com
+  `both`, a animação terminada continua mandando na opacidade e a camada não
+  apaga.
+- **Texto e botão ficam fora do palco** (que é escuro nos dois temas), no pé
+  do cartão, com os tokens do tema.
+- A estaca ou o dia tocado é estado do módulo (`MAQ.sel`, `RIT.sel`) e é
+  solto quando sai do filtro ou da obra.
+
+`tests/maquete-ritmo.ui.test.js` (o app de verdade).
 
 ## O mapa de chuva sai do RDO
 
