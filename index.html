@@ -2936,6 +2936,22 @@ body.presentation .exec-kpi { background: var(--surface); border-color: rgba(255
   .road-3d { width: 90%; height: 90px; }
 }
 
+/* Produtividade real, embaixo do campo do planejamento reverso */
+.plan-real {
+  display: inline-flex; align-items: center; gap: 4px; margin-top: 5px; padding: 2px 7px 2px 5px;
+  border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--muted);
+  font-family: 'JetBrains Mono', monospace; font-size: var(--fs-2xs); font-weight: 500; line-height: 1.5;
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+button.plan-real { cursor: pointer; transition: border-color .15s, background .15s; }
+button.plan-real:hover { border-color: var(--border-strong); background: var(--surface); }
+.plan-real .ic { width: 12px; height: 12px; }
+.plan-real.acima { color: var(--grn); border-color: color-mix(in oklab, var(--grn) 35%, var(--border)); }
+.plan-real.perto { color: var(--ylw-d); border-color: color-mix(in oklab, var(--ylw) 45%, var(--border)); }
+.plan-real.abaixo { color: var(--red); border-color: color-mix(in oklab, var(--red) 35%, var(--border)); }
+.plan-real.pouco { padding-left: 7px; opacity: .8; }
+@media (max-width: 700px) { button.plan-real { min-height: 30px; padding: 4px 10px 4px 8px; } }
+
 /* ==================================================================
    DESENHO EM VOLUME (js/ui/iso.js) — maquete da pista e relevo do ritmo
    ------------------------------------------------------------------
@@ -14466,8 +14482,75 @@ function calcularDataInicioReversa(dataFimStr, diasDuracao) {
   return d;
 }
 
+/* ------------------------------------------------------------------
+   A PRODUTIVIDADE QUE A OBRA ESTÁ FAZENDO DE VERDADE
+   ------------------------------------------------------------------
+   O planejamento reverso divide o saldo pela produtividade do CADASTRO —
+   um número escrito antes de a obra começar. Se a frente rende a metade
+   dele, a "data de início necessária" está errada pela metade, e ninguém
+   vê: a tela não tinha como saber.
+
+   Aqui sai, por pacote, o que o RDO registrou: quantidade lançada ÷ dias
+   em que houve lançamento. É a produção de um dia TRABALHADO (o dia sem
+   lançamento não entra na conta — chuva e falta de frente são do
+   calendário, não da produtividade). Ajuste de avanço do escritório
+   (`ehAjusteDeAvanco`) fica de fora: não é produção de dia nenhum.
+
+   Guardado pela referência das listas, que são trocadas a cada carga. */
+const PROD_REAL_MIN_DIAS = 3;      // menos que isso é um dia bom ou ruim, não um ritmo
+let _prodReal = { fonte: null, pac: null, mapa: null };
+function produtividadeReal() {
+  if (_prodReal.mapa && _prodReal.fonte === STATE.rdoavanco && _prodReal.pac === STATE.pacotes) return _prodReal.mapa;
+  const porChave = {};
+  (STATE.pacotes || []).forEach(p => { const id = getCSVField(p, 'ID'); if (id) porChave[_chavePacote(id)] = id; });
+  const porPac = new Map();
+  (STATE.rdoavanco || []).forEach(r => {
+    if (ehAjusteDeAvanco(r)) return;
+    const pid = porChave[_chavePacote(getCSVField(r, 'Pacote_ID') || getCSVField(r, 'Pacote_id'))];
+    if (!pid) return;
+    const q = num(getCSVField(r, 'Quantidade'));
+    const d = parseISODate(getCSVField(r, 'Data'));
+    if (!(q > 0) || !d) return;
+    let a = porPac.get(pid);
+    if (!a) porPac.set(pid, a = { dias: new Set(), qtd: 0 });
+    a.dias.add(getLocalISODate(d));
+    a.qtd += q;
+  });
+  const mapa = {};
+  porPac.forEach((a, pid) => { mapa[pid] = { dias: a.dias.size, qtd: a.qtd, media: a.qtd / a.dias.size }; });
+  _prodReal = { fonte: STATE.rdoavanco, pac: STATE.pacotes, mapa };
+  return mapa;
+}
+
+/* Usar o ritmo real como produtividade do planejamento, pacote a pacote. */
+window.planUsarProdReal = function (pid) {
+  const r = produtividadeReal()[pid];
+  if (!r || r.dias < PROD_REAL_MIN_DIAS) return;
+  // duas casas, com ponto: é o formato do <input type="number"> que o numCampo lê
+  atualizarPlan(pid, 'prod', String(Math.round(r.media * 100) / 100));
+};
+
 function renderCronograma() {
   return renderCronogramaReverso();
+}
+
+/* A linha "real" embaixo do campo da produtividade: o que o RDO mostra, com a
+   seta dizendo se rende mais ou menos do que o planejamento está usando. Com
+   três dias trabalhados ou mais vira botão — um toque põe o real no campo. */
+function planProdRealHtml(pid, prodUsada, unid) {
+  const r = produtividadeReal()[pid];
+  if (!r || !r.dias) return '';
+  const txt = fmtNum(r.media) + ' ' + unid + '/dia';
+  const dias = r.dias + ' dia' + (r.dias !== 1 ? 's' : '') + ' trabalhado' + (r.dias !== 1 ? 's' : '');
+  if (r.dias < PROD_REAL_MIN_DIAS) {
+    return `<div class="plan-real pouco" title="${escHtml('Só ' + dias + ' no RDO: ainda é cedo para chamar de ritmo.')}">real ${escHtml(txt)} · ${r.dias} d</div>`;
+  }
+  const razao = prodUsada > 0 ? r.media / prodUsada : null;
+  const cls = razao === null ? '' : razao >= 1 ? ' acima' : razao >= 0.8 ? ' perto' : ' abaixo';
+  const seta = razao === null ? '' : razao >= 1.02 ? ic('tendSobe') : razao <= 0.98 ? ic('tendDesce') : ic('tendEstavel');
+  const dica = `Pelo RDO: ${fmtNum(r.qtd)} ${unid} em ${dias} = ${txt}` +
+    (razao === null ? '' : ` (${Math.round(razao * 100)}% da produtividade em uso)`) + '. Toque para planejar com este ritmo.';
+  return `<button type="button" class="plan-real${cls}" title="${escHtml(dica)}" onclick="planUsarProdReal(${jsArg(pid)})">${seta}<span>real ${escHtml(txt)} · ${r.dias} d</span></button>`;
 }
 
 // Limiar (em dias úteis de folga) abaixo do qual um pacote é considerado CRÍTICO.
@@ -14563,7 +14646,7 @@ function renderCronogramaReverso() {
     <div class="card-header">
       <div>
         <div class="card-title">Motor de Planejamento Reverso</div>
-        <div class="card-title-sub">A partir do <strong>término alvo</strong>, o sistema recua o <strong>saldo restante</strong> pela produtividade (em dias úteis: domingos, feriados e sábados conforme config) e indica <strong>quando iniciar</strong> e o <strong>ritmo necessário a partir de hoje</strong>.</div>
+        <div class="card-title-sub">A partir do <strong>término alvo</strong>, o sistema recua o <strong>saldo restante</strong> pela produtividade (em dias úteis: domingos, feriados e sábados conforme config) e indica <strong>quando iniciar</strong> e o <strong>ritmo necessário a partir de hoje</strong>. Embaixo de cada produtividade, o <strong>real</strong> é o que o RDO registrou por dia trabalhado — um toque nele planeja com esse ritmo.</div>
       </div>
     </div>
     <div class="card-body" style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
@@ -14647,7 +14730,7 @@ function renderCronogramaReverso() {
         <input type="number" min="0" step="any" placeholder="${escHtml(phProd)}" value="${escHtml(valProd)}"
                style="width:72px;padding:4px 8px;font-size:var(--fs-sm);border:1px solid var(--border);border-radius:4px"
                onkeyup="if(event.key==='Enter') atualizarPlan(${jsArg(pid)},'prod',this.value)" onblur="atualizarPlan(${jsArg(pid)},'prod',this.value)">
-        <span style="font-size:var(--fs-xs);color:var(--muted)">${escHtml(unid)}/dia</span></div></td>`;
+        <span style="font-size:var(--fs-xs);color:var(--muted)">${escHtml(unid)}/dia</span></div>${planProdRealHtml(pid, l.prodAtual, unid)}</td>`;
 
       // Coluna 5 — duração em dias úteis
       row += `<td class="t-num" style="text-align:center">${l.duracao > 0 ? Math.ceil(l.duracao) + ' du' : '—'}</td>`;

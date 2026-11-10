@@ -201,9 +201,9 @@ function rotear(e) {
                                                    rdoPdfDoDia: true, assinaturaOnline: true } }; break;
       case 'login':           resp = loginUsuario(p.usuario, p.senha); break;
       case 'logout':          resp = sessaoRevogar(p.token); break;
-      case 'deleteRDO':       resp = deleteRDO(p.id, p.token); break;
-      case 'addBatchRDO':     resp = addBatchRDO(p.batch, p.clientId, p.token); break;
-      case 'updateRDO':       resp = updateRDO(p.payload, p.token); break;
+      case 'deleteRDO':       resp = deleteRDO(p.id, p.token, p.reabrir); break;
+      case 'addBatchRDO':     resp = addBatchRDO(p.batch, p.clientId, p.token, p.reabrir); break;
+      case 'updateRDO':       resp = updateRDO(p.payload, p.token, p.reabrir); break;
       // As duas reescrevem a aba RDO_Avanco INTEIRA — que é a base da medição.
       // Vão com o token, e lá dentro exigem admin de verdade e deixam rastro.
       case 'limparDuplicados': resp = limparDuplicadosServidor(p.token); break;
@@ -868,7 +868,7 @@ function idxColuna(cab, nome) {
 // ------------------------------------------------------------
 // 1. deleteRDO — apaga 1 linha pelo ID
 // ------------------------------------------------------------
-function deleteRDO(id, token) {
+function deleteRDO(id, token, reabrir) {
   if (!id) return { ok: false, error: 'ID não informado' };
   var aba = abaServicos();
   var dados = aba.getDataRange().getValues();
@@ -889,10 +889,17 @@ function deleteRDO(id, token) {
       var obraLinhaD = iObraD !== -1 ? normObra(dados[i][iObraD]) : OBRA_ID;
       var sessD = sessaoDoToken(token);
       if (sessD && !sessaoPodeNaObra(sessD, obraLinhaD)) return negarPorObra(token, 'deleteRDO', obraLinhaD);
+      // o serviço sai no RDO daquele dia: assinado, só reaberto (ver rdoServicoPorta_)
+      var iDataD = cab.indexOf('data'); if (iDataD === -1) iDataD = idxColuna(cab, 'data');
+      var iTurnoD = cab.indexOf('turno');
+      var saiNoRdoD = iDataD !== -1 && rdoServicoDoRdo_(iTurnoD !== -1 ? dados[i][iTurnoD] : '');
+      var portaD = rdoServicoPorta_(obraLinhaD, saiNoRdoD ? [dados[i][iDataD]] : [], token, reabrir);
+      if (portaD.recusa) return portaD.recusa;
       var antes = cab.map(function (c, k) { return c + '=' + dados[i][k]; }).join(' | ');
       aba.deleteRow(i + 1); // planilha é base-1 e tem cabeçalho
       registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDO', obraLinhaD, id, antes, '');
-      return { ok: true, deleted: id };
+      var depoisD = rdoServicoDepois_(obraLinhaD, portaD, sessD);
+      return { ok: true, deleted: id, dias: depoisD.dias, reaberto: depoisD.reaberto || undefined };
     }
   }
   return { ok: false, error: 'ID não encontrado: ' + id };
@@ -903,7 +910,7 @@ function deleteRDO(id, token) {
 //    Idempotente: se o clientId já existe na planilha, NÃO regrava
 //    (evita duplicação por reenvio/retry).
 // ------------------------------------------------------------
-function addBatchRDO(batchJson, clientId, token) {
+function addBatchRDO(batchJson, clientId, token, reabrir) {
   var batch;
   try { batch = JSON.parse(batchJson || '[]'); }
   catch (e) { return { ok: false, error: 'batch inválido' }; }
@@ -977,6 +984,16 @@ function addBatchRDO(batchJson, clientId, token) {
       }
     }
 
+    /* Os dias deste lote que saem no RDO (o ajuste de avanço não sai). Vem
+       DEPOIS do dedup: o lote que já tinha entrado e é reenviado pela fila
+       continua sendo "já salvo", mesmo que o dia tenha sido assinado depois. */
+    var datasLote = [];
+    itens.forEach(function (it) {
+      if (normObra(it['obra']) === OBRA_ID && rdoServicoDoRdo_(it['turno'])) datasLote.push(it['data']);
+    });
+    var portaLote = rdoServicoPorta_(OBRA_ID, datasLote, token, reabrir);
+    if (portaLote.recusa) return portaLote.recusa;
+
     var agora = new Date();
     var linhas = itens.map(function (item, k) {
       // copia os campos recebidos (já com as chaves em minúsculas)
@@ -1006,10 +1023,138 @@ function addBatchRDO(batchJson, clientId, token) {
     aba.getRange(aba.getLastRow() + 1, 1, linhas.length, cab.length).setValues(seguroMatriz(linhas));
     registrarAuditoria(sess.usuario, sess.perfil, 'addBatchRDO', normObra(itens[0]['obra']), clientId || '', '',
       linhas.length + ' serviço(s) gravado(s)');
-    return { ok: true, inserted: linhas.length };
+    var depoisLote = rdoServicoDepois_(OBRA_ID, portaLote, sess);
+    return { ok: true, inserted: linhas.length, dias: depoisLote.dias, reaberto: depoisLote.reaberto || undefined };
   } finally {
     lock.releaseLock();
   }
+}
+
+// ------------------------------------------------------------
+// O SERVIÇO DO DIA É PARTE DO RDO ASSINADO
+// ------------------------------------------------------------
+/* A firma do fiscal é o aceite do documento inteiro — e o PDF oficial traz
+   os SERVIÇOS do dia (aba RDO_Avanco), não só o efetivo e o clima. A trava
+   "assinado só muda reaberto" estava só no upsertRDODiario: lançar, corrigir
+   ou apagar um serviço depois da firma passava direto, e o desenho seguinte
+   do PDF punha a firma dada por cima de uma lista de serviços que quem
+   assinou nunca viu.
+
+   Duas travas, dos dois lados da firma:
+     • DEPOIS da firma: recusa com RDO_ASSINADO. Mudar exige `reabrir=1`,
+       que só o escritório manda, e cancela as firmas com link novo —
+       igual ao RDO Diário.
+     • ANTES da firma: o dia ganha `revisao` nova. O PDF depositado fica
+       para trás (o link avisa `desatualizado` e a firma é recusada com
+       `mudou`) até o app redepositar — e o dia entra na lista dos
+       depósitos velhos, que a varredura de qualquer aparelho repõe.
+
+   A linha de Turno "Ajuste" (o ajuste de avanço do escritório) não é
+   serviço do dia e não sai no RDO: não passa por nada disto. E só a obra
+   que assina (OBRA_ID) tem o que travar. */
+function rdoServicoDoRdo_(turno) {
+  return String(turno == null ? '' : turno).trim().toLowerCase() !== 'ajuste';
+}
+
+/* ANTES de gravar. Devolve { recusa, reabrir: [{iso, firmas}], dias: [iso] }. */
+function rdoServicoPorta_(obra, datas, token, reabrir) {
+  var out = { recusa: null, reabrir: [], dias: [] };
+  if (normObra(obra) !== OBRA_ID) return out;
+  for (var i = 0; i < datas.length; i++) {
+    var iso = normData(datas[i]);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || out.dias.indexOf(iso) !== -1) continue;
+    out.dias.push(iso);
+    var firmas = rdoFirmasDePessoa_(obra, iso);
+    if (!firmas.length) continue;
+    var quem = firmas.map(function (x) {
+      return String(x.nomeAssinante || x.nome || x.papel || '');
+    }).join(', ');
+    if (String(reabrir) !== '1') {
+      out.recusa = { ok: false, error: 'RDO_ASSINADO', assinaram: quem, data: iso,
+                     mensagem: 'O RDO de ' + rdoDataBR_(iso) + ' já foi assinado (' + quem + '). ' +
+                               'Para lançar, corrigir ou apagar serviço desse dia, o escritório reabre o RDO — ' +
+                               'as firmas são canceladas e o convite sai de novo.' };
+      return out;
+    }
+    var barrReab = exigirPodeEnviarRDO(token, 'reabrirRDOAssinado');
+    if (barrReab) { out.recusa = barrReab; return out; }
+    out.reabrir.push({ iso: iso, firmas: firmas });
+  }
+  return out;
+}
+
+/* DEPOIS de gravar: as firmas reabertas e a revisão nova de cada dia tocado.
+   Devolve { dias: {iso: linha do dia como ficou}, reaberto, reabertos } — o
+   app guarda a linha por cima do CSV (que leva minutos) e redeposita o PDF
+   desenhado DELA, com a revisão nova. */
+function rdoServicoDepois_(obra, porta, sess) {
+  var res = { dias: {}, reaberto: 0, reabertos: [] };
+  if (!porta || normObra(obra) !== OBRA_ID) return res;
+  porta.reabrir.forEach(function (r) {
+    var n = rdoReabrirAssinaturas_(obra, r.iso, r.firmas, sess);
+    if (n) { res.reaberto += n; res.reabertos.push(r.iso); }
+  });
+  porta.dias.forEach(function (iso) {
+    try {
+      var linha = rdoRevisaoTocar_(obra, iso);
+      if (linha) { res.dias[iso] = linha; rdoDepositoVelhoMarcar_(obra, iso); }
+    } catch (e) {
+      Logger.log('Revisão do RDO de ' + iso + ' não renovada: ' + e);
+    }
+  });
+  return res;
+}
+
+/* Carimbo novo na linha do dia (em TODAS, se o dia ainda está repetido: o
+   app pode desenhar de qualquer uma). Dia sem linha no Diário não tem RDO
+   para ficar para trás: devolve null e nada é marcado. Roda dentro da trava
+   de quem chamou. */
+function rdoRevisaoTocar_(obra, iso) {
+  var aba = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(NOME_ABA_DIARIO);
+  if (!aba) return null;
+  var dados = aba.getDataRange().getValues();
+  if (dados.length <= 1) return null;
+  var cab = dados[0].map(function (h) { return String(h).trim().toLowerCase(); });
+  var iRev = cab.indexOf('revisao');
+  if (iRev === -1) return null;
+  var doDia = rdoLinhasDoDia_(cab, dados, normObra(obra), iso, '');
+  if (!doDia.length) return null;
+  var revisao = 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36);
+  doDia.forEach(function (i) {
+    aba.getRange(i + 1, iRev + 1).setValue(revisao);
+    dados[i][iRev] = revisao;
+  });
+  return rdoLinhaObj_(cab, rdoMesclarLinhas_(cab, doDia.map(function (i) { return dados[i]; })));
+}
+
+/* OS DEPÓSITOS QUE FICARAM PARA TRÁS. O dia mudou (um serviço entrou, saiu
+   ou foi corrigido) e o PDF guardado é o de antes. Quem mudou redeposita em
+   seguida — mas o aparelho pode fechar antes, e o link do fiscal ficaria em
+   "volte em alguns minutos" até alguém abrir aquele dia. A marca põe o dia
+   na lista do `rdoAssinadosPendentes`, que a varredura de QUALQUER aparelho
+   com sessão repõe; o depósito com a revisão do dia a apaga. */
+var RDO_DEPOSITO_VELHO = 'RDO_DEPOSITO_VELHO';
+var RDO_DEPOSITO_VELHO_MAX = 40;
+function rdoDepositoVelhoLer_() {
+  try {
+    var o = JSON.parse(PropertiesService.getScriptProperties().getProperty(RDO_DEPOSITO_VELHO) || '{}');
+    return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
+  } catch (e) { return {}; }
+}
+function rdoDepositoVelhoGravar_(m) {
+  // é um lembrete, não um registro: ficam os mais novos
+  var chaves = Object.keys(m).sort(function (a, b) { return String(m[a]) < String(m[b]) ? -1 : 1; });
+  while (chaves.length > RDO_DEPOSITO_VELHO_MAX) delete m[chaves.shift()];
+  try { PropertiesService.getScriptProperties().setProperty(RDO_DEPOSITO_VELHO, JSON.stringify(m)); } catch (e) {}
+}
+function rdoDepositoVelhoMarcar_(obra, iso) {
+  var m = rdoDepositoVelhoLer_();
+  m[normObra(obra) + '|' + iso] = Utilities.formatDate(new Date(), fusoDoScript(), 'yyyy-MM-dd HH:mm:ss');
+  rdoDepositoVelhoGravar_(m);
+}
+function rdoDepositoVelhoSoltar_(obra, iso) {
+  var m = rdoDepositoVelhoLer_(), k = normObra(obra) + '|' + iso;
+  if (m[k]) { delete m[k]; rdoDepositoVelhoGravar_(m); }
 }
 
 function gerarId(data, k) {
@@ -1445,6 +1590,13 @@ function rdoFoto(p) {
      `|`, então ele lê o ponteiro novo e enxerga a foto carimbada — a
      Galeria de quem ainda não atualizou continua funcionando igual. */
   var ponteiro = 'drive_id:' + fileId + (fileIdLimpa ? '|' + fileIdLimpa : '');
+  /* A foto está no Drive — mas ENTROU NA LINHA do serviço? Quando o lote do
+     serviço ainda espera na fila do aparelho (sem sinal na hora, ou o dia
+     assinado esperando o escritório reabrir), a linha não existe: a resposta
+     era `ok` do mesmo jeito, o app tirava a foto da fila e o serviço nascia
+     sem ela. `anexada: false` diz ao app para guardar e mandar de novo — o
+     reenvio reaproveita o arquivo (ver gravarFotoNoDrive_). */
+  var anexada = false;
 
   // Anexa o ponteiro na linha do serviço. Se a foto subiu mas a linha ainda
   // não existe (fila offline), o arquivo fica no Drive e o app reenvia depois.
@@ -1472,6 +1624,7 @@ function rdoFoto(p) {
 
     var i = alvo.linha;   // já achada (e conferida contra a obra) lá em cima
     if (i > 0) {
+      anexada = true;
       var atual = String(dados[i][iFotos] == null ? '' : dados[i][iFotos]).trim();
       // reenvio de foto reaproveitada: o ponteiro pode já estar na linha
       if (atual.split(/\s+/).indexOf(ponteiro) === -1) {
@@ -1482,12 +1635,12 @@ function rdoFoto(p) {
         aba.getRange(i + 1, iLon + 1).setValue(parseFloat(p.lon));
       }
     }
-  } catch (e) {}
+  } catch (e) { anexada = false; }
 
   registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoFoto', normObra(p.obra), p.id || '',
                      '', fileId + (fileIdLimpa ? ' +limpa:' + fileIdLimpa : '') +
                      (reaproveitada ? ' (reenvio — arquivo reaproveitado)' : ''));
-  return { ok: true, url: ponteiro, fileId: fileId, fileIdLimpa: fileIdLimpa };
+  return { ok: true, url: ponteiro, fileId: fileId, fileIdLimpa: fileIdLimpa, anexada: anexada };
 }
 
 /* Grava (ou reaproveita) uma foto na pasta privada.
@@ -2304,7 +2457,7 @@ function apagarPorPrefixoId(prefixo, token) {
 // ------------------------------------------------------------
 // 3. updateRDO — edição inline de um serviço (por ID)
 // ------------------------------------------------------------
-function updateRDO(payloadJson, token) {
+function updateRDO(payloadJson, token, reabrir) {
   var payload;
   try { payload = JSON.parse(payloadJson || '{}'); }
   catch (e) { return { ok: false, error: 'payload inválido' }; }
@@ -2340,6 +2493,21 @@ function updateRDO(payloadJson, token) {
       var sessU = sessaoDoToken(token);
       var obraLinha = iObraU !== -1 ? normObra(dados[i][iObraU]) : OBRA_ID;
       if (sessU && !sessaoPodeNaObra(sessU, obraLinha)) return negarPorObra(token, 'updateRDO', obraLinha);
+      /* O dia de ONDE o serviço sai e o dia para ONDE vai (a edição pode
+         trocar a data): os dois RDOs mudam, e o assinado só muda reaberto. */
+      var iDataU = cab.indexOf('data'); if (iDataU === -1) iDataU = idxColuna(cab, 'data');
+      var iTurnoU = cab.indexOf('turno');
+      var pl = {};
+      Object.keys(payload).forEach(function (k) { pl[String(k).toLowerCase()] = payload[k]; });
+      var dataAntesU = iDataU !== -1 ? dados[i][iDataU] : '';
+      var turnoAntesU = iTurnoU !== -1 ? dados[i][iTurnoU] : '';
+      var datasU = [];
+      if (rdoServicoDoRdo_(turnoAntesU)) datasU.push(dataAntesU);
+      if (rdoServicoDoRdo_(pl.hasOwnProperty('turno') ? pl['turno'] : turnoAntesU)) {
+        datasU.push(pl.hasOwnProperty('data') ? pl['data'] : dataAntesU);
+      }
+      var portaU = rdoServicoPorta_(obraLinha, datasU, token, reabrir);
+      if (portaU.recusa) return portaU.recusa;
       var antes = [];
       Object.keys(payload).forEach(function (chave) {
         if (EDITAVEIS.indexOf(String(chave).toLowerCase()) === -1) return;
@@ -2351,7 +2519,8 @@ function updateRDO(payloadJson, token) {
       });
       registrarAuditoria(usuarioDoToken(token), perfil, 'updateRDO', obraLinha, id,
         antes.join(' | '), JSON.stringify(payload));
-      return { ok: true, updated: id };
+      var depoisU = rdoServicoDepois_(obraLinha, portaU, sessU);
+      return { ok: true, updated: id, dias: depoisU.dias, reaberto: depoisU.reaberto || undefined };
     }
   }
   return { ok: false, error: 'ID não encontrado: ' + id };
@@ -3354,6 +3523,50 @@ function deleteRDODiario(id, data, token, obra) {
                          'Para mudá-lo, o escritório reabre o RDO — as firmas são canceladas e o convite sai de novo.' };
     };
 
+    /* A OBRA DA LINHA, não a do pedido. Sem `obra` no pedido o roteador
+       confere contra a Teotônio e o `daObra` aceita qualquer linha: quem só
+       tem a Teotônio apagava, pelo ID, o diário do Ranário. */
+    var sessDel = sessaoDoToken(token);
+    var obraDaLinha = function (linha) { return iObraD !== -1 ? normObra(linha[iObraD]) : OBRA_ID; };
+    var barradoNaObra = function (linha) {
+      return (sessDel && !sessaoPodeNaObra(sessDel, obraDaLinha(linha)))
+        ? negarPorObra(token, 'deleteRDODiario', obraDaLinha(linha)) : null;
+    };
+    /* Apaga a linha — e o que ficava pendurado nela. A linha vai INTEIRA para
+       a Auditoria (era só "data: …", e o turno apagado só voltava do backup).
+       E o PDF depositado sai junto quando o dia fica sem linha nenhuma: o
+       gatilho das 6h30 só confere se o arquivo existe, e mandava à
+       fiscalização, com link de assinar, o RDO que tinha sido apagado. */
+    var apagarLinha = function (idx, refAud) {
+      var linha = dados[idx];
+      var ob = obraDaLinha(linha), iso = isoDaLinha(iData !== -1 ? linha[iData] : '');
+      var copia = {};
+      cab.forEach(function (c, k) {
+        if (rdoVazio_(linha[k])) return;
+        copia[c] = (linha[k] instanceof Date) ? isoDaLinha(linha[k]) : linha[k];
+      });
+      aba.deleteRow(idx + 1);
+      registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDODiario', ob, refAud,
+                         JSON.stringify(copia), '');
+      if (ob !== OBRA_ID || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return;
+      var sobrou = false;
+      for (var q = 1; q < dados.length; q++) {
+        if (q !== idx && iData !== -1 && isoDaLinha(dados[q][iData]) === iso && obraDaLinha(dados[q]) === ob) sobrou = true;
+      }
+      if (sobrou) return;
+      try {
+        var pdfDia = rdoPdfArquivo_(ob, iso);
+        if (pdfDia) {
+          pdfDia.setTrashed(true);
+          registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'rdoPdfRetirado', ob, iso,
+                             pdfDia.getId(), 'o RDO do dia foi apagado: o PDF depositado saiu junto');
+        }
+        rdoDepositoVelhoSoltar_(ob, iso);
+      } catch (ePdf) {
+        Logger.log('PDF depositado de ' + iso + ' não foi retirado: ' + ePdf);
+      }
+    };
+
     // 1) por ID — exato; senão por dígitos (IDs numéricos formatados).
     if (iId !== -1 && (alvo || alvoNum !== null)) {
       for (var i = 1; i < dados.length; i++) {
@@ -3363,13 +3576,13 @@ function deleteRDODiario(id, data, token, obra) {
         var cellNum = cellDig ? parseInt(cellDig, 10) : null;
         if (cell === alvo || (alvoNum !== null && cellNum !== null && cellNum === alvoNum)) {
           if (!daObra(dados[i])) continue;       // mesmo número, outra obra: não é este
+          var foraId = barradoNaObra(dados[i]);
+          if (foraId) return foraId;
           var donoId = iDono !== -1 ? dados[i][iDono] : '';
           if (!podeApagarLinha(token, donoId)) return negarPorPermissao(token, 'deleteRDODiario', id, donoId);
           var assinadoId = assinadoPor(dados[i]);
           if (assinadoId) return assinadoId;
-          aba.deleteRow(i + 1);
-          registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDODiario', OBRA_ID, id,
-            'data: ' + (iData !== -1 ? dados[i][iData] : ''), '');
+          apagarLinha(i, id);
           return { ok: true, deleted: id, by: 'id' };
         }
       }
@@ -3393,13 +3606,13 @@ function deleteRDODiario(id, data, token, obra) {
           return { ok: false, error: 'ID não encontrado: ' + id + ' (já foi apagado?)', naoEncontrado: true,
                    idsVistos: amostraIdsDiario(dados, iId) };
         }
+        var foraData = barradoNaObra(dados[matches[0]]);
+        if (foraData) return foraData;
         var donoData = iDono !== -1 ? dados[matches[0]][iDono] : '';
         if (!podeApagarLinha(token, donoData)) return negarPorPermissao(token, 'deleteRDODiario', alvoData, donoData);
         var assinadoData = assinadoPor(dados[matches[0]]);
         if (assinadoData) return assinadoData;
-        aba.deleteRow(matches[0] + 1);
-        registrarAuditoria(usuarioDoToken(token), perfilDoToken(token), 'deleteRDODiario', OBRA_ID, id || alvoData,
-          'data: ' + alvoData, '');
+        apagarLinha(matches[0], id || alvoData);
         return { ok: true, deleted: id, by: 'data' };
       }
       if (matches.length > 1) {
@@ -3714,6 +3927,13 @@ function rdoPdfDoDia(p) {
 
   registrarAuditoria(usuarioDoToken(p.token), perfilDoToken(p.token), 'rdoPdfDoDia', obra,
                      dataISO, '', arq.getId());
+
+  /* O depósito desenhado da revisão que o dia tem AGORA põe o PDF em dia:
+     sai da lista dos depósitos velhos (ver rdoDepositoVelhoMarcar_). */
+  try {
+    var revsDep = rdoRevisoesDoDia_(obra, dataISO);
+    if (!revsDep.length || (revisaoDep && revsDep.indexOf(revisaoDep) !== -1)) rdoDepositoVelhoSoltar_(obra, dataISO);
+  } catch (eVelho) {}
 
   /* Era o redesenho que a marca pedia: o dia sai da varredura. A marca
      continua (com a hora do depósito) até o RDO ASSINADO sair — é ela que
@@ -5528,6 +5748,12 @@ function rdoAssinaturaAbrir(p) {
        quem abre não assina o que está na tela: a versão que vale é outra. */
     resp.revisao = rdoPdfRevisaoDe_(arq);
     var revsDia = resp.revisao ? rdoRevisoesDoDia_(obra, dataISO) : [];
+    /* PDF desenhado de uma gravação e dia SEM gravação nenhuma: o RDO foi
+       apagado depois do depósito (ou sobrou só a linha do clima automático). */
+    if (resp.revisao && !revsDia.length) {
+      resp.desatualizado = true;
+      resp.aviso = 'O RDO deste dia foi retirado depois deste PDF. Aguarde o escritório lançar e enviar o RDO de novo.';
+    } else
     if (revsDia.length && revsDia.indexOf(resp.revisao) === -1) {
       resp.desatualizado = true;
       resp.aviso = 'O RDO deste dia foi corrigido depois deste PDF, e a versão nova ainda não chegou. ' +
@@ -5578,8 +5804,11 @@ function rdoAssinaturaGravar(p) {
   var revsAgora = rdoRevisoesDoDia_(obra, dataISO);
   var revLida = rdoRevNorm_(p.revisao);
   var revPdf = rdoPdfRevisaoDe_(arqPdf);
-  if (revsAgora.length && ((revLida && revsAgora.indexOf(revLida) === -1) ||
-                           (revPdf && revsAgora.indexOf(revPdf) === -1))) {
+  /* (com o dia APAGADO depois do depósito não sobra revisão nenhuma para
+     comparar — e a conferência era pulada: assinava-se um RDO que não existe) */
+  if ((revPdf && !revsAgora.length) ||
+      (revsAgora.length && ((revLida && revsAgora.indexOf(revLida) === -1) ||
+                            (revPdf && revsAgora.indexOf(revPdf) === -1)))) {
     return { ok: false, mudou: true,
              error: 'O RDO deste dia foi corrigido depois que esta página abriu — a assinatura não ' +
                     'foi registrada. Recarregue a página para ler a versão nova antes de assinar.' };
@@ -6053,6 +6282,19 @@ function rdoAssinadosPendentes(p) {
                assinadas: linhasDia.filter(function (x) { return String(x.status) === 'assinada'; }).length,
                noDeposito: rdoPdfAssinaturasNoDeposito_(obra, d),
                enviado: !!log[chave], redesenhar: true });
+  });
+  /* E OS DEPÓSITOS QUE FICARAM PARA TRÁS de uma mudança nos serviços do dia
+     (ver rdoDepositoVelhoMarcar_): o PDF guardado é o de antes dela. */
+  var velhos = rdoDepositoVelhoLer_();
+  Object.keys(velhos).forEach(function (chave) {
+    var partes = chave.split('|');
+    if (partes[0] !== obra) return;
+    var d = partes[1];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || out.some(function (x) { return x.data === d; })) return;
+    var linhasDia = porData[d] || [];
+    out.push({ data: d,
+               assinadas: linhasDia.filter(function (x) { return String(x.status) === 'assinada'; }).length,
+               noDeposito: -1, enviado: !!log[chave], desatualizado: true });
   });
   out.sort(function (a, b) { return a.data < b.data ? -1 : (a.data > b.data ? 1 : 0); });
 
